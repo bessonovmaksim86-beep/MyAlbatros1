@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="ru"
+      xmlns:th="http://www.thymeleaf.org"
+      xmlns:sec="http://www.thymeleaf.org/extras/spring-security">
+<head>
+    <meta charset="UTF-8">
+    <title>Производственная система</title>
+    <link rel="stylesheet" th:href="@{/css/app.css}">
+</head>
+<body>
+
+<header>
+    <strong>Производственная система</strong>
+
+    <div>
+        <span sec:authentication="name"></span>
+
+        <form class="inline-form" th:action="@{/logout}" method="post">
+            <button type="submit">Выйти</button>
+        </form>
+    </div>
+</header>
+
+<main>
+    <h1>Главная страница</h1>
+
+    <div sec:authorize="hasRole('ADMIN')" class="menu">
+        <a th:href="@{/admin/users}">Пользователи</a>
+        <a th:href="@{/admin/operations}">Операции</a>
+    </div>
+
+    <p sec:authorize="!hasRole('ADMIN')">
+        Вы вошли в систему. Доступные рабочие разделы будут добавлены далее.
+    </p>
+</main>
+
+</body>
+</html>

@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="ru" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <title>Вход в систему</title>
+    <link rel="stylesheet" th:href="@{/css/app.css}">
+</head>
+<body class="login-page">
+
+<div class="login-card">
+    <h1>Производственная система</h1>
+    <h2>Вход</h2>
+
+    <div class="message error" th:if="${param.error}">
+        Неверный логин или пароль
+    </div>
+
+    <div class="message success" th:if="${param.logout}">
+        Вы успешно вышли из системы
+    </div>
+
+    <form th:action="@{/login}" method="post">
+        <label>
+            Логин
+            <input type="text"
+                   name="username"
+                   required
+                   autofocus
+                   autocomplete="username">
+        </label>
+
+        <label>
+            Пароль
+            <input type="password"
+                   name="password"
+                   required
+                   autocomplete="current-password">
+        </label>
+
+        <button type="submit">Войти</button>
+    </form>
+</div>
+
+</body>
+</html>

@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="ru" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <title>Операции</title>
+    <link rel="stylesheet" th:href="@{/css/app.css}">
+</head>
+<body>
+
+<header>
+    <a th:href="@{/}">Главная</a>
+    <strong>Справочник операций</strong>
+
+    <form class="inline-form" th:action="@{/logout}" method="post">
+        <button type="submit">Выйти</button>
+    </form>
+</header>
+
+<main>
+    <div class="message success"
+         th:if="${success}"
+         th:text="${success}"></div>
+
+    <div class="message error"
+         th:if="${error}"
+         th:text="${error}"></div>
+
+    <section class="card">
+        <h2>Добавить операцию</h2>
+
+        <form th:action="@{/admin/operations}"
+              th:object="${form}"
+              method="post">
+
+            <div class="message error" th:if="${#fields.hasAnyErrors()}">
+                <div th:each="item : ${#fields.allErrors()}"
+                     th:text="${item.defaultMessage}"></div>
+            </div>
+
+            <label>
+                Код
+                <input type="text"
+                       th:field="*{code}"
+                       placeholder="ASSEMBLY">
+            </label>
+
+            <label>
+                Название
+                <input type="text"
+                       th:field="*{name}"
+                       placeholder="Сборка датчика">
+            </label>
+
+            <label>
+                Описание
+                <textarea th:field="*{description}" rows="4"></textarea>
+            </label>
+
+            <button type="submit">Добавить операцию</button>
+        </form>
+    </section>
+
+    <section class="card">
+        <h2>Список операций</h2>
+
+        <table>
+            <thead>
+            <tr>
+                <th>ID</th>
+                <th>Код</th>
+                <th>Название</th>
+                <th>Описание</th>
+                <th>Действие</th>
+            </tr>
+            </thead>
+
+            <tbody>
+            <tr th:each="operation : ${operations}">
+                <td th:text="${operation.id}"></td>
+                <td th:text="${operation.code}"></td>
+                <td th:text="${operation.name}"></td>
+                <td th:text="${operation.description}"></td>
+                <td>
+                    <form th:action="@{/admin/operations/{id}/delete(id=${operation.id})}"
+                          method="post"
+                          onsubmit="return confirm('Удалить операцию?')">
+                        <button class="danger" type="submit">Удалить</button>
+                    </form>
+                </td>
+            </tr>
+            </tbody>
+        </table>
+    </section>
+</main>
+
+</body>
+</html>

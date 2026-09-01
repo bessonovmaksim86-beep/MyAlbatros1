@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="ru" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <title>Пользователи</title>
+    <link rel="stylesheet" th:href="@{/css/app.css}">
+</head>
+<body>
+
+<header>
+    <a th:href="@{/}">Главная</a>
+    <strong>Управление пользователями</strong>
+
+    <form class="inline-form" th:action="@{/logout}" method="post">
+        <button type="submit">Выйти</button>
+    </form>
+</header>
+
+<main>
+    <div class="message success"
+         th:if="${success}"
+         th:text="${success}"></div>
+
+    <div class="message error"
+         th:if="${error}"
+         th:text="${error}"></div>
+
+    <section class="card">
+        <h2>Добавить пользователя</h2>
+
+        <form th:action="@{/admin/users}"
+              th:object="${form}"
+              method="post">
+
+            <div class="message error" th:if="${#fields.hasAnyErrors()}">
+                <div th:each="item : ${#fields.allErrors()}"
+                     th:text="${item.defaultMessage}"></div>
+            </div>
+
+            <label>
+                Логин
+                <input type="text" th:field="*{username}">
+            </label>
+
+            <label>
+                Пароль
+                <input type="password" th:field="*{password}">
+            </label>
+
+            <label>
+                Роль
+                <select th:field="*{role}">
+                    <option value="">Выберите роль</option>
+                    <option th:each="role : ${roles}"
+                            th:value="${role}"
+                            th:text="${role}">
+                    </option>
+                </select>
+            </label>
+
+            <button type="submit">Добавить пользователя</button>
+        </form>
+    </section>
+
+    <section class="card">
+        <h2>Пользователи системы</h2>
+
+        <table>
+            <thead>
+            <tr>
+                <th>ID</th>
+                <th>Логин</th>
+                <th>Роль</th>
+                <th>Активен</th>
+                <th>Создан</th>
+                <th>Действие</th>
+            </tr>
+            </thead>
+
+            <tbody>
+            <tr th:each="user : ${users}">
+                <td th:text="${user.id}"></td>
+                <td th:text="${user.username}"></td>
+                <td th:text="${user.role}"></td>
+                <td th:text="${user.active ? 'Да' : 'Нет'}"></td>
+                <td th:text="${user.createdAt}"></td>
+                <td>
+                    <form th:action="@{/admin/users/{id}/delete(id=${user.id})}"
+                          method="post"
+                          onsubmit="return confirm('Удалить пользователя?')">
+                        <button class="danger" type="submit">Удалить</button>
+                    </form>
+                </td>
+            </tr>
+            </tbody>
+        </table>
+    </section>
+</main>
+
+</body>
+</html>
