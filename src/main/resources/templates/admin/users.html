@@ -1,5 +1,6 @@
 <!DOCTYPE html>
-<html lang="ru" xmlns:th="http://www.thymeleaf.org">
+<html lang="ru"
+      xmlns:th="http://www.thymeleaf.org">
 <head>
     <meta charset="UTF-8">
     <title>Пользователи</title>
@@ -9,9 +10,12 @@
 
 <header>
     <a th:href="@{/}">Главная</a>
+
     <strong>Управление пользователями</strong>
 
-    <form class="inline-form" th:action="@{/logout}" method="post">
+    <form class="inline-form"
+          th:action="@{/logout}"
+          method="post">
         <button type="submit">Выйти</button>
     </form>
 </header>
@@ -19,11 +23,13 @@
 <main>
     <div class="message success"
          th:if="${success}"
-         th:text="${success}"></div>
+         th:text="${success}">
+    </div>
 
     <div class="message error"
          th:if="${error}"
-         th:text="${error}"></div>
+         th:text="${error}">
+    </div>
 
     <section class="card">
         <h2>Добавить пользователя</h2>
@@ -32,70 +38,334 @@
               th:object="${form}"
               method="post">
 
-            <div class="message error" th:if="${#fields.hasAnyErrors()}">
+            <div class="message error"
+                 th:if="${#fields.hasAnyErrors()}">
                 <div th:each="item : ${#fields.allErrors()}"
-                     th:text="${item.defaultMessage}"></div>
+                     th:text="${item.defaultMessage}">
+                </div>
             </div>
 
             <label>
-                Логин
-                <input type="text" th:field="*{username}">
+                ФИО
+                <input type="text"
+                       id="fullName"
+                       th:field="*{fullName}"
+                       placeholder="Иванов Иван Иванович"
+                       autocomplete="off"
+                       required>
             </label>
 
             <label>
-                Пароль
-                <input type="password" th:field="*{password}">
+                Автоматический логин
+                <input type="text"
+                       id="generatedLogin"
+                       readonly
+                       placeholder="Логин появится после ввода ФИО">
             </label>
 
             <label>
-                Роль
-                <select th:field="*{role}">
-                    <option value="">Выберите роль</option>
-                    <option th:each="role : ${roles}"
-                            th:value="${role}"
-                            th:text="${role}">
+                Специальность
+                <input type="text"
+                       th:field="*{specialty}"
+                       placeholder="Инженер-технолог"
+                       required>
+            </label>
+            <label>
+                Служба
+
+                <select id="serviceSelect"
+                        th:field="*{serviceId}">
+
+                    <option value="">
+                        Без принадлежности к службе
+                    </option>
+
+                    <option th:each="service : ${services}"
+                            th:value="${service.id}"
+                            th:text="|${service.code} — ${service.name}|">
                     </option>
                 </select>
             </label>
+            <label>
+                Тип пользователя
 
-            <button type="submit">Добавить пользователя</button>
+                <select th:field="*{userType}"
+                        id="userTypeSelect">
+
+                    <option value="">
+                        Не выбран
+                    </option>
+
+                    <option th:each="type : ${userTypes}"
+                            th:value="${type.name()}"
+                            th:text="${type.displayName}">
+                    </option>
+                </select>
+            </label>
+            <label>
+                Подразделение
+
+                <select id="unitSelect"
+                        th:field="*{organizationUnitId}">
+
+                    <option value="">
+                        Без подразделения
+                    </option>
+
+                    <option th:each="unit : ${organizationUnits}"
+                            th:value="${unit.id}"
+                            th:attr="data-service-id=${unit.service.id}"
+                            th:text="|${unit.service.code}: ${unit.name}|">
+                    </option>
+                </select>
+
+                <small>
+                    Для СГМ подразделение выбирать не нужно.
+                </small>
+            </label>
+            <label>
+                Пароль
+
+                <span class="input-with-button">
+                    <input type="text"
+                           id="password"
+                           th:field="*{password}"
+                           autocomplete="new-password"
+                           required>
+
+                    <button type="button"
+                            id="generatePasswordButton"
+                            class="secondary-button">
+                        Сгенерировать
+                    </button>
+                </span>
+            </label>
+
+
+
+            <button type="submit">
+                Добавить пользователя
+            </button>
         </form>
     </section>
 
     <section class="card">
         <h2>Пользователи системы</h2>
 
-        <table>
-            <thead>
-            <tr>
-                <th>ID</th>
-                <th>Логин</th>
-                <th>Роль</th>
-                <th>Активен</th>
-                <th>Создан</th>
-                <th>Действие</th>
-            </tr>
-            </thead>
+        <div class="table-wrapper">
+            <table>
+                <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>ФИО</th>
+                    <th>Логин</th>
+                    <th>Пароль</th>
+                    <th>Специальность</th>
+                    <th>Цех/отдел</th>
+                    <th>Роль</th>
+                    <th>Активен</th>
+                    <th>Действие</th>
+                </tr>
+                </thead>
 
-            <tbody>
-            <tr th:each="user : ${users}">
-                <td th:text="${user.id}"></td>
-                <td th:text="${user.username}"></td>
-                <td th:text="${user.role}"></td>
-                <td th:text="${user.active ? 'Да' : 'Нет'}"></td>
-                <td th:text="${user.createdAt}"></td>
-                <td>
-                    <form th:action="@{/admin/users/{id}/delete(id=${user.id})}"
-                          method="post"
-                          onsubmit="return confirm('Удалить пользователя?')">
-                        <button class="danger" type="submit">Удалить</button>
-                    </form>
-                </td>
-            </tr>
-            </tbody>
-        </table>
+                <tbody>
+                <tr th:each="user : ${users}">
+                    <td th:text="${user.id}"></td>
+
+                    <td th:text="${user.fullName != null
+                        ? user.fullName
+                        : 'Не указано'}">
+                    </td>
+
+                    <td>
+                        <code th:text="${user.username}"></code>
+                    </td>
+
+                    <td>
+                        <code class="visible-password"
+                              th:text="${user.password}">
+                        </code>
+                    </td>
+
+                    <td th:text="${user.specialty != null
+                        ? user.specialty
+                        : 'Не указана'}">
+                    </td>
+
+                    <th>Служба</th>
+                    <th>Подразделение</th>
+                    <th>Тип пользователя</th>
+                    <th>Должность</th>
+                    <th>Роль</th>
+
+                    <td th:text="${user.roleName}">
+                    </td>
+
+                    <td th:text="${user.active ? 'Да' : 'Нет'}">
+                    </td>
+
+                    <td>
+                        <form th:action="@{/admin/users/{id}/delete(id=${user.id})}"
+                              method="post"
+                              onsubmit="return confirm('Удалить пользователя?')">
+                            <button class="danger" type="submit">
+                                Удалить
+                            </button>
+                        </form>
+                    </td>
+                </tr>
+
+                <tr th:if="${#lists.isEmpty(users)}">
+                    <td colspan="9">
+                        Пользователей пока нет
+                    </td>
+                </tr>
+                </tbody>
+            </table>
+        </div>
     </section>
 </main>
 
+<script th:inline="javascript">
+    const fullNameInput =
+        document.getElementById("fullName");
+
+    const loginInput =
+        document.getElementById("generatedLogin");
+
+    const passwordInput =
+        document.getElementById("password");
+
+    const generateButton =
+        document.getElementById("generatePasswordButton");
+
+    const loginUrl =
+        /*[[@{/admin/users/suggest-login}]]*/
+        "/admin/users/suggest-login";
+
+    const passwordUrl =
+        /*[[@{/admin/users/generate-password}]]*/
+        "/admin/users/generate-password";
+
+    let loginTimer = null;
+
+    async function updateLogin() {
+        const fullName = fullNameInput.value.trim();
+
+        if (!fullName.includes(" ")) {
+            loginInput.value = "";
+            return;
+        }
+
+        try {
+            const response = await fetch(
+                loginUrl
+                + "?fullName="
+                + encodeURIComponent(fullName)
+            );
+
+            if (!response.ok) {
+                throw new Error("Ошибка HTTP");
+            }
+
+            const data = await response.json();
+            loginInput.value = data.login || "";
+        } catch (error) {
+            loginInput.value = "Ошибка формирования";
+        }
+    }
+
+    fullNameInput.addEventListener("input", function () {
+        clearTimeout(loginTimer);
+
+        loginTimer = setTimeout(
+            updateLogin,
+            300
+        );
+    });
+
+    generateButton.addEventListener("click", async function () {
+        generateButton.disabled = true;
+
+        try {
+            const response = await fetch(passwordUrl);
+
+            if (!response.ok) {
+                throw new Error("Ошибка HTTP");
+            }
+
+            const data = await response.json();
+
+            passwordInput.value = data.password || "";
+            passwordInput.focus();
+            passwordInput.select();
+        } catch (error) {
+            alert("Не удалось сгенерировать пароль");
+        } finally {
+            generateButton.disabled = false;
+        }
+    });
+
+    if (fullNameInput.value.trim() !== "") {
+        updateLogin();
+    }
+
+</script>
+<script>
+    const serviceSelect =
+        document.getElementById("serviceSelect");
+
+    const unitSelect =
+        document.getElementById("unitSelect");
+
+    function filterUnits() {
+        if (!serviceSelect || !unitSelect) {
+            return;
+        }
+
+        const selectedServiceId =
+            serviceSelect.value;
+
+        Array.from(unitSelect.options)
+            .forEach(function (option) {
+                if (!option.value) {
+                    option.hidden = false;
+                    option.disabled = false;
+                    return;
+                }
+
+                const optionServiceId =
+                    option.dataset.serviceId;
+
+                const isAvailable =
+                    selectedServiceId !== ""
+                    && optionServiceId === selectedServiceId;
+
+                option.hidden = !isAvailable;
+                option.disabled = !isAvailable;
+            });
+
+        const selectedOption =
+            unitSelect.options[unitSelect.selectedIndex];
+
+        if (
+            selectedOption
+            && selectedOption.value
+            && selectedOption.dataset.serviceId
+                !== selectedServiceId
+        ) {
+            unitSelect.value = "";
+        }
+    }
+
+    if (serviceSelect) {
+        serviceSelect.addEventListener(
+                "change",
+                filterUnits
+        );
+    }
+
+    filterUnits();
+</script>
 </body>
 </html>
