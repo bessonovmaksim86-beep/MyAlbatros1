@@ -4,19 +4,51 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 import lombok.Getter;
+import lombok.NoArgsConstructor;
 import lombok.Setter;
 import ru.company.production.entity.Role;
+import ru.company.production.entity.UserType;
 
 @Getter
 @Setter
+@NoArgsConstructor
 public class CreateUserForm {
 
-    @NotBlank(message = "Введите имя пользователя")
-    @Size(min = 3, max = 100, message = "Логин должен содержать от 3 до 100 символов")
-    private String username;
+    @NotBlank(message = "Укажите ФИО")
+    @Size(
+            max = 255,
+            message = "ФИО не должно превышать 255 символов"
+    )
+    private String fullName;
 
-    @NotBlank(message = "Введите пароль")
-    @Size(min = 8, max = 100, message = "Пароль должен содержать не менее 8 символов")
+    @NotBlank(message = "Укажите должность")
+    @Size(
+            max = 255,
+            message = "Должность не должна превышать 255 символов"
+    )
+    private String specialty;
+
+    /**
+     * Для администратора базы служба может быть пустой.
+     */
+    private Long serviceId;
+
+    /**
+     * Подразделение необязательно.
+     */
+    private Long organizationUnitId;
+
+    /**
+     * Для администратора базы может быть пустым.
+     */
+    private UserType userType;
+
+    @NotBlank(message = "Укажите пароль")
+    @Size(
+            min = 6,
+            max = 100,
+            message = "Пароль должен содержать от 6 до 100 символов"
+    )
     private String password;
 
     @NotNull(message = "Выберите роль")

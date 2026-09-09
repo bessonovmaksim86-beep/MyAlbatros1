@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="ru" xmlns:th="http://www.thymeleaf.org">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1.0">
+  <title>Классификатор изделий</title>
+  <link rel="stylesheet" th:href="@{/technology/css/technology.css}">
+  <link rel="stylesheet" th:href="@{/technology/css/common.css}">
+  <link rel="stylesheet" th:href="@{/technology/css/classifier.css}">
+</head>
+<body>
+<div class="app-shell">
+  <aside th:replace="~{technology/fragments/layout :: sidebar('classifier')}"></aside>
+  <main class="main">
+    <header th:replace="~{technology/fragments/layout :: topbar}"></header>
+    <div class="page-content classifier-page">
+      <div class="page-head">
+        <div><h1>Классификатор изделий</h1><p>Добавление, изменение и просмотр состава изделий</p></div>
+        <a class="btn primary" th:href="@{/technology/classifier#classifierForm}">Новый классификатор</a>
+      </div>
+
+      <div class="alert alert-success" th:if="${successMessage != null}" th:text="${successMessage}">Операция выполнена.</div>
+      <div class="alert alert-danger" th:if="${errorMessage != null}" th:text="${errorMessage}">Ошибка операции.</div>
+
+      <!-- Три меню последних операций по классификатору -->
+      <section class="classifier-menus" aria-label="Последние операции по классификатору">
+        <article class="card classifier-menu">
+          <div class="card-head"><div><h2>Последние добавленные</h2><p>Новые записи классификатора</p></div><span class="classifier-menu__icon">+</span></div>
+          <div class="classifier-menu__list" th:if="${latestClassifierAdded != null and !#lists.isEmpty(latestClassifierAdded)}">
+            <a class="classifier-menu__item" th:each="item : ${latestClassifierAdded}" th:href="@{/technology/classifier/{id}/edit(id=${item.id})}">
+              <span><strong th:text="${item.code + ' · ' + item.displayName}">1000 · Изделие</strong><small th:text="${item.productType.displayName}">Прибор</small></span><span class="classifier-menu__arrow">›</span>
+            </a>
+          </div>
+          <p class="classifier-menu__empty" th:unless="${latestClassifierAdded != null and !#lists.isEmpty(latestClassifierAdded)}">Новых записей пока нет.</p>
+        </article>
+
+        <article class="card classifier-menu">
+          <div class="card-head"><div><h2>Последние изменённые</h2><p>Изменения данных классификатора</p></div><span class="classifier-menu__icon">↻</span></div>
+          <div class="classifier-menu__list" th:if="${latestClassifierChanged != null and !#lists.isEmpty(latestClassifierChanged)}">
+            <a class="classifier-menu__item" th:each="item : ${latestClassifierChanged}" th:href="@{/technology/classifier/{id}/edit(id=${item.id})}">
+              <span><strong th:text="${item.code + ' · ' + item.displayName}">1000 · Изделие</strong><small th:text="${item.productType.displayName}">Прибор</small></span><span class="classifier-menu__arrow">›</span>
+            </a>
+          </div>
+          <p class="classifier-menu__empty" th:unless="${latestClassifierChanged != null and !#lists.isEmpty(latestClassifierChanged)}">Изменений пока нет.</p>
+        </article>
+
+        <article class="card classifier-menu">
+          <div class="card-head"><div><h2>Последние изменения состава</h2><p>Изменения входимости изделий</p></div><span class="classifier-menu__icon">≡</span></div>
+          <div class="classifier-menu__list" th:if="${latestClassifierComposition != null and !#lists.isEmpty(latestClassifierComposition)}">
+            <a class="classifier-menu__item" th:each="item : ${latestClassifierComposition}" th:href="@{/technology/classifier/{id}/edit(id=${item.id})}">
+              <span><strong th:text="${item.code + ' · ' + item.displayName}">1000 · Изделие</strong><small>Состав изделия обновлён</small></span><span class="classifier-menu__arrow">›</span>
+            </a>
+          </div>
+          <p class="classifier-menu__empty" th:unless="${latestClassifierComposition != null and !#lists.isEmpty(latestClassifierComposition)}">Изменений состава пока нет.</p>
+        </article>
+      </section>
+
+      <section class="card classifier-form-card" id="classifierForm">
+        <div class="card-head"><div><h2 th:text="${editMode} ? 'Изменение классификатора' : 'Добавление классификатора'">Добавление классификатора</h2><p>Заполните сведения об изделии и его составе</p></div></div>
+        <div class="card-body">
+          <form th:object="${classifierForm}" th:action="${editMode} ? @{/technology/classifier/{id}(id=${classifierForm.id})} : @{/technology/classifier}" method="post">
+            <input th:if="${_csrf != null}" type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+            <div class="alert alert-danger" th:if="${#fields.hasGlobalErrors()}"><div th:each="error : ${#fields.globalErrors()}" th:text="${error}">Ошибка сохранения</div></div>
+            <th:block th:replace="~{technology/fragments/classifier-fields :: fields}"></th:block>
+          </form>
+        </div>
+      </section>
+
+      <section class="card classifier-list-card">
+        <div class="card-head"><div><h2>Список классификаторов</h2><p>Все записи классификатора</p></div><label class="classifier-table-search"><span class="visually-hidden">Поиск</span><input id="classifierTableSearch" type="search" placeholder="Поиск по коду или названию" autocomplete="off"></label></div>
+        <div class="table-wrap"><table class="data-table" id="classifierTable">
+          <thead><tr><th>Код</th><th>Наименование</th><th>Тип изделия</th><th>Состояние</th><th></th></tr></thead>
+          <tbody>
+          <tr th:each="classifier : ${classifiers}" th:attr="data-search=${#strings.toLowerCase(classifier.code + ' ' + classifier.displayName)}">
+            <td th:text="${classifier.code}">1000</td><td th:text="${classifier.displayName}">Изделие</td><td th:text="${classifier.productType.displayName}">Прибор</td>
+            <td><span class="status-badge" th:classappend="${classifier.active} ? ' is-active' : ' is-inactive'" th:text="${classifier.active} ? 'Активен' : 'Архивный'">Активен</span></td>
+            <td class="table-actions"><a class="btn secondary small" th:href="@{/technology/classifier/{id}/edit(id=${classifier.id})}">Изменить</a></td>
+          </tr>
+          <tr th:if="${classifiers == null or #lists.isEmpty(classifiers)}"><td colspan="5" class="table-empty">Классификаторы пока не добавлены.</td></tr>
+          </tbody>
+        </table></div>
+      </section>
+    </div>
+  </main>
+</div>
+<th:block th:replace="~{technology/fragments/layout :: commonScripts}"></th:block>
+<script th:src="@{/technology/js/classifier.js}"></script>
+</body>
+</html>

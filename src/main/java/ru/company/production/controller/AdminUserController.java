@@ -9,8 +9,15 @@ import org.springframework.validation.BindingResult;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 import ru.company.production.dto.CreateUserForm;
+import ru.company.production.entity.AppUser;
 import ru.company.production.entity.Role;
+import ru.company.production.entity.UserType;
+import ru.company.production.repository.OrganizationUnitRepository;
+import ru.company.production.repository.ProductionServiceRepository;
 import ru.company.production.service.AdminUserService;
+import ru.company.production.service.PasswordGenerator;
+
+import java.util.Map;
 
 @Controller
 @RequestMapping("/admin/users")
@@ -18,15 +25,43 @@ import ru.company.production.service.AdminUserService;
 public class AdminUserController {
 
     private final AdminUserService userService;
+    private final PasswordGenerator passwordGenerator;
+
+    private final OrganizationUnitRepository unitRepository;
+    private final ProductionServiceRepository serviceRepository;
 
     @GetMapping
     public String page(Model model) {
         if (!model.containsAttribute("form")) {
-            model.addAttribute("form", new CreateUserForm());
+            model.addAttribute(
+                    "form",
+                    new CreateUserForm()
+            );
         }
 
         fillModel(model);
+
         return "admin/users";
+    }
+
+    @GetMapping("/suggest-login")
+    @ResponseBody
+    public Map<String, String> suggestLogin(
+            @RequestParam(defaultValue = "") String fullName
+    ) {
+        return Map.of(
+                "login",
+                userService.suggestLogin(fullName)
+        );
+    }
+
+    @GetMapping("/generate-password")
+    @ResponseBody
+    public Map<String, String> generatePassword() {
+        return Map.of(
+                "password",
+                passwordGenerator.generate()
+        );
     }
 
     @PostMapping
@@ -34,41 +69,50 @@ public class AdminUserController {
             @Valid @ModelAttribute("form") CreateUserForm form,
             BindingResult bindingResult,
             Model model,
-            RedirectAttributes redirectAttributes) {
-
+            RedirectAttributes redirectAttributes
+    ) {
         if (!bindingResult.hasErrors()) {
             try {
-                userService.create(form);
+                AppUser created = userService.create(form);
+
+                redirectAttributes.addFlashAttribute(
+                        "success",
+                        "Пользователь создан. Логин: "
+                                + created.getUsername()
+                );
+
+                return "redirect:/admin/users";
+
             } catch (IllegalArgumentException exception) {
-                bindingResult.reject("create", exception.getMessage());
+                bindingResult.reject(
+                        "create",
+                        exception.getMessage()
+                );
             }
         }
 
-        if (bindingResult.hasErrors()) {
-            fillModel(model);
-            return "admin/users";
-        }
+        fillModel(model);
 
-        redirectAttributes.addFlashAttribute(
-                "success",
-                "Пользователь успешно добавлен"
-        );
-
-        return "redirect:/admin/users";
+        return "admin/users";
     }
 
     @PostMapping("/{id}/delete")
     public String delete(
             @PathVariable Long id,
             Authentication authentication,
-            RedirectAttributes redirectAttributes) {
-
+            RedirectAttributes redirectAttributes
+    ) {
         try {
-            userService.delete(id, authentication.getName());
+            userService.delete(
+                    id,
+                    authentication.getName()
+            );
+
             redirectAttributes.addFlashAttribute(
                     "success",
                     "Пользователь удалён"
             );
+
         } catch (IllegalArgumentException exception) {
             redirectAttributes.addFlashAttribute(
                     "error",
@@ -80,7 +124,31 @@ public class AdminUserController {
     }
 
     private void fillModel(Model model) {
-        model.addAttribute("users", userService.findAll());
-        model.addAttribute("roles", Role.values());
+        model.addAttribute(
+                "users",
+                userService.findAll()
+        );
+
+        model.addAttribute(
+                "roles",
+                Role.values()
+        );
+
+        model.addAttribute(
+                "userTypes",
+                UserType.values()
+        );
+
+        model.addAttribute(
+                "services",
+                serviceRepository
+                        .findAllByActiveTrueOrderByCodeAsc()
+        );
+
+        model.addAttribute(
+                "organizationUnits",
+                unitRepository
+                        .findAllByActiveTrueOrderByNameAsc()
+        );
     }
 }

@@ -7,10 +7,18 @@ spring:
   jpa:
     open-in-view: false
     hibernate:
-      ddl-auto: update
+      ddl-auto: validate
     properties:
       hibernate:
         format_sql: true
+        default_catalog: production_system
+
+  flyway:
+    enabled: true
+    default-schema: production_system
+    schemas: production_system
+    locations: classpath:db/migration
+    baseline-on-migrate: true
 
   thymeleaf:
     cache: false
@@ -19,6 +27,7 @@ server:
   port: ${SERVER_PORT:8080}
 
 application:
+  password-encryption-key: ${PASSWORD_ENCRYPTION_KEY}
   initial-admin:
     username: ${INITIAL_ADMIN_USERNAME:admin}
     password: ${INITIAL_ADMIN_PASSWORD:ChangeMe123!}

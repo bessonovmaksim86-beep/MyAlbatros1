@@ -17,7 +17,7 @@ import ru.company.production.repository.UserRepository;
 public class SecurityConfig {
 
     private final UserRepository userRepository;
-
+    private final DepartmentAuthenticationSuccessHandler successHandler;
     @Bean
     public PasswordEncoder passwordEncoder() {
         return new BCryptPasswordEncoder(12);
@@ -34,7 +34,10 @@ public class SecurityConfig {
                         .disabled(!appUser.isActive())
                         .build())
                 .orElseThrow(() ->
-                        new UsernameNotFoundException("Пользователь не найден"));
+                        new UsernameNotFoundException(
+                                "Пользователь не найден: " + username
+                        )
+                );
     }
 
     @Bean
@@ -43,20 +46,36 @@ public class SecurityConfig {
 
         http
                 .authorizeHttpRequests(auth -> auth
-                        .requestMatchers("/login", "/css/**").permitAll()
-                        .requestMatchers("/admin/**").hasRole("ADMIN")
+                        .requestMatchers(
+                                "/login",
+                                "/error",
+                                "/favicon.ico",
+                                "/css/**",
+                                "/js/**",
+                                "/images/**",
+                                "/webjars/**"
+                        ).permitAll()
+                        .requestMatchers("/admin", "/admin/**").hasRole("ADMIN")
                         .anyRequest().authenticated()
                 )
                 .formLogin(form -> form
                         .loginPage("/login")
-                        .defaultSuccessUrl("/", true)
+                        .loginProcessingUrl("/login")
+                        .successHandler(successHandler)
                         .failureUrl("/login?error")
                         .permitAll()
                 )
+                .rememberMe(remember -> remember
+                        .rememberMeParameter("remember-me")
+                        .tokenValiditySeconds(14 * 24 * 60 * 60)
+                )
                 .logout(logout -> logout
+                        .logoutUrl("/logout")
                         .logoutSuccessUrl("/login?logout")
                         .invalidateHttpSession(true)
-                        .deleteCookies("JSESSIONID")
+                        .clearAuthentication(true)
+                        .deleteCookies("JSESSIONID", "remember-me")
+                        .permitAll()
                 );
 
         return http.build();
