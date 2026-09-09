@@ -1,0 +1,160 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Альбатрос — операции руководителя</title>
+  <style>
+    :root {
+      --bg-image: none;
+      --blue: #0b4d80;
+      --orange: #e78316;
+      --glass: rgba(245, 247, 249, .78);
+      --glass-strong: rgba(255,255,255,.91);
+      --line: rgba(95, 105, 115, .28);
+      --text: #15191d;
+    }
+    * { box-sizing: border-box; }
+    html, body { height: 100%; margin: 0; }
+    body {
+      overflow: hidden;
+      font-family: Arial, Helvetica, sans-serif;
+      color: var(--text);
+      background: #d9dde0;
+    }
+    .app {
+      position: relative;
+      min-height: 100vh;
+      isolation: isolate;
+      background:
+        linear-gradient(rgba(235,239,242,.79), rgba(235,239,242,.79)),
+        var(--bg-image),
+        radial-gradient(circle at 78% 25%, #d2d9dc 0, #b4bdc2 30%, #7e898e 100%);
+      background-size: cover;
+      background-position: center;
+    }
+    .app::after {
+      content: "";
+      position: absolute;
+      z-index: -1;
+      inset: 0;
+      pointer-events: none;
+      background: linear-gradient(90deg, rgba(215,220,224,.82) 0 265px, rgba(232,236,239,.18) 265px 100%);
+    }
+    .topbar {
+      height: 84px;
+      display: grid;
+      grid-template-columns: 265px 1fr 265px;
+      align-items: center;
+      padding: 0 18px 0 22px;
+      background: rgba(255,255,255,.94);
+      border-bottom: 1px solid rgba(0,0,0,.12);
+      border-radius: 0 0 18px 18px;
+      position: relative;
+      z-index: 3;
+    }
+    .user-info { font-size: 17px; line-height: 1.45; padding-left: 55px; }
+    .user-info div:last-child { padding-left: 16px; }
+    .brand { justify-self: center; display: flex; align-items: center; gap: 12px; color: var(--blue); font-weight: 800; font-size: 30px; letter-spacing: -1.5px; }
+    .brand-mark { width: 108px; height: 40px; position: relative; display: inline-block; }
+    .brand-mark::before { content: ""; position: absolute; inset: 5px 0 4px; border: 3px solid var(--orange); border-left-color: transparent; border-right-color: transparent; border-radius: 50%; transform: rotate(-9deg); }
+    .brand-mark::after { content: ""; position: absolute; width: 72px; height: 13px; left: 18px; top: 14px; border-top: 4px solid var(--blue); border-bottom: 3px solid var(--blue); transform: skewX(-25deg) rotate(-3deg); }
+    .top-actions { justify-self: end; display: flex; gap: 12px; align-items: center; }
+    select, .help { border: 1px solid #c6cbd0; background: linear-gradient(#fff,#e8eaec); border-radius: 16px; color: #4b5156; padding: 6px 10px; box-shadow: 0 1px 2px #fff inset; }
+    .help { width: 27px; height: 27px; padding: 0; border-radius: 50%; color: #0873aa; font-weight: bold; cursor: pointer; }
+    .workspace { height: calc(100vh - 84px); position: relative; }
+    .sidebar {
+      position: absolute; inset: 0 auto 0 0; width: 265px; padding: 19px 14px 72px;
+      background: rgba(209,214,218,.66); border-right: 1px solid rgba(255,255,255,.48);
+      z-index: 2; overflow-y: auto;
+    }
+    .section-title { margin: 0 0 13px; text-align: center; font-size: 24px; font-weight: 400; line-height: 1.35; }
+    .section-title.operations { margin-top: 3px; margin-bottom: 10px; }
+    .menu-group { display: flex; flex-direction: column; gap: 5px; margin-bottom: 7px; }
+    .menu-button {
+      width: 100%; min-height: 40px; padding: 9px 12px; border: 1px solid rgba(125,130,135,.38); border-radius: 22px;
+      background: linear-gradient(180deg, rgba(255,255,255,.95), rgba(232,234,236,.84)); color: #444b50;
+      font-size: 12px; line-height: 1.28; cursor: grab; box-shadow: 0 2px 2px rgba(255,255,255,.75) inset, 0 1px 2px rgba(0,0,0,.12);
+      transition: transform .15s, box-shadow .15s, opacity .15s;
+    }
+    .menu-button:active { cursor: grabbing; }
+    .menu-button:hover { transform: translateY(-1px); box-shadow: 0 3px 7px rgba(0,0,0,.16); }
+    .menu-button.dragging { opacity: .38; transform: scale(.98); }
+    .drop-target { outline: 2px dashed #2685b5; outline-offset: 2px; }
+    .wide { min-height: 80px; }
+    .content-hint { margin: 27px 30px 0 295px; color: rgba(50,58,64,.42); font-size: 14px; }
+    .footer-search { position: absolute; left: 14px; bottom: 8px; width: 250px; display: flex; }
+    .footer-search input { min-width: 0; flex: 1; border: 1px solid #cfd3d6; border-radius: 19px 0 0 19px; padding: 10px 11px; background: rgba(255,255,255,.86); color: #777; outline: none; }
+    .footer-search button { width: 80px; border: 1px solid #c5c9cc; border-left: 0; border-radius: 0 19px 19px 0; background: linear-gradient(#fff,#e9ebec); color: #4d555a; cursor: pointer; }
+    .toast { position: fixed; left: 50%; bottom: 25px; transform: translate(-50%, 20px); opacity: 0; pointer-events: none; padding: 11px 18px; border-radius: 9px; color: white; background: rgba(24,45,59,.9); transition: .25s; z-index: 10; }
+    .toast.show { opacity: 1; transform: translate(-50%, 0); }
+    .settings { position: fixed; right: 18px; bottom: 18px; width: min(390px, calc(100vw - 36px)); padding: 14px; border-radius: 12px; background: rgba(255,255,255,.94); box-shadow: 0 7px 28px rgba(0,0,0,.2); z-index: 5; display: none; }
+    .settings.open { display: block; }
+    .settings strong { display: block; margin-bottom: 8px; }
+    .settings p { margin: 0 0 9px; color: #626a70; font-size: 12px; line-height: 1.35; }
+    .settings-row { display: flex; gap: 7px; }
+    .settings input { min-width: 0; flex: 1; padding: 8px 9px; border: 1px solid #c5cbd0; border-radius: 7px; }
+    .settings button { padding: 8px 11px; border: 0; border-radius: 7px; background: var(--blue); color: white; cursor: pointer; }
+    @media (max-width: 760px) {
+      .topbar { grid-template-columns: 1fr auto; height: 72px; padding: 0 12px; }
+      .brand { grid-column: 1; grid-row: 1; justify-self: start; font-size: 21px; }
+      .brand-mark { transform: scale(.7); transform-origin: left center; width: 75px; margin-right: -25px; }
+      .user-info { display: none; }
+      .top-actions { grid-column: 2; }
+      .sidebar { width: min(265px, 82vw); }
+      .content-hint { margin-left: calc(min(265px, 82vw) + 20px); }
+    }
+  </style>
+</head>
+<body>
+  <main class="app" id="app">
+    <header class="topbar">
+      <div class="user-info"><div>31 августа 2026</div><div>Титов М.Н.</div></div>
+      <div class="brand" aria-label="Альбатрос"><span class="brand-mark"></span><span>Альбатрос</span></div>
+      <div class="top-actions"><select id="opacity" aria-label="Прозрачность"><option value=".78">Прозрачность</option><option value=".6">Больше прозрачности</option><option value=".92">Меньше прозрачности</option></select><button class="help" id="help" title="Помощь">?</button></div>
+    </header>
+    <section class="workspace">
+      <aside class="sidebar" id="sidebar">
+        <h1 class="section-title">Операции<br>руководителя</h1>
+        <div class="menu-group" id="manager-menu">
+          <button class="menu-button" draggable="true">Возврат на сборочные операции</button>
+          <button class="menu-button" draggable="true">Перемещение датчика из цеха сборки</button>
+          <button class="menu-button wide" draggable="true">Получение комплектации для цеха<br>сборки</button>
+          <button class="menu-button" draggable="true">Распределение работ для цеха сборки</button>
+        </div>
+        <h2 class="section-title operations">Операции</h2>
+        <div class="menu-group" id="operations-menu">
+          <button class="menu-button" draggable="true">Текущие задания для цеха сборки</button>
+        </div>
+        <div class="footer-search"><input id="search" placeholder="Паспорт/Заказ покупателя" /><button id="searchBtn">Поиск</button></div>
+      </aside>
+      <div class="content-hint">Перетащите кнопки, чтобы изменить их порядок</div>
+    </section>
+    <div class="settings" id="settings">
+      <strong>Фоновое изображение</strong>
+      <p>Вставьте ссылку на изображение сборочного цеха. Ссылка сохранится только в текущем окне.</p>
+      <div class="settings-row"><input id="imageUrl" placeholder="https://.../assembly-shop.jpg" /><button id="applyImage">Применить</button></div>
+    </div>
+    <div class="toast" id="toast"></div>
+  </main>
+  <script>
+    const app = document.getElementById('app');
+    const sidebar = document.getElementById('sidebar');
+    const toast = document.getElementById('toast');
+    let dragged = null;
+    function notify(text) { toast.textContent = text; toast.classList.add('show'); clearTimeout(window.toastTimer); window.toastTimer = setTimeout(() => toast.classList.remove('show'), 1800); }
+    document.querySelectorAll('.menu-button').forEach(button => {
+      button.addEventListener('dragstart', e => { dragged = button; button.classList.add('dragging'); e.dataTransfer.effectAllowed = 'move'; });
+      button.addEventListener('dragend', () => { button.classList.remove('dragging'); document.querySelectorAll('.drop-target').forEach(x => x.classList.remove('drop-target')); dragged = null; });
+      button.addEventListener('dragover', e => { e.preventDefault(); if (dragged && dragged !== button) button.classList.add('drop-target'); });
+      button.addEventListener('dragleave', () => button.classList.remove('drop-target'));
+      button.addEventListener('drop', e => { e.preventDefault(); button.classList.remove('drop-target'); if (dragged && dragged !== button) { button.parentNode.insertBefore(dragged, button); notify('Порядок кнопок изменён'); } });
+      button.addEventListener('click', () => notify('Выбрано: ' + button.textContent.trim().replace(/\s+/g, ' ')));
+    });
+    document.getElementById('opacity').addEventListener('change', e => { document.documentElement.style.setProperty('--glass', `rgba(245,247,249,${e.target.value})`); sidebar.style.background = `rgba(209,214,218,${e.target.value})`; });
+    document.getElementById('help').addEventListener('click', () => document.getElementById('settings').classList.toggle('open'));
+    document.getElementById('applyImage').addEventListener('click', () => { const url = document.getElementById('imageUrl').value.trim(); if (!url) return notify('Введите ссылку на изображение'); document.documentElement.style.setProperty('--bg-image', `url("${url.replace(/"/g, '')}")`); notify('Фоновое изображение применено'); });
+    document.getElementById('searchBtn').addEventListener('click', () => { const value = document.getElementById('search').value.trim(); notify(value ? 'Поиск: ' + value : 'Введите номер паспорта или заказа'); });
+  </script>
+</body>
+</html>

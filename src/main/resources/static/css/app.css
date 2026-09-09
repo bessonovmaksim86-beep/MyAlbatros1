@@ -117,3 +117,78 @@ td {
     border-bottom: 1px solid #e5e7eb;
     text-align: left;
 }
+.input-with-button {
+    display: flex;
+    align-items: stretch;
+    gap: 8px;
+    margin-top: 6px;
+}
+
+.input-with-button input {
+    flex: 1;
+    margin-top: 0;
+}
+
+.input-with-button button {
+    white-space: nowrap;
+}
+
+.secondary-button {
+    background: #64748b;
+}
+
+.table-wrapper {
+    width: 100%;
+    overflow-x: auto;
+}
+
+.visible-password {
+    display: inline-block;
+    min-width: 120px;
+    padding: 6px 8px;
+    border: 1px solid #cbd5e1;
+    border-radius: 4px;
+    color: #991b1b;
+    background: #fef2f2;
+}
+.input-with-button {
+    display: flex;
+    align-items: stretch;
+    gap: 8px;
+    margin-top: 6px;
+}
+
+.input-with-button input {
+    flex: 1;
+    margin-top: 0;
+}
+
+.input-with-button button {
+    flex-shrink: 0;
+    white-space: nowrap;
+}
+
+.secondary-button {
+    background: #64748b;
+}
+
+.table-wrapper {
+    width: 100%;
+    overflow-x: auto;
+}
+
+.visible-password {
+    display: inline-block;
+    min-width: 130px;
+    padding: 6px 8px;
+    border: 1px solid #cbd5e1;
+    border-radius: 4px;
+    color: #991b1b;
+    background: #fef2f2;
+    user-select: all;
+}
+.hero-section {
+  background-image: url('../images/1.jpg');
+  background-size: cover; /* масштабирует картинку, чтобы полностью заполнить блок */
+  background-position: center; /* выравнивает по центру */
+}

@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="ru"
+      xmlns:th="http://www.thymeleaf.org">
+
+<head>
+    <meta charset="UTF-8">
+
+    <meta name="viewport"
+          content="width=device-width, initial-scale=1.0">
+
+    <title>Обзор отдела</title>
+
+    <link rel="stylesheet"
+          th:href="@{/technology/css/technology.css}">
+
+    <link rel="stylesheet"
+          th:href="@{/technology/css/common.css}">
+
+    <link rel="stylesheet"
+          th:href="@{/technology/css/general.css}">
+</head>
+
+<body>
+
+<div class="app-shell">
+
+    <aside th:replace="~{
+        technology/fragments/layout :: sidebar('general')
+    }">
+    </aside>
+
+    <main class="main">
+
+        <header th:replace="~{
+            technology/fragments/layout :: topbar
+        }">
+        </header>
+
+        <div class="page-content">
+
+            <div class="page-head">
+                <div>
+                    <h1>Обзор отдела</h1>
+
+                    <p>
+                        Контроль техпроцессов, операций
+                        и классификаторов
+                    </p>
+                </div>
+            </div>
+
+            <div class="stats">
+
+                <div class="stat">
+                    <small>Техпроцессы в работе</small>
+
+                    <strong th:text="${techprocessCount ?: 0}">
+                        18
+                    </strong>
+
+                    <span class="trend">
+                        Активные техпроцессы
+                    </span>
+                </div>
+
+                <div class="stat">
+                    <small>Операции</small>
+
+                    <strong th:text="${operationCount ?: 0}">
+                        0
+                    </strong>
+
+                    <span class="trend">
+                        Записей в справочнике
+                    </span>
+                </div>
+
+                <div class="stat">
+                    <small>Классификаторы</small>
+
+                    <strong th:text="${classifierCount ?: 0}">
+                        137
+                    </strong>
+
+                    <span class="trend">
+                        Записей в классификаторе
+                    </span>
+                </div>
+
+                <div class="stat">
+                    <small>Ожидают согласования</small>
+
+                    <strong th:text="${approvalCount ?: 0}">
+                        7
+                    </strong>
+
+                    <span class="trend attention">
+                        Требуют внимания
+                    </span>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-head">
+                    <h2>
+                        Последние техпроцессы изделий
+                    </h2>
+
+                    <a class="btn secondary"
+                       th:href="@{/technology/techprocess}">
+                        Открыть техпроцессы
+                    </a>
+                </div>
+
+                <div class="table-wrap">
+                    <!-- Таблица последних техпроцессов -->
+                </div>
+            </div>
+        </div>
+    </main>
+</div>
+
+<th:block th:replace="~{
+    technology/fragments/layout :: commonScripts
+}">
+</th:block>
+
+</body>
+</html>

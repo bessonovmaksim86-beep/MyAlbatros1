@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="ru"
+      xmlns:th="http://www.thymeleaf.org">
+
+<body>
+
+<!-- =========================================================
+     БОКОВОЕ МЕНЮ
+     ========================================================= -->
+<aside th:fragment="sidebar(activePage)"
+       id="technologySidebar"
+       class="sidebar technology-sidebar"
+       aria-label="Навигация технологического отдела">
+
+    <div class="technology-sidebar__inner">
+
+        <a class="department-brand"
+           th:href="@{/technology/general}"
+           title="Перейти на главную страницу отдела">
+
+            <span class="department-brand__logo">
+                <img th:src="@{/images/albatros-logo.jpg}"
+                     src="/images/albatros-logo.jpg"
+                     alt="Предприятие Альбатрос">
+            </span>
+
+            <span class="department-brand__system">
+                Производственная система
+            </span>
+
+            <strong class="department-brand__department">
+                Технологический отдел
+            </strong>
+        </a>
+
+        <div class="technology-sidebar__divider"></div>
+
+        <a class="technology-navigation__item"
+           th:classappend="${activePage == 'general'} ? ' is-active' : ''"
+           th:href="@{/technology/general}"
+           title="Обзор отдела">
+
+                <span class="technology-navigation__icon">
+                    <svg viewBox="0 0 24 24" aria-hidden="true">
+                        <path d="M3 13h8V3H3v10Zm0 8h8v-6H3v6Zm10 0h8V11h-8v10Zm0-18v6h8V3h-8Z"/>
+                    </svg>
+                </span>
+
+            <span class="technology-navigation__text">
+                    Обзор отдела
+                </span>
+        </a>
+
+            <a class="technology-navigation__item"
+               th:classappend="${activePage == 'techprocess'} ? ' is-active' : ''"
+               th:href="@{/technology/techprocess}"
+               title="Техпроцессы">
+
+                <span class="technology-navigation__icon">
+                    <svg viewBox="0 0 24 24" aria-hidden="true">
+                        <path d="M9 2h6a2 2 0 0 1 2 2h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2a2 2 0 0 1 2-2Zm0 4h6V4H9v2Zm-2 5v2h10v-2H7Zm0 5v2h7v-2H7Z"/>
+                    </svg>
+                </span>
+
+                <span class="technology-navigation__text">
+                    Техпроцессы
+                </span>
+            </a>
+
+            <a class="technology-navigation__item"
+               th:classappend="${activePage == 'operations'} ? ' is-active' : ''"
+               th:href="@{/technology/operations}"
+               title="Операции">
+
+                <span class="technology-navigation__icon">
+                    <svg viewBox="0 0 24 24" aria-hidden="true">
+                        <path d="M4 3h16a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Zm0 10h16a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2v-4a2 2 0 0 1 2-2Zm2-8v4h4V5H6Zm0 10v4h4v-4H6Z"/>
+                    </svg>
+                </span>
+
+                <span class="technology-navigation__text">
+                    Операции
+                </span>
+            </a>
+
+        <a class="technology-navigation__item"
+           th:classappend="${activePage == 'classifier'} ? ' is-active' : ''"
+           th:href="@{/technology/classifier}"
+           title="Классификатор">
+
+    <span class="technology-navigation__icon">
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M4 3h6v6H4V3Zm10 0h6v6h-6V3ZM4 13h6v6H4v-6Zm10 0h6v6h-6v-6Z"/>
+        </svg>
+    </span>
+
+            <span class="technology-navigation__text">
+        Классификатор
+    </span>
+        </a>
+
+            <a class="technology-navigation__item"
+               th:classappend="${activePage == 'approvals'} ? ' is-active' : ''"
+               th:href="@{/technology/approvals}"
+               title="Согласование">
+
+                <span class="technology-navigation__icon">
+                    <svg viewBox="0 0 24 24" aria-hidden="true">
+                        <path d="m9 16.2-3.5-3.5L4.1 14.1 9 19 20.3 7.7l-1.4-1.4L9 16.2Z"/>
+                    </svg>
+                </span>
+
+                <span class="technology-navigation__text">
+                    Согласование
+                </span>
+
+                <span class="technology-navigation__counter"
+                      th:if="${approvalCount != null and approvalCount > 0}"
+                      th:text="${approvalCount}">
+                    7
+                </span>
+            </a>
+        </nav>
+
+        <div class="technology-sidebar__footer">
+            <span class="technology-sidebar__status-dot"></span>
+
+        </div>
+    </div>
+</aside>
+
+<!-- =========================================================
+     ВЕРХНЯЯ ПАНЕЛЬ
+     ========================================================= -->
+<th:block th:fragment="topbar">
+
+    <header class="topbar technology-topbar">
+
+        <!-- Поле поиска -->
+        <div class="technology-topbar__left">
+
+            <label class="technology-search"
+                   for="technologyGlobalSearch">
+
+                <span class="visually-hidden">
+                    Поиск по производственной системе
+                </span>
+
+                <input id="technologyGlobalSearch"
+                       name="query"
+                       type="search"
+                       autocomplete="off"
+                       placeholder="Поиск по техпроцессам, классификаторам, датчикам и приборам">
+            </label>
+        </div>
+
+        <!-- Дата, время и пользователь -->
+        <div class="technology-topbar__right">
+
+            <!-- Сначала дата и время -->
+            <time id="technologyDateTime"
+                  class="technology-clock"
+                  datetime="">
+                08.09.2026, 00:00:00
+            </time>
+
+            <!--
+                fullName должен иметь формат:
+                Фамилия Имя Отчество
+
+                Например:
+                Иванов Иван Иванович
+            -->
+            <div th:with="
+                    fullName=${
+                        currentUser != null
+                        and !#strings.isEmpty(currentUser.fullName)
+                            ? #strings.trim(currentUser.fullName)
+                            : (
+                                #authentication != null
+                                and !#strings.isEmpty(#authentication.name)
+                                    ? #authentication.name
+                                    : 'Пользователь'
+                            )
+                    }
+                 ">
+
+                <div class="technology-topbar__user"
+                     th:with="
+                        nameParts=${#strings.arraySplit(fullName, ' ')}
+                     ">
+
+                    <!-- Затем кружок с инициалами -->
+                    <span class="technology-topbar__avatar"
+                          th:text="${
+                              #arrays.length(nameParts) > 1
+                                  ? #strings.toUpperCase(
+                                      #strings.substring(
+                                          nameParts[0],
+                                          0,
+                                          1
+                                      )
+                                      +
+                                      #strings.substring(
+                                          nameParts[1],
+                                          0,
+                                          1
+                                      )
+                                  )
+                                  : #strings.toUpperCase(
+                                      #strings.substring(
+                                          nameParts[0],
+                                          0,
+                                          1
+                                      )
+                                  )
+                          }">
+                        ИИ
+                    </span>
+
+                    <!-- Затем фамилия, первая буква имени и должность -->
+                    <span class="technology-topbar__user-data">
+
+                        <strong class="technology-topbar__username"
+                                th:text="${
+                                    #arrays.length(nameParts) > 1
+                                        ? nameParts[0]
+                                          + ' '
+                                          + #strings.substring(
+                                              nameParts[1],
+                                              0,
+                                              1
+                                          )
+                                          + '.'
+                                        : fullName
+                                }">
+                            Иванов И.
+                        </strong>
+
+                        <small class="technology-topbar__specialty"
+                               th:text="${
+                                   currentUser != null
+                                   and !#strings.isEmpty(
+                                       currentUser.specialty
+                                   )
+                                       ? currentUser.specialty
+                                       : 'Должность не указана'
+                               }">
+                            Инженер-технолог
+                        </small>
+                    </span>
+                </div>
+            </div>
+        </div>
+    </header>
+</th:block>
+
+
+<!-- =========================================================
+     ОБЩИЕ СКРИПТЫ
+     ========================================================= -->
+<th:block th:fragment="commonScripts">
+    <script th:src="@{/technology/js/common.js}"></script>
+</th:block>
+
+</body>
+</html>

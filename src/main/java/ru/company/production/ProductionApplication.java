@@ -10,3 +10,8 @@ public class ProductionApplication {
         SpringApplication.run(ProductionApplication.class, args);
     }
 }
+/*
+mvn flyway:repair `
+        "-Dflyway.url=jdbc:mysql://localhost:3306/production_system" `
+        "-Dflyway.user=root" `
+        "-Dflyway.password=12345"*/
