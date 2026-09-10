@@ -14,5 +14,8 @@ public class ClassifierInclusion {
  private ProductClassifier target;
  @Column(nullable=false,precision=15,scale=3) private BigDecimal quantity;
  @Enumerated(EnumType.STRING) @Column(nullable=false,length=10) private MeasurementUnit unit;
+    @Enumerated(EnumType.STRING)
+    @Column(name = "inclusion_mode", nullable = false, length = 20)
+    private InclusionMode inclusionMode;
  @Column(nullable=false) private Integer position;
 }

@@ -1,14 +1,21 @@
 package ru.company.production.dto;
-import jakarta.validation.constraints.*;
-import lombok.*;
+
+import lombok.Getter;
+import lombok.Setter;
+import ru.company.production.entity.InclusionMode;
 import ru.company.production.entity.MeasurementUnit;
+
 import java.math.BigDecimal;
-@Getter @Setter @NoArgsConstructor
+
+@Getter
+@Setter
 public class ClassifierInclusionForm {
- @NotNull(message="Выберите входящее изделие") private Long targetId;
- @NotNull(message="Укажите количество")
- @DecimalMin(value="0.001",message="Количество должно быть не меньше 0.001")
- private BigDecimal quantity=BigDecimal.ONE;
- @NotNull(message="Выберите единицу измерения")
- private MeasurementUnit unit=MeasurementUnit.PCS;
+
+    private Long targetId;
+
+    private InclusionMode inclusionMode;
+
+    private BigDecimal quantity;
+
+    private MeasurementUnit unit;
 }

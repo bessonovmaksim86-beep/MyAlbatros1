@@ -13,6 +13,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 import ru.company.production.dto.ClassifierForm;
+import ru.company.production.entity.InclusionMode;
 import ru.company.production.entity.MeasurementUnit;
 import ru.company.production.entity.ProductType;
 import ru.company.production.service.ProductClassifierService;
@@ -98,6 +99,26 @@ public class TechnologyClassifierController {
     /**
      * Страница изменения классификатора.
      */
+    /**
+     * Страница выбора классификатора для изменения.
+     */
+    @GetMapping("/update")
+    public String updateClassifierSelectionPage(Model model) {
+        if (!model.containsAttribute("classifierForm")) {
+            model.addAttribute(
+                    "classifierForm",
+                    new ClassifierForm()
+            );
+        }
+
+        fillCommonModel(model, null);
+
+        return "technology/classifier/update";
+    }
+
+    /**
+     * Страница изменения выбранного классификатора.
+     */
     @GetMapping("/update/{id}")
     public String updateClassifierPage(
             @PathVariable Long id,
@@ -110,6 +131,11 @@ public class TechnologyClassifierController {
                     classifierService.getForm(id)
             );
 
+            model.addAttribute(
+                    "selectedClassifierId",
+                    id
+            );
+
             fillCommonModel(model, id);
 
             return "technology/classifier/update";
@@ -119,7 +145,7 @@ public class TechnologyClassifierController {
                     exception.getMessage()
             );
 
-            return "redirect:/technology/classifier";
+            return "redirect:/technology/classifier/update";
         }
     }
 
@@ -137,6 +163,15 @@ public class TechnologyClassifierController {
             RedirectAttributes redirectAttributes
     ) {
         form.setId(id);
+
+        /*
+         * Нужно для повторного отображения формы,
+         * если сервер вернул ошибку валидации.
+         */
+        model.addAttribute(
+                "selectedClassifierId",
+                id
+        );
 
         validateConditionalFields(form, errors);
 
@@ -170,7 +205,17 @@ public class TechnologyClassifierController {
     }
 
     /**
-     * Страница подтверждения удаления.
+     * Страница выбора классификатора для удаления.
+     */
+    @GetMapping("/delete")
+    public String deleteClassifierSelectionPage(Model model) {
+        fillCommonModel(model, null);
+
+        return "technology/classifier/delete";
+    }
+
+    /**
+     * Страница подтверждения удаления выбранного классификатора.
      */
     @GetMapping("/delete/{id}")
     public String deleteClassifierPage(
@@ -180,14 +225,16 @@ public class TechnologyClassifierController {
     ) {
         try {
             model.addAttribute(
-                    "classifier",
-                    classifierService.findOne(id)
+                    "classifierForm",
+                    classifierService.getForm(id)
             );
 
             model.addAttribute(
-                    "activePage",
-                    "classifier"
+                    "selectedClassifierId",
+                    id
             );
+
+            fillCommonModel(model, id);
 
             return "technology/classifier/delete";
         } catch (EntityNotFoundException exception) {
@@ -196,7 +243,7 @@ public class TechnologyClassifierController {
                     exception.getMessage()
             );
 
-            return "redirect:/technology/classifier";
+            return "redirect:/technology/classifier/delete";
         }
     }
 
@@ -278,7 +325,10 @@ public class TechnologyClassifierController {
                 "activePage",
                 "classifier"
         );
-
+        model.addAttribute(
+                "inclusionModes",
+                InclusionMode.values()
+        );
         model.addAttribute(
                 "productTypes",
                 ProductType.values()

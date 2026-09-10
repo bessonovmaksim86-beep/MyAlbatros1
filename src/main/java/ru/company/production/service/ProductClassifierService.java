@@ -108,7 +108,9 @@ public class ProductClassifierService {
             row.setUnit(
                     inclusion.getUnit()
             );
-
+            row.setInclusionMode(
+                    inclusion.getInclusionMode()
+            );
             rows.add(row);
         }
 
@@ -241,6 +243,7 @@ public class ProductClassifierService {
             ClassifierForm form,
             ProductClassifier owner
     ) {
+
         List<ClassifierInclusionForm> rows =
                 form.getInclusions() == null
                         ? List.of()
@@ -254,7 +257,13 @@ public class ProductClassifierService {
 
         for (ClassifierInclusionForm row : rows) {
             validateInclusionRow(row);
+            if (owner.getProductType() == ProductType.CELL &&
+                    !rows.isEmpty()) {
 
+                throw new IllegalArgumentException(
+                        "Для ячейки нельзя указывать состав изделия"
+                );
+            }
             if (!targetIds.add(row.getTargetId())) {
                 throw new IllegalArgumentException(
                         "Входящее изделие повторяется"
@@ -289,7 +298,15 @@ public class ProductClassifierService {
         }
 
         int position = 0;
+        for (ClassifierInclusionForm row : rows) {
+            ProductClassifier target =
+                    targets.get(row.getTargetId());
 
+            validateAllowedTargetType(
+                    owner.getProductType(),
+                    target.getProductType()
+            );
+        }
         for (ClassifierInclusionForm row : rows) {
             ProductClassifier target =
                     targets.get(row.getTargetId());
@@ -301,11 +318,52 @@ public class ProductClassifierService {
             inclusion.setQuantity(row.getQuantity());
             inclusion.setUnit(row.getUnit());
             inclusion.setPosition(position++);
-
+            inclusion.setInclusionMode(
+                    row.getInclusionMode()
+            );
             owner.addInclusion(inclusion);
         }
     }
+    private void validateAllowedTargetType(
+            ProductType ownerType,
+            ProductType targetType
+    ) {
+        if (ownerType == ProductType.CELL) {
+            throw new IllegalArgumentException(
+                    "Ячейка не может содержать другие изделия"
+            );
+        }
 
+        if (ownerType == ProductType.SENSOR ||
+                ownerType == ProductType.DEVICE) {
+
+            if (targetType != ProductType.CELL) {
+                throw new IllegalArgumentException(
+                        "В состав датчика или прибора " +
+                                "можно добавить только ячейку"
+                );
+            }
+
+            return;
+        }
+
+        if (ownerType == ProductType.SYSTEM) {
+            if (targetType != ProductType.SENSOR &&
+                    targetType != ProductType.DEVICE) {
+
+                throw new IllegalArgumentException(
+                        "В состав системы можно добавить " +
+                                "только датчик или прибор"
+                );
+            }
+
+            return;
+        }
+
+        throw new IllegalArgumentException(
+                "Для выбранного типа изделия состав не поддерживается"
+        );
+    }
     private void validateInclusionRow(
             ClassifierInclusionForm row
     ) {
@@ -326,7 +384,11 @@ public class ProductClassifierService {
                     "Укажите количество входящего изделия"
             );
         }
-
+        if (row.getInclusionMode() == null) {
+            throw new IllegalArgumentException(
+                    "Выберите режим включения изделия"
+            );
+        }
         if (row.getUnit() == null) {
             throw new IllegalArgumentException(
                     "Выберите единицу измерения"

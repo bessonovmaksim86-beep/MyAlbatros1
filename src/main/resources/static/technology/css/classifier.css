@@ -1,1 +1,551 @@
-.technology-page{min-height:100vh;display:flex}.technology-workspace{width:100%;min-width:0;flex:1}.classifier-main{box-sizing:border-box;width:100%;max-width:none;padding:24px;display:grid;gap:24px}.card{background:#fff;border:1px solid #e3e8ef;border-radius:14px;overflow:hidden}.card-head,.card-body{padding:20px 24px}.card-head{display:flex;justify-content:space-between;gap:18px;border-bottom:1px solid #e9edf3}.card-head h1,.card-head h2,.inclusion-section h3{margin:0}.card-head p,.inclusion-section p{margin:6px 0;color:#68758a}.form-grid{display:grid;grid-template-columns:1fr 1fr;gap:18px}.field{display:grid;gap:7px;min-width:0}.span-2{grid-column:span 2}.field label{font-weight:600}.field input,.field select,.field textarea,.toolbar input,.toolbar select{box-sizing:border-box;width:100%;padding:10px 12px;border:1px solid #ccd4e0;border-radius:9px;background:#fff}.field textarea{min-height:90px}.field-error,.form-error{color:#b42318}.form-error{padding:10px;background:#fff1f0;border-radius:8px}.sensor-details{padding:12px;background:#f4f7fb;border-radius:8px}.inclusion-section{margin-top:24px;padding-top:20px;border-top:1px solid #e3e8ef}.inclusion-row{display:grid;grid-template-columns:minmax(260px,1fr) 150px 150px auto;align-items:end;gap:12px;padding:12px 0;border-bottom:1px solid #edf0f5}.form-actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:22px}.btn{display:inline-flex;align-items:center;justify-content:center;padding:9px 14px;border:1px solid transparent;border-radius:8px;text-decoration:none;cursor:pointer;font:inherit}.btn-primary{background:#2457d6;color:#fff}.btn-secondary{background:#fff;color:#273449;border-color:#cbd4e0}.btn-danger{background:#fff;color:#b42318;border-color:#efb5b0}.toolbar{display:grid;grid-template-columns:1fr 220px;gap:12px}.table-wrap{overflow:auto}table{width:100%;border-collapse:collapse}th,td{text-align:left;padding:12px 15px;border-top:1px solid #edf0f5}.flash.success{padding:12px 15px;background:#edf9f0;color:#176b32;border-radius:8px}[hidden]{display:none!important}@media(max-width:800px){.form-grid,.toolbar{grid-template-columns:1fr}.span-2{grid-column:auto}.inclusion-row{grid-template-columns:1fr}.classifier-main{padding:14px}}
+/* =========================================================
+   Страницы создания, изменения и удаления классификатора
+   ========================================================= */
+
+.classifier-page {
+    --classifier-primary: #2563eb;
+    --classifier-primary-dark: #1d4ed8;
+    --classifier-primary-soft: #eff6ff;
+
+    --classifier-danger: #dc2626;
+    --classifier-danger-dark: #b91c1c;
+    --classifier-danger-soft: #fef2f2;
+
+    --classifier-text: #172033;
+    --classifier-muted: #667085;
+    --classifier-border: #dfe5ef;
+    --classifier-surface: #ffffff;
+    --classifier-background: #f6f8fc;
+
+    max-width: 1240px;
+    margin: 0 auto;
+}
+
+.classifier-page-head {
+    align-items: flex-start;
+    gap: 28px;
+    margin-bottom: 26px;
+}
+
+.classifier-page-head h1 {
+    margin: 5px 0 8px;
+    color: var(--classifier-text);
+    font-size: clamp(26px, 3vw, 36px);
+    line-height: 1.15;
+    letter-spacing: -0.03em;
+}
+
+.classifier-page-head p {
+    max-width: 680px;
+    margin: 0;
+    color: var(--classifier-muted);
+    font-size: 15px;
+    line-height: 1.6;
+}
+
+.classifier-page-kicker {
+    display: inline-block;
+    color: var(--classifier-primary);
+    font-size: 12px;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+/* Верхнее меню операций */
+
+.classifier-action-menu {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 9px;
+    padding: 6px;
+    border: 1px solid var(--classifier-border);
+    border-radius: 14px;
+    background: var(--classifier-surface);
+    box-shadow: 0 5px 18px rgba(15, 23, 42, 0.05);
+}
+
+.classifier-action-menu .btn {
+    min-height: 40px;
+    padding: 10px 16px;
+    border: 1px solid transparent;
+    border-radius: 10px;
+    text-decoration: none;
+    font-size: 14px;
+    font-weight: 700;
+    transition:
+        transform 0.18s ease,
+        box-shadow 0.18s ease,
+        background-color 0.18s ease;
+}
+
+.classifier-action-menu .btn:hover {
+    transform: translateY(-1px);
+}
+
+.classifier-action-menu .primary {
+    color: #1d4ed8;
+    background: #eff6ff;
+}
+
+.classifier-action-menu .secondary {
+    color: #344054;
+    background: #f7f8fa;
+}
+
+.classifier-action-menu .danger {
+    color: #b42318;
+    background: #fff1f0;
+}
+
+.classifier-action-menu .primary.is-active {
+    color: #ffffff;
+    background: var(--classifier-primary);
+    box-shadow: 0 5px 14px rgba(37, 99, 235, 0.25);
+}
+
+.classifier-action-menu .secondary.is-active {
+    color: #ffffff;
+    background: #475467;
+    box-shadow: 0 5px 14px rgba(71, 84, 103, 0.23);
+}
+
+.classifier-action-menu .danger.is-active {
+    color: #ffffff;
+    background: var(--classifier-danger);
+    box-shadow: 0 5px 14px rgba(220, 38, 38, 0.22);
+}
+
+/* Карточка выбора */
+
+.classifier-selection-card,
+.classifier-editor-card {
+    margin-bottom: 24px;
+    padding: 26px;
+    border: 1px solid var(--classifier-border);
+    border-radius: 20px;
+    background: var(--classifier-surface);
+    box-shadow:
+        0 1px 2px rgba(15, 23, 42, 0.03),
+        0 12px 32px rgba(15, 23, 42, 0.06);
+}
+
+.classifier-selection-card {
+    position: relative;
+    overflow: hidden;
+}
+
+.classifier-selection-card::before {
+    position: absolute;
+    top: 0;
+    right: 0;
+    left: 0;
+    height: 4px;
+    background: linear-gradient(
+        90deg,
+        #2563eb,
+        #60a5fa
+    );
+    content: "";
+}
+
+.classifier-selection-card--danger::before {
+    background: linear-gradient(
+        90deg,
+        #dc2626,
+        #fb7185
+    );
+}
+
+.classifier-selection-card__head,
+.classifier-editor-card__head {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    margin-bottom: 22px;
+}
+
+.classifier-selection-card__head h2,
+.classifier-editor-card__head h2 {
+    margin: 0 0 4px;
+    color: var(--classifier-text);
+    font-size: 19px;
+    line-height: 1.3;
+}
+
+.classifier-selection-card__head p,
+.classifier-editor-card__head p {
+    margin: 0;
+    color: var(--classifier-muted);
+    font-size: 14px;
+    line-height: 1.5;
+}
+
+.classifier-selection-number {
+    display: inline-flex;
+    flex: 0 0 42px;
+    align-items: center;
+    justify-content: center;
+    width: 42px;
+    height: 42px;
+    border-radius: 13px;
+    color: #ffffff;
+    background: linear-gradient(
+        145deg,
+        #2563eb,
+        #1d4ed8
+    );
+    box-shadow: 0 7px 16px rgba(37, 99, 235, 0.25);
+    font-size: 17px;
+    font-weight: 800;
+}
+
+/* Поля формы */
+
+.classifier-form-grid {
+    display: grid;
+    gap: 22px;
+}
+
+.classifier-page .form-group {
+    min-width: 0;
+    margin: 0;
+}
+
+.classifier-page .form-group > label {
+    display: inline-block;
+    margin-bottom: 8px;
+    color: #344054;
+    font-size: 14px;
+    font-weight: 750;
+}
+
+.classifier-page .required {
+    color: var(--classifier-danger);
+}
+
+.classifier-page .form-control {
+    box-sizing: border-box;
+    width: 100%;
+    min-height: 46px;
+    padding: 11px 14px;
+    border: 1px solid #cfd7e5;
+    border-radius: 11px;
+    outline: none;
+    color: var(--classifier-text);
+    background: #ffffff;
+    font: inherit;
+    line-height: 1.4;
+    transition:
+        border-color 0.18s ease,
+        box-shadow 0.18s ease,
+        background-color 0.18s ease;
+}
+
+.classifier-page textarea.form-control {
+    min-height: 112px;
+    resize: vertical;
+}
+
+.classifier-page .form-control:hover {
+    border-color: #98a6ba;
+}
+
+.classifier-page .form-control:focus {
+    border-color: var(--classifier-primary);
+    box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.11);
+}
+
+.classifier-page .form-control::placeholder {
+    color: #98a2b3;
+}
+
+.classifier-page .form-group small,
+.classifier-field-hint {
+    display: block;
+    margin-top: 7px;
+    color: var(--classifier-muted);
+    font-size: 12px;
+    line-height: 1.45;
+}
+
+.classifier-page .field-error {
+    margin-top: 7px;
+    color: var(--classifier-danger);
+    font-size: 13px;
+    font-weight: 650;
+}
+
+.classifier-type-row {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: start;
+    gap: 20px;
+}
+
+.classifier-picker {
+    min-height: 52px !important;
+    border-width: 2px !important;
+    font-weight: 650 !important;
+}
+
+/* Состав изделия */
+
+.classifier-inclusion-section {
+    padding: 22px;
+    border: 1px solid #dbe5f4;
+    border-radius: 16px;
+    background:
+        linear-gradient(
+            145deg,
+            #f8fbff,
+            #ffffff
+        );
+}
+
+.inclusion-section-head {
+    margin-bottom: 18px;
+}
+
+.inclusion-section-head h2 {
+    margin: 0 0 5px;
+    color: var(--classifier-text);
+    font-size: 18px;
+}
+
+.inclusion-section-head p {
+    margin: 0;
+    color: var(--classifier-muted);
+    font-size: 13px;
+}
+
+.inclusion-rows {
+    display: grid;
+    gap: 12px;
+}
+
+.inclusion-row {
+    display: grid;
+    grid-template-columns:
+        minmax(280px, 2fr)
+        minmax(220px, 1fr)
+        auto;
+    align-items: end;
+    gap: 14px;
+    padding: 16px;
+    border: 1px solid #e1e7f0;
+    border-radius: 13px;
+    background: #ffffff;
+}
+
+.remove-inclusion {
+    min-height: 46px;
+    border-color: #fecaca !important;
+    color: #b91c1c !important;
+    background: #fff7f7 !important;
+}
+
+/* Примечание */
+
+.classifier-note-field {
+    padding-top: 4px;
+}
+
+/* Кнопки снизу */
+
+.classifier-form-actions {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 12px;
+    margin-top: 28px;
+    padding-top: 22px;
+    border-top: 1px solid var(--classifier-border);
+}
+
+.classifier-form-actions .btn {
+    min-width: 126px;
+    min-height: 44px;
+    padding: 11px 20px;
+    border: 1px solid transparent;
+    border-radius: 11px;
+    cursor: pointer;
+    text-align: center;
+    text-decoration: none;
+    font: inherit;
+    font-size: 14px;
+    font-weight: 750;
+    transition:
+        transform 0.18s ease,
+        box-shadow 0.18s ease,
+        background-color 0.18s ease;
+}
+
+.classifier-form-actions .btn:hover {
+    transform: translateY(-1px);
+}
+
+.classifier-form-actions .btn-primary {
+    color: #ffffff;
+    background: linear-gradient(
+        145deg,
+        var(--classifier-primary),
+        var(--classifier-primary-dark)
+    );
+    box-shadow: 0 7px 16px rgba(37, 99, 235, 0.22);
+}
+
+.classifier-form-actions .btn-primary:hover {
+    box-shadow: 0 9px 20px rgba(37, 99, 235, 0.29);
+}
+
+.classifier-form-actions .btn-secondary {
+    border-color: #d0d5dd;
+    color: #344054;
+    background: #ffffff;
+}
+
+.classifier-form-actions .btn-danger {
+    color: #ffffff;
+    background: linear-gradient(
+        145deg,
+        var(--classifier-danger),
+        var(--classifier-danger-dark)
+    );
+    box-shadow: 0 7px 16px rgba(220, 38, 38, 0.2);
+}
+
+/* Страница удаления */
+
+.classifier-delete-warning {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    margin-bottom: 22px;
+    padding: 15px 17px;
+    border: 1px solid #fecaca;
+    border-radius: 12px;
+    color: #991b1b;
+    background: var(--classifier-danger-soft);
+    font-size: 14px;
+    line-height: 1.5;
+}
+
+.classifier-delete-warning strong {
+    flex: 0 0 auto;
+}
+
+.classifier-readonly-fields {
+    min-width: 0;
+    margin: 0;
+    padding: 0;
+    border: 0;
+}
+
+.classifier-readonly-fields .form-control:disabled {
+    opacity: 1;
+    border-color: #dfe4ec;
+    color: #475467;
+    background: #f7f8fa;
+    cursor: default;
+}
+
+.classifier-readonly-fields .remove-inclusion {
+    display: none;
+}
+
+/* Состояние без выбранной записи */
+
+.classifier-empty-selection {
+    padding: 48px 24px;
+    border: 1px dashed #cbd5e1;
+    border-radius: 18px;
+    text-align: center;
+    background: rgba(255, 255, 255, 0.65);
+}
+
+.classifier-empty-selection__icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 54px;
+    height: 54px;
+    margin-bottom: 15px;
+    border-radius: 16px;
+    color: var(--classifier-primary);
+    background: var(--classifier-primary-soft);
+    font-size: 28px;
+    font-weight: 800;
+}
+
+.classifier-empty-selection__icon--danger {
+    color: var(--classifier-danger);
+    background: var(--classifier-danger-soft);
+}
+
+.classifier-empty-selection h2 {
+    margin: 0 0 7px;
+    color: var(--classifier-text);
+    font-size: 19px;
+}
+
+.classifier-empty-selection p {
+    margin: 0;
+    color: var(--classifier-muted);
+    font-size: 14px;
+}
+
+/* Адаптивность */
+
+@media (max-width: 900px) {
+    .classifier-page-head {
+        flex-direction: column;
+    }
+
+    .classifier-action-menu {
+        width: 100%;
+    }
+
+    .classifier-action-menu .btn {
+        flex: 1 1 auto;
+        text-align: center;
+    }
+}
+
+@media (max-width: 720px) {
+    .classifier-selection-card,
+    .classifier-editor-card {
+        padding: 19px;
+        border-radius: 16px;
+    }
+
+    .classifier-type-row,
+    .inclusion-row {
+        grid-template-columns: 1fr;
+    }
+
+    .remove-inclusion {
+        width: 100%;
+    }
+
+    .classifier-form-actions {
+        flex-direction: column-reverse;
+    }
+
+    .classifier-form-actions .btn {
+        width: 100%;
+    }
+}
+
+@media (max-width: 480px) {
+    .classifier-action-menu {
+        display: grid;
+        grid-template-columns: 1fr;
+    }
+
+    .classifier-selection-card__head,
+    .classifier-editor-card__head {
+        align-items: flex-start;
+    }
+}
