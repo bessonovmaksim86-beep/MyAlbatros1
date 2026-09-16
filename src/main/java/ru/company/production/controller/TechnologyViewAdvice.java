@@ -13,7 +13,10 @@ import java.util.Locale;
 
 @ControllerAdvice(assignableTypes = {
         TechnologyController.class,
-        TechnologyClassifierController.class
+        TechnologyClassifierController.class,
+        OperationController.class,
+        TechProcessController.class,
+        WorkPlaceController.class
 })
 @RequiredArgsConstructor
 public class TechnologyViewAdvice {

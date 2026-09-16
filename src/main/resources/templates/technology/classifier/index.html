@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="ru"
+      xmlns:th="http://www.thymeleaf.org">
+
+<head>
+    <meta charset="UTF-8">
+
+    <meta
+            name="viewport"
+            content="width=device-width, initial-scale=1.0">
+
+    <title>Классификатор изделий</title>
+
+    <link
+            rel="stylesheet"
+            th:href="@{/technology/css/technology.css}">
+
+    <link
+            rel="stylesheet"
+            th:href="@{/technology/css/common.css}">
+
+    <link
+            rel="stylesheet"
+            th:href="@{/technology/css/classifier.css}">
+</head>
+
+<body>
+
+<div class="app-shell">
+
+    <aside
+            th:replace="~{
+                technology/fragments/layout
+                :: sidebar('classifier')
+            }">
+    </aside>
+
+    <main class="main">
+
+        <header
+                th:replace="~{
+                    technology/fragments/layout
+                    :: topbar
+                }">
+        </header>
+
+        <div class="page-content classifier-page">
+
+            <div class="page-head">
+
+                <div>
+                    <h1>Классификатор изделий</h1>
+
+                    <p>
+                        Просмотр и управление
+                        классификаторами изделий
+                    </p>
+                </div>
+
+                <nav
+                        class="classifier-action-menu"
+                        aria-label="Операции с классификатором">
+
+                    <a
+                            class="btn primary"
+                            th:href="@{
+                                /technology/classifier/create
+                            }">
+                        Добавить классификатор
+                    </a>
+
+                    <a
+                            class="btn secondary"
+                            th:href="@{
+                                /technology/classifier/update
+                            }">
+                        Изменить классификатор
+                    </a>
+
+                    <a
+                            class="btn danger"
+                            th:href="@{
+                                /technology/classifier/delete
+                            }">
+                        Удалить классификатор
+                    </a>
+                </nav>
+
+            </div>
+
+            <div
+                    class="alert alert-success"
+                    th:if="${successMessage != null}"
+                    th:text="${successMessage}">
+                Операция выполнена.
+            </div>
+
+            <div
+                    class="alert alert-danger"
+                    th:if="${errorMessage != null}"
+                    th:text="${errorMessage}">
+                Ошибка операции.
+            </div>
+
+            <div th:replace="~{
+                    technology/fragments/type-filter
+                    :: typeFilter(
+                        @{/technology/classifier},
+                        ${activeType},
+                        ${classifierCards},
+                        'Классификаторы по типам изделий',
+                        'Нажмите тип, чтобы показать список этого типа, или «Все» — весь список',
+                        ${totalCount}
+                    )}">
+            </div>
+
+            <section class="classifier-statistics">
+
+                <div class="classifier-statistics__head">
+
+                    <div>
+                        <h2>
+                            <span th:if="${activeType == null}">
+                                Все классификаторы
+                            </span>
+
+                            <span th:unless="${activeType == null}">
+                                Классификаторы типа
+                                <span th:if="${activeType == 'CELL'}">«Ячейки»</span>
+                                <span th:if="${activeType == 'SENSOR'}">«Датчики»</span>
+                                <span th:if="${activeType == 'DEVICE'}">«Приборы»</span>
+                                <span th:if="${activeType == 'SYSTEM'}">«Системы»</span>
+                            </span>
+                        </h2>
+
+                        <p>
+                            Показано записей:
+
+                            <strong th:text="${#lists.size(classifiers)}">
+                                0
+                            </strong>
+                        </p>
+                    </div>
+                </div>
+
+                <div class="card">
+
+                    <div class="card-body">
+
+                        <div class="table-wrap">
+
+                            <table class="data-table">
+
+                                <thead>
+                                <tr>
+                                    <th>Код</th>
+                                    <th>Тип изделия</th>
+                                    <th>Наименование</th>
+                                    <th>Действия</th>
+                                </tr>
+                                </thead>
+
+                                <tbody>
+
+                                <tr th:if="${#lists.isEmpty(classifiers)}">
+
+                                    <td colspan="4"
+                                        class="empty-table">
+                                        Классификаторы не найдены
+                                    </td>
+
+                                </tr>
+
+                                <tr th:each="classifier : ${classifiers}">
+
+                                    <td th:text="${classifier.code}">
+                                        1001
+                                    </td>
+
+                                    <td th:text="${
+                                        classifier.productType.displayName}">
+                                        Тип
+                                    </td>
+
+                                    <td th:text="${
+                                        classifier.displayName}">
+                                        Наименование
+                                    </td>
+
+                                    <td>
+
+                                        <div class="table-actions">
+
+                                            <a class="btn secondary compact"
+                                               th:href="@{
+                                                  /technology/classifier/update/{id}(
+                                                  id=${classifier.id})}">
+                                                Изменить
+                                            </a>
+
+                                            <a class="btn danger compact"
+                                               th:href="@{
+                                                  /technology/classifier/delete/{id}(
+                                                  id=${classifier.id})}">
+                                                Удалить
+                                            </a>
+
+                                        </div>
+
+                                    </td>
+
+                                </tr>
+
+                                </tbody>
+                            </table>
+
+                        </div>
+
+                    </div>
+
+                </div>
+
+            </section>
+
+        </div>
+    </main>
+</div>
+
+<th:block
+        th:replace="~{
+            technology/fragments/layout
+            :: commonScripts
+        }">
+</th:block>
+
+<script th:src="@{/technology/js/classifier.js}"></script>
+
+</body>
+</html>

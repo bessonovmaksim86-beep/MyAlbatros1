@@ -72,7 +72,7 @@ public class AppUser {
             name = "user_type",
             length = 40
     )
-    private UserType userType;
+    private RoleUser roleUser;
 
     @Column(name = "password_hash", nullable = false, length = 100)
     private String passwordHash;

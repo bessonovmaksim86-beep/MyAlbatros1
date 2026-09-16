@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="ru"
+      xmlns:th="http://www.thymeleaf.org">
+
+<head>
+    <meta charset="UTF-8">
+
+    <meta name="viewport"
+          content="width=device-width, initial-scale=1">
+
+    <title>Изменение операции</title>
+
+    <link rel="stylesheet"
+          th:href="@{/technology/css/technology.css}">
+
+    <link rel="stylesheet"
+          th:href="@{/technology/css/common.css}">
+
+    <link rel="stylesheet"
+          th:href="@{/technology/css/operation.css}">
+</head>
+
+<body>
+
+<div class="app-shell">
+
+    <aside th:replace="~{technology/fragments/layout
+            :: sidebar('operation')}">
+    </aside>
+
+    <main class="main">
+
+        <header th:replace="~{technology/fragments/layout
+                :: topbar}">
+        </header>
+
+        <div class="page-content operation-page">
+
+            <div class="page-head">
+
+                <div class="page-title">
+                    <h1>Изменение операции</h1>
+
+                    <p th:if="${selectedOperation == null}">
+                        Выберите операцию для изменения
+                    </p>
+
+                    <p th:if="${selectedOperation != null}">
+                        Измените необходимые параметры
+                    </p>
+                </div>
+
+                <a class="btn secondary"
+                   th:href="@{/technology/operation}">
+                    Вернуться к операциям
+                </a>
+
+            </div>
+
+            <div class="alert danger"
+                 th:if="${errorMessage}"
+                 th:text="${errorMessage}">
+            </div>
+
+            <section class="card"
+                     th:if="${selectedOperation == null}">
+
+                <div class="card-head">
+                    <div>
+                        <h2>Выбор операции</h2>
+
+                        <small>
+                            Нажмите на операцию, которую требуется изменить
+                        </small>
+                    </div>
+                </div>
+
+                <div class="card-body">
+
+                    <div class="operation-selection-list">
+
+                        <a class="operation-selection-item"
+                           th:each="operation : ${operations}"
+                           th:href="@{
+                              /technology/operation/update(
+                              id=${operation.id})}">
+
+                            <strong th:text="${
+                                    operation.operationName.name}">
+                                Операция
+                            </strong>
+
+                            <span th:text="${
+                                    operation.operationType.name}">
+                                Тип операции
+                            </span>
+
+                        </a>
+
+                        <div class="empty-table"
+                             th:if="${#lists.isEmpty(operations)}">
+                            Операции пока не добавлены
+                        </div>
+
+                    </div>
+                </div>
+            </section>
+
+            <section class="card operation-editor-card"
+                     th:if="${selectedOperation != null}">
+
+                <div class="card-head operation-editor-head">
+                    <div>
+                        <h2>Параметры операции</h2>
+
+                        <small>
+                            Поля со знаком
+                            <span class="required">*</span>
+                            обязательны для заполнения
+                        </small>
+                    </div>
+                </div>
+
+                <div class="card-body operation-editor-body"
+                     th:insert="~{
+                        technology/operation/fragments/operation-form
+                        :: form(
+                            @{
+                              /technology/operation/{id}/update(
+                              id=${selectedOperation.id}
+                            )},
+                            'Сохранить изменения'
+                        )
+                     }">
+                </div>
+
+            </section>
+
+        </div>
+    </main>
+</div>
+
+<th:block th:replace="~{technology/fragments/layout
+        :: commonScripts}">
+</th:block>
+<script th:src="@{/technology/js/operation.js}"></script>
+</body>
+</html>

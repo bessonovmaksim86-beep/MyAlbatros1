@@ -75,6 +75,18 @@ public class ProductClassifier {
     @OrderBy("position ASC")
     private List<ClassifierInclusion> inclusions = new ArrayList<>();
 
+    /*
+     * Состав системы: роды датчиков и приборы.
+     * Используется только для типа SYSTEM.
+     */
+    @OneToMany(
+            mappedBy = "system",
+            cascade = CascadeType.ALL,
+            orphanRemoval = true
+    )
+    @OrderBy("position ASC")
+    private List<SystemComponent> systemComponents = new ArrayList<>();
+
     @Version
     private Long version;
 
@@ -93,5 +105,14 @@ public class ProductClassifier {
 
     public void clearInclusions() {
         inclusions.clear();
+    }
+
+    public void addSystemComponent(SystemComponent component) {
+        component.setSystem(this);
+        systemComponents.add(component);
+    }
+
+    public void clearSystemComponents() {
+        systemComponents.clear();
     }
 }

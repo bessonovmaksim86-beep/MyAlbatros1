@@ -8,10 +8,16 @@ import lombok.RequiredArgsConstructor;
 public enum Role {
 
     ADMIN("Администратор базы"),
-
-    TECHNOLOGIST("Технологический отдел"),
-
-    SDP("Производство"),
+    SDP_SERVICE_HEAD_TECHNOLOGY ("Технологическое бюро"),
+    SDP_SERVICE_HEAD_DISPATCHER ("Диспетчерский отдел"),
+    SDP_SPP_EXECUTOR("СДП.Цех подготовки производства.Исполнитель."),
+    SDP_SA_EXECUTOR("СДП.Цех сборки.Исполнитель."),
+    SDP_SC_EXECUTOR("СДП.Цех настройки.Исполнитель."),
+    SDP_ST_EXECUTOR("СДП.Цех испытаний.Исполнитель."),
+    SDP_SPP_MASTER("СДП.Цех подготовки производства.Руководитель."),
+    SDP_SA_MASTER("СДП.Цех сборки.Руководитель."),
+    SDP_SC_MASTER("СДП.Цех настройки.Руководитель."),
+    SDP_ST_MASTER("СДП.Цех испытаний.Руководитель."),
 
     SGP("Склад готовой продукции"),
 

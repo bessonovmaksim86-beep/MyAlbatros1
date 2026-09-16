@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="ru"
+      xmlns:th="http://www.thymeleaf.org">
+
+<head>
+    <meta charset="UTF-8">
+
+    <meta name="viewport"
+          content="width=device-width, initial-scale=1">
+
+    <title>Операции</title>
+
+    <link rel="stylesheet"
+          th:href="@{/technology/css/technology.css}">
+
+    <link rel="stylesheet"
+          th:href="@{/technology/css/common.css}">
+
+    <link rel="stylesheet"
+          th:href="@{/technology/css/operation.css}">
+</head>
+
+<body>
+
+<div class="app-shell">
+
+    <aside th:replace="~{technology/fragments/layout
+            :: sidebar('operation')}">
+    </aside>
+
+    <main class="main">
+
+        <header th:replace="~{technology/fragments/layout
+                :: topbar}">
+        </header>
+
+        <div class="page-content operation-page">
+
+            <div class="page-head operation-page-head">
+
+                <div class="page-title">
+
+                    <h1>Операции</h1>
+
+                    <p>
+                        Создание, изменение и удаление операций
+                    </p>
+
+                </div>
+
+                <div class="page-head-actions operation-actions-grid">
+
+                    <a class="btn primary operation-action-btn"
+                       th:href="@{/technology/operation/create}">
+                        Добавить операцию
+                    </a>
+
+                    <a class="btn secondary operation-action-btn"
+                       th:href="@{/technology/operation/update}">
+                        Изменить операцию
+                    </a>
+
+                    <a class="btn danger operation-action-btn"
+                       th:href="@{/technology/operation/delete}">
+                        Удалить операцию
+                    </a>
+
+                </div>
+            </div>
+
+            <div class="alert success"
+                 th:if="${successMessage}"
+                 th:text="${successMessage}">
+            </div>
+
+            <div class="alert danger"
+                 th:if="${errorMessage}"
+                 th:text="${errorMessage}">
+            </div>
+
+            <div th:replace="~{technology/fragments/type-filter
+                    :: typeFilter(
+                        @{/technology/operation},
+                        ${activeType},
+                        ${operationCards},
+                        'Операции по типам',
+                        'Нажмите тип, чтобы показать операции этого типа, или «Все» — весь список',
+                        ${operationCount}
+                    )}">
+            </div>
+
+            <section class="card operation-list-card">
+
+                <div class="card-head">
+
+                    <div>
+
+                        <h2>
+                            Список операций
+
+                            <span th:if="${activeTypeName != null}"
+                                  th:text="' — ' + ${activeTypeName}">
+                            </span>
+                        </h2>
+
+                        <small>
+                            Показано записей:
+
+                            <strong th:text="${#lists.size(operations)}">
+                                0
+                            </strong>
+                        </small>
+
+                    </div>
+
+                </div>
+
+                <div class="card-body">
+
+                    <div class="table-wrap">
+
+                        <table class="data-table operation-table">
+
+                            <thead>
+                            <tr>
+                                <th>Наименование</th>
+                                <th>Тип операции</th>
+                                <th>Служба</th>
+                                <th>Подразделение</th>
+                                <th>Роль исполнителя</th>
+                                <th>Действия</th>
+                            </tr>
+                            </thead>
+
+                            <tbody>
+
+                            <tr th:if="${#lists.isEmpty(operations)}">
+
+                                <td colspan="6"
+                                    class="empty-table">
+                                    Операции пока не добавлены
+                                </td>
+
+                            </tr>
+
+                            <tr th:each="operation : ${operations}">
+
+                                <td class="operation-name"
+                                    th:text="${operation.operationName.name}">
+                                    Наименование
+                                </td>
+
+                                <td th:text="${operation.operationType.name}">
+                                    Тип операции
+                                </td>
+
+                                <td th:text="${operation.service.name}">
+                                    Служба
+                                </td>
+
+                                <td th:text="${
+                                    operation.organizationUnit != null
+                                    ? operation.organizationUnit.name
+                                    : 'Не указано'}">
+                                    Подразделение
+                                </td>
+
+                                <td th:text="${operation.executorRole.displayName}">
+                                    Роль исполнителя
+                                </td>
+
+                                <td>
+
+                                    <div class="table-actions">
+
+                                        <a class="btn secondary compact"
+                                           th:href="@{
+                                              /technology/operation/update(
+                                              id=${operation.id})}">
+                                            Изменить
+                                        </a>
+
+                                        <a class="btn danger compact"
+                                           th:href="@{
+                                              /technology/operation/delete(
+                                              id=${operation.id})}">
+                                            Удалить
+                                        </a>
+
+                                    </div>
+
+                                </td>
+
+                            </tr>
+
+                            </tbody>
+                        </table>
+
+                    </div>
+                </div>
+            </section>
+
+        </div>
+    </main>
+</div>
+
+<th:block th:replace="~{technology/fragments/layout
+        :: commonScripts}">
+</th:block>
+<script th:src="@{/technology/js/operation.js}"></script>
+</body>
+</html>

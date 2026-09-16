@@ -2,84 +2,76 @@ package ru.company.production.entity;
 
 import jakarta.persistence.*;
 import lombok.Getter;
-import lombok.NoArgsConstructor;
 import lombok.Setter;
+import org.hibernate.annotations.CreationTimestamp;
 
 import java.time.LocalDateTime;
 
+@Entity
+@Table(name = "operations")
 @Getter
 @Setter
-@NoArgsConstructor
-@Entity
-@Table(
-        name = "operations",
-        uniqueConstraints = {
-                @UniqueConstraint(
-                        name = "uk_operation_code",
-                        columnNames = "code"
-                )
-        },
-        indexes = {
-                @Index(
-                        name = "idx_operation_type",
-                        columnList = "operation_type"
-                ),
-                @Index(
-                        name = "idx_operation_workshop",
-                        columnList = "workshop_id"
-                ),
-                @Index(
-                        name = "idx_operation_department",
-                        columnList = "department_id"
-                )
-        }
-)
 public class Operation {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(nullable = false, length = 50)
-    private String code;
+    @ManyToOne(
+            fetch = FetchType.LAZY,
+            optional = false
+    )
+    @JoinColumn(
+            name = "operation_name_id",
+            nullable = false
+    )
+    private OperationName operationName;
 
-    @Column(nullable = false, length = 255)
-    private String name;
+    @ManyToOne(
+            fetch = FetchType.LAZY,
+            optional = false
+    )
+    @JoinColumn(
+            name = "operation_type_id",
+            nullable = false
+    )
+    private OperationType operationType;
 
-    @Enumerated(EnumType.STRING)
+    @ManyToOne(
+            fetch = FetchType.LAZY,
+            optional = false
+    )
+    @JoinColumn(
+            name = "executor_role_id",
+            nullable = false
+    )
+    private UserRole executorRole;
+
+    @ManyToOne(
+            fetch = FetchType.LAZY,
+            optional = false
+    )
+    @JoinColumn(
+            name = "service_id",
+            nullable = false
+    )
+    private ProductionService service;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "organization_unit_id")
+    private OrganizationUnit organizationUnit;
+
+    /*
+     * Произвольный комментарий к операции.
+     */
+    @Column(length = 2000)
+    private String note;
+
+    @CreationTimestamp
     @Column(
-            name = "operation_type",
+            name = "created_at",
             nullable = false,
-            length = 40
+            updatable = false
     )
-    private OperationType type;
-
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(
-            name = "workshop_id",
-            foreignKey = @ForeignKey(
-                    name = "fk_operation_workshop"
-            )
-    )
-    private Workshop workshop;
-
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(
-            name = "department_id",
-            foreignKey = @ForeignKey(
-                    name = "fk_operation_department"
-            )
-    )
-    private Department department;
-
-    @Column(nullable = false)
-    private boolean active = true;
-
-    @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt;
-
-    @PrePersist
-    protected void onCreate() {
-        createdAt = LocalDateTime.now();
-    }
 }

@@ -88,6 +88,18 @@
                 </div>
 
                 <div class="stat">
+                    <small>Рабочие места</small>
+
+                    <strong th:text="${workplaceCount ?: 0}">
+                        0
+                    </strong>
+
+                    <span class="trend">
+                        Действующих рабочих мест
+                    </span>
+                </div>
+
+                <div class="stat">
                     <small>Ожидают согласования</small>
 
                     <strong th:text="${approvalCount ?: 0}">

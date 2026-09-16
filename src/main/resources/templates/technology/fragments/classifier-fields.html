@@ -1,108 +1,39 @@
 <!DOCTYPE html>
 <html lang="ru" xmlns:th="http://www.thymeleaf.org">
 <th:block th:fragment="fields">
-    <input type="hidden" th:field="*{id}">
-    <input type="hidden" th:field="*{version}">
-<div class="alert alert-danger" th:if="${#fields.hasGlobalErrors()}">
-  <div th:each="error : ${#fields.globalErrors()}" th:text="${error}">Ошибка сохранения</div>
-</div>
+<input type="hidden" th:field="*{id}"><input type="hidden" th:field="*{version}">
+<div class="alert alert-danger" th:if="${#fields.hasGlobalErrors()}"><div th:each="e:${#fields.globalErrors()}" th:text="${e}">Ошибка сохранения</div></div>
 <div class="classifier-form-grid">
-  <div class="classifier-field-row"><div class="form-group">
-    <label for="code">Код <span class="required">*</span></label>
-    <input id="code" type="number" min="1000" max="9999" required th:field="*{code}" class="form-control">
-    <small>Укажите четырёхзначный код от 1000 до 9999.</small>
-    <div class="field-error" th:if="${#fields.hasErrors('code')}" th:errors="*{code}"></div>
-  </div></div>
-
-  <div class="classifier-type-row">
-    <div class="form-group">
-      <label for="productType">Тип изделия <span class="required">*</span></label>
-      <select id="productType" th:field="*{productType}" class="form-control" required>
-        <option value="">Выберите тип изделия</option>
-        <option th:each="type : ${productTypes}" th:value="${type.name()}" th:text="${type.displayName}"></option>
-      </select>
-      <div class="field-error" th:if="${#fields.hasErrors('productType')}" th:errors="*{productType}"></div>
-    </div>
-    <div id="sensorCatalogField" class="form-group" hidden>
-      <label for="sensorCatalogId">Датчик из каталога <span class="required">*</span></label>
-      <select id="sensorCatalogId" th:field="*{sensorCatalogId}" class="form-control" disabled>
-        <option value="">Выберите датчик</option>
-        <option th:each="sensor : ${sensorCatalogOptions}" th:value="${sensor.id}" th:text="${sensor.name}"></option>
-      </select>
-      <div class="field-error" th:if="${#fields.hasErrors('sensorCatalogId')}" th:errors="*{sensorCatalogId}"></div>
-    </div>
+ <div class="form-group"><label for="code">Код <span class="required">*</span></label><input id="code" type="number" min="1000" max="9999" required th:field="*{code}" class="form-control"><small>Четырёхзначный код от 1000 до 9999.</small><div class="field-error" th:if="${#fields.hasErrors('code')}" th:errors="*{code}"></div></div>
+ <div class="classifier-type-row">
+  <div class="form-group"><label for="productType">Тип изделия <span class="required">*</span></label><select id="productType" th:field="*{productType}" class="form-control" required><option value="">Выберите тип изделия</option><option th:each="t:${productTypes}" th:value="${t.name()}" th:text="${t.displayName}"></option></select><div class="field-error" th:if="${#fields.hasErrors('productType')}" th:errors="*{productType}"></div></div>
+  <div id="sensorCatalogField" class="form-group" hidden><label for="sensorCatalogId">Датчик из каталога <span class="required">*</span></label><select id="sensorCatalogId" th:field="*{sensorCatalogId}" class="form-control" disabled><option value="">Выберите датчик</option><option th:each="s:${sensorCatalogOptions}" th:value="${s.id}" th:attr="data-name=${s.name}" th:text="${s.name}"></option></select><div class="field-error" th:if="${#fields.hasErrors('sensorCatalogId')}" th:errors="*{sensorCatalogId}"></div></div>
+ </div>
+ <div class="form-group"><label for="name">Наименование</label><input id="name" type="text" maxlength="255" th:field="*{name}" class="form-control" placeholder="Введите наименование изделия"><div class="field-error" th:if="${#fields.hasErrors('name')}" th:errors="*{name}"></div></div>
+ <section id="inclusionSection" class="classifier-inclusion-section" hidden>
+  <div class="inclusion-section-head"><h2>Состав изделия</h2><p>После выбора изделия появятся режим включения и следующая строка.</p></div>
+  <div id="inclusionRows" class="inclusion-rows">
+   <div class="inclusion-row" th:each="row,st:*{inclusions}">
+    <div class="form-group inclusion-target-field"><label th:for="${'inclusion-target-'+st.index}">Входящее изделие</label><select class="form-control inclusion-target" th:id="${'inclusion-target-'+st.index}" th:name="${'inclusions['+st.index+'].targetId'}"><option value="">Выберите изделие</option><option th:each="o:${inclusionOptions}" th:value="${o.id}" th:attr="data-product-type=${o.productType.name()}" th:selected="${row.targetId==o.id}" th:text="${o.code+' — '+o.productType.displayName+(o.sensorCatalog!=null?' — '+o.sensorCatalog.name:'')+(o.name!=null and !#strings.isEmpty(o.name)?' — '+o.name:'')}"></option></select></div>
+    <div class="form-group inclusion-mode-field" th:hidden="${row.targetId==null}"><label th:for="${'inclusion-mode-'+st.index}">Режим включения</label><select class="form-control inclusion-mode" th:id="${'inclusion-mode-'+st.index}" th:name="${'inclusions['+st.index+'].inclusionMode'}" th:disabled="${row.targetId==null}"><option value="">Выберите режим</option><option th:each="m:${inclusionModes}" th:value="${m.name()}" th:selected="${row.inclusionMode==m}" th:text="${m.displayName}"></option></select></div>
+    <div class="form-group inclusion-max-field" th:hidden="${row.targetId==null}"><label th:for="${'inclusion-max-'+st.index}">Макс. в системе</label><input type="number" class="form-control inclusion-max" th:id="${'inclusion-max-'+st.index}" th:name="${'inclusions['+st.index+'].maxQuantity}" min="0" step="0.001" placeholder="не ограничено" th:value="${row.maxQuantity}" th:disabled="${row.targetId==null}"></div>
+    <input type="hidden" class="inclusion-quantity" th:name="${'inclusions['+st.index+'].quantity'}" th:value="${row.quantity!=null?row.quantity:1}" th:disabled="${row.targetId==null}"><input type="hidden" class="inclusion-unit" th:name="${'inclusions['+st.index+'].unit'}" th:value="${row.unit!=null?row.unit.name():'PCS'}" th:disabled="${row.targetId==null}"><button type="button" class="btn remove-inclusion" th:hidden="${row.targetId==null}">Удалить</button>
+   </div>
   </div>
-
-  <div class="classifier-field-row"><div class="form-group">
-    <label for="name">Наименование</label>
-    <input id="name" type="text" th:field="*{name}" class="form-control" placeholder="Введите наименование изделия">
-    <div class="field-error" th:if="${#fields.hasErrors('name')}" th:errors="*{name}"></div>
-  </div></div>
-
-  <section id="inclusionSection" class="classifier-inclusion-section" hidden>
-    <div class="inclusion-section-head">
-      <h2>Состав изделия</h2>
-      <p>После выбора входящего изделия автоматически появится следующая строка.</p>
-    </div>
-    <div id="inclusionRows" class="inclusion-rows">
-      <div class="inclusion-row" th:each="row, status : *{inclusions}">
-        <div class="form-group inclusion-target-field">
-          <label th:for="${'inclusion-target-' + status.index}">Входящее изделие</label>
-          <select class="form-control inclusion-target" th:id="${'inclusion-target-' + status.index}" th:name="${'inclusions[' + status.index + '].targetId'}">
-            <option value="">Выберите изделие</option>
-            <option th:each="option : ${inclusionOptions}" th:value="${option.id}"
-                    th:attr="data-product-type=${option.productType.name()}"
-                    th:selected="${row.targetId == option.id}"
-                    th:text="${option.code + ' — ' + (option.sensorCatalog != null ? option.sensorCatalog.name : option.name)}"></option>
-          </select>
-        </div>
-        <div class="form-group inclusion-mode-field" th:hidden="${row.targetId == null}">
-          <label th:for="${'inclusion-mode-' + status.index}">Режим включения</label>
-          <select class="form-control inclusion-mode" th:id="${'inclusion-mode-' + status.index}"
-                  th:name="${'inclusions[' + status.index + '].inclusionMode'}" th:disabled="${row.targetId == null}">
-            <option value="">Выберите режим</option>
-            <option th:each="mode : ${inclusionModes}" th:value="${mode.name()}"
-                    th:selected="${row.inclusionMode == mode}" th:text="${mode.displayName}"></option>
-          </select>
-        </div>
-        <input type="hidden" class="inclusion-quantity" th:name="${'inclusions[' + status.index + '].quantity'}"
-               th:value="${row.quantity != null ? row.quantity : 1}" th:disabled="${row.targetId == null}">
-        <input type="hidden" class="inclusion-unit" th:name="${'inclusions[' + status.index + '].unit'}"
-               th:value="${row.unit != null ? row.unit.name() : 'PCS'}" th:disabled="${row.targetId == null}">
-        <button type="button" class="btn btn-secondary remove-inclusion" th:hidden="${row.targetId == null}">Удалить</button>
-      </div>
-    </div>
-
-    <template id="inclusionRowTemplate">
-      <div class="inclusion-row">
-        <div class="form-group inclusion-target-field">
-          <label>Входящее изделие</label>
-          <select class="form-control inclusion-target">
-            <option value="">Выберите изделие</option>
-            <option th:each="option : ${inclusionOptions}" th:value="${option.id}"
-                    th:attr="data-product-type=${option.productType.name()}"
-                    th:text="${option.code + ' — ' + (option.sensorCatalog != null ? option.sensorCatalog.name : option.name)}"></option>
-          </select>
-        </div>
-        <div class="form-group inclusion-mode-field" hidden>
-          <label>Режим включения</label>
-          <select class="form-control inclusion-mode" disabled>
-            <option value="">Выберите режим</option>
-            <option th:each="mode : ${inclusionModes}" th:value="${mode.name()}" th:text="${mode.displayName}"></option>
-          </select>
-        </div>
-        <input type="hidden" class="inclusion-quantity" value="1" disabled>
-        <input type="hidden" class="inclusion-unit" value="PCS" disabled>
-        <button type="button" class="btn btn-secondary remove-inclusion" hidden>Удалить</button>
-      </div>
-    </template>
-  </section>
-
-  <div class="form-group classifier-note-field">
-    <label for="note">Примечание</label>
-    <textarea id="note" th:field="*{note}" class="form-control" rows="4" placeholder="Дополнительная информация о классификаторе"></textarea>
-    <div class="field-error" th:if="${#fields.hasErrors('note')}" th:errors="*{note}"></div>
+  <template id="inclusionRowTemplate"><div class="inclusion-row"><div class="form-group inclusion-target-field"><label>Входящее изделие</label><select class="form-control inclusion-target"><option value="">Выберите изделие</option><option th:each="o:${inclusionOptions}" th:value="${o.id}" th:attr="data-product-type=${o.productType.name()}" th:text="${o.code+' — '+o.productType.displayName+(o.sensorCatalog!=null?' — '+o.sensorCatalog.name:'')+(o.name!=null and !#strings.isEmpty(o.name)?' — '+o.name:'')}"></option></select></div><div class="form-group inclusion-mode-field" hidden><label>Режим включения</label><select class="form-control inclusion-mode" disabled><option value="">Выберите режим</option><option th:each="m:${inclusionModes}" th:value="${m.name()}" th:text="${m.displayName}"></option></select></div><div class="form-group inclusion-max-field" hidden><label>Макс. в системе</label><input type="number" class="form-control inclusion-max" min="0" step="0.001" placeholder="не ограничено" disabled></div><input type="hidden" class="inclusion-quantity" value="1" disabled><input type="hidden" class="inclusion-unit" value="PCS" disabled><button type="button" class="btn remove-inclusion" hidden>Удалить</button></div></template>
+ </section>
+ <section id="systemSection" class="classifier-inclusion-section" hidden>
+  <div class="inclusion-section-head"><h2>Состав системы</h2><p>Компоненты системы: род датчика из каталога (без модельного индекса) или готовый прибор. После выбора появятся режим включения и следующая строка.</p></div>
+  <div id="systemRows" class="inclusion-rows">
+   <div class="inclusion-row" th:each="row,st:*{systemComponents}">
+    <div class="form-group inclusion-target-field"><label th:for="${'system-target-'+st.index}">Компонент системы</label><select class="form-control system-component-target" th:id="${'system-target-'+st.index}"><option value="">Выберите компонент</option><optgroup label="Роды датчиков"><option th:each="s:${sensorCatalogOptions}" th:value="'S'+${s.id}" th:selected="${row.sensorCatalogId!=null and row.sensorCatalogId==s.id}" th:text="${s.name}"></option></optgroup><optgroup label="Приборы"><option th:each="d:${deviceOptions}" th:value="'D'+${d.id}" th:selected="${row.componentClassifierId!=null and row.componentClassifierId==d.id}" th:text="${d.code+' — '+(d.name!=null and !#strings.isEmpty(d.name)?d.name:d.displayName)}"></option></optgroup></select></div>
+    <div class="form-group inclusion-mode-field" th:hidden="${row.sensorCatalogId==null and row.componentClassifierId==null}"><label th:for="${'system-mode-'+st.index}">Режим включения</label><select class="form-control system-mode" th:id="${'system-mode-'+st.index}" th:name="${'systemComponents['+st.index+'].inclusionMode'}" th:disabled="${row.sensorCatalogId==null and row.componentClassifierId==null}"><option value="">Выберите режим</option><option th:each="m:${inclusionModes}" th:value="${m.name()}" th:selected="${row.inclusionMode==m}" th:text="${m.displayName}"></option></select></div>
+    <div class="form-group inclusion-max-field" th:hidden="${row.sensorCatalogId==null and row.componentClassifierId==null}"><label th:for="${'system-max-'+st.index}">Макс. в системе</label><input type="number" class="form-control system-max" th:id="${'system-max-'+st.index}" th:name="${'systemComponents['+st.index+'].maxQuantity}" min="0" step="0.001" placeholder="не ограничено" th:value="${row.maxQuantity}" th:disabled="${row.sensorCatalogId==null and row.componentClassifierId==null}"></div>
+    <input type="hidden" class="system-sensor-id" th:name="${'systemComponents['+st.index+'].sensorCatalogId}" th:value="${row.sensorCatalogId}"><input type="hidden" class="system-classifier-id" th:name="${'systemComponents['+st.index+'].componentClassifierId}" th:value="${row.componentClassifierId}"><input type="hidden" class="system-quantity" th:name="${'systemComponents['+st.index+'].quantity'}" th:value="${row.quantity!=null?row.quantity:1}" th:disabled="${row.sensorCatalogId==null and row.componentClassifierId==null}"><input type="hidden" class="system-unit" th:name="${'systemComponents['+st.index+'].unit'}" th:value="${row.unit!=null?row.unit.name():'PCS'}" th:disabled="${row.sensorCatalogId==null and row.componentClassifierId==null}"><button type="button" class="btn remove-system-component" th:hidden="${row.sensorCatalogId==null and row.componentClassifierId==null}">Удалить</button>
+   </div>
   </div>
+  <template id="systemRowTemplate"><div class="inclusion-row"><div class="form-group inclusion-target-field"><label>Компонент системы</label><select class="form-control system-component-target"><option value="">Выберите компонент</option><optgroup label="Роды датчиков"><option th:each="s:${sensorCatalogOptions}" th:value="'S'+${s.id}" th:text="${s.name}"></option></optgroup><optgroup label="Приборы"><option th:each="d:${deviceOptions}" th:value="'D'+${d.id}" th:text="${d.code+' — '+(d.name!=null and !#strings.isEmpty(d.name)?d.name:d.displayName)}"></option></optgroup></select></div><div class="form-group inclusion-mode-field" hidden><label>Режим включения</label><select class="form-control system-mode" disabled><option value="">Выберите режим</option><option th:each="m:${inclusionModes}" th:value="${m.name()}" th:text="${m.displayName}"></option></select></div><div class="form-group inclusion-max-field" hidden><label>Макс. в системе</label><input type="number" class="form-control system-max" min="0" step="0.001" placeholder="не ограничено" disabled></div><input type="hidden" class="system-sensor-id"><input type="hidden" class="system-classifier-id"><input type="hidden" class="system-quantity" value="1" disabled><input type="hidden" class="system-unit" value="PCS" disabled><button type="button" class="btn remove-system-component" hidden>Удалить</button></div></template>
+ </section>
+ <div class="form-group classifier-note-field"><label for="note">Примечание</label><textarea id="note" th:field="*{note}" class="form-control" rows="4" maxlength="2000" placeholder="Дополнительная информация"></textarea><div class="field-error" th:if="${#fields.hasErrors('note')}" th:errors="*{note}"></div></div>
 </div>
-</th:block>
-</html>
+</th:block></html>

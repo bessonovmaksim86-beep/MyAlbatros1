@@ -32,4 +32,22 @@ public class SensorCatalog {
 
     @Column(name = "protocol_search_path", length = 1000)
     private String protocolSearchPath;
+
+    /*
+     * Род датчика — наименование без модельного индекса
+     * (последнего слова): «Измеритель температуры многоточечный
+     * ДТМ3» → «Измеритель температуры многоточечный».
+     * Используется в составе изделия, где выбирается род,
+     * а не конкретная модель.
+     */
+    @Transient
+    public String getSensorFamily() {
+        if (name == null) {
+            return null;
+        }
+
+        int lastSpace = name.lastIndexOf(' ');
+
+        return lastSpace > 0 ? name.substring(0, lastSpace).trim() : name;
+    }
 }

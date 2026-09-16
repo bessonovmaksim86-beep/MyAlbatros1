@@ -6,17 +6,19 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.validation.BindingResult;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.ModelAttribute;
-import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.*;
 import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 import ru.company.production.dto.ClassifierForm;
+import ru.company.production.dto.TypeCardView;
+import ru.company.production.dto.TypeCards;
 import ru.company.production.entity.InclusionMode;
 import ru.company.production.entity.MeasurementUnit;
+import ru.company.production.entity.ProductClassifier;
 import ru.company.production.entity.ProductType;
 import ru.company.production.service.ProductClassifierService;
+
+import java.util.ArrayList;
+import java.util.List;
 
 @Controller
 @RequestMapping("/technology/classifier")
@@ -26,15 +28,93 @@ public class TechnologyClassifierController {
     private final ProductClassifierService classifierService;
 
     /**
-     * Главная страница классификатора.
-     * Показывает список существующих классификаторов.
+     * Порядок типов на главной странице классификатора.
      */
+    private static final ProductType[] TYPE_ORDER = {
+            ProductType.CELL,
+            ProductType.SENSOR,
+            ProductType.DEVICE,
+            ProductType.SYSTEM
+    };
+
     @GetMapping
-    public String classifierPage(Model model) {
+    public String classifierPage(
+            @RequestParam(
+                    name = "type",
+                    required = false
+            )
+            String type,
+            Model model
+    ) {
         fillCommonModel(model, null);
 
-        return "technology/classifier";
+        List<ProductClassifier> all = classifierService.findAll();
+        ProductType activeType = parseType(type);
+
+        model.addAttribute(
+                "classifiers",
+                activeType == null
+                        ? all
+                        : all.stream()
+                            .filter(item ->
+                                    item.getProductType() == activeType)
+                            .toList()
+        );
+
+        model.addAttribute(
+                "activeType",
+                activeType == null ? null : activeType.name()
+        );
+        model.addAttribute("totalCount", all.size());
+
+        fillClassifierCards(model, all);
+
+        return "technology/classifier/index";
     }
+
+    /**
+     * Разбирает параметр типа из адресной строки.
+     * Некорректное значение трактуется как «показать все».
+     */
+    private ProductType parseType(String type) {
+        if (type == null || type.isBlank()) {
+            return null;
+        }
+
+        try {
+            return ProductType.valueOf(type.trim().toUpperCase());
+        } catch (IllegalArgumentException exception) {
+            return null;
+        }
+    }
+
+    /**
+     * Строит карточки-фильтры по типам изделий.
+     */
+    private void fillClassifierCards(
+            Model model,
+            List<ProductClassifier> all
+    ) {
+        List<TypeCardView> cards = new ArrayList<>();
+
+        for (int index = 0; index < TYPE_ORDER.length; index++) {
+            ProductType type = TYPE_ORDER[index];
+            long count = all.stream()
+                    .filter(item -> item.getProductType() == type)
+                    .count();
+
+            cards.add(new TypeCardView(
+                    type.name(),
+                    type.getDisplayName(),
+                    count,
+                    TypeCards.icon(type.getDisplayName()),
+                    TypeCards.modifier(index)
+            ));
+        }
+
+        model.addAttribute("classifierCards", cards);
+    }
+
 
     /**
      * Страница создания классификатора.
@@ -96,9 +176,6 @@ public class TechnologyClassifierController {
         return "redirect:/technology/classifier";
     }
 
-    /**
-     * Страница изменения классификатора.
-     */
     /**
      * Страница выбора классификатора для изменения.
      */
@@ -165,7 +242,7 @@ public class TechnologyClassifierController {
         form.setId(id);
 
         /*
-         * Нужно для повторного отображения формы,
+         * Идентификатор нужен для повторного отображения формы,
          * если сервер вернул ошибку валидации.
          */
         model.addAttribute(
@@ -277,13 +354,16 @@ public class TechnologyClassifierController {
     }
 
     /**
-     * Дополнительная проверка полей, зависящих от типа изделия.
+     * Дополнительная проверка полей,
+     * зависящих от выбранного типа изделия.
      */
     private void validateConditionalFields(
             ClassifierForm form,
             BindingResult errors
     ) {
-        if (form.getProductType() == null) {
+        ProductType productType = form.getProductType();
+
+        if (productType == null) {
             errors.rejectValue(
                     "productType",
                     "classifier.productType.required",
@@ -293,7 +373,7 @@ public class TechnologyClassifierController {
             return;
         }
 
-        if (form.getProductType() == ProductType.SENSOR) {
+        if (productType == ProductType.SENSOR) {
             if (form.getSensorCatalogId() == null) {
                 errors.rejectValue(
                         "sensorCatalogId",
@@ -315,7 +395,8 @@ public class TechnologyClassifierController {
     }
 
     /**
-     * Общие данные для страниц создания и изменения.
+     * Добавляет в модель общие данные,
+     * используемые страницами классификатора.
      */
     private void fillCommonModel(
             Model model,
@@ -325,10 +406,12 @@ public class TechnologyClassifierController {
                 "activePage",
                 "classifier"
         );
+
         model.addAttribute(
                 "inclusionModes",
                 InclusionMode.values()
         );
+
         model.addAttribute(
                 "productTypes",
                 ProductType.values()
@@ -352,6 +435,13 @@ public class TechnologyClassifierController {
         model.addAttribute(
                 "inclusionOptions",
                 classifierService.inclusionOptions(
+                        excludedClassifierId
+                )
+        );
+
+        model.addAttribute(
+                "deviceOptions",
+                classifierService.deviceOptions(
                         excludedClassifierId
                 )
         );

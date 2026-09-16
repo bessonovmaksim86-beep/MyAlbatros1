@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="ru"
+      xmlns:th="http://www.thymeleaf.org">
+
+<head>
+    <meta charset="UTF-8">
+
+    <meta name="viewport"
+          content="width=device-width, initial-scale=1">
+
+    <title>Удаление операции</title>
+
+    <link rel="stylesheet"
+          th:href="@{/technology/css/technology.css}">
+
+    <link rel="stylesheet"
+          th:href="@{/technology/css/common.css}">
+
+    <link rel="stylesheet"
+          th:href="@{/technology/css/operation.css}">
+</head>
+
+<body>
+
+<div class="app-shell">
+
+    <aside th:replace="~{technology/fragments/layout
+            :: sidebar('operation')}">
+    </aside>
+
+    <main class="main">
+
+        <header th:replace="~{technology/fragments/layout
+                :: topbar}">
+        </header>
+
+        <div class="page-content operation-page">
+
+            <div class="page-head operation-page-head">
+
+                <div class="page-title">
+
+                    <h1>Удаление операции</h1>
+
+                    <p>
+                        Выберите операцию и подтвердите удаление
+                    </p>
+
+                </div>
+
+                <a class="btn secondary"
+                   th:href="@{/technology/operation}">
+                    Вернуться к операциям
+                </a>
+
+            </div>
+
+            <div class="alert danger"
+                 th:if="${errorMessage}"
+                 th:text="${errorMessage}">
+            </div>
+
+            <section class="card operation-delete-selector">
+
+                <div class="card-head">
+
+                    <div>
+                        <h2>Выбор операции</h2>
+
+                        <small>
+                            Выберите операцию из списка
+                        </small>
+                    </div>
+
+                </div>
+
+                <div class="card-body">
+
+                    <form method="get"
+                          class="operation-selector">
+
+                        <div class="form-group">
+
+                            <label for="operationId">
+                                Операция
+                            </label>
+
+                            <select id="operationId"
+                                    name="id"
+                                    data-auto-submit
+                                    required>
+
+                                <option value="">
+                                    Выберите операцию
+                                </option>
+
+                                <option th:each="operation : ${operations}"
+                                        th:value="${operation.id}"
+                                        th:selected="${
+                                            selectedOperation != null
+                                            and selectedOperation.id
+                                                == operation.id}"
+                                        th:text="|
+                                            ${operation.operationName.name}
+                                            — ${operation.service.name}
+                                            / ${
+                                                operation.organizationUnit
+                                                    != null
+                                                ? operation.organizationUnit.name
+                                                : 'без подразделения'
+                                            }|">
+                                    Операция
+                                </option>
+
+                            </select>
+
+                        </div>
+
+                        <button type="submit"
+                                class="btn secondary">
+                            Выбрать
+                        </button>
+
+                    </form>
+
+                </div>
+            </section>
+
+            <section class="card operation-delete-card"
+                     th:if="${selectedOperation != null}">
+
+                <div class="delete-warning">
+
+                    <div class="delete-warning-icon">
+                        !
+                    </div>
+
+                    <div>
+                        <h2>Удалить операцию?</h2>
+
+                        <p>
+                            Это действие нельзя отменить.
+                        </p>
+                    </div>
+
+                </div>
+
+                <dl class="operation-delete-details">
+
+                    <div>
+                        <dt>Наименование</dt>
+
+                        <dd th:text="${
+                            selectedOperation.operationName.name}">
+                            Наименование
+                        </dd>
+                    </div>
+
+                    <div>
+                        <dt>Тип операции</dt>
+
+                        <dd th:text="${
+                            selectedOperation.operationType.name}">
+                            Тип операции
+                        </dd>
+                    </div>
+
+                    <div>
+                        <dt>Служба</dt>
+
+                        <dd th:text="${
+                            selectedOperation.service.name}">
+                            Служба
+                        </dd>
+                    </div>
+
+                    <div>
+                        <dt>Подразделение</dt>
+
+                        <dd th:text="${
+                            selectedOperation.organizationUnit != null
+                            ? selectedOperation.organizationUnit.name
+                            : 'Не указано'}">
+                            Подразделение
+                        </dd>
+                    </div>
+
+                    <div>
+                        <dt>Роль исполнителя</dt>
+
+                        <dd th:text="${
+    selectedOperation.executorRole.displayName}">
+                            Роль исполнителя
+                        </dd>
+                        </dd>
+                    </div>
+
+                </dl>
+
+                <form method="post"
+                      data-delete-form
+                      th:action="@{
+                        /technology/operation/{id}/delete(
+                        id=${selectedOperation.id})}">
+
+                    <input th:if="${_csrf != null}"
+                           type="hidden"
+                           th:name="${_csrf.parameterName}"
+                           th:value="${_csrf.token}">
+
+                    <div class="operation-form-actions">
+
+                        <a class="btn secondary"
+                           th:href="@{/technology/operation}">
+                            Отмена
+                        </a>
+
+                        <button type="submit"
+                                class="btn danger">
+                            Удалить операцию
+                        </button>
+
+                    </div>
+
+                </form>
+
+            </section>
+
+        </div>
+    </main>
+</div>
+
+<th:block th:replace="~{technology/fragments/layout
+        :: commonScripts}">
+</th:block>
+
+<script th:src="@{/technology/js/operation.js}"></script>
+
+</body>
+</html>

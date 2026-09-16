@@ -17,5 +17,11 @@ public class ClassifierInclusionForm {
 
     private BigDecimal quantity;
 
+    /*
+     * Максимальное количество изделия в системе.
+     * Необязательное: пусто — не ограничено.
+     */
+    private BigDecimal maxQuantity;
+
     private MeasurementUnit unit;
 }

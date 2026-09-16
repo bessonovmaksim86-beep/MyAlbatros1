@@ -11,7 +11,7 @@ public interface ProductionServiceRepository
 
     Optional<ProductionService> findByCodeIgnoreCase(String code);
 
-    boolean existsByCodeIgnoreCase(String code);
-
     List<ProductionService> findAllByActiveTrueOrderByCodeAsc();
+
+    List<ProductionService> findAllByActiveTrueOrderByNameAsc();
 }

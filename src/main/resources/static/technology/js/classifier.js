@@ -1,188 +1,37 @@
-(() => {
-  "use strict";
-  document.addEventListener("DOMContentLoaded", () => {
-    const type = document.getElementById("productType");
-    if (!type) return;
-    const form = type.closest("form");
-    const sensorField = document.getElementById("sensorCatalogField");
-    const sensor = document.getElementById("sensorCatalogId");
-    const section = document.getElementById("inclusionSection");
-    const container = document.getElementById("inclusionRows");
-    const template = document.getElementById("inclusionRowTemplate");
-    if (!form || !sensorField || !sensor || !section || !container || !template) return;
+(()=>{"use strict";
+const RULES={SENSOR:new Set(["CELL"]),DEVICE:new Set(["CELL"])};
 
-    const allowed = {
-      SENSOR: new Set(["CELL"]),
-      DEVICE: new Set(["CELL"]),
-      SYSTEM: new Set(["SENSOR", "DEVICE"])
-    };
-    const rows = () => [...container.querySelectorAll(":scope > .inclusion-row")];
+/* ==================== Состав изделия ==================== */
+function inclusionEditor(type,section,box,tpl){
+ const rows=()=>[...box.children].filter(x=>x.classList.contains("inclusion-row"));
+ function sync(r){const t=r.querySelector(".inclusion-target"),mf=r.querySelector(".inclusion-mode-field"),m=r.querySelector(".inclusion-mode"),xf=r.querySelector(".inclusion-max-field"),x=r.querySelector(".inclusion-max"),q=r.querySelector(".inclusion-quantity"),u=r.querySelector(".inclusion-unit"),del=r.querySelector(".remove-inclusion");if(!t||!mf||!m||!q||!u||!del)return;const on=!!t.value;mf.hidden=!on;m.disabled=!on;m.required=on;if(xf)xf.hidden=!on;if(x)x.disabled=!on;q.disabled=!on;u.disabled=!on;del.hidden=!on;if(!on)m.value=""}
+ function filter(){const ok=RULES[type.value]||new Set(),used=new Set(rows().map(r=>r.querySelector(".inclusion-target")?.value).filter(Boolean));rows().forEach(r=>{const s=r.querySelector(".inclusion-target"),own=s.value;[...s.options].forEach(o=>{if(!o.value){o.hidden=false;o.disabled=false;return}const bad=!ok.has(o.dataset.productType),dup=used.has(o.value)&&o.value!==own;o.hidden=bad;o.disabled=bad||dup});const cur=s.selectedOptions[0];if(own&&(!cur||!ok.has(cur.dataset.productType)))s.value="";sync(r)})}
+ function number(){let i=0;rows().forEach(r=>{const t=r.querySelector(".inclusion-target"),m=r.querySelector(".inclusion-mode"),q=r.querySelector(".inclusion-quantity"),u=r.querySelector(".inclusion-unit"),mx=r.querySelector(".inclusion-max"),mxf=r.querySelector(".inclusion-max-field"),a=[t,m,q,u].concat(mx?[mx]:[]);if(!t.value){a.forEach(el=>el.removeAttribute("name"));return}t.id=`inclusion-target-${i}`;m.id=`inclusion-mode-${i}`;r.querySelector(".inclusion-target-field label").htmlFor=t.id;r.querySelector(".inclusion-mode-field label").htmlFor=m.id;t.name=`inclusions[${i}].targetId`;m.name=`inclusions[${i}].inclusionMode`;q.name=`inclusions[${i}].quantity`;u.name=`inclusions[${i}].unit`;if(mx){mx.id=`inclusion-max-${i}`;if(mxf){const ml=mxf.querySelector("label");if(ml)ml.htmlFor=mx.id}mx.name=`inclusions[${i}].maxQuantity`}i++})}
+ function bind(r){if(r.dataset.bound)return;r.dataset.bound="1";r.querySelector(".inclusion-target").addEventListener("change",normalize);r.querySelector(".remove-inclusion").addEventListener("click",()=>{r.remove();normalize()})}
+ function add(){box.append(tpl.content.cloneNode(true));const r=box.lastElementChild;bind(r);sync(r);return r}
+ function normalize(){rows().forEach(bind);filter();rows().filter(r=>!r.querySelector(".inclusion-target").value).slice(1).forEach(r=>r.remove());let empty=rows().find(r=>!r.querySelector(".inclusion-target").value);if(!empty)empty=add();box.append(empty);filter();number()}
+ return{normalize,number,clear:()=>box.replaceChildren()};
+}
 
-    function bind(row) {
-      if (row.dataset.bound) return;
-      row.dataset.bound = "1";
-      row.querySelector(".inclusion-target").addEventListener("change", () => normalize());
-      row.querySelector(".remove-inclusion").addEventListener("click", () => {
-        row.remove(); normalize();
-      });
-    }
+/* ==================== Состав системы ==================== */
+function systemEditor(box,tpl){
+ const rows=()=>[...box.children].filter(x=>x.classList.contains("inclusion-row"));
+ function sync(r){const sel=r.querySelector(".system-component-target"),mf=r.querySelector(".inclusion-mode-field"),m=r.querySelector(".system-mode"),xf=r.querySelector(".inclusion-max-field"),x=r.querySelector(".system-max"),sn=r.querySelector(".system-sensor-id"),cl=r.querySelector(".system-classifier-id"),q=r.querySelector(".system-quantity"),u=r.querySelector(".system-unit"),del=r.querySelector(".remove-system-component");if(!sel||!mf||!m||!sn||!cl||!q||!u||!del)return;const on=!!sel.value;mf.hidden=!on;m.disabled=!on;m.required=on;if(xf)xf.hidden=!on;if(x)x.disabled=!on;q.disabled=!on;u.disabled=!on;del.hidden=!on;if(on){const v=sel.value;if(v[0]==="S"){sn.value=v.slice(1);cl.value=""}else{cl.value=v.slice(1);sn.value=""}}else{m.value="";sn.value="";cl.value=""}}
+ function filter(){const used=new Set(rows().map(r=>r.querySelector(".system-component-target")?.value).filter(Boolean));rows().forEach(r=>{const s=r.querySelector(".system-component-target"),own=s.value;[...s.options].forEach(o=>{if(!o.value){o.hidden=false;o.disabled=false;return}const dup=used.has(o.value)&&o.value!==own;o.disabled=dup});sync(r)})}
+ function number(){let i=0;rows().forEach(r=>{const sel=r.querySelector(".system-component-target"),m=r.querySelector(".system-mode"),sn=r.querySelector(".system-sensor-id"),cl=r.querySelector(".system-classifier-id"),q=r.querySelector(".system-quantity"),u=r.querySelector(".system-unit"),mx=r.querySelector(".system-max"),mxf=r.querySelector(".inclusion-max-field"),a=[sel,m,sn,cl,q,u].concat(mx?[mx]:[]);if(!sel.value){a.forEach(el=>el.removeAttribute("name"));return}sel.id=`system-target-${i}`;m.id=`system-mode-${i}`;r.querySelector(".inclusion-target-field label").htmlFor=sel.id;r.querySelector(".inclusion-mode-field label").htmlFor=m.id;m.name=`systemComponents[${i}].inclusionMode`;sn.name=`systemComponents[${i}].sensorCatalogId`;cl.name=`systemComponents[${i}].componentClassifierId`;q.name=`systemComponents[${i}].quantity`;u.name=`systemComponents[${i}].unit`;if(mx){mx.id=`system-max-${i}`;if(mxf){const ml=mxf.querySelector("label");if(ml)ml.htmlFor=mx.id}mx.name=`systemComponents[${i}].maxQuantity`}i++})}
+ function bind(r){if(r.dataset.bound)return;r.dataset.bound="1";r.querySelector(".system-component-target").addEventListener("change",normalize);r.querySelector(".remove-system-component").addEventListener("click",()=>{r.remove();normalize()})}
+ function add(){box.append(tpl.content.cloneNode(true));const r=box.lastElementChild;bind(r);sync(r);return r}
+ function normalize(){rows().forEach(bind);filter();rows().filter(r=>!r.querySelector(".system-component-target").value).slice(1).forEach(r=>r.remove());let empty=rows().find(r=>!r.querySelector(".system-component-target").value);if(!empty)empty=add();box.append(empty);filter();number()}
+ return{normalize,number,clear:()=>box.replaceChildren()};
+}
 
-    function syncRow(row) {
-      const target = row.querySelector(".inclusion-target");
-      const modeField = row.querySelector(".inclusion-mode-field");
-      const mode = row.querySelector(".inclusion-mode");
-      const quantity = row.querySelector(".inclusion-quantity");
-      const unit = row.querySelector(".inclusion-unit");
-      const remove = row.querySelector(".remove-inclusion");
-      const active = Boolean(target.value);
-      modeField.hidden = !active;
-      mode.disabled = !active;
-      mode.required = active;
-      quantity.disabled = !active;
-      unit.disabled = !active;
-      remove.hidden = !active;
-      if (!active) mode.value = "";
-    }
+function editor(){const type=document.querySelector("#productType");if(!type)return;const form=type.closest("form"),sf=document.querySelector("#sensorCatalogField"),sensor=document.querySelector("#sensorCatalogId"),name=document.querySelector("#name");if(!form||!sf||!sensor)return;
+ const incSec=document.querySelector("#inclusionSection"),incBox=document.querySelector("#inclusionRows"),incTpl=document.querySelector("#inclusionRowTemplate");
+ const sysSec=document.querySelector("#systemSection"),sysBox=document.querySelector("#systemRows"),sysTpl=document.querySelector("#systemRowTemplate");
+ const inc=(incSec&&incBox&&incTpl)?inclusionEditor(type,incSec,incBox,incTpl):null;
+ const sys=(sysSec&&sysBox&&sysTpl)?systemEditor(sysBox,sysTpl):null;
+ function syncType(){const v=type.value,isSensor=v==="SENSOR";sf.hidden=!isSensor;sensor.disabled=!isSensor;sensor.required=isSensor;if(!isSensor)sensor.value="";const itemHas=Object.hasOwn(RULES,v),sysHas=v==="SYSTEM";if(incSec)incSec.hidden=!itemHas;if(sysSec)sysSec.hidden=!sysHas;if(inc)itemHas?inc.normalize():inc.clear();if(sys)sysHas?sys.normalize():sys.clear()}
+ sensor.addEventListener("change",()=>{if(type.value!=="SENSOR"||!name)return;const o=sensor.selectedOptions[0],v=o?.value?(o.dataset.name||o.textContent.trim()):"",old=sensor.dataset.auto||"";if(!name.value.trim()||name.value.trim()===old)name.value=v;sensor.dataset.auto=v});type.addEventListener("change",syncType);form.addEventListener("submit",()=>{if(inc)inc.number();if(sys)sys.number()});if(inc)incSec&&!incSec.hidden&&inc.normalize();if(sys)sysSec&&!sysSec.hidden&&sys.normalize();syncType()}
 
-    function filterOptions() {
-      const targetTypes = allowed[type.value] || new Set();
-      const selected = new Set(rows().map(r => r.querySelector(".inclusion-target").value).filter(Boolean));
-      rows().forEach(row => {
-        const select = row.querySelector(".inclusion-target");
-        const own = select.value;
-        [...select.options].forEach(option => {
-          if (!option.value) { option.hidden = false; option.disabled = false; return; }
-          const wrongType = !targetTypes.has(option.dataset.productType);
-          const duplicate = selected.has(option.value) && option.value !== own;
-          option.hidden = wrongType;
-          option.disabled = wrongType || duplicate;
-        });
-        const current = select.selectedOptions[0];
-        if (own && (!current || !targetTypes.has(current.dataset.productType))) select.value = "";
-        syncRow(row);
-      });
-    }
-
-    function renumber() {
-      let index = 0;
-      rows().forEach(row => {
-        const target = row.querySelector(".inclusion-target");
-        const mode = row.querySelector(".inclusion-mode");
-        const quantity = row.querySelector(".inclusion-quantity");
-        const unit = row.querySelector(".inclusion-unit");
-        const controls = [target, mode, quantity, unit];
-        if (!target.value) { controls.forEach(c => c.removeAttribute("name")); return; }
-        target.id = `inclusion-target-${index}`;
-        mode.id = `inclusion-mode-${index}`;
-        row.querySelector(".inclusion-target-field label").htmlFor = target.id;
-        row.querySelector(".inclusion-mode-field label").htmlFor = mode.id;
-        target.name = `inclusions[${index}].targetId`;
-        mode.name = `inclusions[${index}].inclusionMode`;
-        quantity.name = `inclusions[${index}].quantity`;
-        unit.name = `inclusions[${index}].unit`;
-        index++;
-      });
-    }
-
-    function addRow() {
-      container.appendChild(template.content.cloneNode(true));
-      const row = container.lastElementChild;
-      bind(row); syncRow(row);
-      return row;
-    }
-
-    function normalize() {
-      rows().forEach(bind); rows().forEach(syncRow); filterOptions();
-      const empty = rows().filter(r => !r.querySelector(".inclusion-target").value);
-      empty.slice(1).forEach(r => r.remove());
-      let lastEmpty = rows().find(r => !r.querySelector(".inclusion-target").value);
-      if (!lastEmpty) lastEmpty = addRow();
-      container.appendChild(lastEmpty);
-      filterOptions(); renumber();
-    }
-
-    function syncType() {
-      const isSensor = type.value === "SENSOR";
-      const hasComposition = Object.prototype.hasOwnProperty.call(allowed, type.value);
-      sensorField.hidden = !isSensor;
-      sensor.disabled = !isSensor;
-      sensor.required = isSensor;
-      if (!isSensor) sensor.value = "";
-      section.hidden = !hasComposition;
-      if (!hasComposition) container.replaceChildren(); else normalize();
-    }
-
-    type.addEventListener("change", syncType);
-    form.addEventListener("submit", renumber);
-    rows().forEach(bind);
-    syncType();
-  });
-})();
-/*
- * Переход к выбранному классификатору
- * на страницах изменения и удаления.
- */
-(function () {
-    "use strict";
-
-    function initializeClassifierPickers() {
-        const pickers = document.querySelectorAll(
-            "[data-classifier-picker]"
-        );
-
-        pickers.forEach(function (picker) {
-            picker.addEventListener("change", function () {
-                const baseUrl = picker.dataset.baseUrl;
-                const classifierId = picker.value;
-
-                if (!baseUrl) {
-                    return;
-                }
-
-                if (!classifierId) {
-                    window.location.assign(baseUrl);
-                    return;
-                }
-
-                window.location.assign(
-                    baseUrl + "/" + encodeURIComponent(classifierId)
-                );
-            });
-        });
-    }
-
-    function initializeDeleteConfirmation() {
-        const deleteForm = document.querySelector(
-            "[data-delete-classifier-form]"
-        );
-
-        if (!deleteForm) {
-            return;
-        }
-
-        deleteForm.addEventListener("submit", function (event) {
-            const confirmed = window.confirm(
-                "Удалить выбранный классификатор? " +
-                "Это действие нельзя отменить."
-            );
-
-            if (!confirmed) {
-                event.preventDefault();
-            }
-        });
-    }
-
-    function initializeClassifierOperationPages() {
-        initializeClassifierPickers();
-        initializeDeleteConfirmation();
-    }
-
-    if (document.readyState === "loading") {
-        document.addEventListener(
-            "DOMContentLoaded",
-            initializeClassifierOperationPages
-        );
-    } else {
-        initializeClassifierOperationPages();
-    }
-})();
+function pages(){document.querySelectorAll("[data-classifier-picker]").forEach(p=>p.addEventListener("change",()=>{const b=p.dataset.baseUrl;if(b)location.assign(p.value?`${b}/${encodeURIComponent(p.value)}`:b)}));const f=document.querySelector("[data-delete-classifier-form]");if(f)f.addEventListener("submit",e=>{if(!confirm("Удалить выбранный классификатор? Это действие нельзя отменить."))e.preventDefault()})}
+function init(){editor();pages()}document.readyState==="loading"?document.addEventListener("DOMContentLoaded",init,{once:true}):init();})();

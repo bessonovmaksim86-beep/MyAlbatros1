@@ -698,3 +698,229 @@ body {
         transition: none !important;
     }
 }
+
+
+/* ============================================================
+   КАРТОЧКИ-ФИЛЬТРЫ ПО ТИПАМ (единый компонент для всех модулей)
+   ============================================================ */
+
+.type-filter {
+    margin-bottom: 26px;
+}
+
+.type-filter__head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 24px;
+    margin-bottom: 16px;
+}
+
+.type-filter__head h2 {
+    margin: 0;
+    color: #182033;
+    font-size: 22px;
+    font-weight: 750;
+    letter-spacing: -0.02em;
+}
+
+.type-filter__head p {
+    margin: 6px 0 0;
+    color: #6b7280;
+    font-size: 14px;
+    line-height: 1.5;
+}
+
+.type-filter-total {
+    flex: 0 0 auto;
+    padding: 10px 16px;
+    color: #475569;
+    background: #ffffff;
+    border: 1px solid #e5e7eb;
+    border-radius: 14px;
+    box-shadow: 0 6px 20px rgba(15, 23, 42, 0.05);
+    font-size: 14px;
+    font-weight: 650;
+    white-space: nowrap;
+    text-decoration: none;
+    transition:
+        border-color 160ms ease,
+        box-shadow 160ms ease,
+        transform 160ms ease;
+}
+
+.type-filter-total strong {
+    margin-left: 5px;
+    color: #111827;
+    font-size: 18px;
+}
+
+.type-filter-total:hover {
+    transform: translateY(-1px);
+    text-decoration: none;
+    border-color: #94a3b8;
+}
+
+.type-filter-total.is-active {
+    color: #ffffff;
+    background: #475569;
+    border-color: #475569;
+}
+
+.type-filter-total.is-active strong {
+    color: #ffffff;
+}
+
+.type-filter__grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+    gap: 16px;
+}
+
+.type-filter-card {
+    --tfc-color: #64748b;
+    --tfc-background: #f1f5f9;
+
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    min-height: 158px;
+    padding: 18px;
+    overflow: hidden;
+    color: inherit;
+    text-decoration: none;
+    background: linear-gradient(
+        145deg,
+        #ffffff 0%,
+        #ffffff 62%,
+        var(--tfc-background) 150%
+    );
+    border: 1px solid #e5e7eb;
+    border-radius: 18px;
+    box-shadow: 0 10px 28px rgba(15, 23, 42, 0.06);
+    transition:
+        transform 170ms ease,
+        box-shadow 170ms ease,
+        border-color 170ms ease;
+}
+
+.type-filter-card::before {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 4px;
+    background: var(--tfc-color);
+    content: "";
+}
+
+.type-filter-card:hover,
+.type-filter-card:focus-visible {
+    transform: translateY(-4px);
+    text-decoration: none;
+    border-color: color-mix(in srgb, var(--tfc-color) 40%, #e5e7eb);
+    box-shadow: 0 16px 36px rgba(15, 23, 42, 0.12);
+}
+
+.type-filter-card.is-active {
+    border-color: var(--tfc-color);
+    box-shadow:
+        0 0 0 2px color-mix(in srgb, var(--tfc-color) 35%, transparent),
+        0 14px 32px rgba(15, 23, 42, 0.12);
+}
+
+.type-filter-card__top {
+    position: relative;
+    z-index: 1;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+}
+
+.type-filter-card__icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    color: var(--tfc-color);
+    background: var(--tfc-background);
+    border-radius: 12px;
+    font-size: 16px;
+    font-weight: 800;
+}
+
+.type-filter-card__name {
+    color: #64748b;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    text-align: right;
+}
+
+.type-filter-card__value {
+    position: relative;
+    z-index: 1;
+    display: flex;
+    align-items: baseline;
+    gap: 7px;
+    margin-top: auto;
+    padding-top: 20px;
+}
+
+.type-filter-card__value strong {
+    color: #111827;
+    font-size: 38px;
+    font-weight: 800;
+    line-height: 1;
+    letter-spacing: -0.04em;
+}
+
+.type-filter-card__value span {
+    color: #64748b;
+    font-size: 14px;
+    font-weight: 650;
+}
+
+/* Карточка «Все» */
+
+.type-filter-card--all {
+    --tfc-color: #475569;
+    --tfc-background: #eef2f7;
+}
+
+/* Циклическая палитра цветовых модификаторов */
+
+.type-filter-card.tfc-0 { --tfc-color: #2563eb; --tfc-background: #dbeafe; }
+.type-filter-card.tfc-1 { --tfc-color: #0891b2; --tfc-background: #cffafe; }
+.type-filter-card.tfc-2 { --tfc-color: #7c3aed; --tfc-background: #ede9fe; }
+.type-filter-card.tfc-3 { --tfc-color: #059669; --tfc-background: #d1fae5; }
+.type-filter-card.tfc-4 { --tfc-color: #d97706; --tfc-background: #fef3c7; }
+.type-filter-card.tfc-5 { --tfc-color: #db2777; --tfc-background: #fce7f3; }
+.type-filter-card.tfc-6 { --tfc-color: #4f46e5; --tfc-background: #e0e7ff; }
+.type-filter-card.tfc-7 { --tfc-color: #ea580c; --tfc-background: #ffedd5; }
+
+@media (max-width: 720px) {
+    .type-filter__head {
+        align-items: flex-start;
+        flex-direction: column;
+    }
+
+    .type-filter-total {
+        width: 100%;
+        box-sizing: border-box;
+        text-align: center;
+    }
+
+    .type-filter__grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
+@media (max-width: 460px) {
+    .type-filter__grid {
+        grid-template-columns: 1fr;
+    }
+}
