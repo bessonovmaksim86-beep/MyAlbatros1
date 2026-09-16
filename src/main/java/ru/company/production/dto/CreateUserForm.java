@@ -6,8 +6,10 @@ import jakarta.validation.constraints.Size;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
+import ru.company.production.entity.ProductionService;
 import ru.company.production.entity.Role;
-import ru.company.production.entity.UserType;
+import ru.company.production.entity.RoleUser;
+
 
 @Getter
 @Setter
@@ -32,7 +34,14 @@ public class CreateUserForm {
      * Для администратора базы служба может быть пустой.
      */
     private Long serviceId;
-
+    /**
+     * Подразделение необязательно.
+     */
+    private RoleUser roleUser;
+    /**
+     * Подразделение необязательно.
+     */
+    private ProductionService productionService;
     /**
      * Подразделение необязательно.
      */
@@ -41,7 +50,7 @@ public class CreateUserForm {
     /**
      * Для администратора базы может быть пустым.
      */
-    private UserType userType;
+
 
     @NotBlank(message = "Укажите пароль")
     @Size(

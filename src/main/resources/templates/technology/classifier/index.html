@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="ru"
+      xmlns:th="http://www.thymeleaf.org">
+
+<head>
+    <meta charset="UTF-8">
+
+    <meta
+            name="viewport"
+            content="width=device-width, initial-scale=1.0">
+
+    <title>Классификатор изделий</title>
+
+    <link
+            rel="stylesheet"
+            th:href="@{/technology/css/technology.css}">
+
+    <link
+            rel="stylesheet"
+            th:href="@{/technology/css/common.css}">
+
+    <link
+            rel="stylesheet"
+            th:href="@{/technology/css/classifier.css}">
+</head>
+
+<body>
+
+<div class="app-shell">
+
+    <aside
+            th:replace="~{
+                technology/fragments/layout
+                :: sidebar('classifier')
+            }">
+    </aside>
+
+    <main class="main">
+
+        <header
+                th:replace="~{
+                    technology/fragments/layout
+                    :: topbar
+                }">
+        </header>
+
+        <div class="page-content classifier-page">
+
+            <div class="page-head">
+
+                <div>
+                    <h1>Классификатор изделий</h1>
+
+                    <p>
+                        Просмотр и управление
+                        классификаторами изделий
+                    </p>
+                </div>
+
+                <nav
+                        class="classifier-action-menu"
+                        aria-label="Операции с классификатором">
+
+                    <a
+                            class="btn primary"
+                            th:href="@{
+                                /technology/classifier/create
+                            }">
+                        Добавить классификатор
+                    </a>
+
+                    <a
+                            class="btn secondary"
+                            th:href="@{
+                                /technology/classifier/update
+                            }">
+                        Изменить классификатор
+                    </a>
+
+                    <a
+                            class="btn danger"
+                            th:href="@{
+                                /technology/classifier/delete
+                            }">
+                        Удалить классификатор
+                    </a>
+                </nav>
+
+            </div>
+
+            <div
+                    class="alert alert-success"
+                    th:if="${successMessage != null}"
+                    th:text="${successMessage}">
+                Операция выполнена.
+            </div>
+
+            <div
+                    class="alert alert-danger"
+                    th:if="${errorMessage != null}"
+                    th:text="${errorMessage}">
+                Ошибка операции.
+            </div>
+
+            <section
+                    class="classifier-statistics"
+                    aria-labelledby="classifier-statistics-title">
+
+                <div class="classifier-statistics__head">
+
+                    <div>
+                        <h2 id="classifier-statistics-title">
+                            Классификаторы по типам изделий
+                        </h2>
+
+                        <p>
+                            Количество классификаторов,
+                            добавленных для каждого типа изделия
+                        </p>
+                    </div>
+
+                    <div class="classifier-statistics__total">
+                        Всего:
+
+                        <strong
+                                th:text="${
+                                    (cellClassifierCount != null
+                                        ? cellClassifierCount
+                                        : 0)
+                                    +
+                                    (sensorClassifierCount != null
+                                        ? sensorClassifierCount
+                                        : 0)
+                                    +
+                                    (deviceClassifierCount != null
+                                        ? deviceClassifierCount
+                                        : 0)
+                                    +
+                                    (systemClassifierCount != null
+                                        ? systemClassifierCount
+                                        : 0)
+                                }">
+                            0
+                        </strong>
+
+                        шт.
+                    </div>
+
+                </div>
+
+                <div class="classifier-statistics__grid">
+
+                    <article
+                            class="card classifier-stat-card
+                                   classifier-stat-card--cell">
+
+                        <div class="classifier-stat-card__top">
+                            <span
+                                    class="classifier-stat-card__icon"
+                                    aria-hidden="true">
+                                Я
+                            </span>
+
+                            <span class="classifier-stat-card__type">
+                                Ячейки
+                            </span>
+                        </div>
+
+                        <div class="classifier-stat-card__value">
+                            <strong
+                                    th:text="${
+                                        cellClassifierCount != null
+                                            ? cellClassifierCount
+                                            : 0
+                                    }">
+                                0
+                            </strong>
+
+                            <span>шт.</span>
+                        </div>
+
+                        <p class="classifier-stat-card__description">
+                            Классификаторов добавлено на ячейки
+                        </p>
+                    </article>
+
+                    <article
+                            class="card classifier-stat-card
+                                   classifier-stat-card--sensor">
+
+                        <div class="classifier-stat-card__top">
+                            <span
+                                    class="classifier-stat-card__icon"
+                                    aria-hidden="true">
+                                Д
+                            </span>
+
+                            <span class="classifier-stat-card__type">
+                                Датчики
+                            </span>
+                        </div>
+
+                        <div class="classifier-stat-card__value">
+                            <strong
+                                    th:text="${
+                                        sensorClassifierCount != null
+                                            ? sensorClassifierCount
+                                            : 0
+                                    }">
+                                0
+                            </strong>
+
+                            <span>шт.</span>
+                        </div>
+
+                        <p class="classifier-stat-card__description">
+                            Классификаторов добавлено на датчики
+                        </p>
+                    </article>
+
+                    <article
+                            class="card classifier-stat-card
+                                   classifier-stat-card--device">
+
+                        <div class="classifier-stat-card__top">
+                            <span
+                                    class="classifier-stat-card__icon"
+                                    aria-hidden="true">
+                                П
+                            </span>
+
+                            <span class="classifier-stat-card__type">
+                                Приборы
+                            </span>
+                        </div>
+
+                        <div class="classifier-stat-card__value">
+                            <strong
+                                    th:text="${
+                                        deviceClassifierCount != null
+                                            ? deviceClassifierCount
+                                            : 0
+                                    }">
+                                0
+                            </strong>
+
+                            <span>шт.</span>
+                        </div>
+
+                        <p class="classifier-stat-card__description">
+                            Классификаторов добавлено на приборы
+                        </p>
+                    </article>
+
+                    <article
+                            class="card classifier-stat-card
+                                   classifier-stat-card--system">
+
+                        <div class="classifier-stat-card__top">
+                            <span
+                                    class="classifier-stat-card__icon"
+                                    aria-hidden="true">
+                                С
+                            </span>
+
+                            <span class="classifier-stat-card__type">
+                                Системы
+                            </span>
+                        </div>
+
+                        <div class="classifier-stat-card__value">
+                            <strong
+                                    th:text="${
+                                        systemClassifierCount != null
+                                            ? systemClassifierCount
+                                            : 0
+                                    }">
+                                0
+                            </strong>
+
+                            <span>шт.</span>
+                        </div>
+
+                        <p class="classifier-stat-card__description">
+                            Классификаторов добавлено на системы
+                        </p>
+                    </article>
+
+                </div>
+            </section>
+
+        </div>
+    </main>
+</div>
+
+<th:block
+        th:replace="~{
+            technology/fragments/layout
+            :: commonScripts
+        }">
+</th:block>
+
+<script th:src="@{/technology/js/classifier.js}"></script>
+
+</body>
+</html>

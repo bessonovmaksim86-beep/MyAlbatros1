@@ -18,6 +18,8 @@ import ru.company.production.entity.MeasurementUnit;
 import ru.company.production.entity.ProductType;
 import ru.company.production.service.ProductClassifierService;
 
+import java.util.Map;
+
 @Controller
 @RequestMapping("/technology/classifier")
 @RequiredArgsConstructor
@@ -25,16 +27,14 @@ public class TechnologyClassifierController {
 
     private final ProductClassifierService classifierService;
 
-    /**
-     * Главная страница классификатора.
-     * Показывает список существующих классификаторов.
-     */
     @GetMapping
     public String classifierPage(Model model) {
         fillCommonModel(model, null);
+        fillClassifierCounts(model);
 
-        return "technology/classifier";
+        return "technology/classifier/index";
     }
+
 
     /**
      * Страница создания классификатора.
@@ -96,9 +96,6 @@ public class TechnologyClassifierController {
         return "redirect:/technology/classifier";
     }
 
-    /**
-     * Страница изменения классификатора.
-     */
     /**
      * Страница выбора классификатора для изменения.
      */
@@ -165,7 +162,7 @@ public class TechnologyClassifierController {
         form.setId(id);
 
         /*
-         * Нужно для повторного отображения формы,
+         * Идентификатор нужен для повторного отображения формы,
          * если сервер вернул ошибку валидации.
          */
         model.addAttribute(
@@ -277,13 +274,16 @@ public class TechnologyClassifierController {
     }
 
     /**
-     * Дополнительная проверка полей, зависящих от типа изделия.
+     * Дополнительная проверка полей,
+     * зависящих от выбранного типа изделия.
      */
     private void validateConditionalFields(
             ClassifierForm form,
             BindingResult errors
     ) {
-        if (form.getProductType() == null) {
+        ProductType productType = form.getProductType();
+
+        if (productType == null) {
             errors.rejectValue(
                     "productType",
                     "classifier.productType.required",
@@ -293,7 +293,7 @@ public class TechnologyClassifierController {
             return;
         }
 
-        if (form.getProductType() == ProductType.SENSOR) {
+        if (productType == ProductType.SENSOR) {
             if (form.getSensorCatalogId() == null) {
                 errors.rejectValue(
                         "sensorCatalogId",
@@ -315,7 +315,42 @@ public class TechnologyClassifierController {
     }
 
     /**
-     * Общие данные для страниц создания и изменения.
+     * Добавляет в модель статистику количества
+     * классификаторов по типам изделий.
+     */
+    private void fillClassifierCounts(Model model) {
+        Map<ProductType, Long> counts =
+                classifierService.countByProductType();
+
+        model.addAttribute(
+                "classifierCounts",
+                counts
+        );
+
+        model.addAttribute(
+                "cellClassifierCount",
+                counts.getOrDefault(ProductType.CELL, 0L)
+        );
+
+        model.addAttribute(
+                "sensorClassifierCount",
+                counts.getOrDefault(ProductType.SENSOR, 0L)
+        );
+
+        model.addAttribute(
+                "deviceClassifierCount",
+                counts.getOrDefault(ProductType.DEVICE, 0L)
+        );
+
+        model.addAttribute(
+                "systemClassifierCount",
+                counts.getOrDefault(ProductType.SYSTEM, 0L)
+        );
+    }
+
+    /**
+     * Добавляет в модель общие данные,
+     * используемые страницами классификатора.
      */
     private void fillCommonModel(
             Model model,
@@ -325,10 +360,12 @@ public class TechnologyClassifierController {
                 "activePage",
                 "classifier"
         );
+
         model.addAttribute(
                 "inclusionModes",
                 InclusionMode.values()
         );
+
         model.addAttribute(
                 "productTypes",
                 ProductType.values()

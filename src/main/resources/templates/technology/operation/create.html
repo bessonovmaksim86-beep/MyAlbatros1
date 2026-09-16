@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="ru"
+      xmlns:th="http://www.thymeleaf.org">
+
+<head>
+    <meta charset="UTF-8">
+
+    <meta name="viewport"
+          content="width=device-width, initial-scale=1">
+
+    <title>Создание операции</title>
+
+    <link rel="stylesheet"
+          th:href="@{/technology/css/technology.css}">
+
+    <link rel="stylesheet"
+          th:href="@{/technology/css/common.css}">
+
+    <link rel="stylesheet"
+          th:href="@{/technology/css/operation.css}">
+</head>
+
+<body>
+
+<div class="app-shell">
+
+    <aside th:replace="~{technology/fragments/layout
+            :: sidebar('operation')}">
+    </aside>
+
+    <main class="main">
+
+        <header th:replace="~{technology/fragments/layout
+                :: topbar}">
+        </header>
+
+        <div class="page-content operation-page">
+
+            <div class="page-head operation-create-head">
+
+                <div class="page-title">
+                    <h1>Создание операции</h1>
+
+                    <p>
+                        Заполните параметры новой операции
+                    </p>
+                </div>
+
+                <a class="btn secondary"
+                   th:href="@{/technology/operation}">
+                    Вернуться к операциям
+                </a>
+
+            </div>
+
+            <section class="card operation-editor-card">
+
+                <div class="card-head operation-editor-head">
+
+                    <div>
+                        <h2>Новая операция</h2>
+
+                        <small>
+                            Поля со знаком
+                            <span class="required">*</span>
+                            обязательны для заполнения
+                        </small>
+                    </div>
+
+                </div>
+
+                <div class="card-body operation-editor-body"
+                     th:insert="~{
+                        technology/operation/fragments/operation-form
+                        :: form(
+                            @{/technology/operation/create},
+                            'Создать операцию'
+                        )
+                     }">
+                </div>
+
+            </section>
+
+        </div>
+    </main>
+</div>
+
+<th:block th:replace="~{technology/fragments/layout
+        :: commonScripts}">
+</th:block>
+<script th:src="@{/technology/js/operation.js}"></script>
+</body>
+</html>

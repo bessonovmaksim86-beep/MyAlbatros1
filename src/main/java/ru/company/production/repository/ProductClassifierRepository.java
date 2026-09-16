@@ -10,16 +10,8 @@ import java.util.List;
 import java.util.Optional;
 
 @Repository
-public interface ProductClassifierRepository
-        extends JpaRepository<ProductClassifier, Long> {
+public interface ProductClassifierRepository extends JpaRepository<ProductClassifier, Long> {
 
-    /**
-     * Получение списка для главной страницы.
-     *
-     * Загружаются sensorCatalog и состав классификатора,
-     * чтобы Thymeleaf не обращался к ленивым связям
-     * после завершения транзакции.
-     */
     @Query("""
             select distinct classifier
             from ProductClassifier classifier
@@ -31,9 +23,6 @@ public interface ProductClassifierRepository
             """)
     List<ProductClassifier> findAllDetailed();
 
-    /**
-     * Полная загрузка одного классификатора.
-     */
     @Query("""
             select distinct classifier
             from ProductClassifier classifier
@@ -43,34 +32,42 @@ public interface ProductClassifierRepository
             left join fetch target.sensorCatalog
             where classifier.id = :id
             """)
-    Optional<ProductClassifier> findDetailedById(
-            @Param("id") Long id
-    );
+    Optional<ProductClassifier> findDetailedById(@Param("id") Long id);
 
-    /**
-     * Классификаторы, которые можно добавить
-     * в состав текущего классификатора.
-     */
     @Query("""
             select distinct classifier
             from ProductClassifier classifier
             left join fetch classifier.sensorCatalog
-            where (
-                :excludedId is null
-                or classifier.id <> :excludedId
-            )
+            where (:excludedId is null or classifier.id <> :excludedId)
             order by classifier.code
             """)
-    List<ProductClassifier> findInclusionOptionsDetailed(
-            @Param("excludedId") Long excludedId
-    );
+    List<ProductClassifier> findInclusionOptionsDetailed(@Param("excludedId") Long excludedId);
+
+    @Query("""
+            select classifier.productType as productType,
+                   count(classifier.id) as total
+            from ProductClassifier classifier
+            group by classifier.productType
+            """)
+    List<ProductTypeCountProjection> countGroupedByProductType();
 
     List<ProductClassifier> findAllByOrderByCodeAsc();
 
+    /**
+     * Изделия для каскадного выбора изделия техпроцесса.
+     */
+    @Query("""
+            select classifier.id as id,
+                   classifier.code as code,
+                   classifier.productType as productType,
+                   classifier.name as name,
+                   sensor.id as sensorClassId,
+                   sensor.name as sensorClassName
+            from ProductClassifier classifier
+            left join classifier.sensorCatalog sensor
+            order by classifier.code
+            """)
+    List<ClassifierOptionProjection> findAllOptions();
     boolean existsByCode(Integer code);
-
-    boolean existsByCodeAndIdNot(
-            Integer code,
-            Long id
-    );
+    boolean existsByCodeAndIdNot(Integer code, Long id);
 }

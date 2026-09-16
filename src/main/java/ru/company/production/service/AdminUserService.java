@@ -6,16 +6,15 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import ru.company.production.dto.AdminUserView;
 import ru.company.production.dto.CreateUserForm;
-import ru.company.production.entity.AppUser;
-import ru.company.production.entity.OrganizationUnit;
-import ru.company.production.entity.ProductionService;
-import ru.company.production.entity.Role;
-import ru.company.production.entity.UserType;
+import ru.company.production.entity.*;
+
 import ru.company.production.repository.OrganizationUnitRepository;
 import ru.company.production.repository.ProductionServiceRepository;
 import ru.company.production.repository.UserRepository;
 
 import java.util.List;
+
+import static ru.company.production.entity.Role.SDP_SERVICE_HEAD_TECHNOLOGY;
 
 @Service
 @RequiredArgsConstructor
@@ -216,11 +215,11 @@ public class AdminUserService {
         if (form.getRole() == Role.ADMIN) {
             user.setService(null);
             user.setOrganizationUnit(null);
-            user.setUserType(null);
+            user.setRoleUser(null);
             return;
         }
 
-        if (form.getUserType() == null) {
+        if (form.getRoleUser() == null) {
             throw new IllegalArgumentException(
                     "Выберите тип пользователя"
             );
@@ -280,7 +279,7 @@ public class AdminUserService {
          * Руководитель службы относится к службе целиком
          * и не должен быть привязан к подразделению.
          */
-        if (form.getUserType() == UserType.SERVICE_HEAD
+        if (form.getRoleUser() == RoleUser.SERVICE_HEAD
                 && unit != null) {
 
             throw new IllegalArgumentException(
@@ -293,8 +292,8 @@ public class AdminUserService {
          * Руководитель подразделения обязательно
          * должен иметь выбранное подразделение.
          */
-        if (form.getUserType()
-                == UserType.SUBDIVISION_HEAD
+        if (form.getRoleUser()
+                == RoleUser.HEAD_OF_WORKSHOP_OR_DEPARTMENT
                 && unit == null) {
 
             throw new IllegalArgumentException(
@@ -324,9 +323,9 @@ public class AdminUserService {
          * другое название, замените EMPLOYEE на значение
          * из вашего enum.
          */
-        if (form.getUserType() == UserType.SERVICE_EMPLOYEE
+        if (form.getRoleUser() == RoleUser.EXECUTOR
                 && unit == null
-                && !"СГМ".equalsIgnoreCase(service.getCode())) {
+                ) {
 
             throw new IllegalArgumentException(
                     "Для сотрудника необходимо "
@@ -351,7 +350,7 @@ public class AdminUserService {
                 && "TECHNOLOGY".equalsIgnoreCase(unit.getCode())) {
 
             boolean allowed =
-                    form.getRole() == Role.TECHNOLOGIST
+                    form.getRole() == SDP_SERVICE_HEAD_TECHNOLOGY
                            ;
 
             if (!allowed) {
@@ -363,7 +362,7 @@ public class AdminUserService {
             }
 
             if (form.getRole()
-                    == Role.TECHNOLOGIST
+                    == SDP_SERVICE_HEAD_TECHNOLOGY
                     ) {
 
                 throw new IllegalArgumentException(
@@ -376,7 +375,7 @@ public class AdminUserService {
 
         user.setService(service);
         user.setOrganizationUnit(unit);
-        user.setUserType(form.getUserType());
+        user.setRole(SDP_SERVICE_HEAD_TECHNOLOGY);
     }
 
     private String normalizeRequired(

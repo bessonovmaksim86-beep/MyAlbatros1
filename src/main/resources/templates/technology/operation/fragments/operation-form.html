@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="ru"
+      xmlns:th="http://www.thymeleaf.org">
+
+<body>
+
+<form th:fragment="form(action, submitLabel)"
+      method="post"
+      th:action="${action}"
+      th:object="${operationForm}"
+      class="operation-form">
+
+    <input th:if="${_csrf != null}"
+           type="hidden"
+           th:name="${_csrf.parameterName}"
+           th:value="${_csrf.token}">
+
+    <div class="alert danger"
+         th:if="${#fields.hasGlobalErrors()}">
+
+        <p th:each="error : ${#fields.globalErrors()}"
+           th:text="${error}">
+            Ошибка заполнения формы
+        </p>
+
+    </div>
+
+    <div class="operation-form-grid">
+
+        <div class="form-group operation-name-field">
+
+            <label for="operationName">
+                Наименование операции
+                <span class="required">*</span>
+            </label>
+
+            <input id="operationName"
+                   type="text"
+                   th:field="*{operationName}"
+                   maxlength="255"
+                   autocomplete="off"
+                   required>
+
+            <small class="field-error"
+                   th:if="${#fields.hasErrors('operationName')}"
+                   th:errors="*{operationName}">
+                Ошибка наименования
+            </small>
+
+        </div>
+
+        <div class="form-group">
+
+            <label for="operationTypeId">
+                Тип операции
+                <span class="required">*</span>
+            </label>
+
+            <select id="operationTypeId"
+                    th:field="*{operationTypeId}"
+                    required>
+
+                <option value="">
+                    Выберите тип операции
+                </option>
+
+                <option th:each="operationType : ${operationTypes}"
+                        th:value="${operationType.id}"
+                        th:text="${operationType.name}">
+                    Тип операции
+                </option>
+
+            </select>
+
+            <small class="field-error"
+                   th:if="${#fields.hasErrors('operationTypeId')}"
+                   th:errors="*{operationTypeId}">
+                Ошибка типа операции
+            </small>
+
+        </div>
+
+        <!-- Шаг 1: роль исполнителя -->
+        <div class="form-group">
+
+            <label for="executorRoleId">
+                Тип исполнителя
+                <span class="required">*</span>
+            </label>
+
+            <select id="executorRoleId"
+                    th:field="*{executorRoleId}"
+                    data-executor-role-select
+                    required>
+
+                <option value="">
+                    Выберите тип исполнителя
+                </option>
+
+                <option th:each="executorRole : ${executorRoles}"
+                        th:value="${executorRole.id}"
+                        th:text="${executorRole.displayName}">
+                    Тип исполнителя
+                </option>
+
+            </select>
+
+            <small class="field-error"
+                   th:if="${#fields.hasErrors('executorRoleId')}"
+                   th:errors="*{executorRoleId}">
+                Ошибка типа исполнителя
+            </small>
+
+        </div>
+
+        <!-- Шаг 2: служба -->
+        <div class="form-group">
+
+            <label for="serviceId">
+                Служба
+                <span class="required">*</span>
+            </label>
+
+            <select id="serviceId"
+                    th:field="*{serviceId}"
+                    data-service-select
+                    th:disabled="${operationForm.executorRoleId == null}"
+                    required>
+
+                <option value="">
+                    Выберите службу
+                </option>
+
+                <option th:each="service : ${services}"
+                        th:value="${service.id}"
+                        th:text="${service.name}">
+                    Служба
+                </option>
+
+            </select>
+
+            <small>
+                Сначала выберите тип исполнителя
+            </small>
+
+            <small class="field-error"
+                   th:if="${#fields.hasErrors('serviceId')}"
+                   th:errors="*{serviceId}">
+                Ошибка службы
+            </small>
+
+        </div>
+
+        <!-- Шаг 3: подразделение выбранной службы -->
+        <div class="form-group">
+
+            <label for="organizationUnitId">
+                Подразделение
+            </label>
+
+            <select id="organizationUnitId"
+                    th:field="*{organizationUnitId}"
+                    data-organization-unit-select
+                    th:disabled="${operationForm.serviceId == null}">
+
+                <option value="">
+                    Не указано
+                </option>
+
+                <option th:each="organizationUnit : ${organizationUnits}"
+                        th:value="${organizationUnit.id}"
+                        th:text="${organizationUnit.name}"
+                        th:attr="data-service-id=${organizationUnit.service.id}">
+                    Подразделение
+                </option>
+
+            </select>
+
+            <small>
+                Показываются только подразделения выбранной службы
+            </small>
+
+            <small class="field-error"
+                   th:if="${#fields.hasErrors('organizationUnitId')}"
+                   th:errors="*{organizationUnitId}">
+                Ошибка подразделения
+            </small>
+
+        </div>
+
+        <div class="form-group operation-note-field">
+
+            <label for="operationNote">
+                Примечание
+            </label>
+
+            <textarea id="operationNote"
+                      th:field="*{note}"
+                      rows="4"
+                      maxlength="2000"
+                      placeholder="Комментарий к операции">
+            </textarea>
+
+            <small class="field-error"
+                   th:if="${#fields.hasErrors('note')}"
+                   th:errors="*{note}">
+                Ошибка примечания
+            </small>
+
+        </div>
+
+    </div>
+
+    <div class="operation-form-actions">
+
+        <a class="btn secondary"
+           th:href="@{/technology/operation}">
+            Отмена
+        </a>
+
+        <button type="submit"
+                class="btn primary"
+                th:text="${submitLabel}">
+            Сохранить
+        </button>
+
+    </div>
+
+</form>
+
+</body>
+</html>

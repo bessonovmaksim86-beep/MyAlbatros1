@@ -14,6 +14,8 @@ import ru.company.production.repository.UserRepository;
 import java.io.IOException;
 import java.util.Locale;
 
+import static ru.company.production.entity.Role.SDP_SERVICE_HEAD_TECHNOLOGY;
+
 @Component
 @RequiredArgsConstructor
 public class DepartmentAuthenticationSuccessHandler
@@ -52,7 +54,7 @@ public class DepartmentAuthenticationSuccessHandler
         if (user.getRole() == Role.ADMIN) {
             return "/admin";
         }
-        if (user.getRole() == Role.TECHNOLOGIST) {
+        if (user.getRole() == SDP_SERVICE_HEAD_TECHNOLOGY) {
             return "/technology";
         }
         if (user.getOrganizationUnit() == null) {

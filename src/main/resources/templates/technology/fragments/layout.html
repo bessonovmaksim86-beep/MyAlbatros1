@@ -68,8 +68,8 @@
             </a>
 
             <a class="technology-navigation__item"
-               th:classappend="${activePage == 'operations'} ? ' is-active' : ''"
-               th:href="@{/technology/operations}"
+               th:classappend="${activePage == 'operation'} ? ' is-active' : ''"
+               th:href="@{/technology/operation}"
                title="Операции">
 
                 <span class="technology-navigation__icon">
@@ -98,6 +98,22 @@
         Классификатор
     </span>
         </a>
+
+            <a class="technology-navigation__item"
+               th:classappend="${activePage == 'workplace'} ? ' is-active' : ''"
+               th:href="@{/technology/workplace}"
+               title="Рабочие места">
+
+                <span class="technology-navigation__icon">
+                    <svg viewBox="0 0 24 24" aria-hidden="true">
+                        <path d="M3 4h18a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1h-7v2h3v2H7v-2h3v-2H3a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1Zm1 2v8h16V6H4Z"/>
+                    </svg>
+                </span>
+
+                <span class="technology-navigation__text">
+                    Рабочие места
+                </span>
+            </a>
 
             <a class="technology-navigation__item"
                th:classappend="${activePage == 'approvals'} ? ' is-active' : ''"

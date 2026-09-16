@@ -7,230 +7,121 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import ru.company.production.dto.ClassifierForm;
 import ru.company.production.dto.ClassifierInclusionForm;
-import ru.company.production.entity.ClassifierInclusion;
-import ru.company.production.entity.ProductClassifier;
-import ru.company.production.entity.ProductType;
-import ru.company.production.entity.SensorCatalog;
+import ru.company.production.entity.*;
 import ru.company.production.repository.ProductClassifierRepository;
 import ru.company.production.repository.SensorCatalogRepository;
 
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
-import java.util.Set;
+import java.math.BigDecimal;
+import java.util.*;
 
 @Service
 @RequiredArgsConstructor
 public class ProductClassifierService {
-
+    private static final BigDecimal MIN_QUANTITY = new BigDecimal("0.001");
     private final ProductClassifierRepository classifiers;
     private final SensorCatalogRepository sensors;
 
-    /**
-     * Все классификаторы вместе с данными,
-     * необходимыми для отображения в шаблоне.
-     */
     @Transactional(readOnly = true)
-    public List<ProductClassifier> findAll() {
-        return classifiers.findAllDetailed();
+    public List<ProductClassifier> findAll() { return classifiers.findAllDetailed(); }
+
+    @Transactional(readOnly = true)
+    public Map<ProductType, Long> countByProductType() {
+        EnumMap<ProductType, Long> result = new EnumMap<>(ProductType.class);
+        Arrays.stream(ProductType.values()).forEach(type -> result.put(type, 0L));
+        classifiers.countGroupedByProductType().forEach(row ->
+                result.put(row.getProductType(), row.getTotal()));
+        return Collections.unmodifiableMap(result);
     }
 
-    /**
-     * Получение одного классификатора для просмотра или удаления.
-     */
     @Transactional(readOnly = true)
-    public ProductClassifier findOne(Long id) {
-        return get(id);
+    public ProductClassifier findOne(Long id) { return get(id); }
+
+    @Transactional(readOnly = true)
+    public List<SensorCatalog> findSensors() { return sensors.findAllByOrderByNameAsc(); }
+
+    @Transactional(readOnly = true)
+    public List<ProductClassifier> inclusionOptions(Long excludedClassifierId) {
+        return classifiers.findInclusionOptionsDetailed(excludedClassifierId);
     }
 
-    /**
-     * Список датчиков для выпадающего списка.
-     */
-    @Transactional(readOnly = true)
-    public List<SensorCatalog> findSensors() {
-        return sensors.findAllByOrderByNameAsc();
-    }
-
-    /**
-     * Список классификаторов, которые можно добавить
-     * в состав редактируемого классификатора.
-     */
-    @Transactional(readOnly = true)
-    public List<ProductClassifier> inclusionOptions(
-            Long excludedClassifierId
-    ) {
-        return classifiers.findInclusionOptionsDetailed(
-                excludedClassifierId
-        );
-    }
-
-    /**
-     * Подготовка DTO для формы изменения.
-     */
     @Transactional(readOnly = true)
     public ClassifierForm getForm(Long id) {
         ProductClassifier classifier = get(id);
-
         ClassifierForm form = new ClassifierForm();
-
         form.setId(classifier.getId());
         form.setCode(classifier.getCode());
         form.setProductType(classifier.getProductType());
         form.setName(classifier.getName());
         form.setNote(classifier.getNote());
         form.setVersion(classifier.getVersion());
-
         if (classifier.getSensorCatalog() != null) {
-            form.setSensorCatalogId(
-                    classifier.getSensorCatalog().getId()
-            );
+            form.setSensorCatalogId(classifier.getSensorCatalog().getId());
         }
-
         List<ClassifierInclusionForm> rows = new ArrayList<>();
-
-        for (ClassifierInclusion inclusion
-                : classifier.getInclusions()) {
-
-            ClassifierInclusionForm row =
-                    new ClassifierInclusionForm();
-
-            row.setTargetId(
-                    inclusion.getTarget().getId()
-            );
-
-            row.setQuantity(
-                    inclusion.getQuantity()
-            );
-
-            row.setUnit(
-                    inclusion.getUnit()
-            );
-            row.setInclusionMode(
-                    inclusion.getInclusionMode()
-            );
+        for (ClassifierInclusion inclusion : classifier.getInclusions()) {
+            ClassifierInclusionForm row = new ClassifierInclusionForm();
+            row.setTargetId(inclusion.getTarget().getId());
+            row.setQuantity(inclusion.getQuantity());
+            row.setUnit(inclusion.getUnit());
+            row.setInclusionMode(inclusion.getInclusionMode());
             rows.add(row);
         }
-
         form.setInclusions(rows);
-
         return form;
     }
 
-    /**
-     * Создание классификатора.
-     */
     @Transactional
     public void create(ClassifierForm form) {
         validate(form, null);
-
         if (classifiers.existsByCode(form.getCode())) {
-            throw new IllegalArgumentException(
-                    "Код уже используется"
-            );
+            throw new IllegalArgumentException("Код уже используется");
         }
-
-        ProductClassifier classifier =
-                new ProductClassifier();
-
+        ProductClassifier classifier = new ProductClassifier();
         copy(form, classifier);
         replaceRows(form, classifier);
         save(classifier);
     }
 
-    /**
-     * Изменение классификатора.
-     */
     @Transactional
-    public void update(
-            Long id,
-            ClassifierForm form
-    ) {
+    public void update(Long id, ClassifierForm form) {
         ProductClassifier classifier = get(id);
-
         validate(form, id);
-
-        if (!Objects.equals(
-                classifier.getVersion(),
-                form.getVersion()
-        )) {
-            throw new IllegalStateException(
-                    "Запись уже изменена другим пользователем. " +
-                            "Обновите страницу и повторите операцию."
-            );
+        if (!Objects.equals(classifier.getVersion(), form.getVersion())) {
+            throw new IllegalStateException("Запись уже изменена другим пользователем. Обновите страницу и повторите операцию.");
         }
-
-        if (classifiers.existsByCodeAndIdNot(
-                form.getCode(),
-                id
-        )) {
-            throw new IllegalArgumentException(
-                    "Код уже используется"
-            );
+        if (classifiers.existsByCodeAndIdNot(form.getCode(), id)) {
+            throw new IllegalArgumentException("Код уже используется");
         }
-
         copy(form, classifier);
-
-        /*
-         * Старые строки состава удаляются через orphanRemoval.
-         */
         classifier.clearInclusions();
         classifiers.flush();
-
         replaceRows(form, classifier);
         save(classifier);
     }
 
-    /**
-     * Удаление классификатора.
-     */
     @Transactional
     public void delete(Long id) {
         ProductClassifier classifier = get(id);
-
         try {
             classifiers.delete(classifier);
             classifiers.flush();
         } catch (DataIntegrityViolationException exception) {
-            throw new IllegalStateException(
-                    "Невозможно удалить классификатор. " +
-                            "Он используется в составе другого классификатора.",
-                    exception
-            );
+            throw new IllegalStateException("Невозможно удалить классификатор. Он используется в составе другого классификатора.", exception);
         }
     }
 
     private ProductClassifier get(Long id) {
-        return classifiers.findDetailedById(id)
-                .orElseThrow(
-                        () -> new EntityNotFoundException(
-                                "Классификатор с идентификатором " +
-                                        id +
-                                        " не найден"
-                        )
-                );
+        return classifiers.findDetailedById(id).orElseThrow(() ->
+                new EntityNotFoundException("Классификатор с идентификатором " + id + " не найден"));
     }
 
-    private void copy(
-            ClassifierForm form,
-            ProductClassifier classifier
-    ) {
+    private void copy(ClassifierForm form, ProductClassifier classifier) {
         classifier.setCode(form.getCode());
         classifier.setProductType(form.getProductType());
         classifier.setNote(trim(form.getNote()));
-
         if (form.getProductType() == ProductType.SENSOR) {
-            SensorCatalog sensor = sensors.findById(
-                            form.getSensorCatalogId()
-                    )
-                    .orElseThrow(
-                            () -> new EntityNotFoundException(
-                                    "Выбранный датчик не найден"
-                            )
-                    );
-
+            SensorCatalog sensor = sensors.findById(form.getSensorCatalogId()).orElseThrow(() ->
+                    new EntityNotFoundException("Выбранный датчик не найден"));
             classifier.setSensorCatalog(sensor);
             classifier.setName(null);
         } else {
@@ -239,250 +130,100 @@ public class ProductClassifierService {
         }
     }
 
-    private void replaceRows(
-            ClassifierForm form,
-            ProductClassifier owner
-    ) {
-
-        List<ClassifierInclusionForm> rows =
-                form.getInclusions() == null
-                        ? List.of()
-                        : form.getInclusions();
-
-        if (rows.isEmpty()) {
-            return;
+    private void replaceRows(ClassifierForm form, ProductClassifier owner) {
+        List<ClassifierInclusionForm> rows = selectedRows(form);
+        if (rows.isEmpty()) return;
+        if (owner.getProductType() == ProductType.CELL) {
+            throw new IllegalArgumentException("Для ячейки нельзя указывать состав изделия");
         }
-
         Set<Long> targetIds = new HashSet<>();
-
         for (ClassifierInclusionForm row : rows) {
             validateInclusionRow(row);
-            if (owner.getProductType() == ProductType.CELL &&
-                    !rows.isEmpty()) {
-
-                throw new IllegalArgumentException(
-                        "Для ячейки нельзя указывать состав изделия"
-                );
-            }
             if (!targetIds.add(row.getTargetId())) {
-                throw new IllegalArgumentException(
-                        "Входящее изделие повторяется"
-                );
+                throw new IllegalArgumentException("Входящее изделие повторяется");
             }
-
-            if (Objects.equals(
-                    owner.getId(),
-                    row.getTargetId()
-            )) {
-                throw new IllegalArgumentException(
-                        "Классификатор не может входить сам в себя"
-                );
+            if (Objects.equals(owner.getId(), row.getTargetId())) {
+                throw new IllegalArgumentException("Классификатор не может входить сам в себя");
             }
         }
-
-        Map<Long, ProductClassifier> targets =
-                new HashMap<>();
-
-        classifiers.findAllById(targetIds)
-                .forEach(
-                        target -> targets.put(
-                                target.getId(),
-                                target
-                        )
-                );
-
+        Map<Long, ProductClassifier> targets = new HashMap<>();
+        classifiers.findAllById(targetIds).forEach(target -> targets.put(target.getId(), target));
         if (targets.size() != targetIds.size()) {
-            throw new EntityNotFoundException(
-                    "Одно из входящих изделий не найдено"
-            );
+            throw new EntityNotFoundException("Одно из входящих изделий не найдено");
         }
-
+        for (ClassifierInclusionForm row : rows) {
+            validateAllowedTargetType(owner.getProductType(), targets.get(row.getTargetId()).getProductType());
+        }
         int position = 0;
         for (ClassifierInclusionForm row : rows) {
-            ProductClassifier target =
-                    targets.get(row.getTargetId());
-
-            validateAllowedTargetType(
-                    owner.getProductType(),
-                    target.getProductType()
-            );
-        }
-        for (ClassifierInclusionForm row : rows) {
-            ProductClassifier target =
-                    targets.get(row.getTargetId());
-
-            ClassifierInclusion inclusion =
-                    new ClassifierInclusion();
-
-            inclusion.setTarget(target);
+            ClassifierInclusion inclusion = new ClassifierInclusion();
+            inclusion.setTarget(targets.get(row.getTargetId()));
             inclusion.setQuantity(row.getQuantity());
             inclusion.setUnit(row.getUnit());
+            inclusion.setInclusionMode(row.getInclusionMode());
             inclusion.setPosition(position++);
-            inclusion.setInclusionMode(
-                    row.getInclusionMode()
-            );
             owner.addInclusion(inclusion);
         }
     }
-    private void validateAllowedTargetType(
-            ProductType ownerType,
-            ProductType targetType
-    ) {
-        if (ownerType == ProductType.CELL) {
-            throw new IllegalArgumentException(
-                    "Ячейка не может содержать другие изделия"
-            );
-        }
 
-        if (ownerType == ProductType.SENSOR ||
-                ownerType == ProductType.DEVICE) {
-
-            if (targetType != ProductType.CELL) {
-                throw new IllegalArgumentException(
-                        "В состав датчика или прибора " +
-                                "можно добавить только ячейку"
-                );
-            }
-
-            return;
-        }
-
-        if (ownerType == ProductType.SYSTEM) {
-            if (targetType != ProductType.SENSOR &&
-                    targetType != ProductType.DEVICE) {
-
-                throw new IllegalArgumentException(
-                        "В состав системы можно добавить " +
-                                "только датчик или прибор"
-                );
-            }
-
-            return;
-        }
-
-        throw new IllegalArgumentException(
-                "Для выбранного типа изделия состав не поддерживается"
-        );
-    }
-    private void validateInclusionRow(
-            ClassifierInclusionForm row
-    ) {
-        if (row == null) {
-            throw new IllegalArgumentException(
-                    "Обнаружена пустая строка состава"
-            );
-        }
-
-        if (row.getTargetId() == null) {
-            throw new IllegalArgumentException(
-                    "Выберите входящее изделие"
-            );
-        }
-
-        if (row.getQuantity() == null) {
-            throw new IllegalArgumentException(
-                    "Укажите количество входящего изделия"
-            );
-        }
-        if (row.getInclusionMode() == null) {
-            throw new IllegalArgumentException(
-                    "Выберите режим включения изделия"
-            );
-        }
-        if (row.getUnit() == null) {
-            throw new IllegalArgumentException(
-                    "Выберите единицу измерения"
-            );
-        }
+    private void validateAllowedTargetType(ProductType ownerType, ProductType targetType) {
+        boolean allowed = switch (ownerType) {
+            case SENSOR, DEVICE -> targetType == ProductType.CELL;
+            case SYSTEM -> targetType == ProductType.SENSOR || targetType == ProductType.DEVICE;
+            case CELL -> false;
+        };
+        if (!allowed) throw new IllegalArgumentException("Недопустимый тип изделия в составе");
     }
 
-    private void validate(
-            ClassifierForm form,
-            Long currentClassifierId
-    ) {
-        if (form.getCode() == null) {
-            throw new IllegalArgumentException(
-                    "Укажите код классификатора"
-            );
+    private void validateInclusionRow(ClassifierInclusionForm row) {
+        if (row.getQuantity() == null || row.getQuantity().compareTo(MIN_QUANTITY) < 0) {
+            throw new IllegalArgumentException("Количество должно быть не меньше 0.001");
         }
+        if (row.getInclusionMode() == null) throw new IllegalArgumentException("Выберите режим включения изделия");
+        if (row.getUnit() == null) throw new IllegalArgumentException("Выберите единицу измерения");
+    }
 
-        if (form.getCode() < 1000 ||
-                form.getCode() > 9999) {
-
-            throw new IllegalArgumentException(
-                    "Код классификатора должен быть " +
-                            "в диапазоне от 1000 до 9999"
-            );
+    private void validate(ClassifierForm form, Long currentClassifierId) {
+        if (form.getCode() == null || form.getCode() < 1000 || form.getCode() > 9999) {
+            throw new IllegalArgumentException("Код классификатора должен быть в диапазоне от 1000 до 9999");
         }
-
-        if (form.getProductType() == null) {
-            throw new IllegalArgumentException(
-                    "Выберите тип изделия"
-            );
-        }
-
-        if (form.getProductType() ==
-                ProductType.SENSOR) {
-
-            if (form.getSensorCatalogId() == null) {
-                throw new IllegalArgumentException(
-                        "Выберите датчик"
-                );
-            }
+        if (form.getProductType() == null) throw new IllegalArgumentException("Выберите тип изделия");
+        if (form.getProductType() == ProductType.SENSOR) {
+            if (form.getSensorCatalogId() == null) throw new IllegalArgumentException("Выберите датчик");
         } else if (trim(form.getName()) == null) {
-            throw new IllegalArgumentException(
-                    "Укажите наименование"
-            );
+            throw new IllegalArgumentException("Укажите наименование");
         }
-
-        Set<Long> targetIds = new HashSet<>();
-
-        List<ClassifierInclusionForm> rows =
-                form.getInclusions() == null
-                        ? List.of()
-                        : form.getInclusions();
-
+        List<ClassifierInclusionForm> rows = selectedRows(form);
+        if (form.getProductType() == ProductType.CELL && !rows.isEmpty()) {
+            throw new IllegalArgumentException("Для ячейки нельзя указывать состав изделия");
+        }
+        Set<Long> ids = new HashSet<>();
         for (ClassifierInclusionForm row : rows) {
             validateInclusionRow(row);
-
-            if (Objects.equals(
-                    currentClassifierId,
-                    row.getTargetId()
-            )) {
-                throw new IllegalArgumentException(
-                        "Классификатор не может входить сам в себя"
-                );
+            if (Objects.equals(currentClassifierId, row.getTargetId())) {
+                throw new IllegalArgumentException("Классификатор не может входить сам в себя");
             }
-
-            if (!targetIds.add(row.getTargetId())) {
-                throw new IllegalArgumentException(
-                        "Входящее изделие повторяется"
-                );
-            }
+            if (!ids.add(row.getTargetId())) throw new IllegalArgumentException("Входящее изделие повторяется");
         }
+    }
+
+    private List<ClassifierInclusionForm> selectedRows(ClassifierForm form) {
+        if (form.getInclusions() == null) return List.of();
+        return form.getInclusions().stream().filter(Objects::nonNull)
+                .filter(row -> row.getTargetId() != null).toList();
     }
 
     private void save(ProductClassifier classifier) {
         try {
             classifiers.saveAndFlush(classifier);
         } catch (DataIntegrityViolationException exception) {
-            throw new IllegalArgumentException(
-                    "Не удалось сохранить классификатор. " +
-                            "Проверьте уникальность кода и связанные изделия.",
-                    exception
-            );
+            throw new IllegalArgumentException("Не удалось сохранить классификатор. Проверьте уникальность кода и связанные изделия.", exception);
         }
     }
 
     private String trim(String value) {
-        if (value == null) {
-            return null;
-        }
-
+        if (value == null) return null;
         String result = value.trim();
-
-        return result.isEmpty()
-                ? null
-                : result;
+        return result.isEmpty() ? null : result;
     }
 }

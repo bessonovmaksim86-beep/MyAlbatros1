@@ -5,13 +5,14 @@ import lombok.RequiredArgsConstructor;
 
 @Getter
 @RequiredArgsConstructor
-public enum UserType {
+public enum RoleUser {
 
     SERVICE_HEAD("Руководитель службы"),
 
-    SUBDIVISION_HEAD("Руководитель подразделения"),
+    HEAD_OF_WORKSHOP_OR_DEPARTMENT("Начальник цеха/отдела"),
 
-    SERVICE_EMPLOYEE("Сотрудник службы");
+    EXECUTOR("Исполнитель");
+
 
     private final String displayName;
 }

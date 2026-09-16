@@ -4,6 +4,7 @@ import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
+import jakarta.persistence.GenerationType;
 
 @Getter
 @Setter
@@ -37,9 +38,7 @@ public class OrganizationUnit {
     @Column(nullable = false, length = 255)
     private String name;
 
-    @Enumerated(EnumType.STRING)
-    @Column(name = "type", nullable = false, length = 32)
-    private OrganizationUnitType type;
+
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(

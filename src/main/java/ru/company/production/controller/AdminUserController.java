@@ -10,8 +10,9 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 import ru.company.production.dto.CreateUserForm;
 import ru.company.production.entity.AppUser;
+import ru.company.production.entity.ProductionService;
 import ru.company.production.entity.Role;
-import ru.company.production.entity.UserType;
+
 import ru.company.production.repository.OrganizationUnitRepository;
 import ru.company.production.repository.ProductionServiceRepository;
 import ru.company.production.service.AdminUserService;
@@ -136,7 +137,7 @@ public class AdminUserController {
 
         model.addAttribute(
                 "userTypes",
-                UserType.values()
+                serviceRepository.findAllByActiveTrueOrderByNameAsc()
         );
 
         model.addAttribute(

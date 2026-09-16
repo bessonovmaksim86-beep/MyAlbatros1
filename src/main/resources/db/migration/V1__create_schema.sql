@@ -31,7 +31,6 @@ CREATE TABLE organization_units
     id         BIGINT       NOT NULL AUTO_INCREMENT,
     code       VARCHAR(50)  NOT NULL,
     name       VARCHAR(255) NOT NULL,
-    type       VARCHAR(32)  NOT NULL,
     service_id BIGINT       NOT NULL,
     active     BOOLEAN      NOT NULL,
 
@@ -46,56 +45,13 @@ CREATE TABLE organization_units
 
     CONSTRAINT fk_organization_unit_service
         FOREIGN KEY (service_id)
-            REFERENCES production_services (id)
+            REFERENCES production_services (id),
+
+    INDEX idx_organization_unit_service_active_name
+        (service_id, active, name)
 ) ENGINE = InnoDB
   DEFAULT CHARACTER SET utf8mb4
   COLLATE utf8mb4_unicode_ci;
-
-
--- ============================================================
--- Цеха
--- ============================================================
-
-CREATE TABLE workshops
-(
-    id     BIGINT       NOT NULL AUTO_INCREMENT,
-    code   VARCHAR(50)  NOT NULL,
-    name   VARCHAR(255) NOT NULL,
-    active BOOLEAN      NOT NULL,
-
-    CONSTRAINT pk_workshops
-        PRIMARY KEY (id),
-
-    CONSTRAINT uk_workshop_name
-        UNIQUE (name)
-) ENGINE = InnoDB
-  DEFAULT CHARACTER SET utf8mb4
-  COLLATE utf8mb4_unicode_ci;
-
-
--- ============================================================
--- Отделы
--- ============================================================
-
-CREATE TABLE departments
-(
-    id     BIGINT       NOT NULL AUTO_INCREMENT,
-    code   VARCHAR(50)  NOT NULL,
-    name   VARCHAR(255) NOT NULL,
-    active BOOLEAN      NOT NULL,
-
-    CONSTRAINT pk_departments
-        PRIMARY KEY (id),
-
-    CONSTRAINT uk_department_code
-        UNIQUE (code),
-
-    CONSTRAINT uk_department_name
-        UNIQUE (name)
-) ENGINE = InnoDB
-  DEFAULT CHARACTER SET utf8mb4
-  COLLATE utf8mb4_unicode_ci;
-
 
 -- ============================================================
 -- Каталог датчиков
@@ -184,6 +140,73 @@ CREATE TABLE classifier_inclusion
   DEFAULT CHARACTER SET utf8mb4
   COLLATE utf8mb4_unicode_ci;
 
+-- ============================================================
+-- Наименования операций
+-- ============================================================
+
+CREATE TABLE operation_names
+(
+    id     BIGINT       NOT NULL AUTO_INCREMENT,
+    code   VARCHAR(50)  NOT NULL,
+    name   VARCHAR(255) NOT NULL,
+    active BOOLEAN      NOT NULL DEFAULT TRUE,
+
+    CONSTRAINT pk_operation_names
+        PRIMARY KEY (id),
+
+    CONSTRAINT uk_operation_name_code
+        UNIQUE (code),
+
+    CONSTRAINT uk_operation_name_name
+        UNIQUE (name)
+) ENGINE = InnoDB
+  DEFAULT CHARACTER SET utf8mb4
+  COLLATE utf8mb4_unicode_ci;
+
+-- ============================================================
+-- Типы операций
+-- ============================================================
+
+CREATE TABLE operation_types
+(
+    id     BIGINT       NOT NULL AUTO_INCREMENT,
+    code   VARCHAR(50)  NOT NULL,
+    name   VARCHAR(255) NOT NULL,
+    active BOOLEAN      NOT NULL DEFAULT TRUE,
+
+    CONSTRAINT pk_operation_types
+        PRIMARY KEY (id),
+
+    CONSTRAINT uk_operation_type_code
+        UNIQUE (code),
+
+    CONSTRAINT uk_operation_type_name
+        UNIQUE (name)
+) ENGINE = InnoDB
+  DEFAULT CHARACTER SET utf8mb4
+  COLLATE utf8mb4_unicode_ci;
+-- ============================================================
+-- Роли пользователей
+-- ============================================================
+
+CREATE TABLE user_roles
+(
+    id           BIGINT       NOT NULL AUTO_INCREMENT,
+    code         VARCHAR(50)  NOT NULL,
+    display_name VARCHAR(255) NOT NULL,
+
+    CONSTRAINT pk_user_roles
+        PRIMARY KEY (id),
+
+    CONSTRAINT uk_user_role_code
+        UNIQUE (code),
+
+    CONSTRAINT uk_user_role_display_name
+        UNIQUE (display_name)
+) ENGINE = InnoDB
+  DEFAULT CHARACTER SET utf8mb4
+  COLLATE utf8mb4_unicode_ci;
+
 
 -- ============================================================
 -- Операции
@@ -191,42 +214,65 @@ CREATE TABLE classifier_inclusion
 
 CREATE TABLE operations
 (
-    id             BIGINT       NOT NULL AUTO_INCREMENT,
-    code           VARCHAR(50)  NOT NULL,
-    name           VARCHAR(255) NOT NULL,
-    operation_type VARCHAR(40)  NOT NULL,
-    workshop_id    BIGINT       NULL,
-    department_id  BIGINT       NULL,
-    active         BOOLEAN      NOT NULL,
-    created_at     DATETIME(6)  NOT NULL,
+    id                    BIGINT      NOT NULL AUTO_INCREMENT,
+    operation_name_id     BIGINT      NOT NULL,
+    operation_type_id     BIGINT      NOT NULL,
+    executor_role_id      BIGINT      NOT NULL,
+    service_id            BIGINT      NOT NULL,
+    organization_unit_id  BIGINT      NULL,
+    created_at            DATETIME(6) NOT NULL,
+
+    organization_unit_key BIGINT
+        GENERATED ALWAYS AS (
+            IFNULL(organization_unit_id, 0)
+        ) STORED,
 
     CONSTRAINT pk_operations
         PRIMARY KEY (id),
 
-    CONSTRAINT uk_operation_code
-        UNIQUE (code),
+    CONSTRAINT fk_operation_name
+        FOREIGN KEY (operation_name_id)
+            REFERENCES operation_names (id),
 
-    CONSTRAINT fk_operation_workshop
-        FOREIGN KEY (workshop_id)
-            REFERENCES workshops (id),
+    CONSTRAINT fk_operation_type
+        FOREIGN KEY (operation_type_id)
+            REFERENCES operation_types (id),
 
-    CONSTRAINT fk_operation_department
-        FOREIGN KEY (department_id)
-            REFERENCES departments (id),
+    CONSTRAINT fk_operation_executor_role
+        FOREIGN KEY (executor_role_id)
+            REFERENCES user_roles (id),
+
+    CONSTRAINT fk_operation_service
+        FOREIGN KEY (service_id)
+            REFERENCES production_services (id),
+
+    CONSTRAINT fk_operation_organization_unit
+        FOREIGN KEY (organization_unit_id)
+            REFERENCES organization_units (id),
+
+    CONSTRAINT uk_operation_assignment
+        UNIQUE (
+            operation_name_id,
+            operation_type_id,
+            executor_role_id,
+            service_id,
+            organization_unit_key
+        ),
 
     INDEX idx_operation_type
-        (operation_type),
+        (operation_type_id),
 
-    INDEX idx_operation_workshop
-        (workshop_id),
+    INDEX idx_operation_executor_role
+        (executor_role_id),
 
-    INDEX idx_operation_department
-        (department_id)
+    INDEX idx_operation_service
+        (service_id),
+
+    INDEX idx_operation_organization_unit
+        (organization_unit_id)
 ) ENGINE = InnoDB
   DEFAULT CHARACTER SET utf8mb4
   COLLATE utf8mb4_unicode_ci;
-
-
 -- ============================================================
 -- Пользователи приложения
 -- ============================================================
@@ -239,7 +285,6 @@ CREATE TABLE app_users
     specialty            VARCHAR(255)  NULL,
     service_id           BIGINT        NULL,
     organization_unit_id BIGINT        NULL,
-    user_type            VARCHAR(40)   NULL,
     password_hash        VARCHAR(100)  NOT NULL,
     password_ciphertext  VARCHAR(1000) NULL,
     `role`               VARCHAR(50)   NOT NULL,
