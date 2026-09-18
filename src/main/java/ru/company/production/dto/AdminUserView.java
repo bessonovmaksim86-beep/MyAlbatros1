@@ -5,9 +5,10 @@ public record AdminUserView(
         String username,
         String fullName,
         String specialty,
+        String service,
         String organizationUnit,
+        String roleUser,
         String roleName,
-        boolean active,
-        String password
+        boolean active
 ) {
 }

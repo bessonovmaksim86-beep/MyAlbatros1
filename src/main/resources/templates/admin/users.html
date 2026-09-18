@@ -64,65 +64,90 @@
             </label>
 
             <label>
-                Специальность
+                Должность
                 <input type="text"
                        th:field="*{specialty}"
                        placeholder="Инженер-технолог"
                        required>
             </label>
-            <label>
-                Служба
 
-                <select id="serviceSelect"
-                        th:field="*{serviceId}">
+            <label>
+                Роль
+
+                <select th:field="*{role}"
+                        id="roleSelect"
+                        required>
 
                     <option value="">
-                        Без принадлежности к службе
+                        Выберите роль
                     </option>
 
-                    <option th:each="service : ${services}"
-                            th:value="${service.id}"
-                            th:text="|${service.code} — ${service.name}|">
+                    <option th:each="role : ${roles}"
+                            th:value="${role.name()}"
+                            th:text="${role.displayName}">
                     </option>
                 </select>
             </label>
-            <label>
-                Тип пользователя
 
-                <select th:field="*{userType}"
-                        id="userTypeSelect">
+            <div id="orgFields">
+                <label>
+                    Служба
 
-                    <option value="">
-                        Не выбран
-                    </option>
+                    <select id="serviceSelect"
+                            th:field="*{serviceId}">
 
-                    <option th:each="type : ${userTypes}"
-                            th:value="${type.name()}"
-                            th:text="${type.displayName}">
-                    </option>
-                </select>
-            </label>
-            <label>
-                Подразделение
+                        <option value="">
+                            Не выбрана
+                        </option>
 
-                <select id="unitSelect"
-                        th:field="*{organizationUnitId}">
+                        <option th:each="service : ${services}"
+                                th:value="${service.id}"
+                                th:text="|${service.code} — ${service.name}|">
+                        </option>
+                    </select>
+                </label>
 
-                    <option value="">
-                        Без подразделения
-                    </option>
+                <label>
+                    Тип пользователя
 
-                    <option th:each="unit : ${organizationUnits}"
-                            th:value="${unit.id}"
-                            th:attr="data-service-id=${unit.service.id}"
-                            th:text="|${unit.service.code}: ${unit.name}|">
-                    </option>
-                </select>
+                    <select th:field="*{roleUser}"
+                            id="roleUserSelect">
 
-                <small>
-                    Для СГМ подразделение выбирать не нужно.
-                </small>
-            </label>
+                        <option value="">
+                            Не выбран
+                        </option>
+
+                        <option th:each="type : ${userTypes}"
+                                th:value="${type.name()}"
+                                th:text="${type.displayName}">
+                        </option>
+                    </select>
+                </label>
+
+                <label>
+                    Цех/отдел
+
+                    <select id="unitSelect"
+                            th:field="*{organizationUnitId}">
+
+                        <option value="">
+                            Без подразделения
+                        </option>
+
+                        <option th:each="unit : ${organizationUnits}"
+                                th:value="${unit.id}"
+                                th:attr="data-service-id=${unit.service.id}"
+                                th:text="|${unit.service.code}: ${unit.name}|">
+                        </option>
+                    </select>
+
+                    <small>
+                        Для руководителя службы и для СГМ подразделение
+                        не выбирается.
+                    </small>
+                </label>
+            </div>
+
             <label>
                 Пароль
 
@@ -141,8 +166,6 @@
                 </span>
             </label>
 
-
-
             <button type="submit">
                 Добавить пользователя
             </button>
@@ -160,8 +183,10 @@
                     <th>ФИО</th>
                     <th>Логин</th>
                     <th>Пароль</th>
-                    <th>Специальность</th>
+                    <th>Должность</th>
+                    <th>Служба</th>
                     <th>Цех/отдел</th>
+                    <th>Тип пользователя</th>
                     <th>Роль</th>
                     <th>Активен</th>
                     <th>Действие</th>
@@ -182,8 +207,13 @@
                     </td>
 
                     <td>
-                        <code class="visible-password"
-                              th:text="${user.password}">
+                        <button type="button"
+                                class="secondary-button show-password"
+                                th:attr="data-url=@{/admin/users/{id}/password(id=${user.id})}">
+                            Показать
+                        </button>
+
+                        <code class="visible-password" hidden>
                         </code>
                     </td>
 
@@ -192,11 +222,20 @@
                         : 'Не указана'}">
                     </td>
 
-                    <th>Служба</th>
-                    <th>Подразделение</th>
-                    <th>Тип пользователя</th>
-                    <th>Должность</th>
-                    <th>Роль</th>
+                    <td th:text="${user.service != null
+                        ? user.service
+                        : 'Не назначена'}">
+                    </td>
+
+                    <td th:text="${user.organizationUnit != null
+                        ? user.organizationUnit
+                        : '—'}">
+                    </td>
+
+                    <td th:text="${user.roleUser != null
+                        ? user.roleUser
+                        : '—'}">
+                    </td>
 
                     <td th:text="${user.roleName}">
                     </td>
@@ -216,7 +255,7 @@
                 </tr>
 
                 <tr th:if="${#lists.isEmpty(users)}">
-                    <td colspan="9">
+                    <td colspan="11">
                         Пользователей пока нет
                     </td>
                 </tr>
@@ -318,6 +357,15 @@
     const unitSelect =
         document.getElementById("unitSelect");
 
+    const roleSelect =
+        document.getElementById("roleSelect");
+
+    const roleUserSelect =
+        document.getElementById("roleUserSelect");
+
+    const orgFields =
+        document.getElementById("orgFields");
+
     function filterUnits() {
         if (!serviceSelect || !unitSelect) {
             return;
@@ -358,6 +406,36 @@
         }
     }
 
+    /*
+     * Администратор базы не привязывается к службе,
+     * подразделению и типу пользователя.
+     */
+    function toggleOrganizationFields() {
+        if (!roleSelect || !orgFields) {
+            return;
+        }
+
+        const isAdmin = roleSelect.value === "ADMIN";
+
+        orgFields.hidden = isAdmin;
+
+        if (isAdmin) {
+            if (serviceSelect) {
+                serviceSelect.value = "";
+            }
+
+            if (unitSelect) {
+                unitSelect.value = "";
+            }
+
+            if (roleUserSelect) {
+                roleUserSelect.value = "";
+            }
+        }
+
+        filterUnits();
+    }
+
     if (serviceSelect) {
         serviceSelect.addEventListener(
                 "change",
@@ -365,7 +443,60 @@
         );
     }
 
-    filterUnits();
+    if (roleSelect) {
+        roleSelect.addEventListener(
+                "change",
+                toggleOrganizationFields
+        );
+    }
+
+    toggleOrganizationFields();
+</script>
+<script>
+    document.addEventListener("click", async function (event) {
+        const button =
+            event.target.closest(".show-password");
+
+        if (!button) {
+            return;
+        }
+
+        const passwordBox =
+            button.parentElement.querySelector(".visible-password");
+
+        if (!passwordBox) {
+            return;
+        }
+
+        if (!passwordBox.hidden && passwordBox.textContent.trim()) {
+            passwordBox.textContent = "";
+            passwordBox.hidden = true;
+            button.textContent = "Показать";
+            return;
+        }
+
+        button.disabled = true;
+
+        try {
+            const response = await fetch(button.dataset.url);
+
+            if (!response.ok) {
+                throw new Error("Ошибка HTTP");
+            }
+
+            const data = await response.json();
+
+            passwordBox.textContent = data.password || "Недоступен";
+            passwordBox.hidden = false;
+            button.textContent = "Скрыть";
+        } catch (error) {
+            passwordBox.textContent = "Не удалось получить пароль";
+            passwordBox.hidden = false;
+            button.textContent = "Показать";
+        } finally {
+            button.disabled = false;
+        }
+    });
 </script>
 </body>
 </html>

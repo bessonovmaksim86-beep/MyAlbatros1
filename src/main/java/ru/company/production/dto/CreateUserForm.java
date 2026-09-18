@@ -6,7 +6,6 @@ import jakarta.validation.constraints.Size;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
-import ru.company.production.entity.ProductionService;
 import ru.company.production.entity.Role;
 import ru.company.production.entity.RoleUser;
 
@@ -31,26 +30,24 @@ public class CreateUserForm {
     private String specialty;
 
     /**
-     * Для администратора базы служба может быть пустой.
+     * Служба обязательна для всех, кроме администратора базы.
      */
     private Long serviceId;
+
     /**
-     * Подразделение необязательно.
-     */
-    private RoleUser roleUser;
-    /**
-     * Подразделение необязательно.
-     */
-    private ProductionService productionService;
-    /**
-     * Подразделение необязательно.
+     * Подразделение (цех, отдел, бюро).
+     * Не обязательно для руководителя службы и для СГМ.
      */
     private Long organizationUnitId;
 
     /**
-     * Для администратора базы может быть пустым.
+     * Руководитель службы, руководитель подразделения
+     * или исполнитель.
      */
+    private RoleUser roleUser;
 
+    @NotNull(message = "Выберите роль")
+    private Role role;
 
     @NotBlank(message = "Укажите пароль")
     @Size(
@@ -59,7 +56,4 @@ public class CreateUserForm {
             message = "Пароль должен содержать от 6 до 100 символов"
     )
     private String password;
-
-    @NotNull(message = "Выберите роль")
-    private Role role;
 }

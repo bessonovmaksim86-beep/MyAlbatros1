@@ -1,33 +1,29 @@
 package ru.company.production.service;
 
 import lombok.RequiredArgsConstructor;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import ru.company.production.dto.AdminUserView;
 import ru.company.production.dto.CreateUserForm;
 import ru.company.production.entity.*;
-
 import ru.company.production.repository.OrganizationUnitRepository;
 import ru.company.production.repository.ProductionServiceRepository;
 import ru.company.production.repository.UserRepository;
 
 import java.util.List;
 
-import static ru.company.production.entity.Role.SDP_SERVICE_HEAD_TECHNOLOGY;
-
 @Service
 @RequiredArgsConstructor
 public class AdminUserService {
+
+    private static final String METROLOGY_SERVICE_CODE = "СГМ";
 
     private final UserRepository userRepository;
 
     private final OrganizationUnitRepository unitRepository;
 
-    /*
-     * Эта зависимость отсутствовала.
-     * Из-за этого serviceRepository не находился компилятором.
-     */
     private final ProductionServiceRepository serviceRepository;
 
     private final PasswordEncoder passwordEncoder;
@@ -36,7 +32,8 @@ public class AdminUserService {
 
     @Transactional(readOnly = true)
     public List<AdminUserView> findAll() {
-        return userRepository.findAll()
+        return userRepository
+                .findAllByOrderByFullNameAscUsernameAsc()
                 .stream()
                 .map(this::toView)
                 .toList();
@@ -49,6 +46,31 @@ public class AdminUserService {
         }
 
         return loginGenerator.generateUnique(fullName.trim());
+    }
+
+    /**
+     * Возвращает пароль пользователя в открытом виде.
+     *
+     * Значение берётся из password_ciphertext и расшифровывается,
+     * поэтому пароль доступен только для учётных записей, созданных
+     * после появления хранилища паролей.
+     */
+    @Transactional(readOnly = true)
+    public String revealPassword(Long id) {
+        AppUser user = userRepository.findById(id)
+                .orElseThrow(() ->
+                        new IllegalArgumentException(
+                                "Пользователь не найден"
+                        )
+                );
+
+        String ciphertext = user.getPasswordCiphertext();
+
+        if (ciphertext == null || ciphertext.isBlank()) {
+            return "Пароль недоступен";
+        }
+
+        return passwordVaultService.decrypt(ciphertext);
     }
 
     @Transactional
@@ -134,73 +156,47 @@ public class AdminUserService {
             );
         }
 
-        userRepository.delete(user);
+        try {
+            userRepository.delete(user);
+            userRepository.flush();
+
+        } catch (DataIntegrityViolationException exception) {
+            /*
+             * На пользователя есть ссылки из заказов, ПЗ или операций,
+             * поэтому физическое удаление запрещено ограничениями БД.
+             */
+            throw new IllegalArgumentException(
+                    "Нельзя удалить пользователя: на него есть ссылки. "
+                            + "Отключите учётную запись."
+            );
+        }
     }
 
     private AdminUserView toView(AppUser user) {
-        String unitName = buildOrganizationName(user);
-
-        /*
-         * Защита для пользователей, которые были добавлены
-         * до появления поля passwordCiphertext.
-         */
-        String visiblePassword = null;
-
-        if (user.getPasswordCiphertext() != null
-                && !user.getPasswordCiphertext().isBlank()) {
-
-            try {
-                visiblePassword = passwordVaultService.decrypt(
-                        user.getPasswordCiphertext()
-                );
-            } catch (RuntimeException exception) {
-                /*
-                 * Старое или повреждённое значение не должно
-                 * ломать всю страницу администрирования.
-                 */
-                visiblePassword = null;
-            }
-        }
+        ProductionService service = user.getService();
+        OrganizationUnit unit = user.getOrganizationUnit();
 
         return new AdminUserView(
                 user.getId(),
                 user.getUsername(),
                 user.getFullName(),
                 user.getSpecialty(),
-                unitName,
+                service == null ? null : serviceLabel(service),
+                unit == null ? null : unitLabel(unit),
+                user.getRoleUser() == null
+                        ? null
+                        : user.getRoleUser().getDisplayName(),
                 user.getRole().getDisplayName(),
-                user.isActive(),
-                visiblePassword
+                user.isActive()
         );
     }
 
-    private String buildOrganizationName(AppUser user) {
-        if (user.getRole() == Role.ADMIN) {
-            return "Администратор всей базы";
-        }
+    private String serviceLabel(ProductionService service) {
+        return service.getCode() + " — " + service.getName();
+    }
 
-        ProductionService service = user.getService();
-        OrganizationUnit unit = user.getOrganizationUnit();
-
-        if (service == null) {
-            return "Не назначен";
-        }
-
-        String serviceName =
-                service.getCode() + ": " + service.getName();
-
-        /*
-         * Например, для СГМ подразделение может отсутствовать.
-         */
-        if (unit == null) {
-            return serviceName;
-        }
-
-        return serviceName
-                + " / "
-                + unit.getCode()
-                + ": "
-                + unit.getName();
+    private String unitLabel(OrganizationUnit unit) {
+        return unit.getCode() + " — " + unit.getName();
     }
 
     private void applyOrganizationData(
@@ -302,30 +298,25 @@ public class AdminUserService {
             );
         }
 
-        /*
-         * СГМ подразделений не имеет.
-         * Пользователь может относиться к СГМ,
-         * оставив поле подразделения пустым.
-         */
-        if ("СГМ".equalsIgnoreCase(service.getCode())
-                && unit != null) {
+        boolean metrology = isMetrologyService(service);
 
+        /*
+         * СГМ подразделения не выбираются,
+         * пользователь относится к службе целиком.
+         */
+        if (metrology && unit != null) {
             throw new IllegalArgumentException(
                     "СГМ не содержит подразделений"
             );
         }
 
         /*
-         * Для обычного сотрудника подразделение обязательно,
+         * Для исполнителя подразделение обязательно,
          * кроме сотрудников СГМ.
-         *
-         * Если в вашем UserType вместо EMPLOYEE используется
-         * другое название, замените EMPLOYEE на значение
-         * из вашего enum.
          */
         if (form.getRoleUser() == RoleUser.EXECUTOR
                 && unit == null
-                ) {
+                && !metrology) {
 
             throw new IllegalArgumentException(
                     "Для сотрудника необходимо "
@@ -334,48 +325,29 @@ public class AdminUserService {
         }
 
         /*
-         * В ранее показанном инициализаторе код
-         * технологического отдела был TECHNOLOGY:
-         *
-         * createIfNotExists(
-         *     sdp,
-         *     "TECHNOLOGY",
-         *     "Технологический отдел"
-         * );
-         *
-         * Поэтому здесь нужно проверять TECHNOLOGY,
-         * а не SDP-TECH.
+         * Технологическое бюро относится к службе СДП,
+         * но работать в нём может только роль
+         * «Технологическое бюро».
          */
         if (unit != null
-                && "TECHNOLOGY".equalsIgnoreCase(unit.getCode())) {
+                && "TECHNOLOGY".equalsIgnoreCase(unit.getCode())
+                && form.getRole()
+                != Role.SDP_SERVICE_HEAD_TECHNOLOGY) {
 
-            boolean allowed =
-                    form.getRole() == SDP_SERVICE_HEAD_TECHNOLOGY
-                           ;
-
-            if (!allowed) {
-                throw new IllegalArgumentException(
-                        "В технологическом отделе могут работать "
-                                + "только технологи и руководитель "
-                                + "технологического бюро"
-                );
-            }
-
-            if (form.getRole()
-                    == SDP_SERVICE_HEAD_TECHNOLOGY
-                    ) {
-
-                throw new IllegalArgumentException(
-                        "Руководитель технологического бюро "
-                                + "должен иметь тип "
-                                + "«Руководитель подразделения»"
-                );
-            }
+            throw new IllegalArgumentException(
+                    "В технологическом бюро может работать "
+                            + "только роль «Технологическое бюро»"
+            );
         }
 
         user.setService(service);
         user.setOrganizationUnit(unit);
-        user.setRole(SDP_SERVICE_HEAD_TECHNOLOGY);
+        user.setRoleUser(form.getRoleUser());
+    }
+
+    private boolean isMetrologyService(ProductionService service) {
+        return METROLOGY_SERVICE_CODE.equalsIgnoreCase(service.getCode())
+                || "SGM".equalsIgnoreCase(service.getCode());
     }
 
     private String normalizeRequired(
