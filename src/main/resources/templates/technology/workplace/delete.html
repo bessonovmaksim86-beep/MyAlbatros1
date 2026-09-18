@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="ru"
+      xmlns:th="http://www.thymeleaf.org">
+
+<head>
+    <meta charset="UTF-8">
+
+    <meta name="viewport"
+          content="width=device-width, initial-scale=1">
+
+    <title>Удаление рабочего места</title>
+
+    <link rel="stylesheet"
+          th:href="@{/technology/css/technology.css}">
+
+    <link rel="stylesheet"
+          th:href="@{/technology/css/common.css}">
+
+    <link rel="stylesheet"
+          th:href="@{/technology/css/operation.css}">
+</head>
+
+<body>
+
+<div class="app-shell">
+
+    <aside th:replace="~{technology/fragments/layout
+            :: sidebar('workplace')}">
+    </aside>
+
+    <main class="main">
+
+        <header th:replace="~{technology/fragments/layout
+                :: topbar}">
+        </header>
+
+        <div class="page-content operation-page">
+
+            <div class="page-head operation-page-head">
+
+                <div class="page-title">
+
+                    <h1>Удаление рабочего места</h1>
+
+                    <p>
+                        Выберите рабочее место
+                        и подтвердите удаление
+                    </p>
+
+                </div>
+
+                <a class="btn secondary"
+                   th:href="@{/technology/workplace}">
+                    Вернуться к рабочим местам
+                </a>
+
+            </div>
+
+            <div class="alert danger"
+                 th:if="${errorMessage}"
+                 th:text="${errorMessage}">
+            </div>
+
+            <section class="card operation-delete-selector">
+
+                <div class="card-head">
+
+                    <div>
+                        <h2>Выбор рабочего места</h2>
+
+                        <small>
+                            Выберите рабочее место из списка
+                        </small>
+                    </div>
+
+                </div>
+
+                <div class="card-body">
+
+                    <form method="get"
+                          class="operation-selector">
+
+                        <div class="form-group">
+
+                            <label for="workPlaceId">
+                                Рабочее место
+                            </label>
+
+                            <select id="workPlaceId"
+                                    name="id"
+                                    data-auto-submit
+                                    required>
+
+                                <option value="">
+                                    Выберите рабочее место
+                                </option>
+
+                                <option th:each="place : ${workPlaces}"
+                                        th:value="${place.id}"
+                                        th:selected="${
+                                            selectedWorkPlace != null
+                                            and selectedWorkPlace.id
+                                                == place.id}"
+                                        th:text="|
+                                            ${place.code}
+                                            — ${place.name}
+                                            / ${place.service.name}|">
+                                    Рабочее место
+                                </option>
+
+                            </select>
+
+                        </div>
+
+                        <button type="submit"
+                                class="btn secondary">
+                            Выбрать
+                        </button>
+
+                    </form>
+
+                </div>
+            </section>
+
+            <section class="card operation-delete-card"
+                     th:if="${selectedWorkPlace != null}">
+
+                <div class="delete-warning">
+
+                    <div class="delete-warning-icon">
+                        !
+                    </div>
+
+                    <div>
+                        <h2>Удалить рабочее место?</h2>
+
+                        <p>
+                            Это действие нельзя отменить.
+                        </p>
+                    </div>
+
+                </div>
+
+                <dl class="operation-delete-details">
+
+                    <div>
+                        <dt>Код</dt>
+
+                        <dd th:text="${selectedWorkPlace.code}">
+                            РМ 00.01
+                        </dd>
+                    </div>
+
+                    <div>
+                        <dt>Наименование</dt>
+
+                        <dd th:text="${selectedWorkPlace.name}">
+                            Наименование
+                        </dd>
+                    </div>
+
+                    <div>
+                        <dt>Тип рабочего места</dt>
+
+                        <dd th:text="${
+                            selectedWorkPlace.workPlaceType.name}">
+                            Тип рабочего места
+                        </dd>
+                    </div>
+
+                    <div>
+                        <dt>Служба</dt>
+
+                        <dd th:text="${
+                            selectedWorkPlace.service.name}">
+                            Служба
+                        </dd>
+                    </div>
+
+                    <div>
+                        <dt>Подразделение</dt>
+
+                        <dd th:text="${
+                            selectedWorkPlace.organizationUnit != null
+                            ? selectedWorkPlace.organizationUnit.name
+                            : 'Не указано'}">
+                            Подразделение
+                        </dd>
+                    </div>
+
+                    <div>
+                        <dt>Роль исполнителя</dt>
+
+                        <dd th:text="${
+                            selectedWorkPlace.executorRole.displayName}">
+                            Роль исполнителя
+                        </dd>
+                    </div>
+
+                    <div th:if="${
+                        !#strings.isEmpty(selectedWorkPlace.note)}">
+                        <dt>Примечание</dt>
+
+                        <dd th:text="${selectedWorkPlace.note}">
+                            Примечание
+                        </dd>
+                    </div>
+
+                </dl>
+
+                <form method="post"
+                      data-delete-form
+                      th:action="@{
+                        /technology/workplace/{id}/delete(
+                        id=${selectedWorkPlace.id})}">
+
+                    <input th:if="${_csrf != null}"
+                           type="hidden"
+                           th:name="${_csrf.parameterName}"
+                           th:value="${_csrf.token}">
+
+                    <div class="operation-form-actions">
+
+                        <a class="btn secondary"
+                           th:href="@{/technology/workplace}">
+                            Отмена
+                        </a>
+
+                        <button type="submit"
+                                class="btn danger">
+                            Удалить рабочее место
+                        </button>
+
+                    </div>
+
+                </form>
+
+            </section>
+
+        </div>
+    </main>
+</div>
+
+<th:block th:replace="~{technology/fragments/layout
+        :: commonScripts}">
+</th:block>
+
+<script th:src="@{/technology/js/operation.js}"></script>
+
+</body>
+</html>

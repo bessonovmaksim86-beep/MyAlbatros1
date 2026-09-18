@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="ru"
+      xmlns:th="http://www.thymeleaf.org">
+
+<head>
+    <meta charset="UTF-8">
+
+    <meta name="viewport"
+          content="width=device-width, initial-scale=1">
+
+    <title>Заказы на производство</title>
+
+    <link rel="stylesheet"
+          th:href="@{/technology/css/technology.css}">
+
+    <link rel="stylesheet"
+          th:href="@{/dispatcher/css/dispatcher.css}">
+</head>
+
+<body>
+
+<div class="app-shell">
+
+    <aside th:replace="~{dispatcher/fragments/layout
+            :: sidebar('productionOrder')}">
+    </aside>
+
+    <main class="main">
+
+        <header th:replace="~{dispatcher/fragments/layout
+                :: topbar}">
+        </header>
+
+        <div class="page-content dispatcher-page">
+
+            <div class="page-head">
+
+                <div class="page-title">
+
+                    <h1>Заказы на производство</h1>
+
+                    <p>
+                        Заказы на выпуск изделий: состав выводится
+                        из заказа покупателя, каждое изделие
+                        получает серийный номер
+                    </p>
+
+                </div>
+
+                <div class="page-head-actions">
+
+                    <a class="btn primary"
+                       th:href="@{/dispatcher/production-order/create}">
+                        Создать заказ на производство
+                    </a>
+
+                </div>
+            </div>
+
+            <div class="alert success"
+                 th:if="${successMessage}"
+                 th:text="${successMessage}">
+            </div>
+
+            <div class="alert danger"
+                 th:if="${errorMessage}"
+                 th:text="${errorMessage}">
+            </div>
+
+            <div class="stats">
+
+                <div class="stat">
+                    <small>Всего заказов</small>
+
+                    <strong th:text="${productionOrderCount ?: 0}">
+                        0
+                    </strong>
+
+                    <span class="trend">
+                        Все заказы на производство
+                    </span>
+                </div>
+
+                <div class="stat">
+                    <small>Новые</small>
+
+                    <strong th:text="${productionOrderNewCount ?: 0}">
+                        0
+                    </strong>
+
+                    <span class="trend attention">
+                        Ожидают запуска в работу
+                    </span>
+                </div>
+
+                <div class="stat">
+                    <small>В работе</small>
+
+                    <strong th:text="${productionOrderInWorkCount ?: 0}">
+                        0
+                    </strong>
+
+                    <span class="trend attention">
+                        Находятся в исполнении
+                    </span>
+                </div>
+
+                <div class="stat">
+                    <small>Выполнены</small>
+
+                    <strong th:text="${productionOrderDoneCount ?: 0}">
+                        0
+                    </strong>
+
+                    <span class="trend">
+                        Закрытые заказы
+                    </span>
+                </div>
+            </div>
+
+            <section class="card">
+
+                <div class="card-head">
+
+                    <div>
+
+                        <h2>Список заказов на производство</h2>
+
+                        <small>
+                            Показано записей:
+
+                            <strong th:text="${
+                                productionOrders != null
+                                    ? #lists.size(productionOrders)
+                                    : 0
+                            }">
+                                0
+                            </strong>
+                        </small>
+
+                    </div>
+
+                </div>
+
+                <div class="card-body">
+
+                    <div class="table-wrap">
+
+                        <table class="data-table">
+
+                            <thead>
+                            <tr>
+                                <th>Номер заказа</th>
+                                <th>Уровень</th>
+                                <th>Дата открытия</th>
+                                <th>Заказ покупателя</th>
+                                <th>Операция</th>
+                                <th>Изделий</th>
+                                <th>Собрано</th>
+                                <th>Срок</th>
+                                <th>Статус</th>
+                                <th>Действия</th>
+                            </tr>
+                            </thead>
+
+                            <tbody>
+
+                            <tr th:if="${
+                                    productionOrders == null
+                                    or #lists.isEmpty(productionOrders)
+                                 }">
+
+                                <td colspan="10"
+                                    class="empty-table">
+                                    Заказы на производство пока не добавлены
+                                </td>
+
+                            </tr>
+
+                            <tr th:each="order : ${productionOrders}">
+
+                                <td th:text="${order.number}">
+                                    ПЗ-2026-001
+                                </td>
+
+                                <!--
+                                    Уровень дерева: выпуск верхнего уровня
+                                    (ЗП) или заказ-комплектующий (ЗНП).
+                                    Для комплектующего показан и номер
+                                    выпуска, в который он входит.
+                                -->
+                                <td>
+                                    <span class="status"
+                                          th:classappend="${
+                                              order.component ? 'work' : 'draft'
+                                          }"
+                                          th:text="${
+                                              order.component
+                                                  ? 'ЗНП · ' + order.parentDisplay
+                                                  : 'ЗП'
+                                          }">
+                                        ЗП
+                                    </span>
+                                </td>
+
+                                <td th:text="${order.formattedOrderDate}">
+                                    01.01.2026
+                                </td>
+
+                                <td th:text="${order.customerOrderNumber}">
+                                    ЗП-2026-001
+                                </td>
+
+                                <td th:text="${order.operationName}">
+                                    Комплектовочная
+                                </td>
+
+                                <td th:text="${order.itemCount}">
+                                    3
+                                </td>
+
+                                <td th:text="${order.doneProgress}">
+                                    0 из 3
+                                </td>
+
+                                <td th:text="${order.formattedDueDate}">
+                                    01.01.2026
+                                </td>
+
+                                <td>
+                                    <span class="status"
+                                          th:classappend="${order.statusBadgeClass}"
+                                          th:text="${order.statusDisplayName}">
+                                        Статус
+                                    </span>
+                                </td>
+
+                                <td>
+
+                                    <div class="table-actions">
+
+                                        <a class="btn secondary compact"
+                                           th:href="@{/dispatcher/production-order/{id}(id=${order.id})}">
+                                            Открыть
+                                        </a>
+
+                                    </div>
+
+                                </td>
+
+                            </tr>
+
+                            </tbody>
+                        </table>
+
+                    </div>
+                </div>
+            </section>
+
+            <div class="empty-state"
+                 th:if="${
+                     productionOrders == null
+                     or #lists.isEmpty(productionOrders)
+                 }">
+                <h3>Заказов на производство пока нет</h3>
+
+                <p>
+                    Нажмите «Создать заказ на производство», выберите
+                    свободный заказ покупателя и комплектовочную операцию:
+                    состав выпуска и серийные номера сформируются
+                    автоматически.
+                </p>
+            </div>
+
+        </div>
+    </main>
+</div>
+
+<th:block th:replace="~{dispatcher/fragments/layout
+        :: commonScripts}">
+</th:block>
+
+</body>
+</html>

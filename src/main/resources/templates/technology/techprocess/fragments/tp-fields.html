@@ -1,0 +1,661 @@
+<!DOCTYPE html>
+<html lang="ru"
+      xmlns:th="http://www.thymeleaf.org">
+
+<body>
+
+<!--
+    Форма техпроцесса: параметры маршрута и конструктор операций.
+    Используется страницами создания и изменения.
+
+    Изделие выбирается на предыдущем шаге (create-select),
+    поэтому в форме оно зафиксировано и передаётся скрытым полем.
+    Код техпроцесса выдаётся автоматически (ТП-NNN).
+-->
+<form th:fragment="form(action, submitLabel)"
+      method="post"
+      th:action="${action}"
+      th:object="${techProcessForm}"
+      data-tp-form
+      class="tp-form">
+
+    <input th:if="${_csrf != null}"
+           type="hidden"
+           th:name="${_csrf.parameterName}"
+           th:value="${_csrf.token}">
+
+    <input type="hidden" th:field="*{id}">
+    <input type="hidden" th:field="*{version}">
+    <input type="hidden" th:field="*{productClassifierId}">
+
+    <div class="alert danger"
+         th:if="${#fields.hasGlobalErrors()}">
+
+        <p th:each="error : ${#fields.globalErrors()}"
+           th:text="${error}">
+            Ошибка сохранения техпроцесса
+        </p>
+
+    </div>
+
+    <section class="card">
+
+        <div class="card-head">
+            <div>
+                <h2>Параметры техпроцесса</h2>
+
+                <small>
+                    Код формируется автоматически,
+                    изделие выбирается на шаге выбора
+                </small>
+            </div>
+        </div>
+
+        <div class="card-body">
+
+            <div class="tp-form-grid">
+
+                <div class="form-group">
+
+                    <label for="code">
+                        Код техпроцесса
+                    </label>
+
+                    <input id="code"
+                           type="text"
+                           class="form-control tp-readonly"
+                           maxlength="50"
+                           readonly
+                           th:field="*{code}">
+
+                    <small>
+                        Код назначается автоматически и уникален.
+                    </small>
+
+                    <span class="field-error"
+                          th:if="${#fields.hasErrors('code')}"
+                          th:errors="*{code}">
+                    </span>
+
+                </div>
+
+                <div class="form-group">
+
+                    <label>
+                        Изделие классификатора
+                    </label>
+
+                    <div class="tp-readonly tp-summary-box">
+
+                        <span th:if="${selectedClassifier != null}">
+
+                            <strong th:text="${
+                                'Код ' + selectedClassifier.code
+                            }">Код</strong>
+
+                            <span th:text="${
+                                selectedClassifier.productType.displayName
+                            }">Тип</span>
+
+                            <span th:if="${
+                                selectedClassifier.sensorClassName != null
+                            }"
+                                  th:text="${
+                                      'Класс: '
+                                      + selectedClassifier.sensorClassName
+                                  }">
+                                Класс
+                            </span>
+
+                            <span th:if="${
+                                selectedClassifier.name != null
+                                and !#strings.isEmpty(selectedClassifier.name)
+                            }"
+                                  th:text="${selectedClassifier.name}">
+                                Наименование
+                            </span>
+
+                        </span>
+
+                        <span th:unless="${selectedClassifier != null}">
+                            Изделие не выбрано
+                        </span>
+
+                    </div>
+
+                    <a class="tp-change-link"
+                       th:if="${techProcessForm.id == null}"
+                       th:href="@{/technology/techprocess/create/select}">
+                        Выбрать другое изделие
+                    </a>
+
+                    <span class="field-error"
+                          th:if="${#fields.hasErrors('productClassifierId')}"
+                          th:errors="*{productClassifierId}">
+                    </span>
+
+                </div>
+
+                <div class="form-group tp-span-2">
+
+                    <label for="note">
+                        Примечание
+                    </label>
+
+                    <textarea id="note"
+                              class="form-control"
+                              rows="3"
+                              maxlength="2000"
+                              placeholder="Дополнительная информация о маршруте"
+                              th:field="*{note}">
+                    </textarea>
+
+                    <span class="field-error"
+                          th:if="${#fields.hasErrors('note')}"
+                          th:errors="*{note}">
+                    </span>
+
+                </div>
+
+            </div>
+
+        </div>
+
+    </section>
+
+
+    <!-- Конструктор маршрута -->
+
+    <section class="card">
+
+        <div class="card-body">
+
+            <div class="tp-builder-head">
+
+                <div>
+                    <h2>Операции маршрута</h2>
+
+                    <p>
+                        Добавьте действующие операции, укажите нормы времени
+                        и отметьте, после каких операций выполняется каждая
+                        из них.
+                    </p>
+                </div>
+
+                <button type="button"
+                        class="btn secondary"
+                        data-tp-add-row>
+                    Добавить операцию
+                </button>
+
+            </div>
+
+            <div class="tp-rows" data-tp-rows>
+
+                <div class="tp-row"
+                     th:each="row, state : *{operations}">
+
+                    <div class="form-group">
+
+                        <span class="tp-row-index">
+                            <b data-tp-row-number
+                               th:text="${state.count}">1</b>
+                            Операция
+                        </span>
+
+                        <select class="form-control"
+                                data-tp-operation
+                                data-tp-field="operationId"
+                                required>
+
+                            <option value="">
+                                Выберите операцию
+                            </option>
+
+                            <option th:each="operation : ${operations}"
+                                    th:value="${operation.id}"
+                                    th:attr="data-name=${operation.operationName.name}"
+                                    th:selected="${row.operationId == operation.id}"
+                                    th:text="${
+                                        operation.operationName.name
+                                        + ' - '
+                                        + operation.operationType.name
+                                        + (operation.organizationUnit != null
+                                            ? ' - ' + operation.organizationUnit.name
+                                            : '')
+                                    }">
+                                Операция
+                            </option>
+
+                        </select>
+
+                    </div>
+
+                    <div class="form-group">
+
+                        <label>
+                            Трудоёмкость, ч
+                            <span class="required">*</span>
+                        </label>
+
+                        <input type="number"
+                               class="form-control"
+                               min="0.001"
+                               step="0.001"
+                               value="1"
+                               data-tp-labor
+                               data-tp-field="laborHours"
+                               th:value="${
+                                   row.laborHours != null
+                                       ? row.laborHours
+                                       : '1'
+                               }"
+                               required>
+
+                    </div>
+
+                    <div class="form-group">
+
+                        <label>
+                            Машиновремя, ч
+                            <span class="required">*</span>
+                        </label>
+
+                        <input type="number"
+                               class="form-control"
+                               min="0.001"
+                               step="0.001"
+                               value="1"
+                               data-tp-machine
+                               data-tp-field="machineHours"
+                               th:value="${
+                                   row.machineHours != null
+                                       ? row.machineHours
+                                       : '1'
+                               }"
+                               required>
+
+                    </div>
+
+                    <div class="form-group">
+
+                        <label>
+                            Макс. в день
+                            <span class="required">*</span>
+                        </label>
+
+                        <input type="number"
+                               class="form-control"
+                               min="1"
+                               step="1"
+                               value="8"
+                               data-tp-limit
+                               data-tp-field="dailyLimit"
+                               th:value="${
+                                   row.dailyLimit != null
+                                       ? row.dailyLimit
+                                       : '8'
+                               }"
+                               required>
+
+                    </div>
+
+                    <button type="button"
+                            class="tp-remove"
+                            data-tp-remove>
+                        Удалить
+                    </button>
+
+                    <div class="tp-row-deps">
+
+                        <label class="tp-row-index">
+                            Выполняется после
+                        </label>
+
+                        <!--
+                            Сохранённые зависимости (операции-предшественники)
+                            передаются в разметку скрытыми чекбоксами без name,
+                            чтобы они не ушли в форму повторно. Конструктор
+                            маршрута (rebuildDependencies) читает отмеченные
+                            input:checked и перестраивает список, подхватывая
+                            эти значения. Так галочки остаются после изменения
+                            техпроцесса.
+                        -->
+                        <div class="tp-deps-box" data-tp-deps>
+
+                            <th:block th:if="${
+                                row.predecessorOperationIds != null
+                            }">
+
+                                <input type="checkbox"
+                                       th:each="predId : ${row.predecessorOperationIds}"
+                                       th:value="${predId}"
+                                       checked="checked"
+                                       hidden>
+
+                            </th:block>
+
+                        </div>
+
+                    </div>
+
+                    <div class="tp-row-places">
+
+                        <label class="tp-row-index">
+                            Рабочие места
+                            <span class="required">*</span>
+                        </label>
+
+                        <div class="tp-workplace-box" data-tp-workplaces>
+
+                            <div class="tp-workplace-row"
+                                 th:each="placeId : ${row.workPlaceIds}">
+
+                                <select class="form-control"
+                                        data-tp-workplace>
+
+                                    <option value="">
+                                        Выберите рабочее место
+                                    </option>
+
+                                    <option th:each="place : ${workPlaces}"
+                                            th:value="${place.id}"
+                                            th:selected="${placeId == place.id}"
+                                            th:text="${
+                                                place.code
+                                                + ' · '
+                                                + place.name
+                                            }">
+                                        Рабочее место
+                                    </option>
+
+                                </select>
+
+                                <button type="button"
+                                        class="tp-workplace-remove"
+                                        data-tp-workplace-remove
+                                        aria-label="Убрать рабочее место">
+                                    ×
+                                </button>
+
+                            </div>
+
+                        </div>
+
+                        <small>
+                            После выбора рабочего места появится
+                            строка для следующего.
+                        </small>
+
+                    </div>
+
+                    <div class="tp-row-note form-group">
+
+                        <label class="tp-row-index">
+                            Описание операции
+                        </label>
+
+                        <textarea class="form-control"
+                                  rows="2"
+                                  maxlength="2000"
+                                  placeholder="Как выполняется операция в этом маршруте"
+                                  data-tp-field="note"
+                                  th:text="${row.note}">
+                        </textarea>
+
+                    </div>
+
+                </div>
+
+            </div>
+
+            <!-- Заготовка строки для добавления на лету -->
+
+            <template data-tp-row-template>
+
+                <div class="tp-row">
+
+                    <div class="form-group">
+
+                        <span class="tp-row-index">
+                            <b data-tp-row-number>1</b>
+                            Операция
+                        </span>
+
+                        <select class="form-control"
+                                data-tp-operation
+                                data-tp-field="operationId">
+
+                            <option value="">
+                                Выберите операцию
+                            </option>
+
+                            <option th:each="operation : ${operations}"
+                                    th:value="${operation.id}"
+                                    th:attr="data-name=${operation.operationName.name}"
+                                    th:text="${
+                                        operation.operationName.name
+                                        + ' - '
+                                        + operation.operationType.name
+                                        + (operation.organizationUnit != null
+                                            ? ' - ' + operation.organizationUnit.name
+                                            : '')
+                                    }">
+                                Операция
+                            </option>
+
+                        </select>
+
+                    </div>
+
+                    <div class="form-group">
+                        <label>
+                            Трудоёмкость, ч
+                            <span class="required">*</span>
+                        </label>
+                        <input type="number"
+                               class="form-control"
+                               min="0.001"
+                               step="0.001"
+                               value="1"
+                               data-tp-labor
+                               data-tp-field="laborHours">
+                    </div>
+
+                    <div class="form-group">
+                        <label>
+                            Машиновремя, ч
+                            <span class="required">*</span>
+                        </label>
+                        <input type="number"
+                               class="form-control"
+                               min="0.001"
+                               step="0.001"
+                               value="1"
+                               data-tp-machine
+                               data-tp-field="machineHours">
+                    </div>
+
+                    <div class="form-group">
+                        <label>
+                            Макс. в день
+                            <span class="required">*</span>
+                        </label>
+                        <input type="number"
+                               class="form-control"
+                               min="1"
+                               step="1"
+                               value="8"
+                               data-tp-limit
+                               data-tp-field="dailyLimit">
+                    </div>
+
+                    <button type="button"
+                            class="tp-remove"
+                            data-tp-remove>
+                        Удалить
+                    </button>
+
+                    <div class="tp-row-deps">
+                        <label class="tp-row-index">
+                            Выполняется после
+                        </label>
+                        <div class="tp-deps-box" data-tp-deps></div>
+                    </div>
+
+                    <div class="tp-row-places">
+
+                        <label class="tp-row-index">
+                            Рабочие места
+                            <span class="required">*</span>
+                        </label>
+
+                        <div class="tp-workplace-box" data-tp-workplaces>
+
+                            <div class="tp-workplace-row">
+
+                                <select class="form-control"
+                                        data-tp-workplace>
+
+                                    <option value="">
+                                        Выберите рабочее место
+                                    </option>
+
+                                    <option th:each="place : ${workPlaces}"
+                                            th:value="${place.id}"
+                                            th:text="${
+                                                place.code
+                                                + ' · '
+                                                + place.name
+                                            }">
+                                        Рабочее место
+                                    </option>
+
+                                </select>
+
+                                <button type="button"
+                                        class="tp-workplace-remove"
+                                        data-tp-workplace-remove
+                                        aria-label="Убрать рабочее место">
+                                    ×
+                                </button>
+
+                            </div>
+
+                        </div>
+
+                        <small>
+                            После выбора рабочего места появится
+                            строка для следующего.
+                        </small>
+
+                    </div>
+
+                    <div class="tp-row-note form-group">
+
+                        <label class="tp-row-index">
+                            Описание операции
+                        </label>
+
+                        <textarea class="form-control"
+                                  rows="2"
+                                  maxlength="2000"
+                                  placeholder="Как выполняется операция в этом маршруте"
+                                  data-tp-field="note">
+                        </textarea>
+
+                    </div>
+
+                </div>
+
+            </template>
+
+            <template data-tp-workplace-required-message>
+                Для каждой операции маршрута выберите рабочее место
+            </template>
+
+            <template data-tp-workplace-template>
+
+                <div class="tp-workplace-row">
+
+                    <select class="form-control"
+                            data-tp-workplace>
+
+                        <option value="">
+                            Выберите рабочее место
+                        </option>
+
+                        <option th:each="place : ${workPlaces}"
+                                th:value="${place.id}"
+                                th:text="${
+                                    place.code
+                                    + ' · '
+                                    + place.name
+                                }">
+                            Рабочее место
+                        </option>
+
+                    </select>
+
+                    <button type="button"
+                            class="tp-workplace-remove"
+                            data-tp-workplace-remove
+                            aria-label="Убрать рабочее место">
+                        ×
+                    </button>
+
+                </div>
+
+            </template>
+
+            <template data-tp-dep-template>
+                Нет других операций для связи
+            </template>
+
+            <span class="field-error"
+                  th:if="${#fields.hasErrors('operations')}"
+                  th:errors="*{operations}">
+            </span>
+
+        </div>
+
+    </section>
+
+    <div class="tp-form-actions">
+
+        <a class="btn secondary"
+           th:href="@{/technology/techprocess}">
+            Отмена
+        </a>
+
+        <button type="submit"
+                class="btn primary"
+                th:text="${submitLabel}">
+            Сохранить
+        </button>
+
+    </div>
+
+</form>
+
+<!--
+    Справочник операций для подписей в зависимостях.
+    Значения берутся из каталога операций.
+-->
+<select th:fragment="operationCatalog"
+        class="visually-hidden"
+        data-operation-catalog
+        tabindex="-1"
+        aria-hidden="true">
+
+    <option th:each="operation : ${operations}"
+            th:value="${operation.id}"
+            th:attr="data-name=${operation.operationName.name}"
+            th:text="${operation.operationName.name}">
+        Операция
+    </option>
+
+</select>
+
+</body>
+</html>

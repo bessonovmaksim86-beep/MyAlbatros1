@@ -1,0 +1,551 @@
+<!DOCTYPE html>
+<html lang="ru"
+      xmlns:th="http://www.thymeleaf.org">
+
+<head>
+    <meta charset="UTF-8">
+
+    <meta name="viewport"
+          content="width=device-width, initial-scale=1">
+
+    <title>Заказ на производство</title>
+
+    <link rel="stylesheet"
+          th:href="@{/technology/css/technology.css}">
+
+    <link rel="stylesheet"
+          th:href="@{/technology/css/common.css}">
+
+    <link rel="stylesheet"
+          th:href="@{/dispatcher/css/dispatcher.css}">
+</head>
+
+<body th:attr="data-po-editing=${editing}">
+
+<div class="app-shell">
+
+    <aside th:replace="~{dispatcher/fragments/layout
+            :: sidebar('productionOrder')}">
+    </aside>
+
+    <main class="main">
+
+        <header th:replace="~{dispatcher/fragments/layout
+                :: topbar}">
+        </header>
+
+        <div class="page-content dispatcher-page">
+
+            <div class="page-head">
+
+                <div class="page-title">
+
+                    <h1 th:text="${
+                        editing ? 'Изменение заказа на производство'
+                               : 'Создание заказа на производство'
+                    }">
+                        Создание заказа на производство
+                    </h1>
+
+                    <p>
+                        Состав выпуска формируется из позиций выбранного
+                        заказа покупателя: каждое изделие получает
+                        серийный номер вида «код классификатора — серия»
+                    </p>
+
+                </div>
+
+                <div class="page-head-actions">
+
+                    <a class="btn secondary"
+                       th:href="@{/dispatcher/production-order}">
+                        К списку заказов
+                    </a>
+
+                </div>
+            </div>
+
+            <form method="post"
+                  th:action="${editing}
+                      ? @{/dispatcher/production-order/{id}/edit(id=${productionOrderForm.id})}
+                      : @{/dispatcher/production-order/create}"
+                  th:object="${productionOrderForm}"
+                  class="co-form">
+
+                <input th:if="${_csrf != null}"
+                       type="hidden"
+                       th:name="${_csrf.parameterName}"
+                       th:value="${_csrf.token}">
+
+                <input type="hidden" th:field="*{id}">
+                <input type="hidden" th:field="*{version}">
+
+                <div class="alert danger"
+                     th:if="${#fields.hasGlobalErrors()}">
+
+                    <p th:each="error : ${#fields.globalErrors()}"
+                       th:text="${error}">
+                        Ошибка сохранения заказа
+                    </p>
+
+                </div>
+
+                <section class="card">
+
+                    <div class="card-head">
+
+                        <div>
+
+                            <h2>Параметры заказа</h2>
+
+                            <!--
+                                Текст подсказки зависит от уровня заказа,
+                                который выбирается в этой же форме, поэтому
+                                его переключает скрипт формы: у выпуска
+                                номер автогенерируемый, у комплектующего —
+                                только ручной ввод.
+                            -->
+                            <small id="poParamsHint">
+                                Номер формируется автоматически
+                                и уникален
+                            </small>
+
+                        </div>
+
+                    </div>
+
+                    <div class="card-body">
+
+                        <div class="form-grid">
+
+                            <div class="field span-2">
+
+                                <label for="parentProductionOrderId">
+                                    Заказ верхнего уровня (ЗП)
+                                </label>
+
+                                <!--
+                                    Порядок заполнения для комплектующего:
+                                    сначала ЗП, затем номер, затем изделие.
+                                    Выбор родителя меняет смысл заказа:
+                                    серийники не выдаются, а заказчик
+                                    наследуется от выбранного выпуска —
+                                    поле заказчика при этом блокируется.
+                                    Без родителя заказ остаётся выпуском
+                                    верхнего уровня.
+
+                                    Уровень заказа неизменный, поэтому при
+                                    правке выбор закрыт. Здесь скрытое поле,
+                                    а не disabled-Select: disabled в форму
+                                    не попадает, и после ошибки валидации
+                                    заказ-комплектующий отрисовался бы как
+                                    заказ верхнего уровня.
+                                -->
+                                <th:block th:if="${editing}">
+
+                                    <input type="hidden"
+                                           id="parentProductionOrderId"
+                                           th:field="*{parentProductionOrderId}">
+
+                                    <input type="text"
+                                           th:value="${
+                                               productionOrderForm
+                                                   .parentProductionOrderId != null
+                                                   ? 'Заказ-комплектующий (уровень неизменный)'
+                                                   : 'Заказ верхнего уровня (уровень неизменный)'
+                                           }"
+                                           readonly>
+
+                                </th:block>
+
+                                <select th:unless="${editing}"
+                                        id="parentProductionOrderId"
+                                        th:field="*{parentProductionOrderId}">
+
+                                    <option value="">
+                                        — без родителя (заказ верхнего уровня) —
+                                    </option>
+
+                                    <option th:each="rootOption : ${rootOrders}"
+                                            th:value="${rootOption.id}"
+                                            th:text="${
+                                                rootOption.number
+                                                + ' — '
+                                                + rootOption.customerOrderNumber
+                                            }">
+                                        Заказ верхнего уровня
+                                    </option>
+
+                                </select>
+
+                                <span class="field-error"
+                                      th:if="${#fields.hasErrors('parentProductionOrderId')}"
+                                      th:errors="*{parentProductionOrderId}">
+                                </span>
+
+                            </div>
+
+                            <div class="field">
+
+                                <label for="number">Номер заказа</label>
+
+                                <!--
+                                    Номер подставляется сервисом по шаблону
+                                    ПЗ-ГГГГ-NNN, но остаётся редактируемым:
+                                    диспетчер может задать свой (например,
+                                    зеркальный номер из Б24). Уникальность
+                                    проверяется при сохранении.
+                                -->
+                                <input id="number"
+                                       type="text"
+                                       maxlength="50"
+                                       th:field="*{number}">
+
+                                <span class="field-error"
+                                      th:if="${#fields.hasErrors('number')}"
+                                      th:errors="*{number}">
+                                </span>
+
+                            </div>
+
+                            <!--
+                                Номера датчиков, в которые входит заказ-
+                                комплектующий.
+
+                                Порядок заполнения формы задан цехом:
+                                заказ верхнего уровня → номер ЗНП →
+                                номер датчика → комплектовочная
+                                операция. Поэтому выбор изделий идёт
+                                сразу после номера заказа.
+
+                                Свой список ЗНП не создаёт: серийник
+                                выпускает заказ верхнего уровня и дальше
+                                не меняется, здесь номера только
+                                выбираются. При правке варианты и
+                                отмеченные составы приходят с сервера
+                                (parentSerials + serialIds), при создании
+                                подгружаются по выбранному родителю —
+                                до выбора ЗП список пуст сознательно.
+                            -->
+                            <div class="field span-2" id="serialPickerField">
+
+                                <label>
+                                    Номера датчиков этого заказа
+                                </label>
+
+                                <div class="po-serials"
+                                     id="serialPickerOptions">
+
+                                    <p class="po-serials-empty"
+                                       th:if="${
+                                           parentSerials == null
+                                           or #lists.isEmpty(parentSerials)
+                                       }">
+                                        Сначала выберите заказ верхнего
+                                        уровня — датчики берутся из его
+                                        выпуска.
+                                    </p>
+
+                                    <label class="po-serial"
+                                           th:each="serialOption : ${parentSerials}"
+                                           th:with="checked=${
+                                               productionOrderForm.serialIds
+                                               != null
+                                               and productionOrderForm
+                                                     .serialIds
+                                                     .contains(
+                                                         serialOption.id
+                                                     )
+                                           }">
+
+                                        <input type="checkbox"
+                                               name="serialIds"
+                                               th:value="${serialOption.id}"
+                                               th:checked="${checked}">
+
+                                        <span class="po-serial-number"
+                                              th:text="${
+                                                  serialOption.fullNumber
+                                              }">
+                                            121205333
+                                        </span>
+
+                                        <span class="po-serial-name"
+                                              th:text="${
+                                                  serialOption.displayName
+                                              }">
+                                            Датчик
+                                        </span>
+
+                                    </label>
+
+                                </div>
+
+                                <small>
+                                    Отметьте изделия, в которые входит
+                                    заказ. Один заказ может комплектовать
+                                    несколько датчиков.
+                                </small>
+
+                            </div>
+
+                            <div class="field">
+
+                                <label for="customerOrderId">
+                                    Заказ покупателя
+                                </label>
+
+                                <!--
+                                    В списке только свободные заказы:
+                                    заказ, по которому выпуск уже создан,
+                                    в выборку не попадает. Покупатель здесь
+                                    не выводится — связи lazy, а сессия
+                                    закрыта (open-in-view: false), поэтому
+                                    обращаемся лишь к полям самого заказа.
+                                -->
+                                <select id="customerOrderId"
+                                        th:field="*{customerOrderId}">
+
+                                    <option value="">
+                                        — выберите заказ покупателя —
+                                    </option>
+
+                                    <option th:each="orderOption : ${freeCustomerOrders}"
+                                            th:value="${orderOption.id}"
+                                            th:text="${
+                                                orderOption.number
+                                                + ' от '
+                                                + orderOption.formattedOrderDate
+                                            }">
+                                        Заказ покупателя
+                                    </option>
+
+                                </select>
+
+                                <span class="field-error"
+                                      th:if="${#fields.hasErrors('customerOrderId')}"
+                                      th:errors="*{customerOrderId}">
+                                </span>
+
+                            </div>
+
+                            <div class="field">
+
+                                <label for="productionOperationId">
+                                    Операция выпуска
+                                </label>
+
+                                <select id="productionOperationId"
+                                        th:field="*{productionOperationId}">
+
+                                    <option value="">
+                                        — выберите операцию —
+                                    </option>
+
+                                    <option th:each="operation : ${kittingOperations}"
+                                            th:value="${operation.id}"
+                                            th:text="${operation.operationName.name}">
+                                        Комплектовочная
+                                    </option>
+
+                                </select>
+
+                                <span class="field-error"
+                                      th:if="${#fields.hasErrors('productionOperationId')}"
+                                      th:errors="*{productionOperationId}">
+                                </span>
+
+                            </div>
+
+                            <div class="field">
+
+                                <label for="orderDate">Дата открытия</label>
+
+                                <input id="orderDate"
+                                       type="text"
+                                       placeholder="дд.мм.гггг"
+                                       maxlength="10"
+                                       th:name="orderDate"
+                                       th:value="${
+                                           productionOrderForm.formattedOrderDate
+                                       }">
+
+                                <span class="field-error"
+                                      th:if="${#fields.hasErrors('orderDate')}"
+                                      th:each="error : ${
+                                          #fields.errors('orderDate')
+                                      }"
+                                      th:text="${error}">
+                                </span>
+
+                            </div>
+
+                            <!--
+                                Срок исполнения и статус в форме не
+                                вводятся: срок подтягивается из заказа
+                                покупателя и later правится по мере
+                                выпуска, а статус живёт только карточкой
+                                заказа (кнопки «В работу», «Выполнен»,
+                                «Отменить»).
+                            -->
+
+                            <div class="field span-2">
+
+                                <label for="note">Примечание</label>
+
+                                <textarea id="note"
+                                          rows="3"
+                                          maxlength="2000"
+                                          placeholder="Дополнительная информация о выпуске"
+                                          th:field="*{note}">
+                                </textarea>
+
+                                <span class="field-error"
+                                      th:if="${#fields.hasErrors('note')}"
+                                      th:errors="*{note}">
+                                </span>
+
+                            </div>
+
+                        </div>
+
+                    </div>
+
+                </section>
+
+                <section class="card">
+
+                    <div class="card-head">
+
+                        <div>
+
+                            <h2>Состав выпуска</h2>
+
+                            <small th:text="${
+                                editing
+                                    ? 'Состав сформирован при создании заказа
+                                       и меняется только вместе с ним:
+                                       серийные номера уже выданы'
+                                    : 'Заполняется автоматически после выбора
+                                       заказа покупателя: количество больше одного
+                                       даёт столько же экземпляров'
+                            }">
+                                Состав выпустится из позиций заказа покупателя
+                            </small>
+
+                        </div>
+
+                    </div>
+
+                    <div class="card-body">
+
+                        <div class="table-wrap">
+
+                            <table class="data-table">
+
+                                <thead>
+                                <tr>
+                                    <th style="width: 46px;">№</th>
+                                    <th style="width: 130px;">Код изделия</th>
+                                    <th style="width: 150px;">Тип изделия</th>
+                                    <th>Наименование</th>
+                                    <th style="width: 120px;">Количество</th>
+                                    <th style="width: 150px;">Экземпляров</th>
+                                </tr>
+                                </thead>
+
+                                <tbody id="poPreviewBody"
+                                       th:attr="data-editing=${
+                                           editing ? 'true' : 'false'
+                                       }">
+
+                                <tr>
+
+                                    <td colspan="6"
+                                        class="empty-table"
+                                        id="poPreviewEmpty">
+                                        <span th:if="${!editing}">
+                                            Выберите заказ покупателя,
+                                            чтобы увидеть состав выпуска
+                                        </span>
+
+                                        <span th:if="${editing}">
+                                            Состав выпуска доступен
+                                            на странице заказа
+                                        </span>
+                                    </td>
+
+                                </tr>
+
+                                </tbody>
+
+                            </table>
+
+                        </div>
+
+                        <p th:if="${editing}"
+                           style="margin: 12px 0 0;
+                                  color: var(--muted);
+                                  font-size: 12px;">
+                            Серийные номера позиций видны
+                            в
+                            <a th:if="${productionOrderForm.id != null}"
+                               th:href="@{/dispatcher/production-order/{id}(id=${productionOrderForm.id})}">
+                                карточке заказа
+                            </a>
+                            .
+                        </p>
+
+                    </div>
+
+                </section>
+
+                <div class="form-actions">
+
+                    <!--
+                        Ссылка «Отмена»: в карточку заказа при правке
+                        и в список при создании. Две ссылки вместо
+                        тернарного выражения намеренно: link-выражения
+                        @{...} нельзя вкладывать внутрь ${...} — SpEL
+                        их не понимает (EL1059E).
+                    -->
+                    <a class="btn secondary"
+                       th:if="${editing and productionOrderForm.id != null}"
+                       th:href="@{/dispatcher/production-order/{id}(id=${productionOrderForm.id})}">
+                        Отмена
+                    </a>
+
+                    <a class="btn secondary"
+                       th:unless="${editing and productionOrderForm.id != null}"
+                       th:href="@{/dispatcher/production-order}">
+                        Отмена
+                    </a>
+
+                    <button class="btn primary"
+                            type="submit"
+                            th:text="${
+                                editing
+                                    ? 'Сохранить изменения'
+                                    : 'Создать заказ на производство'
+                            }">
+                        Создать заказ на производство
+                    </button>
+
+                </div>
+
+            </form>
+
+        </div>
+    </main>
+</div>
+
+<th:block th:replace="~{dispatcher/fragments/layout
+        :: commonScripts}">
+</th:block>
+
+<script th:src="@{/dispatcher/js/production-order.js}"
+        th:attr="data-preview-url=@{/dispatcher/production-order/customer-order-items},
+                 data-serials-url=@{/dispatcher/production-order/parent-serials}"></script>
+
+</body>
+</html>

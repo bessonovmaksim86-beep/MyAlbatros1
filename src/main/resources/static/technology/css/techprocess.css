@@ -1,0 +1,936 @@
+/* =========================================================
+   СТРАНИЦЫ ТЕХПРОЦЕССОВ
+   Конструктор маршрута, выбор, удаление, копирование,
+   визуализация графа зависимостей.
+   ========================================================= */
+
+.techprocess-page {
+    --tp-primary: var(--navy, #073e75);
+    --tp-accent: var(--orange, #ef7d00);
+    --tp-text: var(--text, #172738);
+    --tp-muted: var(--muted, #6c7b89);
+    --tp-border: var(--line, #dce4eb);
+    --tp-danger: var(--red, #c73a43);
+
+    max-width: 1240px;
+    margin: 0 auto;
+}
+
+.techprocess-page * {
+    box-sizing: border-box;
+}
+
+.techprocess-page .tp-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 24px;
+    margin-bottom: 24px;
+}
+
+.techprocess-page .tp-head h1 {
+    margin: 0;
+    color: var(--tp-primary);
+    font-size: clamp(24px, 3vw, 32px);
+    letter-spacing: -0.02em;
+}
+
+.techprocess-page .tp-head p {
+    margin: 6px 0 0;
+    color: var(--tp-muted);
+    font-size: 14px;
+}
+
+.techprocess-page .tp-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+
+/* Кнопки */
+
+.techprocess-page .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 40px;
+    padding: 10px 16px;
+    border: 0;
+    border-radius: 9px;
+    font: inherit;
+    font-size: 13px;
+    font-weight: 700;
+    line-height: 1;
+    text-decoration: none;
+    cursor: pointer;
+    transition: filter 0.15s ease;
+}
+
+.techprocess-page .btn:hover {
+    filter: brightness(0.97);
+}
+
+.techprocess-page .btn.primary {
+    color: #ffffff;
+    background: var(--tp-accent);
+}
+
+.techprocess-page .btn.secondary {
+    color: var(--tp-primary);
+    background: #eaf1f7;
+}
+
+.techprocess-page .btn.danger {
+    margin: 0;
+    color: #a12d35;
+    background: #fff0f1;
+}
+
+.techprocess-page .btn.compact {
+    min-height: 34px;
+    padding: 7px 12px;
+    font-size: 12px;
+}
+
+
+/* Карточки */
+
+.techprocess-page .card {
+    overflow: hidden;
+    margin-bottom: 22px;
+    background: #ffffff;
+    border: 1px solid var(--tp-border);
+    border-radius: 14px;
+    box-shadow: 0 10px 28px rgba(16, 47, 75, 0.08);
+}
+
+.techprocess-page .card-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 14px;
+    padding: 17px 20px;
+    border-bottom: 1px solid var(--tp-border);
+}
+
+.techprocess-page .card-head h2 {
+    margin: 0;
+    color: var(--tp-primary);
+    font-size: 15px;
+}
+
+.techprocess-page .card-head small {
+    display: block;
+    margin-top: 5px;
+    color: var(--tp-muted);
+    font-size: 12px;
+}
+
+.techprocess-page .card-body {
+    padding: 22px 20px;
+}
+
+
+/* Сообщения */
+
+.techprocess-page .alert {
+    padding: 12px 14px;
+    margin-bottom: 16px;
+    border-radius: 9px;
+    font-size: 13px;
+}
+
+.techprocess-page .alert.danger {
+    color: #a12d35;
+    background: #fff0f1;
+    border: 1px solid #efc6ca;
+}
+
+.techprocess-page .alert.success {
+    color: #18794e;
+    background: #e8f5ee;
+    border: 1px solid #b9dec9;
+}
+
+
+/* Поля формы */
+
+.techprocess-page .form-group {
+    min-width: 0;
+    margin: 0;
+}
+
+.techprocess-page .form-group > label {
+    display: block;
+    margin-bottom: 8px;
+    color: #344054;
+    font-size: 13px;
+    font-weight: 700;
+}
+
+.techprocess-page .required {
+    color: var(--tp-danger);
+}
+
+.techprocess-page .form-control {
+    width: 100%;
+    min-height: 44px;
+    padding: 11px 13px;
+    border: 1px solid var(--tp-border);
+    border-radius: 9px;
+    outline: none;
+    color: var(--tp-text);
+    background: #ffffff;
+    font: inherit;
+    font-size: 14px;
+    line-height: 1.4;
+    transition:
+        border-color 0.18s ease,
+        box-shadow 0.18s ease;
+}
+
+.techprocess-page .form-control:hover {
+    border-color: #9fb0c5;
+}
+
+.techprocess-page .form-control:focus {
+    border-color: var(--tp-primary);
+    box-shadow: 0 0 0 3px rgba(7, 62, 117, 0.12);
+}
+
+.techprocess-page textarea.form-control {
+    min-height: 96px;
+    resize: vertical;
+}
+
+.techprocess-page .form-control:disabled {
+    color: #98a2b3;
+    background: #f4f6f8;
+    cursor: not-allowed;
+}
+
+.techprocess-page .form-group small {
+    display: block;
+    margin-top: 6px;
+    color: var(--tp-muted);
+    font-size: 12px;
+    line-height: 1.4;
+}
+
+.techprocess-page .field-error {
+    display: block;
+    margin-top: 6px;
+    color: var(--tp-danger);
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.techprocess-page .tp-form-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 20px 18px;
+}
+
+.techprocess-page .tp-span-2 {
+    grid-column: 1 / -1;
+}
+
+.techprocess-page .tp-form-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+    margin-top: 24px;
+    padding-top: 18px;
+    border-top: 1px solid var(--tp-border);
+}
+
+
+/* Конструктор маршрута */
+
+.techprocess-page .tp-builder-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 14px;
+    margin-bottom: 16px;
+}
+
+.techprocess-page .tp-builder-head h2 {
+    margin: 0;
+    color: var(--tp-primary);
+    font-size: 16px;
+}
+
+.techprocess-page .tp-builder-head p {
+    margin: 5px 0 0;
+    color: var(--tp-muted);
+    font-size: 12px;
+}
+
+.techprocess-page .tp-rows {
+    display: grid;
+    gap: 14px;
+}
+
+.techprocess-page .tp-row {
+    display: grid;
+    grid-template-columns: minmax(240px, 2fr) repeat(3, minmax(120px, 1fr)) auto;
+    align-items: end;
+    gap: 12px;
+    padding: 16px;
+    background: #fbfcfe;
+    border: 1px solid var(--tp-border);
+    border-radius: 13px;
+}
+
+.techprocess-page .tp-row-index {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--tp-muted);
+    font-size: 11px;
+    font-weight: 800;
+    text-transform: uppercase;
+}
+
+.techprocess-page .tp-row-index b {
+    display: grid;
+    place-items: center;
+    width: 22px;
+    height: 22px;
+    color: #ffffff;
+    background: var(--tp-primary);
+    border-radius: 7px;
+    font-size: 12px;
+}
+
+.techprocess-page .tp-row-deps {
+    grid-column: 1 / -1;
+}
+
+.techprocess-page .tp-deps-box {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 16px;
+    padding: 12px 14px;
+    background: #ffffff;
+    border: 1px dashed #c7d3e0;
+    border-radius: 10px;
+}
+
+.techprocess-page .tp-deps-empty {
+    color: var(--tp-muted);
+    font-size: 12px;
+}
+
+.techprocess-page .tp-dep-check {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    color: #344054;
+    font-size: 12.5px;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.techprocess-page .tp-dep-check input {
+    width: 16px;
+    height: 16px;
+    accent-color: var(--tp-primary);
+}
+
+/*
+ * Рабочие места и описание операции внутри строки конструктора:
+ * оба блока растянуты на всю ширину сетки строки.
+ */
+.techprocess-page .tp-row-places,
+.techprocess-page .tp-row-note {
+    grid-column: 1 / -1;
+}
+
+/*
+ * Рабочие места операции: строки выбора, новая строка появляется
+ * сразу после заполнения предыдущей.
+ */
+.techprocess-page .tp-workplace-box {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 12px 14px;
+    background: #ffffff;
+    border: 1px dashed #c7d3e0;
+    border-radius: 10px;
+}
+
+.techprocess-page .tp-workplace-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.techprocess-page .tp-workplace-row select {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.techprocess-page .tp-workplace-remove {
+    flex: 0 0 auto;
+    width: 38px;
+    height: 38px;
+    color: #b91c1c;
+    background: #fff7f7;
+    border: 1px solid #fecaca;
+    border-radius: 9px;
+    font-size: 18px;
+    line-height: 1;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.techprocess-page .tp-workplace-remove:hover {
+    background: #fff0f1;
+}
+
+.techprocess-page .tp-row-places small {
+    display: block;
+    margin-top: 6px;
+    color: var(--tp-muted);
+    font-size: 11.5px;
+}
+
+.techprocess-page .tp-row-note textarea {
+    resize: vertical;
+    min-height: 58px;
+}
+
+.techprocess-page .tp-remove {
+    min-height: 44px;
+    padding: 10px 14px;
+    color: #b91c1c;
+    background: #fff7f7;
+    border: 1px solid #fecaca;
+    border-radius: 10px;
+    font: inherit;
+    font-size: 13px;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.techprocess-page .tp-remove:hover {
+    background: #fff0f1;
+}
+
+
+/* Список выбора (обновление / удаление / копирование) */
+
+.techprocess-page .tp-select-list {
+    display: grid;
+    gap: 12px;
+}
+
+.techprocess-page .tp-select-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 15px 18px;
+    background: #ffffff;
+    border: 1px solid var(--tp-border);
+    border-radius: 12px;
+    transition:
+        border-color 0.15s ease,
+        box-shadow 0.15s ease;
+}
+
+.techprocess-page .tp-select-item:hover {
+    border-color: var(--tp-accent);
+    box-shadow: 0 10px 24px rgba(16, 47, 75, 0.08);
+}
+
+.techprocess-page .tp-select-item strong {
+    display: block;
+    color: var(--tp-primary);
+    font-size: 14px;
+}
+
+.techprocess-page .tp-select-item span {
+    display: block;
+    margin-top: 3px;
+    color: var(--tp-muted);
+    font-size: 12px;
+}
+
+.techprocess-page .tp-empty {
+    padding: 40px 16px;
+    color: var(--tp-muted);
+    text-align: center;
+    border: 1px dashed #cbd5e1;
+    border-radius: 14px;
+}
+
+
+/* Сводка по маршруту */
+
+.techprocess-page .tp-summary {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 14px;
+    margin-bottom: 20px;
+}
+
+.techprocess-page .tp-summary-item {
+    padding: 16px;
+    background: #ffffff;
+    border: 1px solid var(--tp-border);
+    border-radius: 12px;
+}
+
+.techprocess-page .tp-summary-item.highlight {
+    background: #f3f7ff;
+    border-color: #c8d9f5;
+}
+
+.techprocess-page .tp-summary-item > span {
+    display: block;
+    margin-top: 4px;
+    color: var(--tp-muted);
+    font-size: 11px;
+}
+
+.techprocess-page .tp-summary-item small {
+    display: block;
+    color: var(--tp-muted);
+    font-size: 11px;
+}
+
+.techprocess-page .tp-summary-item strong {
+    display: block;
+    margin-top: 8px;
+    color: var(--tp-primary);
+    font-size: 22px;
+}
+
+.techprocess-page .tp-summary-item span {
+    display: block;
+    margin-top: 4px;
+    color: var(--tp-muted);
+    font-size: 10.5px;
+}
+
+
+/* Визуализация графа */
+
+.techprocess-page .tp-graph-wrap {
+    overflow-x: auto;
+    padding: 30px 22px 40px;
+    background:
+        linear-gradient(#f7f9fc 1px, transparent 1px) 0 0 / 100% 26px,
+        #ffffff;
+    border: 1px solid var(--tp-border);
+    border-radius: 14px;
+}
+
+.techprocess-page .tp-graph {
+    position: relative;
+    display: flex;
+    align-items: flex-start;
+    gap: 84px;
+    min-width: min-content;
+    padding: 18px 10px;
+}
+
+/*
+ * Strелки графа: SVG-слой поверх узлов, не перехватывает курсор.
+ */
+.techprocess-page .tp-graph-links {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    overflow: visible;
+}
+
+.techprocess-page .tp-graph-links .tp-link {
+    fill: none;
+    stroke: #64748b;
+    stroke-width: 1.6;
+}
+
+.techprocess-page .tp-graph-level {
+    display: grid;
+    gap: 26px;
+    min-width: 190px;
+}
+
+.techprocess-page .tp-graph-level-title {
+    color: var(--tp-muted);
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+}
+
+/*
+ * Узел = компактная фигура + карточка подробностей.
+ * Карточка появляется при наведении, сама фигура остаётся маленькой.
+ */
+.techprocess-page .tp-node {
+    position: relative;
+    z-index: 1;
+}
+
+.techprocess-page .tp-node-shape {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 3px;
+    min-height: 62px;
+    min-width: 168px;
+    max-width: 208px;
+    padding: 10px 16px;
+    text-align: center;
+    cursor: default;
+}
+
+.techprocess-page .tp-node-name {
+    color: var(--tp-text);
+    font-size: 12.5px;
+    font-weight: 700;
+    line-height: 1.3;
+}
+
+.techprocess-page .tp-node-duration {
+    font-size: 11px;
+    font-weight: 800;
+    opacity: 0.85;
+}
+
+/* Формы узлов по типу операции */
+
+.techprocess-page .tp-shape-rect .tp-node-shape {
+    border-radius: 12px;
+    box-shadow: inset 0 0 0 2px currentColor,
+        0 6px 16px rgba(16, 47, 75, 0.08);
+}
+
+.techprocess-page .tp-shape-oval .tp-node-shape {
+    border-radius: 999px;
+    box-shadow: inset 0 0 0 2px currentColor,
+        0 6px 16px rgba(16, 47, 75, 0.08);
+}
+
+.techprocess-page .tp-shape-parallelogram .tp-node-shape {
+    clip-path: polygon(12% 0, 100% 0, 88% 100%, 0 100%);
+    box-shadow: inset 0 0 0 2px currentColor;
+}
+
+.techprocess-page .tp-shape-hexagon .tp-node-shape {
+    clip-path: polygon(
+        11% 0, 89% 0, 100% 50%, 89% 100%, 11% 100%, 0 50%
+    );
+    box-shadow: inset 0 0 0 2px currentColor;
+}
+
+.techprocess-page .tp-shape-diamond .tp-node-shape {
+    clip-path: polygon(50% 0, 100% 50%, 50% 100%, 0 50%);
+    box-shadow: inset 0 0 0 2px currentColor;
+    min-width: 200px;
+    min-height: 92px;
+    padding: 24px 34px;
+}
+
+.techprocess-page .tp-shape-pentagon .tp-node-shape {
+    clip-path: polygon(50% 0, 100% 38%, 82% 100%, 18% 100%, 0 38%);
+    box-shadow: inset 0 0 0 2px currentColor;
+    min-height: 76px;
+    padding: 18px 26px;
+}
+
+/* Цвета типов операций: currentColor — обводка, фон — светлый */
+
+.techprocess-page .tp-type-PRODUCTION {
+    color: #2563eb;
+}
+
+.techprocess-page .tp-type-PRODUCTION .tp-node-shape {
+    background: #e9f0ff;
+}
+
+.techprocess-page .tp-type-TRANSFER {
+    color: #0891b2;
+}
+
+.techprocess-page .tp-type-TRANSFER .tp-node-shape {
+    background: #e2f6fb;
+}
+
+.techprocess-page .tp-type-RETURN {
+    color: #d97706;
+}
+
+.techprocess-page .tp-type-RETURN .tp-node-shape {
+    background: #fdf1df;
+}
+
+.techprocess-page .tp-type-WORK_DISTRIBUTION {
+    color: #7c3aed;
+}
+
+.techprocess-page .tp-type-WORK_DISTRIBUTION .tp-node-shape {
+    background: #f1e9fe;
+}
+
+.techprocess-page .tp-type-KIT_RECEIPT {
+    color: #059669;
+}
+
+.techprocess-page .tp-type-KIT_RECEIPT .tp-node-shape {
+    background: #e5f7ef;
+}
+
+.techprocess-page .tp-type-KITTING {
+    color: #db2777;
+}
+
+.techprocess-page .tp-type-KITTING .tp-node-shape {
+    background: #fce8f1;
+}
+
+/*
+ * Карточка подробностей узла: скрыта, показывается при наведении.
+ */
+.techprocess-page .tp-node-card {
+    position: absolute;
+    left: 50%;
+    bottom: calc(100% + 10px);
+    z-index: 30;
+    display: none;
+    width: 292px;
+    padding: 13px 15px;
+    background: #ffffff;
+    border: 1px solid var(--tp-border);
+    border-radius: 12px;
+    box-shadow: 0 14px 34px rgba(16, 47, 75, 0.18);
+    transform: translateX(-50%);
+    text-align: left;
+}
+
+.techprocess-page .tp-node:hover .tp-node-card {
+    display: block;
+}
+
+.techprocess-page .tp-node:hover {
+    z-index: 40;
+}
+
+.techprocess-page .tp-node-card b {
+    display: block;
+    color: var(--tp-primary);
+    font-size: 13.5px;
+}
+
+.techprocess-page .tp-node .tp-node-type {
+    display: inline-block;
+    margin-top: 6px;
+    padding: 3px 8px;
+    color: #a45c00;
+    background: #fff1dd;
+    border-radius: 99px;
+    font-size: 10.5px;
+    font-weight: 800;
+}
+
+.techprocess-page .tp-node-meta {
+    display: grid;
+    gap: 3px;
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px dashed var(--tp-border);
+}
+
+.techprocess-page .tp-node-meta span {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    color: var(--tp-muted);
+    font-size: 11.5px;
+}
+
+.techprocess-page .tp-node-meta span b {
+    display: inline;
+    color: var(--tp-text);
+    font-size: 11.5px;
+}
+
+.techprocess-page .tp-node-places {
+    margin-top: 9px;
+    color: var(--tp-muted);
+    font-size: 11px;
+    line-height: 1.45;
+}
+
+.techprocess-page .tp-node-place {
+    display: inline-block;
+    margin: 3px 4px 0 0;
+    padding: 2px 8px;
+    color: var(--tp-primary);
+    background: #eef2f8;
+    border-radius: 99px;
+    font-weight: 700;
+}
+
+.techprocess-page .tp-node-deps {
+    margin-top: 9px;
+    color: var(--tp-muted);
+    font-size: 11px;
+    line-height: 1.45;
+}
+
+.techprocess-page .tp-node-note {
+    margin-top: 9px;
+    padding-top: 8px;
+    color: #344054;
+    border-top: 1px dashed var(--tp-border);
+    font-size: 11.5px;
+    line-height: 1.5;
+}
+
+/* Легенда форм и цветов */
+
+.techprocess-page .tp-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 14px 20px;
+    margin-top: 16px;
+    color: var(--tp-muted);
+    font-size: 12px;
+}
+
+.techprocess-page .tp-legend-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 5px 12px 5px 8px;
+    font-weight: 700;
+}
+
+.techprocess-page .tp-legend-item::before {
+    content: "";
+    flex: 0 0 auto;
+    width: 26px;
+    height: 18px;
+    background: currentColor;
+    opacity: 0.85;
+}
+
+.techprocess-page .tp-legend-item.tp-shape-rect::before {
+    border-radius: 4px;
+}
+
+.techprocess-page .tp-legend-item.tp-shape-oval::before {
+    border-radius: 999px;
+}
+
+.techprocess-page .tp-legend-item.tp-shape-parallelogram::before {
+    clip-path: polygon(18% 0, 100% 0, 82% 100%, 0 100%);
+}
+
+.techprocess-page .tp-legend-item.tp-shape-hexagon::before {
+    clip-path: polygon(
+        16% 0, 84% 0, 100% 50%, 84% 100%, 16% 100%, 0 50%
+    );
+}
+
+.techprocess-page .tp-legend-item.tp-shape-diamond::before {
+    clip-path: polygon(50% 0, 100% 50%, 50% 100%, 0 50%);
+}
+
+
+/* Действия в таблице */
+
+.techprocess-page .table-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+
+@media (max-width: 1000px) {
+    .techprocess-page .tp-row {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .techprocess-page .tp-remove {
+        grid-column: 1 / -1;
+    }
+
+    .techprocess-page .tp-summary {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
+@media (max-width: 640px) {
+    .techprocess-page .tp-head {
+        flex-direction: column;
+    }
+
+    .techprocess-page .tp-form-grid,
+    .techprocess-page .tp-row {
+        grid-template-columns: 1fr;
+    }
+
+    .techprocess-page .tp-form-actions {
+        flex-direction: column-reverse;
+    }
+
+    .techprocess-page .tp-form-actions .btn {
+        width: 100%;
+    }
+
+    .techprocess-page .tp-summary {
+        grid-template-columns: 1fr;
+    }
+}
+
+/* Readonly fields and product summary */
+
+.techprocess-page .tp-readonly {
+    color: var(--tp-text);
+    background: #f4f6f8;
+    border: 1px solid var(--tp-border);
+    border-radius: 9px;
+    cursor: default;
+}
+
+.techprocess-page .tp-summary-box {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px 12px;
+    min-height: 44px;
+    padding: 10px 13px;
+    font-size: 13.5px;
+}
+
+.techprocess-page .tp-summary-box strong {
+    color: var(--tp-primary);
+}
+
+.techprocess-page .tp-summary-box span {
+    color: var(--tp-muted);
+}
+
+.techprocess-page .tp-change-link {
+    display: inline-block;
+    margin-top: 8px;
+    color: var(--tp-primary);
+    font-size: 12.5px;
+    font-weight: 700;
+    text-decoration: none;
+}
+
+.techprocess-page .tp-change-link:hover {
+    text-decoration: underline;
+}

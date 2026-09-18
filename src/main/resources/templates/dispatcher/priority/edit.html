@@ -1,0 +1,340 @@
+<!DOCTYPE html>
+<html lang="ru"
+      xmlns:th="http://www.thymeleaf.org">
+
+<head>
+    <meta charset="UTF-8">
+
+    <meta name="viewport"
+          content="width=device-width, initial-scale=1">
+
+    <title>Изменение приоритета</title>
+
+    <link rel="stylesheet"
+          th:href="@{/technology/css/technology.css}">
+
+    <link rel="stylesheet"
+          th:href="@{/technology/css/common.css}">
+
+    <link rel="stylesheet"
+          th:href="@{/dispatcher/css/dispatcher.css}">
+</head>
+
+<body>
+
+<div class="app-shell">
+
+    <aside th:replace="~{dispatcher/fragments/layout
+            :: sidebar('priority')}">
+    </aside>
+
+    <main class="main">
+
+        <header th:replace="~{dispatcher/fragments/layout
+                :: topbar}">
+        </header>
+
+        <div class="page-content dispatcher-page">
+
+            <div class="page-head">
+
+                <div class="page-title">
+
+                    <h1>Изменение приоритета</h1>
+
+                    <p>
+                        Параметры применяются ко всем заказам, оформленным
+                        с этим приоритетом, в том числе к уже запланированным
+                    </p>
+
+                </div>
+
+                <div class="page-head-actions">
+
+                    <a class="btn secondary"
+                       th:href="@{/dispatcher/priority}">
+                        К списку приоритетов
+                    </a>
+
+                </div>
+            </div>
+
+            <div class="alert success"
+                 th:if="${successMessage}"
+                 th:text="${successMessage}">
+            </div>
+
+            <div class="alert danger"
+                 th:if="${errorMessage}"
+                 th:text="${errorMessage}">
+            </div>
+
+            <section class="card">
+
+                <div class="card-head">
+
+                    <div>
+
+                        <h2 th:text="${
+                            priority != null
+                                ? priority.code + ' — ' + priority.name
+                                : 'Параметры приоритета'
+                        }">
+                            ПР-001 — Обычный
+                        </h2>
+
+                        <small>
+                            Код неизменный: на него опираются заказы покупателя
+                        </small>
+
+                    </div>
+
+                </div>
+
+                <div class="card-body">
+
+                    <form method="post"
+                          th:action="@{/dispatcher/priority/{id}/edit(id=${priority.id})}"
+                          th:object="${orderPriorityForm}">
+
+                        <input th:if="${_csrf != null}"
+                               type="hidden"
+                               th:name="${_csrf.parameterName}"
+                               th:value="${_csrf.token}">
+
+                        <div class="alert danger"
+                             th:if="${#fields.hasGlobalErrors()}">
+
+                            <p th:each="error : ${#fields.globalErrors()}"
+                               th:text="${error}">
+                                Ошибка сохранения приоритета
+                            </p>
+
+                        </div>
+
+                        <div class="form-grid">
+
+                            <div class="field span-2">
+
+                                <label for="name">Наименование приоритета</label>
+
+                                <input id="name"
+                                       type="text"
+                                       maxlength="100"
+                                       autocomplete="off"
+                                       th:field="*{name}">
+
+                                <span class="field-error"
+                                      th:if="${#fields.hasErrors('name')}"
+                                      th:errors="*{name}">
+                                </span>
+
+                            </div>
+
+                            <div class="field">
+
+                                <label for="startDays">
+                                    Запуск, дней до первых операций
+                                </label>
+
+                                <input id="startDays"
+                                       type="number"
+                                       min="0"
+                                       max="365"
+                                       th:field="*{startDays}">
+
+                                <span class="field-hint">
+                                    Через сколько дней после планирования
+                                    оформлять первые операции
+                                </span>
+
+                                <span class="field-error"
+                                      th:if="${#fields.hasErrors('startDays')}"
+                                      th:errors="*{startDays}">
+                                </span>
+
+                            </div>
+
+                            <div class="field">
+
+                                <label for="maxLoadPercent">
+                                    Допустимая загруженность, %
+                                </label>
+
+                                <input id="maxLoadPercent"
+                                       type="number"
+                                       min="1"
+                                       max="100"
+                                       th:field="*{maxLoadPercent}">
+
+                                <span class="field-hint">
+                                    До какого процента загрузки участка
+                                    ему ещё можно назначать работу
+                                </span>
+
+                                <span class="field-error"
+                                      th:if="${#fields.hasErrors('maxLoadPercent')}"
+                                      th:errors="*{maxLoadPercent}">
+                                </span>
+
+                            </div>
+
+                            <div class="field">
+
+                                <label for="transitionDays">
+                                    Межоперационные переходы, раб. д.
+                                </label>
+
+                                <input id="transitionDays"
+                                       type="number"
+                                       min="0"
+                                       max="365"
+                                       th:field="*{transitionDays}">
+
+                                <span class="field-hint">
+                                    Рабочие дни паузы после выполнения
+                                    операции до следующей
+                                </span>
+
+                                <span class="field-error"
+                                      th:if="${#fields.hasErrors('transitionDays')}"
+                                      th:errors="*{transitionDays}">
+                                </span>
+
+                            </div>
+
+                            <div class="field">
+
+                                <label for="maxManufacturingDays">
+                                    Максимальная дата изготовления, раб. д.
+                                </label>
+
+                                <input id="maxManufacturingDays"
+                                       type="number"
+                                       min="0"
+                                       max="365"
+                                       th:field="*{maxManufacturingDays}">
+
+                                <span class="field-hint">
+                                    При сроке 23.09 и значении 3 минимальная
+                                    дата изготовления — 20.09; позже
+                                    приступить нельзя, планирование
+                                    отклоняется
+                                </span>
+
+                                <span class="field-error"
+                                      th:if="${#fields.hasErrors('maxManufacturingDays')}"
+                                      th:errors="*{maxManufacturingDays}">
+                                </span>
+
+                            </div>
+
+                            <div class="field">
+
+                                <label for="badgeClass">Цвет бейджа</label>
+
+                                <select id="badgeClass"
+                                        th:field="*{badgeClass}">
+
+                                    <option value="priority-critical">
+                                        Красный — срочный
+                                    </option>
+
+                                    <option value="priority-high">
+                                        Оранжевый — высокий
+                                    </option>
+
+                                    <option value="priority-ordinary">
+                                        Синий — обычный
+                                    </option>
+
+                                    <option value="priority-low">
+                                        Зелёный — низкий
+                                    </option>
+
+                                    <option value="priority-minimal">
+                                        Серый — минимальный
+                                    </option>
+
+                                </select>
+
+                                <span class="field-hint">
+                                    Оформление приоритета в списках заказов
+                                </span>
+
+                            </div>
+
+                        </div>
+
+                        <div class="form-actions">
+
+                            <a class="btn secondary"
+                               th:href="@{/dispatcher/priority}">
+                                Отмена
+                            </a>
+
+                            <button class="btn primary" type="submit">
+                                Сохранить изменения
+                            </button>
+
+                        </div>
+
+                    </form>
+
+                </div>
+            </section>
+
+            <section class="card">
+
+                <div class="card-head">
+
+                    <div>
+
+                        <h2>Другие приоритеты</h2>
+
+                        <small>
+                            Переключение между правилами без возврата
+                            в общий список
+                        </small>
+
+                    </div>
+
+                </div>
+
+                <div class="card-body">
+
+                    <div class="priority-switcher">
+
+                        <a th:each="item : ${priorities}"
+                           class="priority-switcher__item"
+                           th:classappend="${
+                               editingId == #strings.toString(item.id)
+                                   ? ' is-active' : ''
+                           }"
+                           th:href="@{/dispatcher/priority/{id}/edit(id=${item.id})}">
+
+                            <span class="status"
+                                  th:classappend="${item.badgeClass}"
+                                  th:text="${item.name}">
+                                Обычный
+                            </span>
+
+                            <small th:text="${item.code}">ПР-001</small>
+
+                        </a>
+
+                    </div>
+
+                </div>
+            </section>
+
+        </div>
+    </main>
+</div>
+
+<th:block th:replace="~{dispatcher/fragments/layout
+        :: commonScripts}">
+</th:block>
+
+</body>
+</html>

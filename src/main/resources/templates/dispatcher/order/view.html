@@ -1,0 +1,351 @@
+<!DOCTYPE html>
+<html lang="ru"
+      xmlns:th="http://www.thymeleaf.org">
+
+<head>
+    <meta charset="UTF-8">
+
+    <meta name="viewport"
+          content="width=device-width, initial-scale=1">
+
+    <title>Заказ покупателя</title>
+
+    <link rel="stylesheet"
+          th:href="@{/technology/css/technology.css}">
+
+    <link rel="stylesheet"
+          th:href="@{/dispatcher/css/dispatcher.css}">
+</head>
+
+<body>
+
+<div class="app-shell">
+
+    <aside th:replace="~{dispatcher/fragments/layout
+            :: sidebar('customerOrder')}">
+    </aside>
+
+    <main class="main">
+
+        <header th:replace="~{dispatcher/fragments/layout
+                :: topbar}">
+        </header>
+
+        <div class="page-content dispatcher-page">
+
+            <div class="page-head">
+
+                <div class="page-title">
+
+                    <h1 th:text="${
+                            order != null
+                                ? 'Заказ покупателя ' + order.number
+                                : 'Заказ покупателя'
+                    }">
+                        Заказ покупателя № 0001
+                    </h1>
+
+                    <p>
+                        Состав изделий заказа покупателя
+                    </p>
+
+                </div>
+
+                <div class="page-head-actions">
+
+                    <a class="btn secondary"
+                       th:href="@{/dispatcher/customer-order}">
+                        К списку заказов
+                    </a>
+
+                    <a class="btn primary"
+                       th:if="${order != null}"
+                       th:href="@{/dispatcher/customer-order/{id}/edit(id=${order.id})}">
+                        Изменить заказ
+                    </a>
+
+                    <form method="post"
+                          th:if="${order != null}"
+                          th:action="@{/dispatcher/customer-order/{id}/plan(id=${order.id})}"
+                          class="inline-action">
+
+                        <input th:if="${_csrf != null}"
+                               type="hidden"
+                               th:name="${_csrf.parameterName}"
+                               th:value="${_csrf.token}">
+
+                        <button class="btn secondary"
+                                type="submit">
+                            Планировать заказ
+                        </button>
+
+                    </form>
+
+                </div>
+            </div>
+
+            <div class="alert danger"
+                 th:if="${errorMessage}"
+                 th:text="${errorMessage}">
+            </div>
+
+            <th:block th:if="${order != null}">
+
+                <section class="card gap">
+
+                    <div class="card-head">
+                        <h2>Данные заказа</h2>
+                    </div>
+
+                    <div class="card-body">
+
+                        <div class="form-grid">
+
+                            <div class="field">
+                                <label>Номер заказа</label>
+
+                                <input type="text"
+                                       th:value="${order.number}"
+                                       readonly>
+                            </div>
+
+                            <div class="field">
+                                <label>Покупатель</label>
+
+                                <input type="text"
+                                       th:value="${order.customer.name}"
+                                       readonly>
+                            </div>
+
+                            <div class="field">
+                                <label>Дата заказа</label>
+
+                                <input type="text"
+                                       th:value="${order.formattedOrderDate}"
+                                       readonly>
+                            </div>
+
+                            <div class="field">
+                                <label>Срок поставки</label>
+
+                                <input type="text"
+                                       th:value="${
+                                           order.dueDate != null
+                                               ? order.formattedDueDate
+                                               : 'Не указан'
+                                       }"
+                                       readonly>
+                            </div>
+
+                            <div class="field">
+                                <label>Номер договора</label>
+
+                                <input type="text"
+                                       th:value="${
+                                           order.contractNumber != null
+                                           ? order.contractNumber
+                                           : 'Не указан'
+                                       }"
+                                       readonly>
+                            </div>
+
+                            <div class="field">
+                                <label>Статус</label>
+
+                                <input type="text"
+                                       th:value="${order.status.displayName}"
+                                       readonly>
+                            </div>
+
+                            <div class="field">
+                                <label>Вид заказа</label>
+
+                                <input type="text"
+                                       th:value="${order.orderTypeDisplayName}"
+                                       readonly>
+                            </div>
+
+                            <div class="field">
+                                <label>Приоритет</label>
+
+                                <input type="text"
+                                       th:value="${order.priorityDisplayName}"
+                                       readonly>
+                            </div>
+
+                            <div class="field">
+                                <label>Заказ в Б24</label>
+
+                                <a class="b24-link"
+                                   th:if="${order.b24OrderUrl != null}"
+                                   th:href="${order.b24OrderUrl}"
+                                   th:text="${order.b24OrderUrl}"
+                                   target="_blank"
+                                   rel="noopener noreferrer">
+                                    Открыть заказ в Б24
+                                </a>
+
+                                <input th:unless="${order.b24OrderUrl != null}"
+                                       type="text"
+                                       value="Не указан"
+                                       readonly>
+                            </div>
+
+                            <div class="field">
+                                <label>Чек-лист в Б24</label>
+
+                                <a class="b24-link"
+                                   th:if="${order.b24ChecklistUrl != null}"
+                                   th:href="${order.b24ChecklistUrl}"
+                                   th:text="${order.b24ChecklistUrl}"
+                                   target="_blank"
+                                   rel="noopener noreferrer">
+                                    Открыть чек-лист в Б24
+                                </a>
+
+                                <input th:unless="${order.b24ChecklistUrl != null}"
+                                       type="text"
+                                       value="Не указан"
+                                       readonly>
+                            </div>
+
+                            <div class="field span-2">
+                                <label>Примечание</label>
+
+                                <textarea readonly
+                                          th:text="${
+                                              order.note != null
+                                              ? order.note
+                                              : 'Примечание отсутствует'
+                                          }">
+                                </textarea>
+                            </div>
+
+                        </div>
+                    </div>
+                </section>
+
+                <section class="card">
+
+                    <div class="card-head">
+
+                        <div>
+
+                            <h2>Изделия заказа</h2>
+
+                            <small>
+                                Позиций в заказе:
+
+                                <strong th:text="${
+                                    items != null
+                                        ? #lists.size(items)
+                                        : 0
+                                }">
+                                    0
+                                </strong>
+                            </small>
+
+                        </div>
+
+                    </div>
+
+                    <div class="card-body">
+
+                        <div class="table-wrap">
+
+                            <table class="data-table">
+
+                                <thead>
+                                <tr>
+                                    <th>№</th>
+                                    <th>Код изделия</th>
+                                    <th>Наименование изделия</th>
+                                    <th>Количество</th>
+                                    <th>Готово</th>
+                                    <th>Осталось</th>
+                                    <th>Ед. изм.</th>
+                                    <th>Срок</th>
+                                    <th>Статус</th>
+                                </tr>
+                                </thead>
+
+                                <tbody>
+
+                                <tr th:if="${
+                                        items == null
+                                        or #lists.isEmpty(items)
+                                     }">
+
+                                    <td colspan="9"
+                                        class="empty-table">
+                                        В заказ ещё не добавлено ни одного изделия
+                                    </td>
+
+                                </tr>
+
+                                <tr th:each="item : ${items}">
+
+                                    <td th:text="${item.position}">
+                                        1
+                                    </td>
+
+                                    <td th:text="${item.classifierCode}">
+                                        1234
+                                    </td>
+
+                                    <td th:text="${
+                                            item.classifierName != null
+                                            ? item.classifierName
+                                            : item.sensorClassName
+                                        }">
+                                        Изделие
+                                    </td>
+
+                                    <td th:text="${item.formattedQuantity}">
+                                        10
+                                    </td>
+
+                                    <td th:text="${item.formattedDoneQuantity}">
+                                        0
+                                    </td>
+
+                                    <td th:text="${item.formattedRemainingQuantity}">
+                                        10
+                                    </td>
+
+                                    <td th:text="${item.unitName}">
+                                        шт.
+                                    </td>
+
+                                    <td th:text="${item.formattedDueDate}">
+                                        —
+                                    </td>
+
+                                    <td>
+                                        <span class="status work"
+                                              th:text="${item.status.displayName}">
+                                            Статус
+                                        </span>
+                                    </td>
+
+                                </tr>
+
+                                </tbody>
+                            </table>
+
+                        </div>
+                    </div>
+                </section>
+
+            </th:block>
+
+        </div>
+    </main>
+</div>
+
+<th:block th:replace="~{dispatcher/fragments/layout
+        :: commonScripts}">
+</th:block>
+
+</body>
+</html>

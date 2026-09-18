@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="ru"
+      xmlns:th="http://www.thymeleaf.org">
+
+<head>
+    <meta charset="UTF-8">
+
+    <meta name="viewport"
+          content="width=device-width, initial-scale=1">
+
+    <title>Изменение техпроцесса</title>
+
+    <link rel="stylesheet"
+          th:href="@{/technology/css/technology.css}">
+
+    <link rel="stylesheet"
+          th:href="@{/technology/css/common.css}">
+
+    <link rel="stylesheet"
+          th:href="@{/technology/css/techprocess.css}">
+</head>
+
+<body>
+
+<div class="app-shell">
+
+    <aside th:replace="~{technology/fragments/layout
+            :: sidebar('techprocess')}">
+    </aside>
+
+    <main class="main">
+
+        <header th:replace="~{technology/fragments/layout
+                :: topbar}">
+        </header>
+
+        <div class="page-content techprocess-page">
+
+            <div class="tp-head">
+
+                <div>
+                    <h1>Изменение техпроцесса</h1>
+
+                    <p>
+                        Измените состав маршрута, нормы времени
+                        и зависимости между операциями
+                    </p>
+                </div>
+
+                <a class="btn secondary"
+                   th:href="@{/technology/techprocess/update}">
+                    Выбрать другой
+                </a>
+
+            </div>
+
+            <div th:replace="~{technology/techprocess/fragments/tp-fields
+                    :: operationCatalog}">
+            </div>
+
+            <div th:insert="~{technology/techprocess/fragments/tp-fields
+                    :: form(
+                        @{
+                            /technology/techprocess/update/{id}(
+                                id=${techProcessForm.id}
+                            )
+                        },
+                        'Сохранить изменения'
+                    )}">
+            </div>
+
+        </div>
+
+    </main>
+
+</div>
+
+<th:block th:replace="~{technology/fragments/layout
+        :: commonScripts}">
+</th:block>
+
+<script th:src="@{/technology/js/techprocess.js}"></script>
+
+</body>
+</html>

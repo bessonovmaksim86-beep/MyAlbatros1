@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="ru"
+      xmlns:th="http://www.thymeleaf.org">
+
+<head>
+    <meta charset="UTF-8">
+
+    <meta name="viewport"
+          content="width=device-width, initial-scale=1">
+
+    <title>Заказы покупателя</title>
+
+    <link rel="stylesheet"
+          th:href="@{/technology/css/technology.css}">
+
+    <link rel="stylesheet"
+          th:href="@{/dispatcher/css/dispatcher.css}">
+</head>
+
+<body>
+
+<div class="app-shell">
+
+    <aside th:replace="~{dispatcher/fragments/layout
+            :: sidebar('customerOrder')}">
+    </aside>
+
+    <main class="main">
+
+        <header th:replace="~{dispatcher/fragments/layout
+                :: topbar}">
+        </header>
+
+        <div class="page-content dispatcher-page">
+
+            <div class="page-head">
+
+                <div class="page-title">
+
+                    <h1>Заказы покупателя</h1>
+
+                    <p>
+                        Учёт заказов поступивших от покупателей
+                        и контроль их исполнения
+                    </p>
+
+                </div>
+
+                <div class="page-head-actions">
+
+                    <a class="btn primary"
+                       th:href="@{/dispatcher/customer-order/create}">
+                        Создать заказ
+                    </a>
+
+                </div>
+            </div>
+
+            <div class="alert success"
+                 th:if="${successMessage}"
+                 th:text="${successMessage}">
+            </div>
+
+            <div class="alert danger"
+                 th:if="${errorMessage}"
+                 th:text="${errorMessage}">
+            </div>
+
+            <div class="stats">
+
+                <div class="stat">
+                    <small>Всего заказов</small>
+
+                    <strong th:text="${customerOrderCount ?: 0}">
+                        0
+                    </strong>
+
+                    <span class="trend">
+                        Все заказы покупателя
+                    </span>
+                </div>
+
+                <div class="stat">
+                    <small>Новые</small>
+
+                    <strong th:text="${customerOrderNewCount ?: 0}">
+                        0
+                    </strong>
+
+                    <span class="trend attention">
+                        Ожидают взятия в работу
+                    </span>
+                </div>
+
+                <div class="stat">
+                    <small>В работе</small>
+
+                    <strong th:text="${customerOrderInWorkCount ?: 0}">
+                        0
+                    </strong>
+
+                    <span class="trend attention">
+                        Находятся в исполнении
+                    </span>
+                </div>
+
+                <div class="stat">
+                    <small>Завершены</small>
+
+                    <strong th:text="${customerOrderDoneCount ?: 0}">
+                        0
+                    </strong>
+
+                    <span class="trend">
+                        Закрытые заказы
+                    </span>
+                </div>
+            </div>
+
+            <section class="card">
+
+                <div class="card-head">
+
+                    <div>
+
+                        <h2>Список заказов покупателя</h2>
+
+                        <small>
+                            Показано записей:
+
+                            <strong th:text="${
+                                customerOrders != null
+                                    ? #lists.size(customerOrders)
+                                    : 0
+                            }">
+                                0
+                            </strong>
+                        </small>
+
+                    </div>
+
+                </div>
+
+                <div class="card-body">
+
+                    <div class="table-wrap">
+
+                        <table class="data-table">
+
+                            <thead>
+                            <tr>
+                                <th>Номер заказа</th>
+                                <th>Дата заказа</th>
+                                <th>Покупатель</th>
+                                <th>Изделий в заказе</th>
+                                <th>Количество всего</th>
+                                <th>Срок поставки</th>
+                                <th>Приоритет</th>
+                                <th>Статус</th>
+                                <th>Б24</th>
+                                <th>Действия</th>
+                            </tr>
+                            </thead>
+
+                            <tbody>
+
+                            <tr th:if="${
+                                    customerOrders == null
+                                    or #lists.isEmpty(customerOrders)
+                                 }">
+
+                                <td colspan="10"
+                                    class="empty-table">
+                                    Заказы покупателя пока не добавлены
+                                </td>
+
+                            </tr>
+
+                            <tr th:each="order : ${customerOrders}">
+
+                                <td th:text="${order.number}">
+                                    № 0001
+                                </td>
+
+                                <td th:text="${order.formattedOrderDate}">
+                                    01.01.2026
+                                </td>
+
+                                <td th:text="${order.customerName}">
+                                    Покупатель
+                                </td>
+
+                                <!--
+                                    Изделий в заказе: позиций может быть
+                                    любое количество, поэтому показываем
+                                    их число, а не одно изделие.
+                                -->
+                                <td th:text="${order.itemCount}">
+                                    3
+                                </td>
+
+                                <td th:text="${order.formattedPlannedQuantity}">
+                                    25
+                                </td>
+
+                                <td th:text="${order.formattedDueDate}">
+                                    01.01.2026
+                                </td>
+
+                                <td>
+                                    <span class="status"
+                                          th:classappend="${order.priorityBadgeClass}"
+                                          th:text="${order.priorityDisplayName}">
+                                        Приоритет
+                                    </span>
+                                </td>
+
+                                <td>
+                                    <span class="status"
+                                          th:classappend="${order.statusBadgeClass}"
+                                          th:text="${order.status.displayName}">
+                                        Статус
+                                    </span>
+                                </td>
+
+                                <td>
+                                    <div class="b24-links"
+                                         th:if="${
+                                             order.b24OrderUrl != null
+                                             or order.b24ChecklistUrl != null
+                                         }">
+
+                                        <a th:if="${order.b24OrderUrl != null}"
+                                           th:href="${order.b24OrderUrl}"
+                                           target="_blank"
+                                           rel="noopener noreferrer"
+                                           title="Открыть заказ в Битрикс24">
+                                            Заказ
+                                        </a>
+
+                                        <a th:if="${order.b24ChecklistUrl != null}"
+                                           th:href="${order.b24ChecklistUrl}"
+                                           target="_blank"
+                                           rel="noopener noreferrer"
+                                           title="Открыть чек-лист в Битрикс24">
+                                            Чек-лист
+                                        </a>
+
+                                    </div>
+
+                                    <span class="b24-links__empty"
+                                          th:unless="${
+                                              order.b24OrderUrl != null
+                                              or order.b24ChecklistUrl != null
+                                          }">
+                                        —
+                                    </span>
+                                </td>
+
+                                <td>
+
+                                    <div class="table-actions">
+
+                                        <a class="btn secondary compact"
+                                           th:href="@{/dispatcher/customer-order/{id}(id=${order.id})}">
+                                            Открыть
+                                        </a>
+
+                                    </div>
+
+                                </td>
+
+                            </tr>
+
+                            </tbody>
+                        </table>
+
+                    </div>
+                </div>
+            </section>
+
+            <div class="empty-state"
+                 th:if="${
+                     customerOrders == null
+                     or #lists.isEmpty(customerOrders)
+                 }">
+                <h3>Заказов покупателя пока нет</h3>
+
+                <p>
+                    Нажмите «Создать заказ», чтобы добавить первый заказ:
+                    покупатель, срок и любое количество изделий.
+                </p>
+            </div>
+
+        </div>
+    </main>
+</div>
+
+<th:block th:replace="~{dispatcher/fragments/layout
+        :: commonScripts}">
+</th:block>
+
+</body>
+</html>

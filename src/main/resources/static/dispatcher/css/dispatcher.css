@@ -1,0 +1,1377 @@
+/* ============================================================
+   ДИСПЕТЧЕРСКИЙ ОТДЕЛ — ПЕРЕМЕННЫЕ
+   ============================================================ */
+
+:root {
+    --dispatcher-sidebar-collapsed-width: 72px;
+    --dispatcher-sidebar-expanded-width: 286px;
+    --dispatcher-sidebar-duration: 220ms;
+
+    --dispatcher-sidebar-background: #102844;
+    --dispatcher-sidebar-background-dark: #0b1e34;
+    --dispatcher-sidebar-border: rgba(255, 255, 255, 0.1);
+    --dispatcher-sidebar-text: #ffffff;
+    --dispatcher-sidebar-muted: #9fb0c5;
+    --dispatcher-sidebar-active: rgba(255, 255, 255, 0.14);
+    --dispatcher-accent: #ed7900;
+}
+
+html,
+body {
+    width: 100%;
+    min-height: 100%;
+    margin: 0;
+}
+
+body {
+    overflow-x: hidden;
+}
+
+
+/* ============================================================
+   КОМПОНОВКА
+   ============================================================ */
+
+.app-shell {
+    display: grid !important;
+    grid-template-columns:
+        var(--dispatcher-sidebar-collapsed-width)
+        minmax(0, 1fr) !important;
+
+    width: 100%;
+    min-height: 100vh;
+}
+
+.main {
+    box-sizing: border-box;
+    width: 100% !important;
+    max-width: none !important;
+    min-width: 0;
+    margin: 0 !important;
+    overflow-x: hidden;
+}
+
+.page-content {
+    box-sizing: border-box;
+    width: 100%;
+    max-width: none !important;
+    margin: 0 !important;
+    padding: 20px;
+}
+
+
+/* ============================================================
+   БОКОВОЕ МЕНЮ
+   ============================================================ */
+
+.dispatcher-sidebar {
+    position: sticky;
+    top: 0;
+    z-index: 1000;
+
+    align-self: start;
+
+    box-sizing: border-box;
+    width: var(--dispatcher-sidebar-collapsed-width) !important;
+    min-width: 0 !important;
+    height: 100vh;
+
+    padding: 0 !important;
+    overflow: hidden;
+
+    color: var(--dispatcher-sidebar-text);
+
+    background:
+        linear-gradient(
+            180deg,
+            var(--dispatcher-sidebar-background) 0%,
+            var(--dispatcher-sidebar-background-dark) 100%
+        );
+
+    border-right: 1px solid var(--dispatcher-sidebar-border);
+    box-shadow: 5px 0 18px rgba(4, 18, 34, 0.12);
+
+    transition:
+        width var(--dispatcher-sidebar-duration) ease,
+        box-shadow var(--dispatcher-sidebar-duration) ease;
+}
+
+.dispatcher-sidebar:hover,
+.dispatcher-sidebar:focus-within {
+    width: var(--dispatcher-sidebar-expanded-width) !important;
+    box-shadow: 12px 0 34px rgba(4, 18, 34, 0.28);
+}
+
+.dispatcher-sidebar__inner {
+    display: flex;
+    flex-direction: column;
+
+    box-sizing: border-box;
+    width: var(--dispatcher-sidebar-expanded-width);
+    height: 100%;
+
+    padding: 12px 10px 18px;
+}
+
+
+/* ============================================================
+   ЛОГОТИП И НАЗВАНИЕ ОТДЕЛА
+   ============================================================ */
+
+.department-brand {
+    display: flex;
+    flex: 0 0 154px;
+    flex-direction: column;
+    align-items: flex-start;
+
+    box-sizing: border-box;
+    width: 100%;
+    height: 154px;
+    padding: 0 4px 12px;
+
+    color: #ffffff;
+    text-decoration: none;
+}
+
+.department-brand:hover,
+.department-brand:focus {
+    color: #ffffff;
+    text-decoration: none;
+}
+
+.department-brand__logo {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    box-sizing: border-box;
+    width: 48px;
+    height: 54px;
+    margin: 0 0 12px;
+    padding: 5px;
+
+    overflow: hidden;
+
+    background: #ffffff;
+    border-radius: 10px;
+    box-shadow: 0 7px 18px rgba(0, 0, 0, 0.18);
+
+    transition:
+        width var(--dispatcher-sidebar-duration) ease,
+        height var(--dispatcher-sidebar-duration) ease,
+        padding var(--dispatcher-sidebar-duration) ease;
+}
+
+.department-brand__logo img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+}
+
+.dispatcher-sidebar:hover .department-brand__logo,
+.dispatcher-sidebar:focus-within .department-brand__logo {
+    width: 248px;
+    height: 66px;
+    padding: 7px 10px;
+}
+
+.department-brand__system,
+.department-brand__department {
+    display: block;
+    width: 248px;
+
+    overflow: hidden;
+    white-space: nowrap;
+
+    opacity: 0;
+    transform: translateX(-8px);
+
+    transition:
+        opacity 150ms ease 40ms,
+        transform 150ms ease 40ms;
+}
+
+.dispatcher-sidebar:hover .department-brand__system,
+.dispatcher-sidebar:hover .department-brand__department,
+.dispatcher-sidebar:focus-within .department-brand__system,
+.dispatcher-sidebar:focus-within .department-brand__department {
+    opacity: 1;
+    transform: translateX(0);
+}
+
+.department-brand__system {
+    margin-bottom: 6px;
+
+    color: var(--dispatcher-sidebar-muted);
+
+    font-size: 10px;
+    font-weight: 700;
+    line-height: 1.35;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+}
+
+.department-brand__department {
+    color: #ffffff;
+    font-size: 18px;
+    font-weight: 700;
+    line-height: 1.25;
+}
+
+.dispatcher-sidebar__divider {
+    flex: 0 0 1px;
+    width: 252px;
+    height: 1px;
+    margin: 0 0 16px;
+
+    background: var(--dispatcher-sidebar-border);
+}
+
+
+/* ============================================================
+   НАВИГАЦИЯ
+   ============================================================ */
+
+.dispatcher-navigation {
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    gap: 6px;
+
+    min-height: 0;
+    overflow-x: hidden;
+    overflow-y: auto;
+}
+
+.dispatcher-navigation__item {
+    position: relative;
+
+    display: flex;
+    align-items: center;
+
+    box-sizing: border-box;
+    width: 266px;
+    min-height: 48px;
+    padding: 10px 13px;
+
+    overflow: hidden;
+
+    color: #dbe6f1;
+    font-size: 14px;
+    font-weight: 500;
+    line-height: 1.2;
+    text-decoration: none;
+    white-space: nowrap;
+
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 10px;
+
+    transition:
+        color 160ms ease,
+        background-color 160ms ease,
+        border-color 160ms ease,
+        transform 160ms ease;
+}
+
+.dispatcher-navigation__item:hover,
+.dispatcher-navigation__item:focus-visible {
+    color: #ffffff;
+    text-decoration: none;
+    background: rgba(255, 255, 255, 0.08);
+}
+
+.dispatcher-navigation__item.is-active {
+    color: #ffffff;
+    background: var(--dispatcher-sidebar-active);
+    border-color: rgba(255, 255, 255, 0.08);
+    box-shadow: inset 3px 0 0 var(--dispatcher-accent);
+}
+
+.dispatcher-navigation__icon {
+    display: inline-flex;
+    flex: 0 0 24px;
+    align-items: center;
+    justify-content: center;
+
+    width: 24px;
+    height: 24px;
+    margin-right: 15px;
+}
+
+.dispatcher-navigation__icon svg {
+    display: block;
+    width: 21px;
+    height: 21px;
+    fill: currentColor;
+}
+
+.dispatcher-navigation__text {
+    min-width: 0;
+    overflow: hidden;
+
+    text-overflow: ellipsis;
+
+    opacity: 0;
+    transform: translateX(-6px);
+
+    transition:
+        opacity 130ms ease,
+        transform 130ms ease;
+}
+
+.dispatcher-sidebar:hover .dispatcher-navigation__text,
+.dispatcher-sidebar:focus-within .dispatcher-navigation__text {
+    opacity: 1;
+    transform: translateX(0);
+}
+
+.dispatcher-navigation__counter {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+
+    min-width: 21px;
+    height: 21px;
+    margin-left: auto;
+    padding: 0 6px;
+
+    color: #ffffff;
+    font-size: 11px;
+    font-weight: 700;
+
+    background: #e44c4c;
+    border-radius: 20px;
+
+    opacity: 0;
+
+    transition: opacity 130ms ease;
+}
+
+.dispatcher-sidebar:hover .dispatcher-navigation__counter,
+.dispatcher-sidebar:focus-within .dispatcher-navigation__counter {
+    opacity: 1;
+}
+
+.dispatcher-sidebar__footer {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+
+    padding: 14px 12px 0;
+
+    color: var(--dispatcher-sidebar-muted);
+    font-size: 11px;
+}
+
+.dispatcher-sidebar__status-dot {
+    width: 8px;
+    height: 8px;
+    background: #38c172;
+    border-radius: 50%;
+}
+
+
+/* ============================================================
+   ВЕРХНЯЯ ПАНЕЛЬ
+   ============================================================ */
+
+.dispatcher-topbar {
+    position: sticky;
+    top: 0;
+    z-index: 800;
+
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 24px;
+
+    box-sizing: border-box;
+    width: 100%;
+    min-width: 0;
+    min-height: 74px;
+    padding: 0 22px;
+
+    background: rgba(255, 255, 255, 0.97);
+    border-bottom: 1px solid #e5eaf0;
+    box-shadow: 0 4px 18px rgba(18, 38, 63, 0.05);
+    backdrop-filter: blur(10px);
+}
+
+.dispatcher-topbar__left {
+    display: flex;
+    flex: 1 1 auto;
+    align-items: center;
+
+    min-width: 180px;
+}
+
+.dispatcher-topbar__right {
+    display: flex;
+    flex: 0 0 auto;
+    align-items: center;
+    gap: 18px;
+}
+
+
+/* ============================================================
+   ПОИСК
+   ============================================================ */
+
+.dispatcher-search {
+    position: relative;
+
+    display: block;
+    width: 100%;
+    max-width: 760px;
+}
+
+.dispatcher-search input {
+    display: block;
+
+    box-sizing: border-box;
+    width: 100%;
+    height: 42px;
+    padding: 0 16px;
+
+    color: var(--text, #27394d);
+    font: inherit;
+    font-size: 13px;
+
+    background: #f7f9fc;
+    border: 1px solid var(--line, #dfe6ed);
+    border-radius: 10px;
+    outline: none;
+
+    transition:
+        border-color 160ms ease,
+        background-color 160ms ease,
+        box-shadow 160ms ease;
+}
+
+.dispatcher-search input::placeholder {
+    color: #7d8c9c;
+    opacity: 1;
+}
+
+.dispatcher-search input:hover {
+    border-color: #bac8d5;
+    background: #ffffff;
+}
+
+.dispatcher-search input:focus {
+    background: #ffffff;
+    border-color: #2c6da7;
+    box-shadow: 0 0 0 3px rgba(44, 109, 167, 0.12);
+}
+
+
+/* ============================================================
+   ЧАСЫ
+   ============================================================ */
+
+.dispatcher-clock {
+    display: block;
+
+    min-width: 175px;
+
+    color: var(--navy, #153c63);
+    font-size: 13px;
+    font-weight: 700;
+    line-height: 1.25;
+    text-align: right;
+    white-space: nowrap;
+}
+
+
+/* ============================================================
+   ПОЛЬЗОВАТЕЛЬ
+   ============================================================ */
+
+.dispatcher-topbar__user {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+
+    min-width: 180px;
+    padding-left: 18px;
+
+    border-left: 1px solid var(--line, #dfe6ed);
+}
+
+.dispatcher-topbar__avatar {
+    display: inline-flex;
+    flex: 0 0 40px;
+    align-items: center;
+    justify-content: center;
+
+    box-sizing: border-box;
+    width: 40px;
+    height: 40px;
+
+    color: #ffffff;
+    font-size: 13px;
+    font-weight: 800;
+    letter-spacing: 0.02em;
+
+    background: #0c4c86;
+    border-radius: 50%;
+}
+
+.dispatcher-topbar__user-data {
+    display: flex;
+    flex-direction: column;
+
+    min-width: 0;
+}
+
+.dispatcher-topbar__username {
+    display: block;
+
+    max-width: 190px;
+    overflow: hidden;
+
+    color: #27394d;
+    font-size: 13px;
+    font-weight: 700;
+    line-height: 1.3;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.dispatcher-topbar__specialty {
+    display: block;
+
+    max-width: 190px;
+    margin-top: 2px;
+    overflow: hidden;
+
+    color: var(--muted, #748397);
+    font-size: 10px;
+    line-height: 1.3;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+
+/* ============================================================
+   СОСТОЯНИЯ СТРАНИЦ
+   ============================================================ */
+
+.empty-state {
+    padding: 46px 20px;
+
+    color: var(--muted, #6c7b89);
+    text-align: center;
+}
+
+.empty-state h3 {
+    margin: 0 0 8px;
+    color: var(--navy, #073e75);
+    font-size: 16px;
+}
+
+.empty-state p {
+    margin: 0;
+    font-size: 13px;
+}
+
+.empty-table {
+    color: var(--muted, #6c7b89);
+    text-align: center;
+}
+
+.stats {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 14px;
+    margin-bottom: 20px;
+}
+
+/*
+ * Обзор отдела: карточки заказов и всего количества продукции
+ * вынесены в отдельный ряд из трёх карточек.
+ */
+.stats--overview {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.page-head-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+}
+
+/*
+ * Форма действия (например, «Планировать заказ») встроена в ряд кнопок,
+ * поэтому не должна добавлять перенос строки и свои отступы.
+ */
+.page-head-actions .inline-action {
+    margin: 0;
+}
+
+.type-filter {
+    margin-bottom: 24px;
+}
+
+/*
+ * Карточки типов на обзоре отдела только показывают значения,
+ * поэтому не являются ссылками и не «подпрыгивают» при наведении.
+ */
+.type-filter-card.is-static {
+    cursor: default;
+}
+
+.type-filter-card.is-static:hover {
+    transform: none;
+}
+
+
+/* ============================================================
+   ФОРМА ЗАКАЗА ПОКУПАТЕЛЯ
+   ============================================================ */
+
+.co-items td {
+    vertical-align: top;
+}
+
+.co-items select,
+.co-items input {
+    box-sizing: border-box;
+
+    width: 100%;
+    min-width: 0;
+    height: 40px;
+    padding: 8px 10px;
+
+    color: var(--text, #27394d);
+    font: inherit;
+    font-size: 12px;
+
+    background: #fff;
+    border: 1px solid var(--line, #dce4eb);
+    border-radius: 8px;
+    outline: none;
+}
+
+.co-items select:focus,
+.co-items input:focus {
+    border-color: #2c6da7;
+    box-shadow: 0 0 0 3px rgba(44, 109, 167, 0.12);
+}
+
+.co-item-position {
+    color: var(--muted, #6c7b89);
+    font-weight: 700;
+    text-align: center;
+}
+
+.co-form .field input,
+.co-form .field select,
+.co-form .field textarea {
+    box-sizing: border-box;
+
+    width: 100%;
+    min-width: 0;
+    padding: 11px 12px;
+
+    font: inherit;
+    font-size: 13px;
+
+    background: #fff;
+    border: 1px solid var(--line, #dce4eb);
+    border-radius: 9px;
+    outline: none;
+}
+
+.co-form .field input:focus,
+.co-form .field select:focus,
+.co-form .field textarea:focus {
+    border-color: #2c6da7;
+    box-shadow: 0 0 0 3px rgba(44, 109, 167, 0.12);
+}
+
+.co-form .field label {
+    display: block;
+    margin-bottom: 7px;
+
+    color: var(--navy, #073e75);
+    font-size: 11px;
+    font-weight: 800;
+}
+
+/*
+ * Поле ссылки на чек-лист: само поле и кнопка «Занести из
+ * чек-листа» в одну строку. Кнопка-ссылка открывается в новой
+ * вкладке; без валидного URL она приглушена и не ведёт никуда.
+ */
+.co-checklist-field {
+    display: flex;
+    align-items: stretch;
+    gap: 8px;
+}
+
+.co-checklist-field input {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.co-checklist-field .btn {
+    flex: 0 0 auto;
+
+    display: inline-flex;
+    align-items: center;
+
+    white-space: nowrap;
+    text-decoration: none;
+}
+
+.co-checklist-field .btn.is-disabled {
+    color: var(--muted, #6c7b89);
+    background: #f2f4f6;
+    border-color: var(--line, #dce4eb);
+    cursor: not-allowed;
+    opacity: 0.7;
+    pointer-events: none;
+}
+
+/*
+ * Каскад «тип изделия → изделие»: при выборе типа в списке изделия
+ * остаются только опции подходящего типа (скрытые через hidden).
+ */
+.co-items .co-product-type,
+.co-items .co-classifier {
+    box-sizing: border-box;
+    width: 100%;
+}
+
+/*
+ * Датчик вносится вручную: полное обозначение из КД.
+ *
+ * По умолчанию (прибор, ячейка, система) поле наименования не нужен,
+ * поэтому он скрыт, а виден список классификатора. Класс is-sensor
+ * навешивает скрипт по выбранному типу; стартовое состояние задаёт
+ * сервер тем же классом, чтобы форма не «моргала» до инициализации.
+ *
+ * Список при датчике остаётся запасным выбором (класс show-classifier):
+ * им пользуются, когда автоподбор не удался, — сервер тогда берёт
+ * выбранное изделие.
+ */
+.co-items .co-fullname {
+    display: none;
+    box-sizing: border-box;
+    width: 100%;
+}
+
+.co-items .co-item-row.is-sensor .co-fullname {
+    display: block;
+}
+
+.co-items .co-item-row.is-sensor .co-classifier,
+.co-items .co-item-row.is-sensor .co-pick {
+    display: none;
+}
+
+.co-items .co-item-row.is-sensor.show-classifier .co-classifier {
+    display: block;
+}
+
+.co-items .co-pick {
+    margin-top: 4px;
+    padding: 0;
+    border: 0;
+    background: none;
+    color: var(--navy, #073e75);
+    font-size: 11px;
+    font-weight: 700;
+    text-decoration: underline;
+    cursor: pointer;
+}
+
+/*
+ * Строка состава системы: раскрывается под строкой позиции, когда
+ * выбран тип «Система». Показывает роды датчиков и приборы системы.
+ */
+.co-system-row > td {
+    padding: 0 10px 12px;
+
+    background: #f7fafc;
+    border-top: 0;
+}
+
+.co-system-components {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+
+    box-sizing: border-box;
+    width: 100%;
+    padding: 12px 14px;
+
+    background: #eef4fa;
+    border: 1px solid var(--line, #dce4eb);
+    border-radius: 9px;
+}
+
+.co-system-components__title {
+    color: var(--navy, #073e75);
+    font-size: 11px;
+    font-weight: 800;
+}
+
+.co-system-component {
+    color: var(--text, #27394d);
+    font-size: 12px;
+}
+
+.co-system-empty {
+    box-sizing: border-box;
+    width: 100%;
+    padding: 12px 14px;
+
+    color: var(--muted, #6c7b89);
+    font-size: 12px;
+
+    background: #f2f4f6;
+    border: 1px dashed var(--line, #dce4eb);
+    border-radius: 9px;
+}
+
+
+/* ============================================================
+   СТАТУСЫ И ПРИОРИТЕТЫ ЗАКАЗОВ ПОКУПАТЕЛЯ
+   ============================================================ */
+
+/*
+ * Модификаторы статуса: часть классов (.work, .done, .draft)
+ * уже объявлена в technology.css, здесь дополняют набор
+ * производственными состояниями.
+ */
+.status.overdued {
+    color: #a12d35;
+    background: #fff0f1;
+}
+
+.status.suspended {
+    color: #4a5568;
+    background: #eef1f5;
+}
+
+.status.deleted {
+    color: #7b858f;
+    background: #f2f4f6;
+    text-decoration: line-through;
+}
+
+.priority-critical {
+    color: #ffffff;
+    background: #c73a43;
+}
+
+.priority-high {
+    color: #a45c00;
+    background: #ffe4c2;
+}
+
+.priority-ordinary {
+    color: #0b5798;
+    background: #e6f0f9;
+}
+
+.priority-low {
+    color: #4a6b57;
+    background: #eef5f0;
+}
+
+.priority-minimal {
+    color: #7b858f;
+    background: #f2f4f6;
+}
+
+/*
+ * Бейджи вида заказа покупателя: производство, гарантийный и
+ * платный ремонт, внутренний заказ.
+ */
+.type-production {
+    color: #0b5798;
+    background: #e6f0f9;
+}
+
+.type-warranty {
+    color: #4a6b57;
+    background: #eef5f0;
+}
+
+.type-paid {
+    color: #a45c00;
+    background: #ffe4c2;
+}
+
+.type-internal {
+    color: #4a5568;
+    background: #eef1f5;
+}
+
+/*
+ * Колонка Б24 в списке заказов: ссылки на карточку заказа
+ * и чек-лист размещаются в одну строку.
+ */
+.b24-links {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.b24-links a {
+    padding: 4px 9px;
+
+    color: var(--navy, #073e75);
+    font-size: 10px;
+    font-weight: 800;
+
+    background: #eaf1f7;
+    border: 1px solid var(--line, #dce4eb);
+    border-radius: 99px;
+}
+
+.b24-links a:hover {
+    color: #ffffff;
+    background: var(--navy, #073e75);
+}
+
+.b24-links__empty {
+    color: var(--muted, #6c7b89);
+}
+
+/* Ссылка на Б24 в карточке заказа переносится по словам. */
+.b24-link {
+    display: block;
+    overflow-wrap: anywhere;
+
+    padding: 11px 12px;
+
+    color: var(--navy, #073e75);
+    font-size: 12px;
+    font-weight: 600;
+
+    background: #f7fafc;
+    border: 1px solid var(--line, #dce4eb);
+    border-radius: 9px;
+}
+
+.b24-link:hover {
+    color: #0b5798;
+    background: #eaf1f7;
+    text-decoration: underline;
+}
+
+.stat {
+    display: grid;
+    gap: 8px;
+    padding: 17px;
+    border: 1px solid var(--line, #dce4eb);
+    border-radius: 11px;
+    background: #fff;
+    box-shadow: var(--shadow, 0 10px 28px rgba(16, 47, 75, .08));
+}
+
+.stat small {
+    color: var(--muted, #6c7b89);
+    font-size: 11px;
+}
+
+.stat strong {
+    color: var(--navy, #073e75);
+    font-size: 27px;
+}
+
+.trend {
+    color: var(--green, #198754);
+    font-size: 10px;
+}
+
+.trend.attention {
+    color: var(--orange, #ef7d00);
+}
+
+.table-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.btn.compact {
+    padding: 7px 10px;
+    font-size: 11px;
+}
+
+.btn.danger {
+    background: #fdecee;
+    color: #a12d35;
+}
+
+.data-table {
+    min-width: 760px;
+}
+
+.data-table.customer-table {
+    min-width: 520px;
+}
+
+/*
+ * СПРАВОЧНИК ПРИОРИТЕТОВ ПЛАНИРОВАНИЯ
+ *
+ * Приоритет задаёт четыре параметра запуска заказа, поэтому строк
+ * в таблице больше, чем в справочнике заказчиков: минимальная ширина
+ * держит таблицу прокручиваемой, а не сжатой до нечитаемого.
+ */
+.stats--priority {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.data-table.priority-table {
+    min-width: 1080px;
+}
+
+.priority-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    align-items: center;
+}
+
+.priority-actions form {
+    margin: 0;
+}
+
+/*
+ * Подсказка под полем: поясняет смысл параметра приоритета, потому что
+ * «максимальная дата изготовления» и «допустимая загруженность» без
+ * примера читаются двусмысленно.
+ */
+.field-hint {
+    display: block;
+    margin-top: 6px;
+
+    color: var(--muted, #6c7b89);
+    font-size: 11px;
+    line-height: 1.45;
+}
+
+/*
+ * Переключатель приоритетов на странице правки: правила близки по
+ * смыслу, и сравнивать их удобнее на одной странице.
+ */
+.priority-switcher {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+}
+
+.priority-switcher__item {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+
+    padding: 10px 12px;
+
+    border: 1px solid var(--line, #dce4eb);
+    border-radius: 10px;
+}
+
+.priority-switcher__item.is-active {
+    border-color: #2c6da7;
+    box-shadow: 0 0 0 3px rgba(44, 109, 167, 0.12);
+}
+
+.priority-switcher__item small {
+    color: var(--muted, #6c7b89);
+    font-size: 10px;
+    font-weight: 700;
+}
+
+/*
+ * Справочник заказчиков: карточки всего две,
+ * форма занесения — в одну строку с кнопкой.
+ */
+.stats--customer {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.customer-quick-form {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    gap: 14px;
+}
+
+.customer-quick-form .alert {
+    width: 100%;
+    margin: 0 0 4px;
+}
+
+.customer-quick-form .field {
+    flex: 1 1 320px;
+    min-width: 0;
+}
+
+.customer-quick-form .field input {
+    box-sizing: border-box;
+
+    width: 100%;
+    min-width: 0;
+    padding: 11px 12px;
+
+    font: inherit;
+    font-size: 13px;
+
+    background: #fff;
+    border: 1px solid var(--line, #dce4eb);
+    border-radius: 9px;
+    outline: none;
+}
+
+.customer-quick-form .field input:focus {
+    border-color: #2c6da7;
+    box-shadow: 0 0 0 3px rgba(44, 109, 167, 0.12);
+}
+
+.customer-quick-form .field label {
+    display: block;
+    margin-bottom: 7px;
+
+    color: var(--navy, #073e75);
+    font-size: 11px;
+    font-weight: 800;
+}
+
+.customer-quick-form .btn {
+    min-width: 190px;
+}
+
+
+/* ============================================================
+   СЛУЖЕБНЫЙ СКРЫТЫЙ ТЕКСТ
+   ============================================================ */
+
+.visually-hidden {
+    position: absolute !important;
+
+    width: 1px !important;
+    height: 1px !important;
+    padding: 0 !important;
+    margin: -1px !important;
+
+    overflow: hidden !important;
+    white-space: nowrap !important;
+
+    border: 0 !important;
+
+    clip: rect(0, 0, 0, 0) !important;
+    clip-path: inset(50%) !important;
+}
+
+
+/* ============================================================
+   ВЫБОР ДАТЧИКОВ В ЗАКАЗЕ-КОМПЛЕКТУЮЩЕМ (ЗНП)
+
+   Серийники выпускает заказ верхнего уровня, поэтому в форме ЗНП
+   они только отмечаются. Плитка, а не select: номеров в выпуске
+   бывает много, и номер с наименованием должны читаться строкой.
+   ============================================================ */
+
+.po-serials {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+
+    box-sizing: border-box;
+    max-height: 240px;
+    padding: 10px 12px;
+
+    overflow-y: auto;
+
+    background: #f7fafc;
+    border: 1px solid #d7e1ec;
+    border-radius: 8px;
+}
+
+.po-serials-empty {
+    margin: 0;
+    color: #5b6b7c;
+    font-size: 12px;
+}
+
+.po-serial {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+
+    padding: 6px 8px;
+
+    cursor: pointer;
+
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+}
+
+.po-serial:hover {
+    border-color: var(--navy, #073e75);
+}
+
+.po-serial input[type='checkbox'] {
+    flex: 0 0 auto;
+    margin: 0;
+}
+
+.po-serial-number {
+    font-family: 'Consolas', 'Courier New', monospace;
+    font-weight: 700;
+    color: var(--navy, #073e75);
+}
+
+.po-serial-name {
+    overflow: hidden;
+
+    font-size: 12px;
+    color: #40505f;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+
+/* ============================================================
+   АДАПТИВНОСТЬ
+   ============================================================ */
+
+@media (max-width: 1100px) {
+    .dispatcher-topbar {
+        gap: 15px;
+        padding-right: 16px;
+        padding-left: 16px;
+    }
+
+    .dispatcher-topbar__right {
+        gap: 12px;
+    }
+
+    .dispatcher-clock {
+        min-width: 150px;
+        font-size: 12px;
+    }
+
+    .dispatcher-topbar__user {
+        min-width: 150px;
+        padding-left: 12px;
+    }
+
+    .dispatcher-topbar__username,
+    .dispatcher-topbar__specialty {
+        max-width: 130px;
+    }
+
+    .stats {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
+@media (max-width: 820px) {
+    :root {
+        --dispatcher-sidebar-collapsed-width: 62px;
+    }
+
+    .dispatcher-sidebar__inner {
+        padding-right: 6px;
+        padding-left: 6px;
+    }
+
+    .department-brand {
+        padding-right: 1px;
+        padding-left: 1px;
+    }
+
+    .department-brand__logo {
+        width: 48px;
+    }
+
+    .dispatcher-navigation__item {
+        padding-right: 12px;
+        padding-left: 12px;
+    }
+
+    .dispatcher-topbar {
+        flex-wrap: wrap;
+        gap: 10px;
+
+        min-height: 112px;
+        padding-top: 10px;
+        padding-bottom: 10px;
+    }
+
+    .dispatcher-topbar__left {
+        flex-basis: 100%;
+        order: 2;
+    }
+
+    .dispatcher-topbar__right {
+        order: 1;
+        width: 100%;
+        justify-content: flex-end;
+    }
+
+    .dispatcher-search {
+        max-width: none;
+    }
+
+    .page-content {
+        padding: 16px;
+    }
+}
+
+@media (max-width: 560px) {
+    .dispatcher-clock {
+        min-width: auto;
+        font-size: 11px;
+    }
+
+    .dispatcher-topbar__user {
+        min-width: auto;
+    }
+
+    .dispatcher-topbar__user-data {
+        display: none;
+    }
+
+    .dispatcher-topbar__avatar {
+        flex-basis: 36px;
+        width: 36px;
+        height: 36px;
+    }
+
+    .dispatcher-search input {
+        height: 39px;
+        font-size: 12px;
+    }
+
+    .page-content {
+        padding: 12px;
+    }
+
+    .stats {
+        grid-template-columns: 1fr;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .dispatcher-sidebar,
+    .department-brand__logo,
+    .department-brand__system,
+    .department-brand__department,
+    .dispatcher-navigation__item,
+    .dispatcher-navigation__text,
+    .dispatcher-navigation__counter {
+        transition: none !important;
+    }
+}

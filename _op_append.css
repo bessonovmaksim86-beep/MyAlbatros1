@@ -1,0 +1,308 @@
+
+
+/* =========================================================
+   ФОРМА ОПЕРАЦИИ: сетка полей, отступы, оформление
+   (адаптация под общую стилистику технологического отдела)
+   ========================================================= */
+
+.operation-page .operation-editor-card {
+    max-width: 980px;
+    margin-left: auto;
+    margin-right: auto;
+}
+
+.operation-page .operation-editor-head {
+    padding: 18px 22px;
+}
+
+.operation-page .operation-editor-head h2 {
+    margin: 0;
+    color: var(--navy);
+    font-size: 16px;
+}
+
+.operation-page .operation-editor-head small {
+    display: block;
+    margin-top: 6px;
+    color: var(--muted);
+    font-size: 12px;
+}
+
+.operation-page .operation-editor-body {
+    padding: 24px 22px 26px;
+}
+
+
+/* Сетка полей и расстояние между ними */
+
+.operation-page .operation-form-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 20px 18px;
+}
+
+.operation-page .operation-name-field {
+    grid-column: 1 / -1;
+}
+
+.operation-page .form-group {
+    min-width: 0;
+    margin: 0;
+}
+
+.operation-page .form-group > label {
+    display: block;
+    margin-bottom: 8px;
+    color: #344054;
+    font-size: 13px;
+    font-weight: 700;
+}
+
+.operation-page .required {
+    color: var(--red);
+}
+
+
+/* Поля ввода и списки */
+
+.operation-page .operation-form input[type="text"],
+.operation-page .operation-form select {
+    box-sizing: border-box;
+    width: 100%;
+    min-height: 44px;
+    padding: 11px 13px;
+    border: 1px solid var(--line);
+    border-radius: 9px;
+    outline: none;
+    color: var(--text);
+    background: #ffffff;
+    font: inherit;
+    font-size: 14px;
+    line-height: 1.4;
+    transition:
+        border-color 0.18s ease,
+        box-shadow 0.18s ease;
+}
+
+.operation-page .operation-form input[type="text"]:hover,
+.operation-page .operation-form select:hover {
+    border-color: #9fb0c5;
+}
+
+.operation-page .operation-form input[type="text"]:focus,
+.operation-page .operation-form select:focus {
+    border-color: var(--navy);
+    box-shadow: 0 0 0 3px rgba(7, 62, 117, 0.12);
+}
+
+.operation-page .operation-form input[type="text"]::placeholder {
+    color: #9aa7b6;
+}
+
+.operation-page .operation-form select:disabled,
+.operation-page .operation-form input[type="text"]:disabled {
+    color: #98a2b3;
+    background: #f4f6f8;
+    cursor: not-allowed;
+}
+
+
+/* Подсказки и ошибки под полями */
+
+.operation-page .operation-form .form-group small {
+    display: block;
+    margin-top: 6px;
+    color: var(--muted);
+    font-size: 12px;
+    line-height: 1.4;
+}
+
+.operation-page .operation-form .field-error {
+    margin-top: 6px;
+    color: var(--red);
+    font-size: 12px;
+    font-weight: 600;
+}
+
+
+/* Кнопки формы */
+
+.operation-page .operation-form-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+    margin-top: 24px;
+    padding-top: 18px;
+    border-top: 1px solid var(--line);
+}
+
+.operation-page .operation-form-actions .btn,
+.operation-page .operation-selector .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 42px;
+    padding: 10px 18px;
+    border: 0;
+    border-radius: 9px;
+    font-weight: 700;
+    font-size: 13px;
+    line-height: 1;
+    text-decoration: none;
+    cursor: pointer;
+    transition: filter 0.15s ease;
+}
+
+.operation-page .operation-form-actions .btn:hover,
+.operation-page .operation-selector .btn:hover {
+    filter: brightness(0.97);
+}
+
+.operation-page .operation-form-actions .btn.primary {
+    color: #ffffff;
+    background: var(--orange);
+}
+
+.operation-page .operation-form-actions .btn.secondary {
+    color: var(--navy);
+    background: #eaf1f7;
+}
+
+.operation-page .operation-form-actions .btn.danger {
+    margin: 0;
+    border: 0;
+    color: #a12d35;
+    background: #fff0f1;
+}
+
+/* Кнопка «Вернуться» в шапке страницы */
+
+.operation-page .page-head > .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 40px;
+    padding: 10px 16px;
+    border: 0;
+    border-radius: 9px;
+    font-weight: 700;
+    font-size: 13px;
+    line-height: 1;
+    text-decoration: none;
+}
+
+
+/* Заголовок страницы */
+
+.operation-page .page-title h1 {
+    margin: 0;
+    color: var(--navy);
+}
+
+.operation-page .page-title p {
+    margin: 6px 0 0;
+    color: var(--muted);
+    font-size: 13px;
+}
+
+
+/* Список выбора операции (страницы изменения/удаления) */
+
+.operation-page .operation-selection-list {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+}
+
+.operation-page .operation-selection-item {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 14px 16px;
+    border: 1px solid var(--line);
+    border-radius: 11px;
+    background: #ffffff;
+    transition:
+        border-color 0.15s ease,
+        box-shadow 0.15s ease,
+        transform 0.15s ease;
+}
+
+.operation-page .operation-selection-item:hover {
+    border-color: var(--orange);
+    box-shadow: var(--shadow);
+    transform: translateY(-1px);
+}
+
+.operation-page .operation-selection-item strong {
+    color: var(--navy);
+    font-size: 14px;
+}
+
+.operation-page .operation-selection-item span {
+    color: var(--muted);
+    font-size: 12px;
+}
+
+
+/* Действия в таблице и пустое состояние */
+
+.operation-page .table-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.operation-page .table-actions .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 34px;
+    padding: 7px 12px;
+    border: 0;
+    border-radius: 8px;
+    font-weight: 700;
+    font-size: 12px;
+    line-height: 1;
+    text-decoration: none;
+    cursor: pointer;
+}
+
+.operation-page .table-actions .btn.secondary {
+    color: var(--navy);
+    background: #eaf1f7;
+}
+
+.operation-page .table-actions .btn.danger {
+    margin: 0;
+    border: 0;
+    color: #a12d35;
+    background: #fff0f1;
+}
+
+.operation-page .operation-name {
+    color: var(--navy);
+    font-weight: 600;
+}
+
+.operation-page .empty-table {
+    padding: 34px 12px;
+    color: var(--muted);
+    text-align: center;
+}
+
+
+@media (max-width: 760px) {
+    .operation-page .operation-form-grid,
+    .operation-page .operation-selection-list {
+        grid-template-columns: 1fr;
+    }
+
+    .operation-page .operation-form-actions {
+        flex-direction: column-reverse;
+    }
+
+    .operation-page .operation-form-actions .btn {
+        width: 100%;
+    }
+}

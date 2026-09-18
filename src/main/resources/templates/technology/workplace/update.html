@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="ru"
+      xmlns:th="http://www.thymeleaf.org">
+
+<head>
+    <meta charset="UTF-8">
+
+    <meta name="viewport"
+          content="width=device-width, initial-scale=1">
+
+    <title>Изменение рабочего места</title>
+
+    <link rel="stylesheet"
+          th:href="@{/technology/css/technology.css}">
+
+    <link rel="stylesheet"
+          th:href="@{/technology/css/common.css}">
+
+    <link rel="stylesheet"
+          th:href="@{/technology/css/operation.css}">
+</head>
+
+<body>
+
+<div class="app-shell">
+
+    <aside th:replace="~{technology/fragments/layout
+            :: sidebar('workplace')}">
+    </aside>
+
+    <main class="main">
+
+        <header th:replace="~{technology/fragments/layout
+                :: topbar}">
+        </header>
+
+        <div class="page-content operation-page">
+
+            <div class="page-head">
+
+                <div class="page-title">
+                    <h1>Изменение рабочего места</h1>
+
+                    <p th:if="${selectedWorkPlace == null}">
+                        Выберите рабочее место для изменения
+                    </p>
+
+                    <p th:if="${selectedWorkPlace != null}">
+                        Измените необходимые параметры
+                    </p>
+                </div>
+
+                <a class="btn secondary"
+                   th:href="@{/technology/workplace}">
+                    Вернуться к рабочим местам
+                </a>
+
+            </div>
+
+            <div class="alert danger"
+                 th:if="${errorMessage}"
+                 th:text="${errorMessage}">
+            </div>
+
+            <section class="card"
+                     th:if="${selectedWorkPlace == null}">
+
+                <div class="card-head">
+                    <div>
+                        <h2>Выбор рабочего места</h2>
+
+                        <small>
+                            Нажмите на рабочее место,
+                            которое требуется изменить
+                        </small>
+                    </div>
+                </div>
+
+                <div class="card-body">
+
+                    <div class="operation-selection-list">
+
+                        <a class="operation-selection-item"
+                           th:each="place : ${workPlaces}"
+                           th:href="@{
+                              /technology/workplace/update(
+                              id=${place.id})}">
+
+                            <strong th:text="${place.code}">
+                                РМ 00.01
+                            </strong>
+
+                            <span th:text="${place.name}">
+                                Наименование
+                            </span>
+
+                        </a>
+
+                        <div class="empty-table"
+                             th:if="${#lists.isEmpty(workPlaces)}">
+                            Рабочие места пока не добавлены
+                        </div>
+
+                    </div>
+                </div>
+            </section>
+
+            <section class="card operation-editor-card"
+                     th:if="${selectedWorkPlace != null}">
+
+                <div class="card-head operation-editor-head">
+                    <div>
+                        <h2>Параметры рабочего места</h2>
+
+                        <small>
+                            Поля со знаком
+                            <span class="required">*</span>
+                            обязательны для заполнения
+                        </small>
+                    </div>
+                </div>
+
+                <div class="card-body operation-editor-body"
+                     th:insert="~{
+                        technology/workplace/fragments/workplace-form
+                        :: form(
+                            @{
+                              /technology/workplace/{id}/update(
+                              id=${selectedWorkPlace.id}
+                            )},
+                            'Сохранить изменения'
+                        )
+                     }">
+                </div>
+
+            </section>
+
+        </div>
+    </main>
+</div>
+
+<th:block th:replace="~{technology/fragments/layout
+        :: commonScripts}">
+</th:block>
+<script th:src="@{/technology/js/operation.js}"></script>
+</body>
+</html>

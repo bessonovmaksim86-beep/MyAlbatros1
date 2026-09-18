@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="ru"
+      xmlns:th="http://www.thymeleaf.org">
+
+<body>
+
+<!-- =========================================================
+     БОКОВОЕ МЕНЮ ДИСПЕТЧЕРСКОГО ОТДЕЛА
+     ========================================================= -->
+<aside th:fragment="sidebar(activePage)"
+       id="dispatcherSidebar"
+       class="sidebar dispatcher-sidebar"
+       aria-label="Навигация диспетчерского отдела">
+
+    <div class="dispatcher-sidebar__inner">
+
+        <a class="department-brand"
+           th:href="@{/dispatcher/general}"
+           title="Перейти на главную страницу отдела">
+
+            <span class="department-brand__logo">
+                <img th:src="@{/images/albatros-logo.jpg}"
+                     src="/images/albatros-logo.jpg"
+                     alt="Предприятие Альбатрос">
+            </span>
+
+            <span class="department-brand__system">
+                Производственная система
+            </span>
+
+            <strong class="department-brand__department">
+                Диспетчерский отдел
+            </strong>
+        </a>
+
+        <div class="dispatcher-sidebar__divider"></div>
+
+        <nav class="dispatcher-navigation">
+
+            <a class="dispatcher-navigation__item"
+               th:classappend="${activePage == 'general'} ? ' is-active' : ''"
+               th:href="@{/dispatcher/general}"
+               title="Обзор отдела">
+
+                <span class="dispatcher-navigation__icon">
+                    <svg viewBox="0 0 24 24" aria-hidden="true">
+                        <path d="M3 13h8V3H3v10Zm0 8h8v-6H3v6Zm10 0h8V11h-8v10Zm0-18v6h8V3h-8Z"/>
+                    </svg>
+                </span>
+
+                <span class="dispatcher-navigation__text">
+                    Обзор отдела
+                </span>
+            </a>
+
+            <a class="dispatcher-navigation__item"
+               th:classappend="${activePage == 'customerOrder'} ? ' is-active' : ''"
+               th:href="@{/dispatcher/customer-order}"
+               title="Заказы покупателя">
+
+                <span class="dispatcher-navigation__icon">
+                    <svg viewBox="0 0 24 24" aria-hidden="true">
+                        <path d="M7 4h11a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2Zm0 2v9h11V6H7Zm2 11h7v2H9v-2Zm-4 3h15a1 1 0 0 1 0 2H5a1 1 0 0 1 0-2Zm3-9 2 2 4-4 1.4 1.4L10 13.8 7.6 11.4 8 10Z"/>
+                    </svg>
+                </span>
+
+                <span class="dispatcher-navigation__text">
+                    Заказы покупателя
+                </span>
+
+                <span class="dispatcher-navigation__counter"
+                      th:if="${customerOrderCount != null and customerOrderCount > 0}"
+                      th:text="${customerOrderCount}">
+                    4
+                </span>
+            </a>
+
+            <a class="dispatcher-navigation__item"
+               th:classappend="${activePage == 'customer'} ? ' is-active' : ''"
+               th:href="@{/dispatcher/customer}"
+               title="Заказчики">
+
+                <span class="dispatcher-navigation__icon">
+                    <svg viewBox="0 0 24 24" aria-hidden="true">
+                        <path d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8Zm0 2c-3.31 0-8 1.66-8 5v3h16v-3c0-3.34-4.69-5-8-5Zm-6 6v-1c0-1.96 3.03-3.5 6-3.5s6 1.54 6 3.5v1H6Z"/>
+                    </svg>
+                </span>
+
+                <span class="dispatcher-navigation__text">
+                    Заказчик
+                </span>
+
+                <span class="dispatcher-navigation__counter"
+                      th:if="${customerCount != null and customerCount > 0}"
+                      th:text="${customerCount}">
+                    3
+                </span>
+            </a>
+
+            <a class="dispatcher-navigation__item"
+               th:classappend="${activePage == 'priority'} ? ' is-active' : ''"
+               th:href="@{/dispatcher/priority}"
+               title="Приоритеты">
+
+                <span class="dispatcher-navigation__icon">
+                    <svg viewBox="0 0 24 24" aria-hidden="true">
+                        <path d="M4 3h2v18H4V3Zm4 2h12l-2.4 4.5L20 14H8V5Zm0 11h9v2H8v-2Zm0 4h6v2H8v-2Z"/>
+                    </svg>
+                </span>
+
+                <span class="dispatcher-navigation__text">
+                    Приоритеты
+                </span>
+
+                <span class="dispatcher-navigation__counter"
+                      th:if="${priorityCount != null and priorityCount > 0}"
+                      th:text="${priorityCount}">
+                    5
+                </span>
+            </a>
+
+            <a class="dispatcher-navigation__item"
+               th:classappend="${activePage == 'productionOrder'} ? ' is-active' : ''"
+               th:href="@{/dispatcher/production-order}"
+               title="Заказы на производство">
+
+                <span class="dispatcher-navigation__icon">
+                    <svg viewBox="0 0 24 24" aria-hidden="true">
+                        <path d="M12 2 4 6v12l8 4 8-4V6l-8-4Zm0 2.3 5.7 2.85L12 10 6.3 7.15 12 4.3ZM6 9.06l5 2.5v6.9l-5-2.5v-6.9Zm7 9.4v-6.9l5-2.5v6.9l-5 2.5Z"/>
+                    </svg>
+                </span>
+
+                <span class="dispatcher-navigation__text">
+                    Заказы на производство
+                </span>
+
+                <span class="dispatcher-navigation__counter"
+                      th:if="${productionOrderCount != null and productionOrderCount > 0}"
+                      th:text="${productionOrderCount}">
+                    6
+                </span>
+            </a>
+
+        </nav>
+
+        <div class="dispatcher-sidebar__footer">
+            <span class="dispatcher-sidebar__status-dot"></span>
+        </div>
+    </div>
+</aside>
+
+<!-- =========================================================
+     ВЕРХНЯЯ ПАНЕЛЬ
+     ========================================================= -->
+<th:block th:fragment="topbar">
+
+    <header class="topbar dispatcher-topbar">
+
+        <div class="dispatcher-topbar__left">
+
+            <label class="dispatcher-search"
+                   for="dispatcherGlobalSearch">
+
+                <span class="visually-hidden">
+                    Поиск по производственной системе
+                </span>
+
+                <input id="dispatcherGlobalSearch"
+                       name="query"
+                       type="search"
+                       autocomplete="off"
+                       placeholder="Поиск по заказам покупателя и заказам на производство">
+            </label>
+        </div>
+
+        <div class="dispatcher-topbar__right">
+
+            <time id="dispatcherDateTime"
+                  class="dispatcher-clock"
+                  datetime="">
+                01.01.2026, 00:00:00
+            </time>
+
+            <div th:with="
+                    fullName=${
+                        currentUser != null
+                        and !#strings.isEmpty(currentUser.fullName)
+                            ? #strings.trim(currentUser.fullName)
+                            : (
+                                #authentication != null
+                                and !#strings.isEmpty(#authentication.name)
+                                    ? #authentication.name
+                                    : 'Пользователь'
+                            )
+                    }
+                 ">
+
+                <div class="dispatcher-topbar__user"
+                     th:with="
+                        nameParts=${#strings.arraySplit(fullName, ' ')}
+                     ">
+
+                    <span class="dispatcher-topbar__avatar"
+                          th:text="${
+                              #arrays.length(nameParts) > 1
+                                  ? #strings.toUpperCase(
+                                      #strings.substring(
+                                          nameParts[0],
+                                          0,
+                                          1
+                                      )
+                                      +
+                                      #strings.substring(
+                                          nameParts[1],
+                                          0,
+                                          1
+                                      )
+                                  )
+                                  : #strings.toUpperCase(
+                                      #strings.substring(
+                                          nameParts[0],
+                                          0,
+                                          1
+                                      )
+                                  )
+                          }">
+                        ИИ
+                    </span>
+
+                    <span class="dispatcher-topbar__user-data">
+
+                        <strong class="dispatcher-topbar__username"
+                                th:text="${
+                                    #arrays.length(nameParts) > 1
+                                        ? nameParts[0]
+                                          + ' '
+                                          + #strings.substring(
+                                              nameParts[1],
+                                              0,
+                                              1
+                                          )
+                                          + '.'
+                                        : fullName
+                                }">
+                            Иванов И.
+                        </strong>
+
+                        <small class="dispatcher-topbar__specialty"
+                               th:text="${
+                                   currentUser != null
+                                   and !#strings.isEmpty(
+                                       currentUser.specialty
+                                   )
+                                       ? currentUser.specialty
+                                       : 'Должность не указана'
+                               }">
+                            Диспетчер
+                        </small>
+                    </span>
+                </div>
+            </div>
+        </div>
+    </header>
+</th:block>
+
+
+<!-- =========================================================
+     ОБЩИЕ СКРИПТЫ
+     ========================================================= -->
+<th:block th:fragment="commonScripts">
+    <script th:src="@{/dispatcher/js/common.js}"></script>
+</th:block>
+
+</body>
+</html>

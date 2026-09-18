@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="ru"
+      xmlns:th="http://www.thymeleaf.org">
+
+<head>
+    <meta charset="UTF-8">
+
+    <meta name="viewport"
+          content="width=device-width, initial-scale=1">
+
+    <title>Подтверждение удаления техпроцесса</title>
+
+    <link rel="stylesheet"
+          th:href="@{/technology/css/technology.css}">
+
+    <link rel="stylesheet"
+          th:href="@{/technology/css/common.css}">
+
+    <link rel="stylesheet"
+          th:href="@{/technology/css/techprocess.css}">
+</head>
+
+<body>
+
+<div class="app-shell">
+
+    <aside th:replace="~{technology/fragments/layout
+            :: sidebar('techprocess')}">
+    </aside>
+
+    <main class="main">
+
+        <header th:replace="~{technology/fragments/layout
+                :: topbar}">
+        </header>
+
+        <div class="page-content techprocess-page">
+
+            <div class="tp-head">
+
+                <div>
+                    <h1>Удаление техпроцесса</h1>
+
+                    <p>
+                        Проверьте состав перед удалением
+                    </p>
+                </div>
+
+                <a class="btn secondary"
+                   th:href="@{/technology/techprocess/delete}">
+                    Выбрать другой
+                </a>
+
+            </div>
+
+            <section class="card">
+
+                <div class="card-head">
+                    <div>
+                        <h2 th:text="${techProcess.code}">ТП-0001</h2>
+
+                        <small th:text="${
+                            techProcess.productClassifier.code
+                            + ' — '
+                            + techProcess.productClassifier.productType.displayName
+                            + (techProcess.productClassifier.displayName != null
+                                ? ' — ' + techProcess.productClassifier.displayName
+                                : '')
+                        }">
+                            Изделие
+                        </small>
+                    </div>
+                </div>
+
+                <div class="card-body">
+
+                    <div class="tp-select-list">
+
+                        <div class="tp-select-item"
+                             th:each="item : ${techProcess.operations}">
+
+                            <div>
+
+                                <strong th:text="${
+                                    item.position + 1
+                                    + '. '
+                                    + item.operation.operationName.name
+                                }">
+                                    Операция
+                                </strong>
+
+                                <span th:text="${
+                                    'Тип: '
+                                    + item.operation.operationType.name
+                                    + ' · Служба: '
+                                    + item.operation.service.name
+                                }">
+                                    Параметры
+                                </span>
+
+                            </div>
+
+                            <span th:text="${
+                                item.laborHours + ' ч / '
+                                + item.machineHours + ' маш.-ч'
+                            }">
+                                Нормы
+                            </span>
+
+                        </div>
+
+                        <div class="tp-empty"
+                             th:if="${#lists.isEmpty(techProcess.operations)}">
+
+                            В техпроцессе нет операций
+
+                        </div>
+
+                    </div>
+
+                    <div class="alert danger">
+                        Удаление техпроцесса необратимо.
+                        Операции справочника и изделия классификатора
+                        останутся без изменений.
+                    </div>
+
+                    <form method="post"
+                          th:action="@{
+                              /technology/techprocess/delete/{id}(
+                                  id=${techProcess.id}
+                              )}"
+                          data-tp-delete-form>
+
+                        <input th:if="${_csrf != null}"
+                               type="hidden"
+                               th:name="${_csrf.parameterName}"
+                               th:value="${_csrf.token}">
+
+                        <div class="tp-form-actions">
+
+                            <a class="btn secondary"
+                               th:href="@{/technology/techprocess}">
+                                Отмена
+                            </a>
+
+                            <button type="submit"
+                                    class="btn danger">
+                                Удалить техпроцесс
+                            </button>
+
+                        </div>
+
+                    </form>
+
+                </div>
+
+            </section>
+
+        </div>
+
+    </main>
+
+</div>
+
+<th:block th:replace="~{technology/fragments/layout
+        :: commonScripts}">
+</th:block>
+
+<script th:src="@{/technology/js/techprocess.js}"></script>
+
+</body>
+</html>

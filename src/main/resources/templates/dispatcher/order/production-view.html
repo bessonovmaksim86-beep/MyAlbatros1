@@ -1,0 +1,708 @@
+<!DOCTYPE html>
+<html lang="ru"
+      xmlns:th="http://www.thymeleaf.org">
+
+<head>
+    <meta charset="UTF-8">
+
+    <meta name="viewport"
+          content="width=device-width, initial-scale=1">
+
+    <title>Заказ на производство</title>
+
+    <link rel="stylesheet"
+          th:href="@{/technology/css/technology.css}">
+
+    <link rel="stylesheet"
+          th:href="@{/dispatcher/css/dispatcher.css}">
+</head>
+
+<body>
+
+<div class="app-shell">
+
+    <aside th:replace="~{dispatcher/fragments/layout
+            :: sidebar('productionOrder')}">
+    </aside>
+
+    <main class="main">
+
+        <header th:replace="~{dispatcher/fragments/layout
+                :: topbar}">
+        </header>
+
+        <div class="page-content dispatcher-page">
+
+            <div class="page-head">
+
+                <div class="page-title">
+
+                    <h1 th:text="${
+                            order != null
+                                ? 'Заказ на производство ' + order.number
+                                : 'Заказ на производство'
+                    }">
+                        Заказ на производстве ПЗ-2026-001
+                    </h1>
+
+                    <p>
+                        Состав выпуска и серийные номера изделий
+                    </p>
+
+                </div>
+
+                <div class="page-head-actions">
+
+                    <a class="btn secondary"
+                       th:href="@{/dispatcher/production-order}">
+                        К списку заказов
+                    </a>
+
+                    <a class="btn primary"
+                       th:if="${order != null}"
+                       th:href="@{/dispatcher/production-order/{id}/edit(id=${order.id})}">
+                        Изменить заказ
+                    </a>
+
+                    <!--
+                        Новый выпуск запускается в работу отдельной кнопкой:
+                        со статусом «Новый» позиции ещё не видны операторам.
+                    -->
+                    <form method="post"
+                          th:if="${
+                              order != null
+                              and order.status != null
+                              and order.status.name() == 'NEW'
+                          }"
+                          th:action="@{/dispatcher/production-order/{id}/plan(id=${order.id})}"
+                          class="inline-action">
+
+                        <input th:if="${_csrf != null}"
+                               type="hidden"
+                               th:name="${_csrf.parameterName}"
+                               th:value="${_csrf.token}">
+
+                        <button class="btn secondary"
+                                type="submit">
+                            Взять в работу
+                        </button>
+
+                    </form>
+
+                    <!--
+                        Выполнение закрывает все позиции и серийники,
+                        поэтому доступно только незакрытому выпуску.
+                    -->
+                    <form method="post"
+                          th:if="${
+                              order != null
+                              and order.status != null
+                              and (
+                                  order.status.name() == 'IN_WORK'
+                                  or order.status.name() == 'PARTIALLY_DONE'
+                              )
+                          }"
+                          th:action="@{/dispatcher/production-order/{id}/complete(id=${order.id})}"
+                          class="inline-action">
+
+                        <input th:if="${_csrf != null}"
+                               type="hidden"
+                               th:name="${_csrf.parameterName}"
+                               th:value="${_csrf.token}">
+
+                        <button class="btn secondary"
+                                type="submit">
+                            Выполнить заказ
+                        </button>
+
+                    </form>
+
+                    <form method="post"
+                          th:if="${
+                              order != null
+                              and order.status != null
+                              and order.status.name() != 'DONE'
+                              and order.status.name() != 'CANCELLED'
+                          }"
+                          th:action="@{/dispatcher/production-order/{id}/cancel(id=${order.id})}"
+                          class="inline-action">
+
+                        <input th:if="${_csrf != null}"
+                               type="hidden"
+                               th:name="${_csrf.parameterName}"
+                               th:value="${_csrf.token}">
+
+                        <button class="btn danger"
+                                type="submit">
+                            Отменить заказ
+                        </button>
+
+                    </form>
+
+                    <!--
+                        Удаляется только новый выпуск: выданные серийные
+                        номера остаются в реестре, поэтому у взятого
+                        в работу заказа удаления нет.
+                    -->
+                    <form method="post"
+                          th:if="${
+                              order != null
+                              and order.status != null
+                              and order.status.name() == 'NEW'
+                          }"
+                          th:action="@{/dispatcher/production-order/{id}/delete(id=${order.id})}"
+                          class="inline-action"
+                          onsubmit="return confirm(
+                              'Удалить заказ на производство? '
+                              + 'Выпущенные серийные номера останутся в реестре.'
+                          );">
+
+                        <input th:if="${_csrf != null}"
+                               type="hidden"
+                               th:name="${_csrf.parameterName}"
+                               th:value="${_csrf.token}">
+
+                        <button class="btn danger"
+                                type="submit">
+                            Удалить заказ
+                        </button>
+
+                    </form>
+
+                </div>
+            </div>
+
+            <div class="alert success"
+                 th:if="${successMessage}"
+                 th:text="${successMessage}">
+            </div>
+
+            <div class="alert danger"
+                 th:if="${errorMessage}"
+                 th:text="${errorMessage}">
+            </div>
+
+            <th:block th:if="${order != null}">
+
+                <div class="stats">
+
+                    <div class="stat">
+                        <small>Изделий выпущено</small>
+
+                        <strong th:text="${itemCount ?: 0}">
+                            0
+                        </strong>
+
+                        <span class="trend">
+                            Экземпляров с серийным номером
+                        </span>
+                    </div>
+
+                    <div class="stat">
+                        <small>Собрано</small>
+
+                        <strong th:text="${doneItemCount ?: 0}">
+                            0
+                        </strong>
+
+                        <span class="trend">
+                            Позиций в статусе «Выполнена»
+                        </span>
+                    </div>
+
+                    <div class="stat">
+                        <small>Готовность</small>
+
+                        <strong th:text="${
+                            (itemCount != null and itemCount > 0)
+                                ? (doneItemCount ?: 0) + ' из ' + itemCount
+                                : '—'
+                        }">
+                            0 из 0
+                        </strong>
+
+                        <span class="trend attention">
+                            По позициям состава
+                        </span>
+                    </div>
+
+                    <div class="stat">
+                        <small>Срок исполнения</small>
+
+                        <strong th:text="${
+                            order.dueDate != null
+                                ? order.formattedDueDate
+                                : '—'
+                        }">
+                            01.01.2026
+                        </strong>
+
+                        <span class="trend">
+                            Дата открытия:
+
+                            <span th:text="${order.formattedOrderDate}">
+                                01.01.2026
+                            </span>
+                        </span>
+                    </div>
+                </div>
+
+                <section class="card gap">
+
+                    <div class="card-head">
+                        <h2>Данные заказа</h2>
+                    </div>
+
+                    <div class="card-body">
+
+                        <div class="form-grid">
+
+                            <div class="field">
+                                <label>Номер заказа</label>
+
+                                <input type="text"
+                                       th:value="${order.number}"
+                                       readonly>
+                            </div>
+
+                            <!--
+                                Уровень дерева: выпуск верхнего уровня (ЗП)
+                                или заказ-комплектующий (ЗНП). Ссылка на
+                                родителя сделана отдельной веткой, потому
+                                что @{...} внутрь ${...} не вкладывается.
+                            -->
+                            <div class="field">
+                                <label>Уровень заказа</label>
+
+                                <div>
+                                    <span th:if="${order.root}"
+                                          class="status draft"
+                                          th:text="${order.levelDisplayName}">
+                                        Заказ на производство
+                                    </span>
+
+                                    <a th:unless="${order.root}"
+                                       class="status work"
+                                       th:href="@{/dispatcher/production-order/{id}(id=${order.parentId})}"
+                                       th:text="${
+                                           'Комплектующий · '
+                                           + order.parentOrderNumber
+                                       }">
+                                        Заказ-комплектующий
+                                    </a>
+                                </div>
+                            </div>
+
+                            <div class="field">
+                                <label>Заказ покупателя</label>
+
+                                <input type="text"
+                                       th:value="${order.customerOrderNumber}"
+                                       readonly>
+                            </div>
+
+                            <div class="field">
+                                <label>Операция выпуска</label>
+
+                                <input type="text"
+                                       th:value="${order.operationName}"
+                                       readonly>
+                            </div>
+
+                            <div class="field">
+                                <label>Дата открытия</label>
+
+                                <input type="text"
+                                       th:value="${order.formattedOrderDate}"
+                                       readonly>
+                            </div>
+
+                            <div class="field">
+                                <label>Срок исполнения</label>
+
+                                <input type="text"
+                                       th:value="${
+                                           order.dueDate != null
+                                               ? order.formattedDueDate
+                                               : 'Не указан'
+                                       }"
+                                       readonly>
+                            </div>
+
+                            <div class="field">
+                                <label>Статус</label>
+
+                                <!--
+                                    Статус показывается бейджем, а не полем:
+                                    цвет здесь — часть смысла (новый, в работе,
+                                    выполнен, отменён).
+                                -->
+                                <div>
+                                    <span class="status"
+                                          th:classappend="${order.statusBadgeClass}"
+                                          th:text="${order.statusDisplayName}">
+                                        Статус
+                                    </span>
+                                </div>
+                            </div>
+
+                            <div class="field">
+                                <label>Автор заказа</label>
+
+                                <input type="text"
+                                       th:value="${order.createdByName}"
+                                       readonly>
+                            </div>
+
+                            <div class="field">
+                                <label>Позиций в составе</label>
+
+                                <input type="text"
+                                       th:value="${itemCount ?: 0}"
+                                       readonly>
+                            </div>
+
+                            <div class="field span-2">
+                                <label>Примечание</label>
+
+                                <textarea readonly
+                                          th:text="${
+                                              order.note != null
+                                              ? order.note
+                                              : 'Примечание отсутствует'
+                                          }">
+                                </textarea>
+                            </div>
+
+                        </div>
+                    </div>
+                </section>
+
+                <!--
+                    Входящие заказы-комплектующие (ЗНП). Блок выводится
+                    только у выпуска верхнего уровня: у комплектующего
+                    детей не бывает по построению (вложенность глубже
+                    одного уровня запрещена сервисом).
+
+                    Закрытие выпуска закрывает и эти заказы, поэтому
+                    они показаны рядом с составом выпуска.
+                -->
+                <section class="card"
+                         th:if="${order.root}">
+
+                    <div class="card-head">
+
+                        <div>
+
+                            <h2>Заказы-комплектующие</h2>
+
+                            <small>
+                                Входят внутрь выпускаемых изделий;
+                                при закрытии этого заказа закрываются
+                                вместе с ним
+                            </small>
+
+                        </div>
+
+                        <a class="btn secondary"
+                           th:href="@{/dispatcher/production-order/create}">
+                            Добавить комплектующий
+                        </a>
+
+                    </div>
+
+                    <div class="card-body">
+
+                        <div class="table-wrap">
+
+                            <table class="data-table">
+
+                                <thead>
+                                <tr>
+                                    <th style="width: 160px;">Номер</th>
+                                    <th>Операция</th>
+                                    <th style="width: 130px;">Статус</th>
+                                    <th style="width: 110px;"></th>
+                                </tr>
+                                </thead>
+
+                                <tbody>
+
+                                <tr th:if="${
+                                        children == null
+                                        or #lists.isEmpty(children)
+                                     }">
+
+                                    <td colspan="4"
+                                        class="empty-table">
+                                        В заказ не входит ни одного
+                                        заказ-комплектующего
+                                    </td>
+
+                                </tr>
+
+                                <tr th:each="child : ${children}">
+
+                                    <td th:text="${child.number}">
+                                        333-01
+                                    </td>
+
+                                    <td th:text="${child.operationName}">
+                                        Комплектовочная
+                                    </td>
+
+                                    <td>
+                                        <span class="status"
+                                              th:classappend="${child.statusBadgeClass}"
+                                              th:text="${child.statusDisplayName}">
+                                            Статус
+                                        </span>
+                                    </td>
+
+                                    <td>
+                                        <div class="table-actions">
+
+                                            <a class="btn small"
+                                               th:href="@{/dispatcher/production-order/{id}(id=${child.id})}">
+                                                Открыть
+                                            </a>
+
+                                        </div>
+                                    </td>
+
+                                </tr>
+
+                                </tbody>
+
+                            </table>
+
+                        </div>
+
+                    </div>
+
+                </section>
+
+                <!--
+                    Обратная связь для заказ-комплектующего: какие
+                    датчики он комплектует. Без неё ЗНП был бы виден
+                    только как строка в списке — непонятно, в какие
+                    именно изделия он вошёл.
+                -->
+                <section class="card"
+                         th:unless="${order.root}">
+
+                    <div class="card-head">
+
+                        <div>
+
+                            <h2>Датчики этого заказа</h2>
+
+                            <small>
+                                Изделия выбранного выпуска, в которые
+                                вошёл заказ; номера выпускает заказ
+                                верхнего уровня
+
+                                Входит в:
+
+                                <strong th:text="${
+                                    kitting != null
+                                        ? #lists.size(kitting)
+                                        : 0
+                                }">
+                                    0
+                                </strong>
+                            </small>
+
+                        </div>
+
+                        <a class="btn secondary"
+                           th:href="@{/dispatcher/production-order/{id}/edit(id=${order.id})}">
+                            Изменить состав
+                        </a>
+
+                    </div>
+
+                    <div class="card-body">
+
+                        <div class="table-wrap">
+
+                            <table class="data-table">
+
+                                <thead>
+                                <tr>
+                                    <th style="width: 160px;">Номер</th>
+                                    <th style="width: 110px;">Тип</th>
+                                    <th>Изделие</th>
+                                    <th style="width: 200px;">Операция</th>
+                                </tr>
+                                </thead>
+
+                                <tbody>
+
+                                <tr th:if="${
+                                        kitting == null
+                                        or #lists.isEmpty(kitting)
+                                     }">
+
+                                    <td colspan="4"
+                                        class="empty-table">
+                                        Заказ ещё не внесён ни в один
+                                        датчик
+                                    </td>
+
+                                </tr>
+
+                                <tr th:each="link : ${kitting}">
+
+                                    <td th:text="${link.serialNumber}">
+                                        121205333
+                                    </td>
+
+                                    <td th:text="${link.serialTypeName}">
+                                        Датчик
+                                    </td>
+
+                                    <td th:text="${link.serialName}">
+                                        Датчик давления
+                                    </td>
+
+                                    <td th:text="${link.operationName}">
+                                        Комплектование
+                                    </td>
+
+                                </tr>
+
+                                </tbody>
+
+                            </table>
+
+                        </div>
+
+                    </div>
+
+                </section>
+
+                <!--
+                    Состав выпуска есть только у заказа верхнего уровня:
+                    серийники выдаёт он. У заказ-комплектующего позиций
+                    нет по определению (он сам входит внутрь изделия),
+                    поэтому блок скрывается — пустая таблица иначе
+                    выглядела бы как ошибка данных.
+                -->
+                <section class="card"
+                         th:if="${order.root}">
+
+                    <div class="card-head">
+
+                        <div>
+
+                            <h2>Состав выпуска</h2>
+
+                            <small>
+                                Номер изделия: 4 цифры кода классификатора
+                                и 5 цифр серии в пределах типа изделия.
+
+                                Позиций:
+
+                                <strong th:text="${
+                                    items != null
+                                        ? #lists.size(items)
+                                        : 0
+                                }">
+                                    0
+                                </strong>
+                            </small>
+
+                        </div>
+
+                    </div>
+
+                    <div class="card-body">
+
+                        <div class="table-wrap">
+
+                            <table class="data-table">
+
+                                <thead>
+                                <tr>
+                                    <th style="width: 56px;">№</th>
+                                    <th style="width: 150px;">Номер изделия</th>
+                                    <th>Изделие</th>
+                                    <th style="width: 140px;">Тип изделия</th>
+                                    <th style="width: 150px;">Позиция заказа</th>
+                                    <th style="width: 150px;">Статус</th>
+                                </tr>
+                                </thead>
+
+                                <tbody>
+
+                                <tr th:if="${
+                                        items == null
+                                        or #lists.isEmpty(items)
+                                     }">
+
+                                    <td colspan="6"
+                                        class="empty-table">
+                                        В заказе нет выпущенных изделий
+                                    </td>
+
+                                </tr>
+
+                                <tr th:each="item : ${items}">
+
+                                    <td th:text="${item.position}">
+                                        1
+                                    </td>
+
+                                    <td>
+                                        <strong th:text="${item.fullNumber}">
+                                            121200022
+                                        </strong>
+                                    </td>
+
+                                    <td th:text="${item.productLabel}">
+                                        121200022 — Изделие
+                                    </td>
+
+                                    <td th:text="${item.productTypeDisplayName}">
+                                        Прибор
+                                    </td>
+
+                                    <td th:text="${
+                                        item.customerOrderItemPosition != null
+                                            ? 'Позиция '
+                                              + item.customerOrderItemPosition
+                                            : '—'
+                                    }">
+                                        Позиция 1
+                                    </td>
+
+                                    <td>
+                                        <span class="status"
+                                              th:classappend="${item.statusBadgeClass}"
+                                              th:text="${item.statusDisplayName}">
+                                            Статус
+                                        </span>
+                                    </td>
+
+                                </tr>
+
+                                </tbody>
+                            </table>
+
+                        </div>
+                    </div>
+                </section>
+
+            </th:block>
+
+        </div>
+    </main>
+</div>
+
+<th:block th:replace="~{dispatcher/fragments/layout
+        :: commonScripts}">
+</th:block>
+
+</body>
+</html>

@@ -1,0 +1,797 @@
+<!DOCTYPE html>
+<html lang="ru"
+      xmlns:th="http://www.thymeleaf.org">
+
+<head>
+    <meta charset="UTF-8">
+
+    <meta name="viewport"
+          content="width=device-width, initial-scale=1">
+
+    <title>Создание заказа покупателя</title>
+
+    <link rel="stylesheet"
+          th:href="@{/technology/css/technology.css}">
+
+    <link rel="stylesheet"
+          th:href="@{/technology/css/common.css}">
+
+    <link rel="stylesheet"
+          th:href="@{/dispatcher/css/dispatcher.css}">
+</head>
+
+<body>
+
+<div class="app-shell">
+
+    <aside th:replace="~{dispatcher/fragments/layout
+            :: sidebar('customerOrder')}">
+    </aside>
+
+    <main class="main">
+
+        <header th:replace="~{dispatcher/fragments/layout
+                :: topbar}">
+        </header>
+
+        <div class="page-content dispatcher-page">
+
+            <div class="page-head">
+
+                <div class="page-title">
+
+                    <h1 th:text="${
+                        editing ? 'Изменение заказа покупателя'
+                               : 'Создание заказа покупателя'
+                    }">
+                        Создание заказа покупателя
+                    </h1>
+
+                    <p th:text="${
+                        'Заказ оформляется на ' + currentYear
+                        + ' год: срок исполнения указывается в пределах года'
+                    }">
+                        Заказ оформляется на текущий год
+                    </p>
+
+                </div>
+
+                <div class="page-head-actions">
+
+                    <a class="btn secondary"
+                       th:href="@{/dispatcher/customer-order}">
+                        К списку заказов
+                    </a>
+
+                </div>
+            </div>
+
+            <form method="post"
+                  th:action="${editing}
+                      ? @{/dispatcher/customer-order/{id}/edit(id=${customerOrderForm.id})}
+                      : @{/dispatcher/customer-order/create}"
+                  th:object="${customerOrderForm}"
+                  class="co-form">
+
+                <input th:if="${_csrf != null}"
+                       type="hidden"
+                       th:name="${_csrf.parameterName}"
+                       th:value="${_csrf.token}">
+
+                <input type="hidden" th:field="*{id}">
+                <input type="hidden" th:field="*{version}">
+
+                <div class="alert danger"
+                     th:if="${#fields.hasGlobalErrors()}">
+
+                    <p th:each="error : ${#fields.globalErrors()}"
+                       th:text="${error}">
+                        Ошибка сохранения заказа
+                    </p>
+
+                </div>
+
+                <section class="card">
+
+                    <div class="card-head">
+
+                        <div>
+
+                            <h2>Параметры заказа</h2>
+
+                            <small>
+                                Номер формируется автоматически и уникален
+                            </small>
+
+                        </div>
+
+                    </div>
+
+                    <div class="card-body">
+
+                        <div class="form-grid">
+
+                            <div class="field">
+
+                                <label for="number">Номер заказа</label>
+
+                                <input id="number"
+                                       type="text"
+                                       maxlength="50"
+                                       th:field="*{number}">
+
+                                <span class="field-error"
+                                      th:if="${#fields.hasErrors('number')}"
+                                      th:errors="*{number}">
+                                </span>
+
+                            </div>
+
+                            <div class="field">
+
+                                <label for="customerId">Покупатель</label>
+
+                                <select id="customerId"
+                                        th:field="*{customerId}">
+
+                                    <option value="">
+                                        — выберите покупателя —
+                                    </option>
+
+                                    <option th:each="customer : ${customers}"
+                                            th:value="${customer.id}"
+                                            th:text="${
+                                                customer.code
+                                                + ' — '
+                                                + customer.name
+                                            }">
+                                        Покупатель
+                                    </option>
+
+                                </select>
+
+                                <span class="field-error"
+                                      th:if="${#fields.hasErrors('customerId')}"
+                                      th:errors="*{customerId}">
+                                </span>
+
+                            </div>
+
+                            <div class="field">
+
+                                <label for="orderDate">Дата заказа</label>
+
+                                <input id="orderDate"
+                                       type="text"
+                                       placeholder="дд.мм.гггг"
+                                       maxlength="10"
+                                       th:name="orderDate"
+                                       th:value="${customerOrderForm.formattedOrderDate}">
+
+                                <span class="field-error"
+                                      th:if="${#fields.hasErrors('orderDate')}"
+                                      th:each="error : ${
+                                          #fields.errors('orderDate')
+                                      }"
+                                      th:text="${error}">
+                                </span>
+
+                            </div>
+
+                            <div class="field">
+
+                                <label for="dueDate">Срок исполнения</label>
+
+                                <input id="dueDate"
+                                       type="text"
+                                       placeholder="дд.мм.гггг"
+                                       maxlength="10"
+                                       th:name="dueDate"
+                                       th:value="${customerOrderForm.formattedDueDate}">
+
+                                <span class="field-error"
+                                      th:if="${#fields.hasErrors('dueDate')}"
+                                      th:each="error : ${
+                                          #fields.errors('dueDate')
+                                      }"
+                                      th:text="${error}">
+                                </span>
+
+                            </div>
+
+                            <div class="field">
+
+                                <label for="contractNumber">
+                                    Номер договора
+                                </label>
+
+                                <input id="contractNumber"
+                                       type="text"
+                                       maxlength="100"
+                                       placeholder="Например: 12 от 10.02.2026"
+                                       th:field="*{contractNumber}">
+
+                                <span class="field-error"
+                                      th:if="${#fields.hasErrors('contractNumber')}"
+                                      th:errors="*{contractNumber}">
+                                </span>
+
+                            </div>
+
+                            <div class="field">
+
+                                <label for="orderType">Вид заказа</label>
+
+                                <select id="orderType"
+                                        th:field="*{orderType}">
+
+                                    <option th:each="typeOption : ${orderTypes}"
+                                            th:value="${typeOption.name()}"
+                                            th:text="${typeOption.displayName}">
+                                        Вид заказа
+                                    </option>
+
+                                </select>
+
+                                <span class="field-error"
+                                      th:if="${#fields.hasErrors('orderType')}"
+                                      th:errors="*{orderType}">
+                                </span>
+
+                            </div>
+
+                            <div class="field">
+
+                                <label for="statusDisplay">Статус заказа</label>
+
+                                <!--
+                                    Новый заказ всегда поступает со статусом
+                                    «Новый» — это точка входа цикла, поэтому
+                                    поле недоступно для правки. Значение
+                                    уходит в форму скрытым полем (readonly
+                                    select не сабмитится).
+                                -->
+                                <input id="statusDisplay"
+                                       type="text"
+                                       th:value="${
+                                           customerOrderForm.status
+                                               != null
+                                               ? customerOrderForm.status.displayName
+                                               : 'Новый'
+                                       }"
+                                       readonly>
+
+                                <input type="hidden" th:field="*{status}">
+
+                            </div>
+
+                            <div class="field">
+
+                                <label for="priorityId">Приоритет</label>
+
+                                <select id="priorityId"
+                                        th:field="*{priorityId}">
+
+                                    <option value="">
+                                        — выберите приоритет —
+                                    </option>
+
+                                    <option th:each="priorityOption : ${priorities}"
+                                            th:value="${priorityOption.id}"
+                                            th:text="${
+                                                priorityOption.name
+                                                + ' — запуск '
+                                                + priorityOption.startDays
+                                                + ' д., отсечка '
+                                                + priorityOption.maxManufacturingDays
+                                                + ' раб. д.'
+                                            }">
+                                        Приоритет
+                                    </option>
+
+                                </select>
+
+                                <span class="field-hint">
+                                    Правила приоритета проверяются
+                                    при планировании заказа
+                                </span>
+
+                                <span class="field-error"
+                                      th:if="${#fields.hasErrors('priorityId')}"
+                                      th:errors="*{priorityId}">
+                                </span>
+
+                            </div>
+
+                            <div class="field">
+
+                                <label for="b24OrderUrl">
+                                    Ссылка на заказ в Б24
+                                </label>
+
+                                <input id="b24OrderUrl"
+                                       type="text"
+                                       maxlength="500"
+                                       placeholder="https://albatros.bitrix24.ru/crm/deal/123/"
+                                       th:field="*{b24OrderUrl}">
+
+                                <span class="field-error"
+                                      th:if="${#fields.hasErrors('b24OrderUrl')}"
+                                      th:errors="*{b24OrderUrl}">
+                                </span>
+
+                            </div>
+
+                            <div class="field">
+
+                                <label for="b24ChecklistUrl">
+                                    Ссылка на чек-лист Б24
+                                </label>
+
+                                <div class="co-checklist-field">
+
+                                    <input id="b24ChecklistUrl"
+                                           type="text"
+                                           maxlength="500"
+                                           placeholder="https://albatros.bitrix24.ru/.../checklist.xml"
+                                           th:field="*{b24ChecklistUrl}">
+
+                                    <a class="btn secondary compact"
+                                       id="coChecklistOpen"
+                                       href="#"
+                                       target="_blank"
+                                       rel="noopener noreferrer"
+                                       title="Открыть XML-чек-лист">
+                                        Занести из чек-листа
+                                    </a>
+
+                                </div>
+
+                                <span class="field-error"
+                                      th:if="${#fields.hasErrors('b24ChecklistUrl')}"
+                                      th:errors="*{b24ChecklistUrl}">
+                                </span>
+
+                            </div>
+
+                            <div class="field span-2">
+
+                                <label for="note">Примечание</label>
+
+                                <textarea id="note"
+                                          rows="3"
+                                          maxlength="2000"
+                                          placeholder="Дополнительная информация о заказе"
+                                          th:field="*{note}">
+                                </textarea>
+
+                                <span class="field-error"
+                                      th:if="${#fields.hasErrors('note')}"
+                                      th:errors="*{note}">
+                                </span>
+
+                            </div>
+
+                        </div>
+
+                    </div>
+
+                </section>
+
+                <section class="card">
+
+                    <div class="card-head">
+
+                        <div>
+
+                            <h2>Изделия заказа</h2>
+
+                            <small>
+                                Выберите тип изделия, затем само изделие.
+                                Для датчика изделие не выбирают — впишите
+                                полное обозначение из КД, классификатор
+                                подберётся сам.
+                                Количество всегда указывается в штуках
+                            </small>
+
+                        </div>
+
+                        <button class="btn secondary"
+                                type="button"
+                                id="coAddItem">
+                            Добавить изделие
+                        </button>
+
+                    </div>
+
+                    <div class="card-body">
+
+                        <div class="alert danger"
+                             th:if="${#fields.hasErrors('items')}">
+
+                            <p th:each="error : ${#fields.errors('items')}"
+                               th:text="${error}">
+                                Добавьте хотя бы одно изделие
+                            </p>
+
+                        </div>
+
+                        <div class="table-wrap">
+
+                            <table class="data-table co-items">
+
+                                <thead>
+                                <tr>
+                                    <th style="width: 46px;">№</th>
+                                    <th style="width: 150px;">Тип изделия</th>
+                                    <th>Изделие (для датчика — полное наименование)</th>
+                                    <th style="width: 110px;">Кол-во, шт.</th>
+                                    <th style="width: 150px;">Тип ТП</th>
+                                    <th>Примечание</th>
+                                    <th style="width: 74px;"></th>
+                                </tr>
+                                </thead>
+
+                                <tbody id="coItemsBody">
+
+                                <tr class="co-item-row"
+                                    th:each="item, stat : *{items}"
+                                    th:classappend="${
+                                        item.productType != null
+                                        and item.productType.name() == 'SENSOR'
+                                            ? 'is-sensor'
+                                            : ''
+                                    }"
+                                    th:with="pathPrefix=${
+                                        'items[' + stat.index + ']'
+                                    }">
+
+                                    <td class="co-item-position"
+                                        th:text="${stat.count}">
+                                        1
+                                    </td>
+
+                                    <td>
+
+                                        <select th:id="${
+                                                'items_' + stat.index + '_productType'
+                                            }"
+                                                th:name="${
+                                                    pathPrefix + '.productType'
+                                                }"
+                                                class="co-product-type">
+
+                                            <option value="">
+                                                — тип —
+                                            </option>
+
+                                            <option th:each="type : ${productTypes}"
+                                                    th:value="${type.name()}"
+                                                    th:selected="${
+                                                        item.productType != null
+                                                        and item.productType.name() == type.name()
+                                                    }"
+                                                    th:text="${type.displayName}">
+                                                Тип
+                                            </option>
+
+                                        </select>
+
+                                    </td>
+
+                                    <td>
+<!--
+    Для датчика изделие вносится вручную: полное обозначение из КД,
+    по которому сервис подбирает классификатор (род + значимые
+    параметры). Список остаётся для остальных типов и как запасной
+    выбор, если подбор не удался. Переключает вид строки скрипт
+    (класс is-sensor), стартовое состояние задаётся типом позиции.
+-->
+                                        <input type="text"
+                                               class="co-fullname"
+                                               th:id="${
+                                                   'items_' + stat.index + '_fullname'
+                                               }"
+                                               th:name="${
+                                                   pathPrefix + '.fullName'
+                                               }"
+                                               th:value="${item.fullName}"
+                                               maxlength="500"
+                                               placeholder="Датчик уровня ультразвуковой ДУУ2М-12-1-15,00-…">
+
+                                        <span class="field-error"
+                                              th:if="${
+                                                  #fields.hasErrors(
+                                                      pathPrefix + '.fullName'
+                                                  )
+                                              }"
+                                              th:each="error : ${
+                                                  #fields.errors(
+                                                      pathPrefix + '.fullName'
+                                                  )
+                                              }"
+                                              th:text="${error}">
+                                        </span>
+
+                                        <select th:id="${
+                                                'items_' + stat.index + '_classifier'
+                                            }"
+                                                th:name="${
+                                                    pathPrefix + '.productClassifierId'
+                                                }"
+                                                class="co-classifier">
+
+                                            <option value="">
+                                                — выберите изделие —
+                                            </option>
+
+                                            <option th:each="option : ${classifierOptions}"
+                                                    th:value="${option.id}"
+                                                    th:attr="data-type=${
+                                                        option.productType.name()
+                                                    }"
+                                                    th:selected="${
+                                                        option.id
+                                                        == item.productClassifierId
+                                                    }"
+                                                    th:text="${
+                                                        option.code
+                                                        + ' · '
+                                                        + option.productType.displayName
+                                                        + (option.sensorClassName != null
+                                                            ? ' · ' + option.sensorClassName
+                                                            : '')
+                                                        + (option.name != null
+                                                            ? ' · ' + option.name
+                                                            : '')
+                                                    }">
+                                                Изделие
+                                            </option>
+
+                                        </select>
+
+                                        <button class="co-pick"
+                                                type="button"
+                                                data-co-pick>
+                                            Выбрать из списка
+                                        </button>
+
+                                        <span class="field-error"
+                                              th:if="${
+                                                  #fields.hasErrors(
+                                                      pathPrefix + '.productClassifierId'
+                                                  )
+                                              }"
+                                              th:each="error : ${
+                                                  #fields.errors(
+                                                      pathPrefix + '.productClassifierId'
+                                                  )
+                                              }"
+                                              th:text="${error}">
+                                        </span>
+
+                                    </td>
+
+                                    <td>
+
+                                        <input type="text"
+                                               class="co-quantity"
+                                               th:id="${
+                                                   'items_' + stat.index + '_quantity'
+                                               }"
+                                               th:name="${
+                                                   pathPrefix + '.quantity'
+                                               }"
+                                               th:value="${item.formattedQuantity}"
+                                               placeholder="1">
+
+                                        <span class="field-error"
+                                              th:if="${
+                                                  #fields.hasErrors(
+                                                      pathPrefix + '.quantity'
+                                                  )
+                                              }"
+                                              th:each="error : ${
+                                                  #fields.errors(
+                                                      pathPrefix + '.quantity'
+                                                  )
+                                              }"
+                                              th:text="${error}">
+                                        </span>
+
+                                    </td>
+
+                                    <td>
+
+                                        <select th:id="${
+                                                'items_' + stat.index + '_techProcessType'
+                                            }"
+                                                th:name="${
+                                                    pathPrefix + '.techProcessType'
+                                                }"
+                                                class="co-tech-process">
+
+                                            <option th:each="tpType : ${techProcessTypes}"
+                                                    th:value="${tpType.name()}"
+                                                    th:selected="${tpType.name() == 'BASIC'}"
+                                                    th:text="${tpType.displayName}">
+                                                Тип ТП
+                                            </option>
+
+                                        </select>
+
+                                    </td>
+
+                                    <td>
+
+                                        <input type="text"
+                                               class="co-note"
+                                               th:id="${
+                                                   'items_' + stat.index + '_note'
+                                               }"
+                                               th:name="${pathPrefix + '.note'}"
+                                               th:value="${item.note}"
+                                               maxlength="2000"
+                                               placeholder="Особенности позиции">
+
+                                        <span class="field-error"
+                                              th:if="${
+                                                  #fields.hasErrors(
+                                                      pathPrefix + '.note'
+                                                  )
+                                              }"
+                                              th:each="error : ${
+                                                  #fields.errors(
+                                                      pathPrefix + '.note'
+                                                  )
+                                              }"
+                                              th:text="${error}">
+                                        </span>
+
+                                    </td>
+
+                                    <td>
+
+                                        <button class="btn danger compact"
+                                                type="button"
+                                                data-co-remove>
+                                            Удалить
+                                        </button>
+
+                                    </td>
+
+                                </tr>
+
+                                </tbody>
+
+                            </table>
+
+                        </div>
+
+                    </div>
+
+                </section>
+
+                <div class="form-actions">
+
+                    <a class="btn secondary"
+                       th:href="@{/dispatcher/customer-order}">
+                        Отмена
+                    </a>
+
+                    <button class="btn primary"
+                            type="submit"
+                            th:text="${
+                                editing ? 'Сохранить изменения' : 'Создать заказ'
+                            }">
+                        Создать заказ
+                    </button>
+
+                </div>
+
+            </form>
+
+        </div>
+    </main>
+</div>
+
+<!--
+    Образец пустой строки позиции: клонируется скриптом
+    и получает новый индекс в именах полей.
+-->
+<template id="coItemTemplate">
+    <tr class="co-item-row">
+
+        <td class="co-item-position">1</td>
+
+        <td>
+            <select class="co-product-type">
+                <option value="">— тип —</option>
+
+                <option th:each="type : ${productTypes}"
+                        th:value="${type.name()}"
+                        th:text="${type.displayName}">
+                    Тип
+                </option>
+            </select>
+        </td>
+
+        <td>
+            <input type="text"
+                   class="co-fullname"
+                   maxlength="500"
+                   placeholder="Датчик уровня ультразвуковой ДУУ2М-12-1-15,00-…">
+
+            <select class="co-classifier">
+                <option value="">— выберите изделие —</option>
+
+                <option th:each="option : ${classifierOptions}"
+                        th:value="${option.id}"
+                        th:attr="data-type=${option.productType.name()}"
+                        th:text="${
+                            option.code
+                            + ' · '
+                            + option.productType.displayName
+                            + (option.sensorClassName != null
+                                ? ' · ' + option.sensorClassName
+                                : '')
+                            + (option.name != null
+                                ? ' · ' + option.name
+                                : '')
+                        }">
+                    Изделие
+                </option>
+            </select>
+
+            <button class="co-pick"
+                    type="button"
+                    data-co-pick>
+                Выбрать из списка
+            </button>
+        </td>
+
+        <td>
+            <input type="text"
+                   class="co-quantity"
+                   value="1"
+                   placeholder="1">
+        </td>
+
+        <td>
+            <select class="co-tech-process">
+                <option th:each="tpType : ${techProcessTypes}"
+                        th:value="${tpType.name()}"
+                        th:selected="${tpType.name() == 'BASIC'}"
+                        th:text="${tpType.displayName}">
+                    Тип ТП
+                </option>
+            </select>
+        </td>
+
+        <td>
+            <input type="text"
+                   class="co-note"
+                   maxlength="2000"
+                   placeholder="Особенности позиции">
+        </td>
+
+        <td>
+            <button class="btn danger compact"
+                    type="button"
+                    data-co-remove>
+                Удалить
+            </button>
+        </td>
+
+    </tr>
+</template>
+
+<th:block th:replace="~{dispatcher/fragments/layout
+        :: commonScripts}">
+</th:block>
+
+<script th:src="@{/dispatcher/js/customer-order.js}"
+        th:attr="data-system-components-url=@{/dispatcher/customer-order/system-components}"></script>
+
+</body>
+</html>

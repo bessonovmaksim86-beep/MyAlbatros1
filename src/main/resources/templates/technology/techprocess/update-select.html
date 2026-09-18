@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="ru"
+      xmlns:th="http://www.thymeleaf.org">
+
+<head>
+    <meta charset="UTF-8">
+
+    <meta name="viewport"
+          content="width=device-width, initial-scale=1">
+
+    <title>Изменение техпроцесса</title>
+
+    <link rel="stylesheet"
+          th:href="@{/technology/css/technology.css}">
+
+    <link rel="stylesheet"
+          th:href="@{/technology/css/common.css}">
+
+    <link rel="stylesheet"
+          th:href="@{/technology/css/techprocess.css}">
+</head>
+
+<body>
+
+<div class="app-shell">
+
+    <aside th:replace="~{technology/fragments/layout
+            :: sidebar('techprocess')}">
+    </aside>
+
+    <main class="main">
+
+        <header th:replace="~{technology/fragments/layout
+                :: topbar}">
+        </header>
+
+        <div class="page-content techprocess-page">
+
+            <div class="tp-head">
+
+                <div>
+                    <h1>Изменение техпроцесса</h1>
+
+                    <p>
+                        Выберите техпроцесс, который требуется изменить
+                    </p>
+                </div>
+
+                <a class="btn secondary"
+                   th:href="@{/technology/techprocess}">
+                    К списку техпроцессов
+                </a>
+
+            </div>
+
+            <div class="alert danger"
+                 th:if="${errorMessage}"
+                 th:text="${errorMessage}">
+            </div>
+
+            <section class="card">
+
+                <div class="card-head">
+                    <div>
+                        <h2>Выбор техпроцесса</h2>
+
+                        <small>
+                            Нажмите на техпроцесс для перехода к его составу
+                        </small>
+                    </div>
+                </div>
+
+                <div class="card-body">
+
+                    <div class="tp-empty"
+                         th:if="${#lists.isEmpty(techProcesses)}">
+
+                        Техпроцессы пока не созданы
+
+                    </div>
+
+                    <div class="tp-select-list"
+                         th:unless="${#lists.isEmpty(techProcesses)}">
+
+                        <a class="tp-select-item"
+                           th:each="process : ${techProcesses}"
+                           th:href="@{
+                               /technology/techprocess/update/{id}(
+                                   id=${process.id}
+                               )}">
+
+                            <div>
+
+                                <strong th:text="${process.code}">
+                                    ТП-0001
+                                </strong>
+
+                                <span th:text="${
+                                    process.productClassifier.code
+                                    + ' — '
+                                    + process.productClassifier.productType.displayName
+                                    + (process.productClassifier.displayName != null
+                                        ? ' — ' + process.productClassifier.displayName
+                                        : '')
+                                }">
+                                    Изделие
+                                </span>
+
+                            </div>
+
+                            <span class="btn secondary compact">
+                                Изменить
+                            </span>
+
+                        </a>
+
+                    </div>
+
+                </div>
+
+            </section>
+
+        </div>
+
+    </main>
+
+</div>
+
+<th:block th:replace="~{technology/fragments/layout
+        :: commonScripts}">
+</th:block>
+
+<script th:src="@{/technology/js/techprocess.js}"></script>
+
+</body>
+</html>

@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="ru"
+      xmlns:th="http://www.thymeleaf.org">
+
+<body>
+
+<!--
+    Единый блок карточек-фильтров по типам.
+
+    baseUrl    — адрес главной страницы модуля без параметра типа;
+    activeType — выбранный тип (null — показан весь список);
+    cards      — список TypeCardView (code, name, count, icon, modifier);
+    title      — заголовок блока;
+    subtitle   — пояснение под заголовком;
+    total      — общее количество записей (карточка «Все»).
+
+    Клик по карточке ведёт на baseUrl?type=code,
+    карточка «Все» в заголовке ведёт на baseUrl и сбрасывает фильтр.
+-->
+<section th:fragment="typeFilter(baseUrl, activeType, cards, title, subtitle, total)"
+         class="type-filter">
+
+    <div class="type-filter__head">
+
+        <div>
+            <h2 th:text="${title}">По типам</h2>
+
+            <p th:text="${subtitle}">
+                Нажмите на тип, чтобы отфильтровать список
+            </p>
+        </div>
+
+        <a class="type-filter-total"
+           th:classappend="${activeType == null} ? ' is-active' : ''"
+           th:href="@{${baseUrl}}">
+            Все:
+
+            <strong th:text="${total}">0</strong>
+        </a>
+    </div>
+
+    <div class="type-filter__grid">
+
+        <a th:each="card : ${cards}"
+           class="type-filter-card"
+           th:classappend="${card.modifier} + (${activeType != null and activeType == card.code} ? ' is-active' : '')"
+           th:href="@{${baseUrl}(type=${card.code})}">
+
+            <div class="type-filter-card__top">
+                <span class="type-filter-card__icon"
+                      aria-hidden="true"
+                      th:text="${card.icon}">
+                    Т
+                </span>
+
+                <span class="type-filter-card__name"
+                      th:text="${card.name}">
+                    Тип
+                </span>
+            </div>
+
+            <div class="type-filter-card__value">
+                <strong th:text="${card.count}">0</strong>
+
+                <span>шт.</span>
+            </div>
+        </a>
+    </div>
+</section>
+
+</body>
+</html>

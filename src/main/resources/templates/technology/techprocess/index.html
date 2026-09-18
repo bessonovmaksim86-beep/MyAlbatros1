@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="ru"
+      xmlns:th="http://www.thymeleaf.org">
+
+<head>
+    <meta charset="UTF-8">
+
+    <meta name="viewport"
+          content="width=device-width, initial-scale=1">
+
+    <title>Техпроцессы</title>
+
+    <link rel="stylesheet"
+          th:href="@{/technology/css/technology.css}">
+
+    <link rel="stylesheet"
+          th:href="@{/technology/css/common.css}">
+
+    <link rel="stylesheet"
+          th:href="@{/technology/css/techprocess.css}">
+</head>
+
+<body>
+
+<div class="app-shell">
+
+    <aside th:replace="~{technology/fragments/layout
+            :: sidebar('techprocess')}">
+    </aside>
+
+    <main class="main">
+
+        <header th:replace="~{technology/fragments/layout
+                :: topbar}">
+        </header>
+
+        <div class="page-content techprocess-page">
+
+            <div class="tp-head">
+
+                <div>
+                    <h1>Техпроцессы</h1>
+
+                    <p>
+                        Маршруты изготовления из действующих
+                        операций и изделий классификатора
+                    </p>
+                </div>
+
+                <div class="tp-actions">
+
+                    <a class="btn primary"
+                       th:href="@{/technology/techprocess/create}">
+                        Создать техпроцесс
+                    </a>
+
+                    <a class="btn secondary"
+                       th:href="@{/technology/techprocess/update}">
+                        Изменить
+                    </a>
+
+                    <a class="btn danger"
+                       th:href="@{/technology/techprocess/delete}">
+                        Удалить
+                    </a>
+
+                </div>
+
+            </div>
+
+            <div class="alert success"
+                 th:if="${successMessage}"
+                 th:text="${successMessage}">
+            </div>
+
+            <div class="alert danger"
+                 th:if="${errorMessage}"
+                 th:text="${errorMessage}">
+            </div>
+
+            <div th:replace="~{technology/fragments/type-filter
+                    :: typeFilter(
+                        @{/technology/techprocess},
+                        ${activeType},
+                        ${techProcessCards},
+                        'Техпроцессы по типам изделий',
+                        'Нажмите тип, чтобы показать техпроцессы этого типа, или «Все» — весь список',
+                        ${totalCount}
+                    )}">
+            </div>
+
+            <section class="card">
+
+                <div class="card-head">
+
+                    <div>
+                        <h2>
+                            Список техпроцессов
+
+                            <span th:if="${activeTypeName != null}"
+                                  th:text="' — ' + ${activeTypeName}">
+                            </span>
+                        </h2>
+
+                        <small>
+                            Показано записей:
+                            <strong th:text="${
+                                #lists.size(techProcesses)
+                            }">0</strong>
+                        </small>
+                    </div>
+
+                </div>
+
+                <div class="card-body">
+
+                    <div class="tp-empty"
+                         th:if="${#lists.isEmpty(techProcesses)}">
+
+                        Техпроцессы пока не созданы
+
+                    </div>
+
+                    <div class="tp-select-list"
+                         th:unless="${#lists.isEmpty(techProcesses)}">
+
+                        <div class="tp-select-item"
+                             th:each="process : ${techProcesses}">
+
+                            <div>
+
+                                <strong th:text="${process.code}">
+                                    ТП-0001
+                                </strong>
+
+                                <span th:text="${
+                                    'Код ' + process.classifierCode
+                                    + ' — '
+                                    + process.productType.displayName
+                                    + (process.sensorClassName != null
+                                        ? ' — ' + process.sensorClassName
+                                        : '')
+                                    + (process.classifierName != null
+                                       and !#strings.isEmpty(process.classifierName)
+                                        ? ' — ' + process.classifierName
+                                        : '')
+                                }">
+                                    Изделие
+                                </span>
+
+                                <span th:text="${
+                                    process.operationCount + ' опер.'
+                                }">
+                                    0 опер.
+                                </span>
+
+                            </div>
+
+                            <div class="table-actions">
+
+                                <a class="btn secondary compact"
+                                   th:href="@{
+                                       /technology/techprocess/{id}/view(
+                                           id=${process.id}
+                                       )}">
+                                    Визуализация
+                                </a>
+
+                                <a class="btn secondary compact"
+                                   th:href="@{
+                                       /technology/techprocess/{id}/copy(
+                                           id=${process.id}
+                                       )}">
+                                    Применить
+                                </a>
+
+                                <a class="btn secondary compact"
+                                   th:href="@{
+                                       /technology/techprocess/update/{id}(
+                                           id=${process.id}
+                                       )}">
+                                    Изменить
+                                </a>
+
+                                <a class="btn danger compact"
+                                   th:href="@{
+                                       /technology/techprocess/delete/{id}(
+                                           id=${process.id}
+                                       )}">
+                                    Удалить
+                                </a>
+
+                            </div>
+
+                        </div>
+
+                    </div>
+
+                </div>
+
+            </section>
+
+        </div>
+
+    </main>
+
+</div>
+
+<th:block th:replace="~{technology/fragments/layout
+        :: commonScripts}">
+</th:block>
+
+<script th:src="@{/technology/js/techprocess.js}"></script>
+
+</body>
+</html>

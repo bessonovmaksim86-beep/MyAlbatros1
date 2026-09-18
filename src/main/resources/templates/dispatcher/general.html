@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="ru"
+      xmlns:th="http://www.thymeleaf.org">
+
+<head>
+    <meta charset="UTF-8">
+
+    <meta name="viewport"
+          content="width=device-width, initial-scale=1">
+
+    <title>Обзор отдела</title>
+
+    <link rel="stylesheet"
+          th:href="@{/technology/css/technology.css}">
+
+    <link rel="stylesheet"
+          th:href="@{/technology/css/common.css}">
+
+    <link rel="stylesheet"
+          th:href="@{/dispatcher/css/dispatcher.css}">
+</head>
+
+<body>
+
+<div class="app-shell">
+
+    <aside th:replace="~{dispatcher/fragments/layout
+            :: sidebar('general')}">
+    </aside>
+
+    <main class="main">
+
+        <header th:replace="~{dispatcher/fragments/layout
+                :: topbar}">
+        </header>
+
+        <div class="page-content dispatcher-page">
+
+            <div class="page-head">
+
+                <div class="page-title">
+
+                    <h1>Обзор отдела</h1>
+
+                    <p>
+                        Заказы покупателя, заказы на производство
+                        и количество заказанной продукции
+                    </p>
+
+                </div>
+
+                <div class="page-head-actions">
+
+                    <a class="btn primary"
+                       th:href="@{/dispatcher/customer-order/create}">
+                        Создать заказ покупателя
+                    </a>
+
+                </div>
+            </div>
+
+            <div class="alert success"
+                 th:if="${successMessage}"
+                 th:text="${successMessage}">
+            </div>
+
+            <div class="stats stats--overview">
+
+                <div class="stat">
+                    <small>Заказы покупателя</small>
+
+                    <strong th:text="${customerOrderCount ?: 0}">
+                        0
+                    </strong>
+
+                    <span class="trend">
+                        Действующих заказов
+                    </span>
+                </div>
+
+                <div class="stat">
+                    <small>Заказы на производство</small>
+
+                    <strong th:text="${productionOrderCount ?: 0}">
+                        0
+                    </strong>
+
+                    <span class="trend attention">
+                        Раздел в разработке
+                    </span>
+                </div>
+
+                <div class="stat">
+                    <small>Всего внесённой продукции</small>
+
+                    <strong th:text="${formattedPlannedQuantity ?: '0'}">
+                        0
+                    </strong>
+
+                    <span class="trend">
+                        Заказано по позициям, шт.
+                    </span>
+                </div>
+            </div>
+
+            <section class="type-filter">
+
+                <div class="type-filter__head">
+
+                    <div>
+                        <h2>Заказанная продукция по типам</h2>
+
+                        <p>
+                            Суммарное количество изделий в позициях
+                            действующих заказов покупателя
+                        </p>
+                    </div>
+
+                    <a class="type-filter-total"
+                       th:href="@{/dispatcher/customer-order}">
+                        Все заказы:
+
+                        <strong th:text="${customerOrderCount ?: 0}">
+                            0
+                        </strong>
+                    </a>
+                </div>
+
+                <div class="type-filter__grid">
+
+                    <div th:each="card : ${typeCards}"
+                         class="type-filter-card is-static"
+                         th:classappend="${card.modifier}">
+
+                        <div class="type-filter-card__top">
+                            <span class="type-filter-card__icon"
+                                  aria-hidden="true"
+                                  th:text="${card.icon}">
+                                Т
+                            </span>
+
+                            <span class="type-filter-card__name"
+                                  th:text="${card.name}">
+                                Тип
+                            </span>
+                        </div>
+
+                        <div class="type-filter-card__value">
+                            <strong th:text="${card.count}">0</strong>
+
+                            <span>шт.</span>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <section class="card">
+
+                <div class="card-head">
+
+                    <div>
+
+                        <h2>Состояние заказов покупателя</h2>
+
+                        <small>
+                            Распределение действующих заказов по статусам
+                        </small>
+
+                    </div>
+
+                    <a class="btn secondary"
+                       th:href="@{/dispatcher/customer-order}">
+                        Открыть заказы покупателя
+                    </a>
+                </div>
+
+                <div class="card-body">
+
+                    <div class="table-wrap">
+
+                        <table class="data-table">
+
+                            <thead>
+                            <tr>
+                                <th>Статус</th>
+                                <th>Количество заказов</th>
+                            </tr>
+                            </thead>
+
+                            <tbody>
+
+                            <tr>
+                                <td>
+                                    <span class="status draft"
+                                          th:text="${newStatusName}">
+                                        Новый
+                                    </span>
+                                </td>
+
+                                <td th:text="${customerOrderNewCount ?: 0}">
+                                    0
+                                </td>
+                            </tr>
+
+                            <tr>
+                                <td>
+                                    <span class="status work"
+                                          th:text="${inWorkStatusName}">
+                                        В работе
+                                    </span>
+                                </td>
+
+                                <td th:text="${customerOrderInWorkCount ?: 0}">
+                                    0
+                                </td>
+                            </tr>
+
+                            <tr>
+                                <td>
+                                    <span class="status done"
+                                          th:text="${doneStatusName}">
+                                        Исполнен
+                                    </span>
+                                </td>
+
+                                <td th:text="${customerOrderDoneCount ?: 0}">
+                                    0
+                                </td>
+                            </tr>
+
+                            </tbody>
+                        </table>
+
+                    </div>
+                </div>
+            </section>
+
+        </div>
+    </main>
+</div>
+
+<th:block th:replace="~{dispatcher/fragments/layout
+        :: commonScripts}">
+</th:block>
+
+</body>
+</html>

@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="ru"
+      xmlns:th="http://www.thymeleaf.org">
+
+<head>
+    <meta charset="UTF-8">
+
+    <meta name="viewport"
+          content="width=device-width, initial-scale=1">
+
+    <title>Заказчики</title>
+
+    <link rel="stylesheet"
+          th:href="@{/technology/css/technology.css}">
+
+    <link rel="stylesheet"
+          th:href="@{/dispatcher/css/dispatcher.css}">
+</head>
+
+<body>
+
+<div class="app-shell">
+
+    <aside th:replace="~{dispatcher/fragments/layout
+            :: sidebar('customer')}">
+    </aside>
+
+    <main class="main">
+
+        <header th:replace="~{dispatcher/fragments/layout
+                :: topbar}">
+        </header>
+
+        <div class="page-content dispatcher-page">
+
+            <div class="page-head">
+
+                <div class="page-title">
+
+                    <h1>Заказчики</h1>
+
+                    <p>
+                        Справочник контрагентов, на которых
+                        оформляются заказы покупателя
+                    </p>
+
+                </div>
+
+            </div>
+
+            <div class="alert success"
+                 th:if="${successMessage}"
+                 th:text="${successMessage}">
+            </div>
+
+            <section class="card">
+
+                <div class="card-head">
+
+                    <div>
+
+                        <h2>Новый заказчик</h2>
+
+                        <small>
+                            Достаточно наименования: код вида ЗК-NNN
+                            присваивается автоматически
+                        </small>
+
+                    </div>
+
+                </div>
+
+                <div class="card-body">
+
+                    <form method="post"
+                          th:action="@{/dispatcher/customer/create}"
+                          th:object="${customerForm}"
+                          class="customer-quick-form">
+
+                        <input th:if="${_csrf != null}"
+                               type="hidden"
+                               th:name="${_csrf.parameterName}"
+                               th:value="${_csrf.token}">
+
+                        <div class="alert danger"
+                             th:if="${#fields.hasGlobalErrors()}">
+
+                            <p th:each="error : ${#fields.globalErrors()}"
+                               th:text="${error}">
+                                Ошибка сохранения заказчика
+                            </p>
+
+                        </div>
+
+                        <div class="field">
+
+                            <label for="name">Наименование заказчика</label>
+
+                            <input id="name"
+                                   type="text"
+                                   maxlength="255"
+                                   autocomplete="off"
+                                   placeholder="Например: ООО «Альянс»"
+                                   th:field="*{name}">
+
+                            <span class="field-error"
+                                  th:if="${#fields.hasErrors('name')}"
+                                  th:errors="*{name}">
+                            </span>
+
+                        </div>
+
+                        <button class="btn primary"
+                                type="submit">
+                            Занести заказчика
+                        </button>
+
+                    </form>
+
+                </div>
+
+            </section>
+
+            <div class="stats stats--customer">
+
+                <div class="stat">
+                    <small>Всего заказчиков</small>
+
+                    <strong th:text="${
+                        customers != null
+                            ? #lists.size(customers)
+                            : 0
+                    }">
+                        0
+                    </strong>
+
+                    <span class="trend">
+                        Все записи справочника
+                    </span>
+                </div>
+
+                <div class="stat">
+                    <small>Действующие</small>
+
+                    <strong th:text="${customerCount ?: 0}">
+                        0
+                    </strong>
+
+                    <span class="trend">
+                        Доступны для новых заказов
+                    </span>
+                </div>
+            </div>
+
+            <section class="card">
+
+                <div class="card-head">
+
+                    <div>
+
+                        <h2>Список заказчиков</h2>
+
+                        <small>
+                            Показано записей:
+
+                            <strong th:text="${
+                                customers != null
+                                    ? #lists.size(customers)
+                                    : 0
+                            }">
+                                0
+                            </strong>
+                        </small>
+
+                    </div>
+
+                </div>
+
+                <div class="card-body">
+
+                    <div class="table-wrap">
+
+                        <table class="data-table customer-table">
+
+                            <thead>
+                            <tr>
+                                <th style="width: 140px;">Код</th>
+                                <th>Наименование</th>
+                                <th style="width: 170px;">Статус</th>
+                            </tr>
+                            </thead>
+
+                            <tbody>
+
+                            <tr th:if="${
+                                    customers == null
+                                    or #lists.isEmpty(customers)
+                                 }">
+
+                                <td colspan="3"
+                                    class="empty-table">
+                                    Заказчики пока не добавлены
+                                </td>
+
+                            </tr>
+
+                            <tr th:each="customer : ${customers}">
+
+                                <td th:text="${customer.code}">
+                                    ЗК-001
+                                </td>
+
+                                <td th:text="${customer.name}">
+                                    ООО «Альянс»
+                                </td>
+
+                                <td>
+
+                                    <span class="status done"
+                                          th:if="${customer.active}">
+                                        Действующий
+                                    </span>
+
+                                    <span class="status draft"
+                                          th:unless="${customer.active}">
+                                        Архивный
+                                    </span>
+
+                                </td>
+
+                            </tr>
+
+                            </tbody>
+                        </table>
+
+                    </div>
+                </div>
+            </section>
+
+            <div class="empty-state"
+                 th:if="${
+                     customers == null
+                     or #lists.isEmpty(customers)
+                 }">
+                <h3>Заказчиков в справочнике пока нет</h3>
+
+                <p>
+                    Введите наименование в форме выше и нажмите
+                    «Занести заказчика» — код будет выдан автоматически.
+                </p>
+            </div>
+
+        </div>
+    </main>
+</div>
+
+<th:block th:replace="~{dispatcher/fragments/layout
+        :: commonScripts}">
+</th:block>
+
+</body>
+</html>

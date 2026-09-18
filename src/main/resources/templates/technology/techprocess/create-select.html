@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="ru"
+      xmlns:th="http://www.thymeleaf.org">
+
+<head>
+    <meta charset="UTF-8">
+
+    <meta name="viewport"
+          content="width=device-width, initial-scale=1">
+
+    <title>Выбор изделия для техпроцесса</title>
+
+    <link rel="stylesheet"
+          th:href="@{/technology/css/technology.css}">
+
+    <link rel="stylesheet"
+          th:href="@{/technology/css/common.css}">
+
+    <link rel="stylesheet"
+          th:href="@{/technology/css/techprocess.css}">
+</head>
+
+<body>
+
+<div class="app-shell">
+
+    <aside th:replace="~{technology/fragments/layout
+            :: sidebar('techprocess')}">
+    </aside>
+
+    <main class="main">
+
+        <header th:replace="~{technology/fragments/layout
+                :: topbar}">
+        </header>
+
+        <div class="page-content techprocess-page">
+
+            <div class="tp-head">
+
+                <div>
+                    <h1>Новый техпроцесс</h1>
+
+                    <p>
+                        Шаг 1 из 2. Выберите изделие, для которого
+                        разрабатывается маршрут
+                    </p>
+                </div>
+
+                <a class="btn secondary"
+                   th:href="@{/technology/techprocess}">
+                    К списку техпроцессов
+                </a>
+
+            </div>
+
+            <div class="alert danger"
+                 th:if="${errorMessage}"
+                 th:text="${errorMessage}">
+            </div>
+
+            <section class="card">
+
+                <div class="card-head">
+                    <div>
+                        <h2>Выбор изделия классификатора</h2>
+
+                        <small>
+                            Поля заполняются последовательно:
+                            вид изделия, класс датчика и само изделие
+                        </small>
+                    </div>
+                </div>
+
+                <div class="card-body">
+
+                    <div class="tp-form-grid">
+
+                        <div class="form-group">
+
+                            <label for="productTypePicker">
+                                Вид изделия
+                                <span class="required">*</span>
+                            </label>
+
+                            <select id="productTypePicker"
+                                    class="form-control"
+                                    data-tp-type-picker>
+
+                                <option value="">
+                                    Выберите вид изделия
+                                </option>
+
+                                <option th:each="type : ${productTypes}"
+                                        th:value="${type.name()}"
+                                        th:text="${type.displayName}">
+                                    Вид
+                                </option>
+
+                            </select>
+
+                        </div>
+
+                        <div class="form-group" data-tp-sensor-field>
+
+                            <label for="sensorClassPicker">
+                                Класс датчика
+                                <span class="required">*</span>
+                            </label>
+
+                            <select id="sensorClassPicker"
+                                    class="form-control"
+                                    data-tp-sensor-picker>
+
+                                <option value="">
+                                    Выберите класс датчика
+                                </option>
+
+                            </select>
+
+                            <small>
+                                Поле доступно только для датчиков.
+                            </small>
+
+                        </div>
+
+                        <div class="form-group tp-span-2">
+
+                            <label for="classifierPicker">
+                                Изделие из классификатора
+                                <span class="required">*</span>
+                            </label>
+
+                            <select id="classifierPicker"
+                                    class="form-control"
+                                    data-tp-classifier-picker>
+
+                                <option value="">
+                                    Сначала выберите вид изделия
+                                </option>
+
+                            </select>
+
+                            <small>
+                                В списке показаны код, класс и наименование
+                                изделия.
+                            </small>
+
+                        </div>
+
+                    </div>
+
+                    <div class="tp-form-actions">
+
+                        <a class="btn secondary"
+                           th:href="@{/technology/techprocess}">
+                            Отмена
+                        </a>
+
+                        <button type="button"
+                                class="btn primary"
+                                data-tp-continue
+                                disabled>
+                            Перейти к заполнению
+                        </button>
+
+                    </div>
+
+                </div>
+
+            </section>
+
+        </div>
+
+    </main>
+
+</div>
+
+<!--
+    Данные для каскадного фильтра передаются сервером:
+    каждое изделие знает свой вид, класс датчика и наименование.
+-->
+<ul class="visually-hidden"
+     data-tp-classifier-data
+    th:attr="data-code-prefix='Код',
+             data-separator='—',
+             data-sensor-class-label='Выберите класс датчика',
+             data-classifier-label='Выберите изделие'"
+    aria-hidden="true">
+
+    <li th:each="option : ${classifierOptions}"
+        th:attr="data-id=${option.id},
+                 data-code=${option.code},
+                 data-type=${option.productType.name()},
+                 data-sensor-class-id=${option.sensorClassId},
+                 data-sensor-class-name=${option.sensorClassName},
+                 data-name=${option.name}">
+    </li>
+
+</ul>
+
+<th:block th:replace="~{technology/fragments/layout
+        :: commonScripts}">
+</th:block>
+
+<script th:src="@{/technology/js/techprocess.js}"></script>
+
+<script th:inline="javascript">
+    /*<![CDATA[*/
+    window.TP_CREATE_NEW_URL = /*[[@{/technology/techprocess/create/new}]]*/ '';
+    /*]]>*/
+</script>
+
+</body>
+</html>

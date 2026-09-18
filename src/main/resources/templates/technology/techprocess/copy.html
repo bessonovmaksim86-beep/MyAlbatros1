@@ -1,0 +1,348 @@
+<!DOCTYPE html>
+<html lang="ru"
+      xmlns:th="http://www.thymeleaf.org">
+
+<head>
+    <meta charset="UTF-8">
+
+    <meta name="viewport"
+          content="width=device-width, initial-scale=1">
+
+    <title>Применение техпроцесса</title>
+
+    <link rel="stylesheet"
+          th:href="@{/technology/css/technology.css}">
+
+    <link rel="stylesheet"
+          th:href="@{/technology/css/common.css}">
+
+    <link rel="stylesheet"
+          th:href="@{/technology/css/techprocess.css}">
+</head>
+
+<body>
+
+<div class="app-shell">
+
+    <aside th:replace="~{technology/fragments/layout
+            :: sidebar('techprocess')}">
+    </aside>
+
+    <main class="main">
+
+        <header th:replace="~{technology/fragments/layout
+                :: topbar}">
+        </header>
+
+        <div class="page-content techprocess-page">
+
+            <div class="tp-head">
+
+                <div>
+                    <h1>Применение техпроцесса</h1>
+
+                    <p>
+                        Маршрут не копируется: выбранное изделие
+                        добавляется к этому техпроцессу
+                    </p>
+                </div>
+
+                <a class="btn secondary"
+                   th:href="@{/technology/techprocess}">
+                    К списку техпроцессов
+                </a>
+
+            </div>
+
+            <div class="alert danger"
+                 th:if="${errorMessage}"
+                 th:text="${errorMessage}">
+            </div>
+
+            <section class="card">
+
+                <div class="card-head">
+                    <div>
+                        <h2>
+                            Исходный техпроцесс
+                            <span th:text="${source.code}">ТП-0001</span>
+                        </h2>
+
+                        <small th:text="${
+                            source.operations.size()
+                            + ' опер. · Общий маршрут для всех изделий'
+                        }">
+                            Состав маршрута
+                        </small>
+                    </div>
+                </div>
+
+                <div class="card-body">
+
+                    <div class="tp-select-list">
+
+                        <div class="tp-select-item"
+                             th:each="item : ${source.operations}">
+
+                            <div>
+
+                                <strong th:text="${
+                                    item.position + 1
+                                    + '. '
+                                    + item.operation.operationName.name
+                                }">
+                                    Операция
+                                </strong>
+
+                                <span th:text="${
+                                    item.operation.operationType.name
+                                    + ' · '
+                                    + item.operation.service.name
+                                }">
+                                    Параметры
+                                </span>
+
+                            </div>
+
+                            <span th:text="${
+                                item.laborHours + ' ч / '
+                                + item.machineHours + ' маш.-ч · до '
+                                + item.dailyLimit + ' в день'
+                            }">
+                                Нормы
+                            </span>
+
+                        </div>
+
+                        <div class="tp-empty"
+                             th:if="${#lists.isEmpty(source.operations)}">
+
+                            В техпроцессе нет операций
+
+                        </div>
+
+                    </div>
+
+                </div>
+
+            </section>
+
+            <section class="card">
+
+                <div class="card-head">
+                    <div>
+                        <h2>Изделия, к которым применён маршрут</h2>
+
+                        <small>
+                            Техпроцесс уже используется следующими
+                            изделиями
+                        </small>
+                    </div>
+                </div>
+
+                <div class="card-body">
+
+                    <div class="tp-select-list">
+
+                        <div class="tp-select-item"
+                             th:each="item : ${applied}">
+
+                            <div>
+
+                                <strong th:text="${'Код ' + item.code}">
+                                    Код
+                                </strong>
+
+                                <span th:text="${item.productType.displayName}">
+                                    Вид
+                                </span>
+
+                                <span th:if="${item.sensorClassName != null}"
+                                      th:text="${'Класс: ' + item.sensorClassName}">
+                                    Класс
+                                </span>
+
+                                <span th:if="${
+                                    item.name != null
+                                    and !#strings.isEmpty(item.name)
+                                }"
+                                      th:text="${item.name}">
+                                    Наименование
+                                </span>
+
+                            </div>
+
+                        </div>
+
+                        <div class="tp-empty"
+                             th:if="${#lists.isEmpty(applied)}">
+
+                            Маршрут пока не применён ни к одному изделию
+
+                        </div>
+
+                    </div>
+
+                </div>
+
+            </section>
+
+            <section class="card">
+
+                <div class="card-head">
+                    <div>
+                        <h2>Применить к другому изделию</h2>
+
+                        <small>
+                            Выберите изделие — тот же маршрут будет
+                            назначен ему без создания нового техпроцесса
+                        </small>
+                    </div>
+                </div>
+
+                <div class="card-body">
+
+                    <form method="post"
+                          th:action="@{
+                              /technology/techprocess/{id}/copy(
+                                  id=${source.id}
+                              )}">
+
+                        <input th:if="${_csrf != null}"
+                               type="hidden"
+                               th:name="${_csrf.parameterName}"
+                               th:value="${_csrf.token}">
+
+                        <div class="tp-form-grid">
+
+                            <div class="form-group">
+
+                                <label for="copyProductType">
+                                    Вид изделия
+                                    <span class="required">*</span>
+                                </label>
+
+                                <select id="copyProductType"
+                                        class="form-control"
+                                        data-tp-type-picker>
+
+                                    <option value="">
+                                        Выберите вид изделия
+                                    </option>
+
+                                    <option th:each="type : ${productTypes}"
+                                            th:value="${type.name()}"
+                                            th:text="${type.displayName}">
+                                        Вид
+                                    </option>
+
+                                </select>
+
+                            </div>
+
+                            <div class="form-group" data-tp-sensor-field>
+
+                                <label for="copySensorClass">
+                                    Класс датчика
+                                    <span class="required">*</span>
+                                </label>
+
+                                <select id="copySensorClass"
+                                        class="form-control"
+                                        data-tp-sensor-picker>
+
+                                    <option value="">
+                                        Выберите класс датчика
+                                    </option>
+
+                                </select>
+
+                                <small>
+                                    Поле доступно только для датчиков.
+                                </small>
+
+                            </div>
+
+                            <div class="form-group">
+
+                                <label for="copyClassifier">
+                                    Целевое изделие
+                                    <span class="required">*</span>
+                                </label>
+
+                                <select id="copyClassifier"
+                                        class="form-control"
+                                        data-tp-classifier-picker>
+
+                                    <option value="">
+                                        Сначала выберите вид изделия
+                                    </option>
+
+                                </select>
+
+                                <input type="hidden"
+                                       name="targetClassifierId"
+                                       data-tp-target-input>
+
+                            </div>
+
+                        </div>
+
+                        <div class="tp-form-actions">
+
+                            <a class="btn secondary"
+                               th:href="@{/technology/techprocess}">
+                                Отмена
+                            </a>
+
+                            <button type="submit"
+                                    class="btn primary"
+                                    data-tp-continue
+                                    disabled>
+                                Применить техпроцесс
+                            </button>
+
+                        </div>
+
+                    </form>
+
+                </div>
+
+            </section>
+
+        </div>
+
+    </main>
+
+</div>
+
+<!--
+    Данные для каскадного фильтра передаются сервером.
+-->
+<ul class="visually-hidden"
+     data-tp-classifier-data
+    th:attr="data-code-prefix='Код',
+             data-separator='—',
+             data-sensor-class-label='Выберите класс датчика',
+             data-classifier-label='Выберите изделие'"
+    aria-hidden="true">
+
+    <li th:each="option : ${classifierOptions}"
+        th:attr="data-id=${option.id},
+                 data-code=${option.code},
+                 data-type=${option.productType.name()},
+                 data-sensor-class-id=${option.sensorClassId},
+                 data-sensor-class-name=${option.sensorClassName},
+                 data-name=${option.name}">
+    </li>
+
+</ul>
+
+<th:block th:replace="~{technology/fragments/layout
+        :: commonScripts}">
+</th:block>
+
+<script th:src="@{/technology/js/techprocess.js}"></script>
+
+</body>
+</html>

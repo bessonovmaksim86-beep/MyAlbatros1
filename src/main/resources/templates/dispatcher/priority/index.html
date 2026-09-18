@@ -1,0 +1,451 @@
+<!DOCTYPE html>
+<html lang="ru"
+      xmlns:th="http://www.thymeleaf.org">
+
+<head>
+    <meta charset="UTF-8">
+
+    <meta name="viewport"
+          content="width=device-width, initial-scale=1">
+
+    <title>Приоритеты</title>
+
+    <link rel="stylesheet"
+          th:href="@{/technology/css/technology.css}">
+
+    <link rel="stylesheet"
+          th:href="@{/technology/css/common.css}">
+
+    <link rel="stylesheet"
+          th:href="@{/dispatcher/css/dispatcher.css}">
+</head>
+
+<body>
+
+<div class="app-shell">
+
+    <aside th:replace="~{dispatcher/fragments/layout
+            :: sidebar('priority')}">
+    </aside>
+
+    <main class="main">
+
+        <header th:replace="~{dispatcher/fragments/layout
+                :: topbar}">
+        </header>
+
+        <div class="page-content dispatcher-page">
+
+            <div class="page-head">
+
+                <div class="page-title">
+
+                    <h1>Приоритеты</h1>
+
+                    <p>
+                        Правила запуска заказов покупателя в работу:
+                        запуск, допустимая загруженность участка,
+                        межоперационные переходы и максимальная дата
+                        изготовления
+                    </p>
+
+                </div>
+
+            </div>
+
+            <div class="alert success"
+                 th:if="${successMessage}"
+                 th:text="${successMessage}">
+            </div>
+
+            <div class="alert danger"
+                 th:if="${errorMessage}"
+                 th:text="${errorMessage}">
+            </div>
+
+            <section class="card">
+
+                <div class="card-head">
+
+                    <div>
+
+                        <h2>Новый приоритет</h2>
+
+                        <small>
+                            Код вида ПР-NNN присваивается автоматически:
+                            правило описывают наименование и четыре параметра
+                        </small>
+
+                    </div>
+
+                </div>
+
+                <div class="card-body">
+
+                    <form method="post"
+                          th:action="@{/dispatcher/priority/create}"
+                          th:object="${orderPriorityForm}">
+
+                        <input th:if="${_csrf != null}"
+                               type="hidden"
+                               th:name="${_csrf.parameterName}"
+                               th:value="${_csrf.token}">
+
+                        <div class="alert danger"
+                             th:if="${#fields.hasGlobalErrors()}">
+
+                            <p th:each="error : ${#fields.globalErrors()}"
+                               th:text="${error}">
+                                Ошибка сохранения приоритета
+                            </p>
+
+                        </div>
+
+                        <div class="form-grid">
+
+                            <div class="field span-2">
+
+                                <label for="name">Наименование приоритета</label>
+
+                                <input id="name"
+                                       type="text"
+                                       maxlength="100"
+                                       autocomplete="off"
+                                       placeholder="Например: Срочный"
+                                       th:field="*{name}">
+
+                                <span class="field-error"
+                                      th:if="${#fields.hasErrors('name')}"
+                                      th:errors="*{name}">
+                                </span>
+
+                            </div>
+
+                            <div class="field">
+
+                                <label for="startDays">
+                                    Запуск, дней до первых операций
+                                </label>
+
+                                <input id="startDays"
+                                       type="number"
+                                       min="0"
+                                       max="365"
+                                       placeholder="3"
+                                       th:field="*{startDays}">
+
+                                <span class="field-hint">
+                                    Через сколько дней после планирования
+                                    оформлять первые операции
+                                </span>
+
+                                <span class="field-error"
+                                      th:if="${#fields.hasErrors('startDays')}"
+                                      th:errors="*{startDays}">
+                                </span>
+
+                            </div>
+
+                            <div class="field">
+
+                                <label for="maxLoadPercent">
+                                    Допустимая загруженность, %
+                                </label>
+
+                                <input id="maxLoadPercent"
+                                       type="number"
+                                       min="1"
+                                       max="100"
+                                       placeholder="90"
+                                       th:field="*{maxLoadPercent}">
+
+                                <span class="field-hint">
+                                    До какого процента загрузки участка
+                                    ему ещё можно назначать работу
+                                </span>
+
+                                <span class="field-error"
+                                      th:if="${#fields.hasErrors('maxLoadPercent')}"
+                                      th:errors="*{maxLoadPercent}">
+                                </span>
+
+                            </div>
+
+                            <div class="field">
+
+                                <label for="transitionDays">
+                                    Межоперационные переходы, раб. д.
+                                </label>
+
+                                <input id="transitionDays"
+                                       type="number"
+                                       min="0"
+                                       max="365"
+                                       placeholder="2"
+                                       th:field="*{transitionDays}">
+
+                                <span class="field-hint">
+                                    Рабочие дни паузы после выполнения
+                                    операции до следующей
+                                </span>
+
+                                <span class="field-error"
+                                      th:if="${#fields.hasErrors('transitionDays')}"
+                                      th:errors="*{transitionDays}">
+                                </span>
+
+                            </div>
+
+                            <div class="field">
+
+                                <label for="maxManufacturingDays">
+                                    Максимальная дата изготовления, раб. д.
+                                </label>
+
+                                <input id="maxManufacturingDays"
+                                       type="number"
+                                       min="0"
+                                       max="365"
+                                       placeholder="5"
+                                       th:field="*{maxManufacturingDays}">
+
+                                <span class="field-hint">
+                                    Сколько рабочих дней остаётся на
+                                    изготовление перед отгрузкой: при сроке
+                                    23.09 и значении 3 приступают не позднее
+                                    20.09, иначе планирование невозможно
+                                </span>
+
+                                <span class="field-error"
+                                      th:if="${#fields.hasErrors('maxManufacturingDays')}"
+                                      th:errors="*{maxManufacturingDays}">
+                                </span>
+
+                            </div>
+
+                        </div>
+
+                        <div class="form-actions">
+
+                            <button class="btn primary" type="submit">
+                                Занести приоритет
+                            </button>
+
+                        </div>
+
+                    </form>
+
+                </div>
+            </section>
+
+            <div class="stats stats--priority">
+
+                <div class="stat">
+                    <small>Действующих приоритетов</small>
+
+                    <strong th:text="${priorityCount ?: 0}">
+                        0
+                    </strong>
+
+                    <span class="trend">
+                        Доступны при оформлении заказа
+                    </span>
+                </div>
+
+                <div class="stat">
+                    <small>Всего правил</small>
+
+                    <strong th:text="${
+                        priorities != null
+                            ? #lists.size(priorities)
+                            : 0
+                    }">
+                        0
+                    </strong>
+
+                    <span class="trend">
+                        Вместе с выведенными из работы
+                    </span>
+                </div>
+            </div>
+
+            <section class="card">
+
+                <div class="card-head">
+
+                    <div>
+
+                        <h2>Список приоритетов</h2>
+
+                        <small>
+                            Показано записей:
+
+                            <strong th:text="${
+                                priorities != null
+                                    ? #lists.size(priorities)
+                                    : 0
+                            }">
+                                0
+                            </strong>
+                        </small>
+
+                    </div>
+
+                </div>
+
+                <div class="card-body">
+
+                    <div class="table-wrap">
+
+                        <table class="data-table priority-table">
+
+                            <thead>
+                            <tr>
+                                <th style="width: 110px;">Код</th>
+                                <th>Наименование</th>
+                                <th style="width: 120px;">Запуск, дн.</th>
+                                <th style="width: 150px;">
+                                    Допустимая загруженность, %
+                                </th>
+                                <th style="width: 150px;">
+                                    Переходы, раб. д.
+                                </th>
+                                <th style="width: 190px;">
+                                    Макс. дата изготовления, раб. д.
+                                </th>
+                                <th style="width: 150px;">Статус</th>
+                                <th style="width: 190px;">Действия</th>
+                            </tr>
+                            </thead>
+
+                            <tbody>
+
+                            <tr th:if="${
+                                    priorities == null
+                                    or #lists.isEmpty(priorities)
+                                 }">
+
+                                <td colspan="8"
+                                    class="empty-table">
+                                    Приоритеты пока не заданы
+                                </td>
+
+                            </tr>
+
+                            <tr th:each="priority : ${priorities}">
+
+                                <td th:text="${priority.code}">
+                                    ПР-001
+                                </td>
+
+                                <td>
+                                    <span class="status"
+                                          th:classappend="${priority.badgeClass}"
+                                          th:text="${priority.name}">
+                                        Обычный
+                                    </span>
+                                </td>
+
+                                <td th:text="${priority.startDays}">3</td>
+
+                                <td th:text="${priority.maxLoadPercent}">90</td>
+
+                                <td th:text="${priority.transitionDays}">2</td>
+
+                                <td th:text="${priority.maxManufacturingDays}">
+                                    5
+                                </td>
+
+                                <td>
+
+                                    <span class="status done"
+                                          th:if="${priority.active}">
+                                        Действующий
+                                    </span>
+
+                                    <span class="status draft"
+                                          th:unless="${priority.active}">
+                                        Архивный
+                                    </span>
+
+                                </td>
+
+                                <td>
+
+                                    <div class="priority-actions">
+
+                                        <a class="btn secondary compact"
+                                           th:href="@{/dispatcher/priority/{id}/edit(id=${priority.id})}">
+                                            Изменить
+                                        </a>
+
+                                        <form method="post"
+                                              th:if="${priority.active}"
+                                              th:action="@{/dispatcher/priority/{id}/deactivate(id=${priority.id})}">
+
+                                            <input th:if="${_csrf != null}"
+                                                   type="hidden"
+                                                   th:name="${_csrf.parameterName}"
+                                                   th:value="${_csrf.token}">
+
+                                            <button class="btn secondary compact"
+                                                    type="submit">
+                                                В архив
+                                            </button>
+
+                                        </form>
+
+                                        <form method="post"
+                                              th:unless="${priority.active}"
+                                              th:action="@{/dispatcher/priority/{id}/activate(id=${priority.id})}">
+
+                                            <input th:if="${_csrf != null}"
+                                                   type="hidden"
+                                                   th:name="${_csrf.parameterName}"
+                                                   th:value="${_csrf.token}">
+
+                                            <button class="btn secondary compact"
+                                                    type="submit">
+                                                В работу
+                                            </button>
+
+                                        </form>
+
+                                    </div>
+
+                                </td>
+
+                            </tr>
+
+                            </tbody>
+                        </table>
+
+                    </div>
+                </div>
+            </section>
+
+            <div class="empty-state"
+                 th:if="${
+                     priorities == null
+                     or #lists.isEmpty(priorities)
+                 }">
+                <h3>Правил планирования пока нет</h3>
+
+                <p>
+                    Задайте приоритет в форме выше: заказ покупателя
+                    без приоритета нельзя поставить в очередь, а от
+                    максимальной даты изготовления зависит, успеет ли
+                    заказ к сроку отгрузки.
+                </p>
+            </div>
+
+        </div>
+    </main>
+</div>
+
+<th:block th:replace="~{dispatcher/fragments/layout
+        :: commonScripts}">
+</th:block>
+
+</body>
+</html>
