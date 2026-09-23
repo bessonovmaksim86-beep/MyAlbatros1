@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="ru"
+      xmlns:th="http://www.thymeleaf.org">
+
+<head>
+    <meta charset="UTF-8">
+
+    <meta name="viewport"
+          content="width=device-width, initial-scale=1">
+
+    <title>Возврат поставщику</title>
+
+    <link rel="stylesheet"
+          th:href="@{/technology/css/technology.css}">
+
+    <link rel="stylesheet"
+          th:href="@{/technology/css/common.css}">
+
+    <link rel="stylesheet"
+          th:href="@{/input-control/css/input-control.css}">
+</head>
+
+<body>
+
+<div class="app-shell">
+
+    <aside th:replace="~{input-control/fragments/layout
+            :: sidebar('returns')}">
+    </aside>
+
+    <main class="main">
+
+        <header th:replace="~{input-control/fragments/layout
+                :: topbar}">
+        </header>
+
+        <div class="bvk-page">
+
+            <div class="page-head">
+
+                <div class="page-title">
+
+                    <h1>Возврат поставщику</h1>
+
+                    <p>
+                        Забракованные партии, по которым бюро приняло
+                        решение о возврате: строки реестра служат
+                        основой рекламации поставщику
+                    </p>
+
+                </div>
+
+                <div class="page-head-actions">
+
+                    <a class="btn secondary"
+                       th:href="@{/input-control/control}">
+                        К списку партий
+                    </a>
+
+                </div>
+            </div>
+
+            <div class="alert success"
+                 th:if="${successMessage}"
+                 th:text="${successMessage}">
+            </div>
+
+            <div class="alert danger"
+                 th:if="${errorMessage}"
+                 th:text="${errorMessage}">
+            </div>
+
+            <section class="card">
+
+                <div class="card-head">
+
+                    <div>
+
+                        <h2>Партии к возврату</h2>
+
+                        <small>
+                            В реестр попадают группы брака закрытых
+                            проверок с решением «Возврат поставщику»:
+                            партию бракуют частями, поэтому на одну
+                            партию может приходиться несколько строк —
+                            по каждой возвратной группе
+                        </small>
+
+                    </div>
+
+                    <span class="bvk-counter"
+                          th:if="${returns != null and !#lists.isEmpty(returns)}">
+
+                        Строк возврата:
+
+                        <strong th:text="${#lists.size(returns)}">
+                            1
+                        </strong>
+                    </span>
+                </div>
+
+                <div class="card-body">
+
+                    <div class="alert danger"
+                         th:if="${returns == null or #lists.isEmpty(returns)}">
+
+                        <p>
+                            Возвратов нет: реестр заполняется, когда
+                            контролёр закрывает проверку с решением
+                            «Возврат поставщику» по группе брака
+                        </p>
+
+                    </div>
+
+                    <div class="table-wrap"
+                         th:unless="${returns == null or #lists.isEmpty(returns)}">
+
+                        <table class="data-table bvk-batch-table">
+
+                            <thead>
+
+                            <tr>
+                                <th>Поставщик</th>
+                                <th>Ордер</th>
+                                <th>Подсборка</th>
+                                <th>Состав возврата</th>
+                                <th>Причина</th>
+                                <th>Проверка</th>
+                                <th>Контролёр</th>
+                                <th></th>
+                            </tr>
+
+                            </thead>
+
+                            <tbody>
+
+                            <tr th:each="rec : ${returns}">
+
+                                <td th:text="${rec.batch.supplierName}">
+                                    ООО «Компонент»
+                                </td>
+
+                                <td th:text="${rec.batch.incomingOrderNumber}">
+                                    ТОРГ-12/44
+                                </td>
+
+                                <td th:text="${rec.batch.cellLabel}">
+                                    1212 — Подсборка ЯПР56
+                                </td>
+
+                                <td class="bvk-number-cell"
+                                    th:text="${rec.compositionLabel}">
+                                    2 яч.: 121200023, 121200024
+                                </td>
+
+                                <td th:text="${rec.reasonChainLabel}">
+                                    Механическое повреждение → Скол корпуса
+                                </td>
+
+                                <td>
+                                    <div class="bvk-cell-stack">
+
+                                        <span class="status"
+                                              th:classappend="' ' + ${rec.group.decisionBadgeClass}"
+                                              th:text="${rec.group.decisionLabel}">
+                                            Возврат поставщику
+                                        </span>
+
+                                        <small class="mono"
+                                               th:text="${rec.card.formattedCompletedAt}">
+                                            21.09.2026 11:20
+                                        </small>
+                                    </div>
+                                </td>
+
+                                <td th:text="${rec.card.checkerName}">
+                                    Иванов И.И.
+                                </td>
+
+                                <td class="table-actions">
+
+                                    <!--
+                                        Возврат не правят на месте:
+                                        решение по партии меняют новой
+                                        проверкой, поэтому строку ведут
+                                        к карточке, породившей возврат.
+                                    -->
+                                    <a class="btn secondary compact"
+                                       th:href="@{/input-control/control/{id}(id=${rec.card.id})}">
+                                        Карточка проверки
+                                    </a>
+
+                                </td>
+
+                            </tr>
+
+                            </tbody>
+                        </table>
+
+                    </div>
+
+                </div>
+            </section>
+
+        </div>
+    </main>
+</div>
+
+<th:block th:replace="~{input-control/fragments/layout
+        :: commonScripts}">
+</th:block>
+
+</body>
+</html>

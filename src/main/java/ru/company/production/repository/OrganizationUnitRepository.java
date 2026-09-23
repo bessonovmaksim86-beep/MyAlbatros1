@@ -13,6 +13,16 @@ public interface OrganizationUnitRepository
 
     Optional<OrganizationUnit> findByCodeIgnoreCase(String code);
 
+    /**
+     * Подразделение службы по коду: цех руководителя определяется
+     * именно так, чтобы одноимённые подразделения разных служб
+     * не смешивались.
+     */
+    Optional<OrganizationUnit> findByServiceIdAndCodeIgnoreCase(
+            Long serviceId,
+            String code
+    );
+
     boolean existsByCodeIgnoreCase(String code);
 
     boolean existsByServiceAndNameIgnoreCase(

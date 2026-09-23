@@ -1,0 +1,455 @@
+<!DOCTYPE html>
+<html lang="ru"
+      xmlns:th="http://www.thymeleaf.org">
+
+<head>
+    <meta charset="UTF-8">
+
+    <meta name="viewport"
+          content="width=device-width, initial-scale=1">
+
+    <title>Оприходование ячеек</title>
+
+    <link rel="stylesheet"
+          th:href="@{/technology/css/technology.css}">
+
+    <link rel="stylesheet"
+          th:href="@{/technology/css/common.css}">
+
+    <link rel="stylesheet"
+          th:href="@{/warehouse/css/warehouse.css}">
+</head>
+
+<body>
+
+<div class="app-shell">
+
+    <aside th:replace="~{warehouse/fragments/layout
+            :: sidebar('receiving')}">
+    </aside>
+
+    <main class="main">
+
+        <header th:replace="~{warehouse/fragments/layout
+                :: topbar}">
+        </header>
+
+        <div class="page-content warehouse-page">
+
+            <div class="page-head">
+
+                <div class="page-title">
+
+                    <h1>Оприходование</h1>
+
+                    <p>
+                        Приход полуфабрикатов: поставщик, ордер,
+                        количество и название подсборки — из них
+                        формируется партия и серия номеров
+                    </p>
+
+                </div>
+
+                <div class="page-head-actions">
+
+                    <a class="btn secondary"
+                       th:href="@{/warehouse/general}">
+                        Обзор склада
+                    </a>
+
+                </div>
+            </div>
+
+            <div class="alert success"
+                 th:if="${successMessage}"
+                 th:text="${successMessage}">
+            </div>
+
+            <div class="alert danger"
+                 th:if="${errorMessage}"
+                 th:text="${errorMessage}">
+            </div>
+
+            <ol class="warehouse-steps">
+
+                <li class="warehouse-steps__item is-current">
+                    Приход
+                </li>
+
+                <li class="warehouse-steps__item">
+                    Номера и печать QR
+                </li>
+
+                <li class="warehouse-steps__item">
+                    Проверка данных
+                </li>
+
+                <li class="warehouse-steps__item">
+                    Сканирование ячеек
+                </li>
+
+            </ol>
+
+            <section class="card">
+
+                <div class="card-head">
+
+                    <div>
+
+                        <h2>Оформить приход</h2>
+
+                        <small>
+                            Все поля обязательны, кроме примечания:
+                            именно эти реквизиты сверяются перед
+                            окончательным оприходованием
+                        </small>
+
+                    </div>
+
+                </div>
+
+                <div class="card-body">
+
+                    <form method="post"
+                          th:action="@{/warehouse/receiving/create}"
+                          th:object="${receivingForm}"
+                          id="receivingForm">
+
+                        <input th:if="${_csrf != null}"
+                               type="hidden"
+                               th:name="${_csrf.parameterName}"
+                               th:value="${_csrf.token}">
+
+                        <div class="alert danger"
+                             th:if="${#fields.hasGlobalErrors()}">
+
+                            <p th:each="error : ${#fields.globalErrors()}"
+                               th:text="${error}">
+                                Партия не сформирована
+                            </p>
+
+                        </div>
+
+                        <div class="alert danger"
+                             th:if="${classifiers == null
+                                     or #lists.isEmpty(classifiers)}">
+
+                            <p>
+                                В справочнике нет ни одной ячейки:
+                                классификаторы с типом «Ячейка»
+                                заводит технологический отдел, после
+                                чего они появятся в этом списке
+                            </p>
+
+                        </div>
+
+                        <div class="form-grid">
+
+                            <div class="field">
+
+                                <label for="supplierName">Поставщик</label>
+
+                                <input id="supplierName"
+                                       type="text"
+                                       maxlength="255"
+                                       autocomplete="off"
+                                       list="supplierNamesList"
+                                       placeholder="ООО «Компонент»"
+                                       th:field="*{supplierName}">
+
+                                <!--
+                                    Написания из справочника поставщиков:
+                                    имя по-прежнему вводится свободно, но
+                                    сверка с ним не раскалывает сводку по
+                                    поставщику на несколько строк.
+                                -->
+                                <datalist id="supplierNamesList">
+                                    <option th:each="supplierName : ${supplierNames}"
+                                            th:value="${supplierName}">
+                                    </option>
+                                </datalist>
+
+                                <span class="field-error"
+                                      th:if="${#fields.hasErrors('supplierName')}"
+                                      th:errors="*{supplierName}">
+                                </span>
+
+                            </div>
+
+                            <div class="field">
+
+                                <label for="incomingOrderNumber">
+                                    Номер приходного ордера
+                                </label>
+
+                                <input id="incomingOrderNumber"
+                                       type="text"
+                                       maxlength="100"
+                                       autocomplete="off"
+                                       placeholder="Например: ТОРГ-12/44"
+                                       th:field="*{incomingOrderNumber}">
+
+                                <span class="field-error"
+                                      th:if="${#fields.hasErrors('incomingOrderNumber')}"
+                                      th:errors="*{incomingOrderNumber}">
+                                </span>
+
+                            </div>
+
+                            <div class="field">
+
+                                <label for="cellClassifierId">
+                                    Название подсборки
+                                </label>
+
+                                <select id="cellClassifierId"
+                                        th:field="*{cellClassifierId}">
+
+                                    <option value="">— выберите —</option>
+
+                                    <option th:each="classifier : ${classifiers}"
+                                            th:value="${classifier.id}"
+                                            th:text="${
+                                                classifier.code
+                                                + ' — '
+                                                + (classifier.subassemblyLabel != null
+                                                   and !#strings.isEmpty(classifier.subassemblyLabel)
+                                                       ? classifier.subassemblyLabel
+                                                       : 'Без наименования')
+                                            }">
+                                        1212 — Подсборка ЯПР56
+                                    </option>
+
+                                </select>
+
+                                <small class="field-hint">
+                                    Подсборки справочника классификаторов:
+                                    из их кода складывается префикс
+                                    серийных номеров
+                                </small>
+
+                                <span class="field-error"
+                                      th:if="${#fields.hasErrors('cellClassifierId')}"
+                                      th:errors="*{cellClassifierId}">
+                                </span>
+
+                            </div>
+
+                            <div class="field">
+
+                                <label for="quantity">Количество, шт.</label>
+
+                                <input id="quantity"
+                                       type="number"
+                                       min="1"
+                                       max="500"
+                                       step="1"
+                                       placeholder="Например: 10"
+                                       th:field="*{quantity}">
+
+                                <small class="field-hint">
+                                    От 1 до 500 ячеек одной партией
+                                </small>
+
+                                <span class="field-error"
+                                      th:if="${#fields.hasErrors('quantity')}"
+                                      th:errors="*{quantity}">
+                                </span>
+
+                            </div>
+
+                            <div class="field">
+
+                                <label for="changeNumber">Номер изменения</label>
+
+                                <input id="changeNumber"
+                                       type="text"
+                                       maxlength="50"
+                                       autocomplete="off"
+                                       placeholder="Например: Изм. 3"
+                                       th:field="*{changeNumber}">
+
+                                <span class="field-error"
+                                      th:if="${#fields.hasErrors('changeNumber')}"
+                                      th:errors="*{changeNumber}">
+                                </span>
+
+                            </div>
+
+                            <div class="field span-2">
+
+                                <label for="note">Примечание</label>
+
+                                <textarea id="note"
+                                          maxlength="2000"
+                                          placeholder="Необязательно"
+                                          th:field="*{note}">
+                                </textarea>
+
+                                <span class="field-error"
+                                      th:if="${#fields.hasErrors('note')}"
+                                      th:errors="*{note}">
+                                </span>
+
+                            </div>
+
+                        </div>
+
+                        <div class="form-actions">
+
+                            <button type="submit" class="btn primary">
+                                Сформировать партию
+                            </button>
+
+                        </div>
+
+                    </form>
+
+                </div>
+
+            </section>
+
+            <section class="card">
+
+                <div class="card-head">
+
+                    <div>
+
+                        <h2>Партии приходов</h2>
+
+                        <small>
+                            Незакрытую партию можно продолжить:
+                            зарезервированные за ней номера остаются
+                            занятыми до сканирования
+                        </small>
+
+                    </div>
+
+                    <span class="badge"
+                          th:if="${pendingReceivingCount != null
+                                  and pendingReceivingCount > 0}">
+
+                        Незакрытых:
+
+                        <strong th:text="${pendingReceivingCount}">
+                            1
+                        </strong>
+                    </span>
+                </div>
+
+                <div class="card-body">
+
+                    <div class="alert danger"
+                         th:if="${batches == null or #lists.isEmpty(batches)}">
+
+                        <p>
+                            Партий ещё нет: оформите приход в форме выше
+                        </p>
+
+                    </div>
+
+                    <div class="table-wrap"
+                         th:unless="${batches == null or #lists.isEmpty(batches)}">
+
+                        <table class="data-table warehouse-batch-table">
+
+                            <thead>
+
+                            <tr>
+                                <th>Поставщик</th>
+                                <th>Ордер</th>
+                                <th>Подсборка</th>
+                                <th>Кол-во</th>
+                                <th>Номера</th>
+                                <th>Изм.</th>
+                                <th>Статус</th>
+                                <th>Оформлен</th>
+                                <th></th>
+                            </tr>
+
+                            </thead>
+
+                            <tbody>
+
+                            <tr th:each="batch : ${batches}">
+
+                                <td th:text="${batch.supplierName}">
+                                    ООО «Компонент»
+                                </td>
+
+                                <td th:text="${batch.incomingOrderNumber}">
+                                    ТОРГ-12/44
+                                </td>
+
+                                <td th:text="${batch.cellLabel}">
+                                    1212 — Подсборка ЯПР56
+                                </td>
+
+                                <td th:text="${batch.quantity}">
+                                    4
+                                </td>
+
+                                <td class="warehouse-number-cell"
+                                    th:text="${batch.numberRangeLabel}">
+                                    121200022 … 121200025
+                                </td>
+
+                                <td th:text="${batch.changeNumber}">
+                                    Изм. 3
+                                </td>
+
+                                <td>
+                                    <span class="status"
+                                          th:classappend="' ' + ${batch.statusBadgeClass}"
+                                          th:text="${batch.statusLabel}">
+                                        Ждёт сканирования
+                                    </span>
+                                </td>
+
+                                <td th:text="${batch.formattedCreatedAt}">
+                                    21.09.2026 09:14
+                                </td>
+
+                                <td class="table-actions">
+
+                                    <a class="btn secondary compact"
+                                       th:if="${batch.pending and !batch.qrPrinted}"
+                                       th:href="@{/warehouse/receiving/{id}/qr(id=${batch.id})}">
+                                        Номера и QR
+                                    </a>
+
+                                    <a class="btn secondary compact"
+                                       th:if="${batch.pending and batch.qrPrinted}"
+                                       th:href="@{/warehouse/receiving/{id}/scan(id=${batch.id})}">
+                                        Сканировать
+                                    </a>
+
+                                    <a class="btn secondary compact"
+                                       th:unless="${batch.pending}"
+                                       th:href="@{/warehouse/receiving/{id}/confirm(id=${batch.id})}">
+                                        Смотреть
+                                    </a>
+
+                                </td>
+
+                            </tr>
+
+                            </tbody>
+                        </table>
+
+                    </div>
+
+                </div>
+
+            </section>
+
+        </div>
+    </main>
+</div>
+
+<th:block th:replace="~{warehouse/fragments/layout
+        :: commonScripts}">
+</th:block>
+
+</body>
+</html>

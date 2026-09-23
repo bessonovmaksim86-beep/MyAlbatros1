@@ -1,7 +1,6 @@
 package ru.company.production.service;
 
 import lombok.RequiredArgsConstructor;
-import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -127,8 +126,14 @@ public class AdminUserService {
         return userRepository.save(user);
     }
 
+    /*
+     * Учётную запись только отключают: на неё ссылаются заказы, ПЗ,
+     * операции и приходные партии (fk_customer_order_author и др.),
+     * поэтому физический DELETE БД не пропускает, а история автора
+     * при удалении всё равно была бы потеряна.
+     */
     @Transactional
-    public void delete(
+    public void deactivate(
             Long id,
             String currentUsername
     ) {
@@ -144,32 +149,27 @@ public class AdminUserService {
                 .equalsIgnoreCase(currentUsername)) {
 
             throw new IllegalArgumentException(
-                    "Нельзя удалить собственную учётную запись"
+                    "Нельзя отключить собственную учётную запись"
             );
         }
 
         if (user.getRole() == Role.ADMIN
-                && userRepository.countByRole(Role.ADMIN) <= 1) {
+                && userRepository.countByRoleAndActiveTrue(Role.ADMIN) <= 1) {
 
             throw new IllegalArgumentException(
-                    "Нельзя удалить последнего администратора"
+                    "Нельзя отключить последнего активного администратора"
             );
         }
 
-        try {
-            userRepository.delete(user);
-            userRepository.flush();
-
-        } catch (DataIntegrityViolationException exception) {
-            /*
-             * На пользователя есть ссылки из заказов, ПЗ или операций,
-             * поэтому физическое удаление запрещено ограничениями БД.
-             */
+        if (!user.isActive()) {
             throw new IllegalArgumentException(
-                    "Нельзя удалить пользователя: на него есть ссылки. "
-                            + "Отключите учётную запись."
+                    "Учётная запись уже отключена"
             );
         }
+
+        user.setActive(false);
+
+        userRepository.save(user);
     }
 
     private AdminUserView toView(AppUser user) {

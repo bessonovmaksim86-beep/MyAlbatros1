@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="ru"
+      xmlns:th="http://www.thymeleaf.org">
+
+<head>
+    <meta charset="UTF-8">
+
+    <meta name="viewport"
+          content="width=device-width, initial-scale=1">
+
+    <title>Обзор бюро входного контроля</title>
+
+    <link rel="stylesheet"
+          th:href="@{/technology/css/technology.css}">
+
+    <link rel="stylesheet"
+          th:href="@{/technology/css/common.css}">
+
+    <link rel="stylesheet"
+          th:href="@{/input-control/css/input-control.css}">
+</head>
+
+<body>
+
+<div class="app-shell">
+
+    <aside th:replace="~{input-control/fragments/layout
+            :: sidebar('general')}">
+    </aside>
+
+    <main class="main">
+
+        <header th:replace="~{input-control/fragments/layout
+                :: topbar}">
+        </header>
+
+        <div class="bvk-page">
+
+            <div class="page-head">
+
+                <div class="page-title">
+
+                    <h1>Бюро входного контроля</h1>
+
+                    <p>
+                        Проверка партий, оприходованных складом:
+                        выборочный контроль ячеек, изолятор брака и
+                        решение по партии
+                    </p>
+
+                </div>
+
+                <div class="page-head-actions">
+
+                    <a class="btn primary"
+                       th:href="@{/input-control/control}">
+                        Входной контроль
+                    </a>
+
+                </div>
+            </div>
+
+            <div class="alert success"
+                 th:if="${successMessage}"
+                 th:text="${successMessage}">
+            </div>
+
+            <div class="alert danger"
+                 th:if="${errorMessage}"
+                 th:text="${errorMessage}">
+            </div>
+
+            <div class="stats stats--bvk">
+
+                <div class="stat">
+                    <small>Проверок в работе</small>
+
+                    <strong th:text="${inWorkCount ?: 0}">
+                        1
+                    </strong>
+
+                    <span class="trend attention">
+                        Открытая карточка держит партию от повторного
+                        взятия в работу
+                    </span>
+                </div>
+
+                <div class="stat">
+                    <small>Проверок завершено</small>
+
+                    <strong th:text="${completedCount ?: 0}">
+                        3
+                    </strong>
+
+                    <span class="trend">
+                        Закрытые карточки с причиной и решением
+                    </span>
+                </div>
+
+                <div class="stat">
+                    <small>Партий на входе</small>
+
+                    <strong th:text="${batches == null ? 0 : batches.size()}">
+                        5
+                    </strong>
+
+                    <span class="trend">
+                        Оприходовано складом и доступно проверке
+                    </span>
+                </div>
+            </div>
+
+            <section class="card">
+
+                <div class="card-head">
+
+                    <div>
+
+                        <h2>Партии, ожидающие проверки</h2>
+
+                        <small>
+                            Партия попадает в список после того, как
+                            склад закрыл приход: её номера уже в реестре
+                        </small>
+
+                    </div>
+
+                    <a class="btn secondary"
+                       th:href="@{/input-control/control}">
+                        Перейти к списку
+                    </a>
+                </div>
+
+                <div class="card-body">
+
+                    <div class="alert danger"
+                         th:if="${batches == null or #lists.isEmpty(batches)}">
+
+                        <p>
+                            Оприходованных партий пока нет: входной
+                            контроль начинают после того, как склад
+                            подтвердит приход и внесёт номера ячеек в
+                            реестр
+                        </p>
+
+                    </div>
+
+                    <div class="table-wrap"
+                         th:unless="${batches == null or #lists.isEmpty(batches)}">
+
+                        <table class="data-table bvk-batch-table">
+
+                            <thead>
+
+                            <tr>
+                                <th>Поставщик</th>
+                                <th>Ордер</th>
+                                <th>Подсборка</th>
+                                <th>Кол-во</th>
+                                <th>Номера</th>
+                                <th>Оприходовано</th>
+                                <th>Входной контроль</th>
+                                <th></th>
+                            </tr>
+
+                            </thead>
+
+                            <tbody>
+
+                            <tr th:each="batch : ${batches}"
+                                th:with="
+                                    openCard=${
+                                        openCards != null
+                                            ? openCards.get(batch.id)
+                                            : null
+                                    },
+                                    doneCard=${
+                                        completedCards != null
+                                            ? completedCards.get(batch.id)
+                                            : null
+                                    }">
+
+                                <td th:text="${batch.supplierName}">
+                                    ООО «Компонент»
+                                </td>
+
+                                <td th:text="${batch.incomingOrderNumber}">
+                                    ТОРГ-12/44
+                                </td>
+
+                                <td th:text="${batch.cellLabel}">
+                                    1212 — Подсборка ЯПР56
+                                </td>
+
+                                <td th:text="${batch.quantity}">
+                                    4
+                                </td>
+
+                                <td class="bvk-number-cell"
+                                    th:text="${batch.numberRangeLabel}">
+                                    121200022 … 121200025
+                                </td>
+
+                                <td th:text="${batch.formattedConfirmedAt}">
+                                    21.09.2026 09:40
+                                </td>
+
+                                <td>
+                                    <span class="bvk-state bvk-state--work"
+                                          th:if="${openCard != null}">
+                                        В работе
+                                    </span>
+
+                                    <span class="bvk-state bvk-state--done"
+                                          th:if="${openCard == null and doneCard != null}">
+                                        Проверка завершена
+                                    </span>
+
+                                    <span class="bvk-state bvk-state--free"
+                                          th:if="${openCard == null and doneCard == null}">
+                                        Ожидает проверки
+                                    </span>
+                                </td>
+
+                                <td class="table-actions">
+
+                                    <a class="btn secondary compact"
+                                       th:if="${openCard != null}"
+                                       th:href="@{/input-control/control/{id}(id=${openCard.id})}">
+                                        Продолжить
+                                    </a>
+
+                                    <a class="btn secondary compact"
+                                       th:if="${openCard == null and doneCard != null}"
+                                       th:href="@{/input-control/control/{id}(id=${doneCard.id})}">
+                                        Смотреть
+                                    </a>
+
+                                    <form th:if="${openCard == null and doneCard == null}"
+                                          method="post"
+                                          th:action="@{/input-control/control/{batchId}/take(batchId=${batch.id})}">
+
+                                        <input th:if="${_csrf != null}"
+                                               type="hidden"
+                                               th:name="${_csrf.parameterName}"
+                                               th:value="${_csrf.token}">
+
+                                        <button type="submit" class="btn primary compact">
+                                            Взять в работу
+                                        </button>
+                                    </form>
+
+                                </td>
+
+                            </tr>
+
+                            </tbody>
+                        </table>
+
+                    </div>
+
+                </div>
+            </section>
+
+        </div>
+    </main>
+</div>
+
+<th:block th:replace="~{input-control/fragments/layout
+        :: commonScripts}">
+</th:block>
+
+</body>
+</html>

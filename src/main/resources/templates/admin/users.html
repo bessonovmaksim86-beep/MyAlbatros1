@@ -1,269 +1,394 @@
 <!DOCTYPE html>
 <html lang="ru"
       xmlns:th="http://www.thymeleaf.org">
+
 <head>
     <meta charset="UTF-8">
+
+    <meta name="viewport"
+          content="width=device-width, initial-scale=1">
+
     <title>Пользователи</title>
-    <link rel="stylesheet" th:href="@{/css/app.css}">
+
+    <link rel="stylesheet"
+          th:href="@{/technology/css/technology.css}">
+
+    <link rel="stylesheet"
+          th:href="@{/technology/css/common.css}">
+
+    <link rel="stylesheet"
+          th:href="@{/admin/css/admin.css}">
 </head>
+
 <body>
 
-<header>
-    <a th:href="@{/}">Главная</a>
+<div class="app-shell">
 
-    <strong>Управление пользователями</strong>
+    <aside th:replace="~{admin/fragments/layout
+            :: sidebar('users')}">
+    </aside>
 
-    <form class="inline-form"
-          th:action="@{/logout}"
-          method="post">
-        <button type="submit">Выйти</button>
-    </form>
-</header>
+    <main class="main">
 
-<main>
-    <div class="message success"
-         th:if="${success}"
-         th:text="${success}">
-    </div>
+        <header th:replace="~{admin/fragments/layout
+                :: topbar}">
+        </header>
 
-    <div class="message error"
-         th:if="${error}"
-         th:text="${error}">
-    </div>
+        <div class="page-content admin-page">
 
-    <section class="card">
-        <h2>Добавить пользователя</h2>
+            <div class="page-head">
 
-        <form th:action="@{/admin/users}"
-              th:object="${form}"
-              method="post">
+                <div>
 
-            <div class="message error"
-                 th:if="${#fields.hasAnyErrors()}">
-                <div th:each="item : ${#fields.allErrors()}"
-                     th:text="${item.defaultMessage}">
+                    <h1>Управление пользователями</h1>
+
+                    <p>
+                        Учётные записи сотрудников: логин формируется из ФИО,
+                        роль определяет интерфейс, в который попадёт человек
+                        после входа.
+                    </p>
                 </div>
-            </div>
 
-            <label>
-                ФИО
-                <input type="text"
-                       id="fullName"
-                       th:field="*{fullName}"
-                       placeholder="Иванов Иван Иванович"
-                       autocomplete="off"
-                       required>
-            </label>
-
-            <label>
-                Автоматический логин
-                <input type="text"
-                       id="generatedLogin"
-                       readonly
-                       placeholder="Логин появится после ввода ФИО">
-            </label>
-
-            <label>
-                Должность
-                <input type="text"
-                       th:field="*{specialty}"
-                       placeholder="Инженер-технолог"
-                       required>
-            </label>
-
-            <label>
-                Роль
-
-                <select th:field="*{role}"
-                        id="roleSelect"
-                        required>
-
-                    <option value="">
-                        Выберите роль
-                    </option>
-
-                    <option th:each="role : ${roles}"
-                            th:value="${role.name()}"
-                            th:text="${role.displayName}">
-                    </option>
-                </select>
-            </label>
-
-            <div id="orgFields">
-                <label>
-                    Служба
-
-                    <select id="serviceSelect"
-                            th:field="*{serviceId}">
-
-                        <option value="">
-                            Не выбрана
-                        </option>
-
-                        <option th:each="service : ${services}"
-                                th:value="${service.id}"
-                                th:text="|${service.code} — ${service.name}|">
-                        </option>
-                    </select>
-                </label>
-
-                <label>
-                    Тип пользователя
-
-                    <select th:field="*{roleUser}"
-                            id="roleUserSelect">
-
-                        <option value="">
-                            Не выбран
-                        </option>
-
-                        <option th:each="type : ${userTypes}"
-                                th:value="${type.name()}"
-                                th:text="${type.displayName}">
-                        </option>
-                    </select>
-                </label>
-
-                <label>
-                    Цех/отдел
-
-                    <select id="unitSelect"
-                            th:field="*{organizationUnitId}">
-
-                        <option value="">
-                            Без подразделения
-                        </option>
-
-                        <option th:each="unit : ${organizationUnits}"
-                                th:value="${unit.id}"
-                                th:attr="data-service-id=${unit.service.id}"
-                                th:text="|${unit.service.code}: ${unit.name}|">
-                        </option>
-                    </select>
-
-                    <small>
-                        Для руководителя службы и для СГМ подразделение
-                        не выбирается.
-                    </small>
-                </label>
-            </div>
-
-            <label>
-                Пароль
-
-                <span class="input-with-button">
-                    <input type="text"
-                           id="password"
-                           th:field="*{password}"
-                           autocomplete="new-password"
-                           required>
-
-                    <button type="button"
-                            id="generatePasswordButton"
-                            class="secondary-button">
-                        Сгенерировать
-                    </button>
+                <span class="badge"
+                      th:text="${#lists.size(users) + ' записей'}">
+                    18 записей
                 </span>
-            </label>
+            </div>
 
-            <button type="submit">
-                Добавить пользователя
-            </button>
-        </form>
-    </section>
+            <div class="alert success"
+                 th:if="${success}"
+                 th:text="${success}">
+            </div>
 
-    <section class="card">
-        <h2>Пользователи системы</h2>
+            <div class="alert danger"
+                 th:if="${error}"
+                 th:text="${error}">
+            </div>
 
-        <div class="table-wrapper">
-            <table>
-                <thead>
-                <tr>
-                    <th>ID</th>
-                    <th>ФИО</th>
-                    <th>Логин</th>
-                    <th>Пароль</th>
-                    <th>Должность</th>
-                    <th>Служба</th>
-                    <th>Цех/отдел</th>
-                    <th>Тип пользователя</th>
-                    <th>Роль</th>
-                    <th>Активен</th>
-                    <th>Действие</th>
-                </tr>
-                </thead>
+            <section class="card gap">
 
-                <tbody>
-                <tr th:each="user : ${users}">
-                    <td th:text="${user.id}"></td>
+                <div class="card-head">
 
-                    <td th:text="${user.fullName != null
-                        ? user.fullName
-                        : 'Не указано'}">
-                    </td>
+                    <div>
 
-                    <td>
-                        <code th:text="${user.username}"></code>
-                    </td>
+                        <h2>Добавить пользователя</h2>
 
-                    <td>
-                        <button type="button"
-                                class="secondary-button show-password"
-                                th:attr="data-url=@{/admin/users/{id}/password(id=${user.id})}">
-                            Показать
-                        </button>
+                        <p>
+                            Поля со звёздочкой обязательны. Пароль можно
+                            сгенерировать кнопкой — администратору он виден
+                            только при явном запросе из таблицы ниже.
+                        </p>
+                    </div>
+                </div>
 
-                        <code class="visible-password" hidden>
-                        </code>
-                    </td>
+                <div class="card-body">
 
-                    <td th:text="${user.specialty != null
-                        ? user.specialty
-                        : 'Не указана'}">
-                    </td>
+                    <form th:action="@{/admin/users}"
+                          th:object="${form}"
+                          method="post">
 
-                    <td th:text="${user.service != null
-                        ? user.service
-                        : 'Не назначена'}">
-                    </td>
+                        <input th:if="${_csrf != null}"
+                               type="hidden"
+                               th:name="${_csrf.parameterName}"
+                               th:value="${_csrf.token}">
 
-                    <td th:text="${user.organizationUnit != null
-                        ? user.organizationUnit
-                        : '—'}">
-                    </td>
+                        <div class="alert danger"
+                             th:if="${#fields.hasAnyErrors()}">
+                            <div th:each="item : ${#fields.allErrors()}"
+                                 th:text="${item.defaultMessage}">
+                            </div>
+                        </div>
 
-                    <td th:text="${user.roleUser != null
-                        ? user.roleUser
-                        : '—'}">
-                    </td>
+                        <div class="form-grid">
 
-                    <td th:text="${user.roleName}">
-                    </td>
+                            <div class="field">
 
-                    <td th:text="${user.active ? 'Да' : 'Нет'}">
-                    </td>
+                                <label for="fullName">ФИО</label>
 
-                    <td>
-                        <form th:action="@{/admin/users/{id}/delete(id=${user.id})}"
-                              method="post"
-                              onsubmit="return confirm('Удалить пользователя?')">
-                            <button class="danger" type="submit">
-                                Удалить
+                                <input type="text"
+                                       id="fullName"
+                                       th:field="*{fullName}"
+                                       placeholder="Иванов Иван Иванович"
+                                       autocomplete="off"
+                                       required>
+                            </div>
+
+                            <div class="field">
+
+                                <label for="generatedLogin">
+                                    Автоматический логин
+                                </label>
+
+                                <input type="text"
+                                       id="generatedLogin"
+                                       readonly
+                                       placeholder="Логин появится после ввода ФИО">
+
+                                <small class="field-hint">
+                                    Формируется из ФИО, править вручную не нужно
+                                </small>
+                            </div>
+
+                            <div class="field">
+
+                                <label for="specialty">Должность</label>
+
+                                <input type="text"
+                                       id="specialty"
+                                       th:field="*{specialty}"
+                                       placeholder="Инженер-технолог"
+                                       required>
+                            </div>
+
+                            <div class="field">
+
+                                <label for="roleSelect">Роль</label>
+
+                                <select th:field="*{role}"
+                                        id="roleSelect"
+                                        required>
+
+                                    <option value="">
+                                        Выберите роль
+                                    </option>
+
+                                    <option th:each="role : ${roles}"
+                                            th:value="${role.name()}"
+                                            th:text="${role.displayName}">
+                                    </option>
+                                </select>
+                            </div>
+
+                            <div id="orgFields"
+                                 class="span-2">
+
+                                <div class="form-grid">
+
+                                    <div class="field">
+
+                                        <label for="serviceSelect">
+                                            Служба
+                                        </label>
+
+                                        <select id="serviceSelect"
+                                                th:field="*{serviceId}">
+
+                                            <option value="">
+                                                Не выбрана
+                                            </option>
+
+                                            <option th:each="service : ${services}"
+                                                    th:value="${service.id}"
+                                                    th:text="|${service.code} — ${service.name}|">
+                                            </option>
+                                        </select>
+                                    </div>
+
+                                    <div class="field">
+
+                                        <label for="roleUserSelect">
+                                            Тип пользователя
+                                        </label>
+
+                                        <select th:field="*{roleUser}"
+                                                id="roleUserSelect">
+
+                                            <option value="">
+                                                Не выбран
+                                            </option>
+
+                                            <option th:each="type : ${userTypes}"
+                                                    th:value="${type.name()}"
+                                                    th:text="${type.displayName}">
+                                            </option>
+                                        </select>
+                                    </div>
+
+                                    <div class="field span-2">
+
+                                        <label for="unitSelect">
+                                            Цех/отдел
+                                        </label>
+
+                                        <select id="unitSelect"
+                                                th:field="*{organizationUnitId}">
+
+                                            <option value="">
+                                                Без подразделения
+                                            </option>
+
+                                            <option th:each="unit : ${organizationUnits}"
+                                                    th:value="${unit.id}"
+                                                    th:attr="data-service-id=${unit.service.id}"
+                                                    th:text="|${unit.service.code}: ${unit.name}|">
+                                            </option>
+                                        </select>
+
+                                        <small class="field-hint">
+                                            Для руководителя службы и для СГМ
+                                            подразделение не выбирается.
+                                        </small>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="field span-2">
+
+                                <label for="password">Пароль</label>
+
+                                <span class="admin-password-row">
+                                    <input type="text"
+                                           id="password"
+                                           th:field="*{password}"
+                                           autocomplete="new-password"
+                                           required>
+
+                                    <button type="button"
+                                            id="generatePasswordButton"
+                                            class="btn secondary">
+                                        Сгенерировать
+                                    </button>
+                                </span>
+                            </div>
+                        </div>
+
+                        <div class="form-actions">
+
+                            <button type="submit" class="btn primary">
+                                Добавить пользователя
                             </button>
-                        </form>
-                    </td>
-                </tr>
+                        </div>
 
-                <tr th:if="${#lists.isEmpty(users)}">
-                    <td colspan="11">
-                        Пользователей пока нет
-                    </td>
-                </tr>
-                </tbody>
-            </table>
+                    </form>
+
+                </div>
+
+            </section>
+
+            <section class="card">
+
+                <div class="card-head">
+
+                    <div>
+
+                        <h2>Пользователи системы</h2>
+
+                        <p>
+                            Удаление отключает учётную запись: история заказов
+                            и отметок календаря остаётся в базе.
+                        </p>
+                    </div>
+                </div>
+
+                <div class="card-body">
+
+                    <div class="table-wrap">
+
+                        <table>
+                            <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>ФИО</th>
+                                <th>Логин</th>
+                                <th>Пароль</th>
+                                <th>Должность</th>
+                                <th>Служба</th>
+                                <th>Цех/отдел</th>
+                                <th>Тип пользователя</th>
+                                <th>Роль</th>
+                                <th>Активен</th>
+                                <th>Действие</th>
+                            </tr>
+                            </thead>
+
+                            <tbody>
+                            <tr th:each="user : ${users}">
+
+                                <td th:text="${user.id}"></td>
+
+                                <td th:text="${user.fullName != null
+                                    ? user.fullName
+                                    : 'Не указано'}">
+                                </td>
+
+                                <td>
+                                    <code th:text="${user.username}"></code>
+                                </td>
+
+                                <td>
+                                    <button type="button"
+                                            class="btn secondary compact show-password"
+                                            th:attr="data-url=@{/admin/users/{id}/password(id=${user.id})}">
+                                        Показать
+                                    </button>
+
+                                    <code class="visible-password" hidden>
+                                    </code>
+                                </td>
+
+                                <td th:text="${user.specialty != null
+                                    ? user.specialty
+                                    : 'Не указана'}">
+                                </td>
+
+                                <td th:text="${user.service != null
+                                    ? user.service
+                                    : 'Не назначена'}">
+                                </td>
+
+                                <td th:text="${user.organizationUnit != null
+                                    ? user.organizationUnit
+                                    : '—'}">
+                                </td>
+
+                                <td th:text="${user.roleUser != null
+                                    ? user.roleUser
+                                    : '—'}">
+                                </td>
+
+                                <td th:text="${user.roleName}"></td>
+
+                                <td th:text="${user.active ? 'Да' : 'Нет'}"></td>
+
+                                <td>
+                                    <form th:action="@{/admin/users/{id}/deactivate(id=${user.id})}"
+                                          method="post"
+                                          onsubmit="return confirm('Отключить учётную запись?')">
+
+                                        <input th:if="${_csrf != null}"
+                                               type="hidden"
+                                               th:name="${_csrf.parameterName}"
+                                               th:value="${_csrf.token}">
+
+                                        <button class="btn danger compact"
+                                                type="submit"
+                                                th:disabled="${!user.active}">
+                                            Отключить
+                                        </button>
+                                    </form>
+                                </td>
+                            </tr>
+
+                            <tr th:if="${#lists.isEmpty(users)}">
+                                <td colspan="11">
+                                    Пользователей пока нет
+                                </td>
+                            </tr>
+                            </tbody>
+                        </table>
+                    </div>
+
+                </div>
+
+            </section>
+
         </div>
-    </section>
-</main>
+    </main>
+</div>
+
+<th:block th:replace="~{admin/fragments/layout
+        :: commonScripts}">
+</th:block>
 
 <script th:inline="javascript">
     const fullNameInput =
@@ -348,8 +473,8 @@
     if (fullNameInput.value.trim() !== "") {
         updateLogin();
     }
-
 </script>
+
 <script>
     const serviceSelect =
         document.getElementById("serviceSelect");
@@ -452,6 +577,7 @@
 
     toggleOrganizationFields();
 </script>
+
 <script>
     document.addEventListener("click", async function (event) {
         const button =
@@ -498,5 +624,6 @@
         }
     });
 </script>
+
 </body>
 </html>

@@ -61,6 +61,30 @@ public interface OperationRepository
             @Param("id") Long id
     );
 
+    /*
+     * Операции цеха с ролью «Исполнитель» — тот же раздел, что и в
+     * справочнике операций: руководителю цеха доступны только те
+     * операции, которые исполнитель этого цеха и выполняет.
+     */
+    @EntityGraph(attributePaths = {
+            "operationName",
+            "operationType",
+            "service",
+            "organizationUnit",
+            "executorRole"
+    })
+    @Query("""
+            select operation
+            from Operation operation
+            where operation.organizationUnit.id = :organizationUnitId
+              and operation.executorRole.code = :executorRoleCode
+            order by operation.operationName.name asc
+            """)
+    List<Operation> findUnitExecutorOperations(
+            @Param("organizationUnitId") Long organizationUnitId,
+            @Param("executorRoleCode") String executorRoleCode
+    );
+
     @Query("""
             select count(operation)
             from Operation operation

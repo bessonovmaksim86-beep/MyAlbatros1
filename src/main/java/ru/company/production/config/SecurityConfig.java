@@ -56,6 +56,36 @@ public class SecurityConfig {
                                 "/webjars/**"
                         ).permitAll()
                         .requestMatchers("/admin", "/admin/**").hasRole("ADMIN")
+                        /*
+                         * Модуль руководителя цеха: доступ только у
+                         * руководящих ролей цехов. Содержимое при этом
+                         * ограничено цехом конкретной учётной записи —
+                         * см. WorkshopStaffService, где граница берётся
+                         * из подразделения пользователя.
+                         */
+                        .requestMatchers("/workshop", "/workshop/**")
+                        .hasAnyRole(
+                                "SDP_SPP_MASTER",
+                                "SDP_SA_MASTER",
+                                "SDP_SC_MASTER",
+                                "SDP_ST_MASTER"
+                        )
+                        /*
+                         * Склад полуфабрикатов: оприходование ячеек.
+                         * Модуль определяет свои границы по учётной записи,
+                         * поэтому право даётся только роли склада.
+                         */
+                        .requestMatchers("/warehouse", "/warehouse/**")
+                        .hasRole("OMTSIK_EXECUTOR")
+                        /*
+                         * Бюро входного контроля: проверка партий,
+                         * оприходованных складом. Модуль работает с
+                         * чужим приходом, поэтому право давать ему
+                         * доступ к этим партиям есть только у роли
+                         * входного контроля.
+                         */
+                        .requestMatchers("/input-control", "/input-control/**")
+                        .hasRole("BVK_EXECUTOR")
                         .anyRequest().authenticated()
                 )
                 .formLogin(form -> form

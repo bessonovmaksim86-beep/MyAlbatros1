@@ -98,6 +98,16 @@ public class ProductClassifier {
         return name;
     }
 
+    /**
+     * Название в терминах склада: «Подсборка …» вместо «Ячейка …».
+     * Нужно формам прихода, где позиция до оприходования является
+     * подсборкой (см. {@link WarehouseNaming}).
+     */
+    @Transient
+    public String getSubassemblyLabel() {
+        return WarehouseNaming.subassemblyLabel(getDisplayName());
+    }
+
     public void addInclusion(ClassifierInclusion inclusion) {
         inclusion.setOwner(this);
         inclusions.add(inclusion);

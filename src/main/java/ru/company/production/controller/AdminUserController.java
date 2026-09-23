@@ -97,7 +97,7 @@ public class AdminUserController {
                 AppUser created = userService.create(form);
 
                 redirectAttributes.addFlashAttribute(
-                        "success",
+                        "successMessage",
                         "Пользователь создан. Логин: "
                                 + created.getUsername()
                 );
@@ -117,21 +117,26 @@ public class AdminUserController {
         return "admin/users";
     }
 
-    @PostMapping("/{id}/delete")
-    public String delete(
+    /*
+     * Учётную запись отключают, а не удаляют: на неё ссылаются
+     * заказы, ПЗ и приходные партии, поэтому физическое удаление
+     * запрещено ограничениями внешних ключей.
+     */
+    @PostMapping("/{id}/deactivate")
+    public String deactivate(
             @PathVariable Long id,
             Authentication authentication,
             RedirectAttributes redirectAttributes
     ) {
         try {
-            userService.delete(
+            userService.deactivate(
                     id,
                     authentication.getName()
             );
 
             redirectAttributes.addFlashAttribute(
-                    "success",
-                    "Пользователь удалён"
+                    "successMessage",
+                    "Учётная запись отключена"
             );
 
         } catch (IllegalArgumentException exception) {

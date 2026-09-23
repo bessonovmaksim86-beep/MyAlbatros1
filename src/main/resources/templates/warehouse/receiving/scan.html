@@ -1,0 +1,353 @@
+<!DOCTYPE html>
+<html lang="ru"
+      xmlns:th="http://www.thymeleaf.org">
+
+<head>
+    <meta charset="UTF-8">
+
+    <meta name="viewport"
+          content="width=device-width, initial-scale=1">
+
+    <title>Сканирование ячеек партии</title>
+
+    <link rel="stylesheet"
+          th:href="@{/technology/css/technology.css}">
+
+    <link rel="stylesheet"
+          th:href="@{/technology/css/common.css}">
+
+    <link rel="stylesheet"
+          th:href="@{/warehouse/css/warehouse.css}">
+</head>
+
+<body>
+
+<div class="app-shell">
+
+    <aside th:replace="~{warehouse/fragments/layout
+            :: sidebar('receiving')}">
+    </aside>
+
+    <main class="main">
+
+        <header th:replace="~{warehouse/fragments/layout
+                :: topbar}">
+        </header>
+
+        <div class="page-content warehouse-page">
+
+            <div class="page-head">
+
+                <div class="page-title">
+
+                    <h1>Сканирование ячеек партии</h1>
+
+                    <p th:text="${
+                        'Проверьте каждую ячейку партии '
+                        + batch.numberRangeLabel + ' — '
+                        + batch.quantity + ' шт.'
+                    }">
+                        Проверьте каждую ячейку партии 121200022 … 121200025
+                    </p>
+
+                </div>
+
+                <div class="page-head-actions">
+
+                    <a class="btn secondary"
+                       th:href="@{/warehouse/receiving/{id}/confirm(id=${batch.id})}">
+                        Назад к проверке данных
+                    </a>
+
+                </div>
+            </div>
+
+            <div class="alert danger"
+                 th:if="${errorMessage}"
+                 th:text="${errorMessage}">
+            </div>
+
+            <ol class="warehouse-steps">
+
+                <li class="warehouse-steps__item is-done">
+                    Приход
+                </li>
+
+                <li class="warehouse-steps__item is-done">
+                    Номера и печать QR
+                </li>
+
+                <li class="warehouse-steps__item is-done">
+                    Проверка данных
+                </li>
+
+                <li class="warehouse-steps__item"
+                    th:classappend="${batch.pending} ? ' is-current' : ' is-done'">
+                    Сканирование ячеек
+                </li>
+
+            </ol>
+
+            <!-- Партия уже закрыта: поле сканирования не предлагается,
+                 иначе повторная проверка выглядела бы как незакрытый приход -->
+            <div class="alert success"
+                 th:unless="${batch.pending}">
+
+                <p>
+                    Партия оприходована
+                    <strong th:text="${batch.formattedConfirmedAt}">
+                        21.09.2026 09:40
+                    </strong>
+                    — все ячейки уже в реестре
+                </p>
+
+            </div>
+
+            <section class="card"
+                     th:if="${batch.pending}">
+
+                <div class="card-head">
+
+                    <div>
+
+                        <h2>Сканирование</h2>
+
+                        <small>
+                            Поднесите этикетку к сканеру или введите
+                            номер вручную: партия закроется, только
+                            когда совпадут все ячейки без повторов и
+                            посторонних номеров
+                        </small>
+
+                    </div>
+
+                    <span class="warehouse-counter"
+                          id="scanCounter">
+
+                        Введено <strong id="scanCount">0</strong>
+                        из <strong th:text="${batch.quantity}">4</strong>
+                    </span>
+                </div>
+
+                <div class="card-body">
+
+                    <form method="post"
+                          th:action="@{/warehouse/receiving/{id}/scan(id=${batch.id})}"
+                          id="scanForm">
+
+                        <input th:if="${_csrf != null}"
+                               type="hidden"
+                               th:name="${_csrf.parameterName}"
+                               th:value="${_csrf.token}">
+
+                        <div class="warehouse-scan-input">
+
+                            <input type="text"
+                                   id="scanField"
+                                   name="scanField"
+                                   autocomplete="off"
+                                   spellcheck="false"
+                                   placeholder="Номер ячейки: 9 цифр, например 121200022"
+                                   aria-label="Номер сканируемой ячейки">
+
+                            <button type="button"
+                                    class="btn secondary"
+                                    id="scanAdd">
+                                Добавить
+                            </button>
+
+                        </div>
+
+                        <ul class="warehouse-scan-list" id="scanList">
+
+                            <li class="warehouse-scan-list__item"
+                                th:each="line : ${scannedLines}"
+                                th:with="value=${line != null ? #strings.trim(line) : ''}"
+                                th:classappend="${
+                                    !#strings.isEmpty(value)
+                                    and (numbers == null or !numbers.contains(value))
+                                        ? ' is-foreign' : ''
+                                }">
+
+                                <input type="hidden"
+                                       name="scanned"
+                                       th:value="${value}">
+
+                                <span th:text="${
+                                    #strings.isEmpty(value) ? 'пустая строка' : value
+                                }">
+                                    121200022
+                                </span>
+
+                                <button type="button"
+                                        class="warehouse-scan-list__remove"
+                                        aria-label="Убрать номер">
+                                    &times;
+                                </button>
+                            </li>
+
+                        </ul>
+
+                        <p class="warehouse-scan-empty" id="scanEmpty">
+                            Отсканированных ячеек пока нет
+                        </p>
+
+                        <div class="warehouse-actions">
+
+                            <div class="warehouse-actions__group">
+
+                                <button type="button"
+                                        class="btn secondary"
+                                        id="scanUndo">
+                                    Убрать последний
+                                </button>
+
+                                <button type="button"
+                                        class="btn danger"
+                                        id="scanClear">
+                                    Очистить ввод
+                                </button>
+
+                            </div>
+
+                            <button type="submit" class="btn primary">
+                                Проверить партию и оприходовать
+                            </button>
+                        </div>
+
+                    </form>
+
+                    <!-- Причины отказа: без перечисления номеров
+                         оператор не поймёт, какую ячейку искать -->
+                    <div class="warehouse-problems"
+                         th:if="${result != null and !result.accepted()}">
+
+                        <div class="warehouse-problem"
+                             th:if="${!#lists.isEmpty(result.missing)}">
+
+                            <h3>
+                                Не отсканировано,
+                                <span th:text="${#lists.size(result.missing)}">2</span>
+                                шт.
+                            </h3>
+
+                            <ul>
+                                <li th:each="number : ${result.missing}"
+                                    th:text="${number}">
+                                    121200023
+                                </li>
+                            </ul>
+                        </div>
+
+                        <div class="warehouse-problem"
+                             th:if="${!#lists.isEmpty(result.duplicates)}">
+
+                            <h3>
+                                Задвоены,
+                                <span th:text="${#lists.size(result.duplicates)}">1</span>
+                                шт.
+                            </h3>
+
+                            <ul>
+                                <li th:each="number : ${result.duplicates}"
+                                    th:text="${number}">
+                                    121200022
+                                </li>
+                            </ul>
+                        </div>
+
+                        <div class="warehouse-problem"
+                             th:if="${!#lists.isEmpty(result.foreign)}">
+
+                            <h3>
+                                Посторонние номера,
+                                <span th:text="${#lists.size(result.foreign)}">1</span>
+                                шт.
+                            </h3>
+
+                            <ul>
+                                <li th:each="number : ${result.foreign}"
+                                    th:text="${number}">
+                                    121200099
+                                </li>
+                            </ul>
+                        </div>
+
+                        <div class="warehouse-problem"
+                             th:if="${!#lists.isEmpty(result.malformed)}">
+
+                            <h3>
+                                Не распознано,
+                                <span th:text="${#lists.size(result.malformed)}">1</span>
+                                шт.
+                            </h3>
+
+                            <ul>
+                                <li th:each="line : ${result.malformed}"
+                                    th:text="${line}">
+                                    1212000
+                                </li>
+                            </ul>
+                        </div>
+
+                    </div>
+
+                </div>
+            </section>
+
+            <section class="card">
+
+                <div class="card-head">
+
+                    <div>
+
+                        <h2>Номера партии</h2>
+
+                        <small>
+                            Отсканированный номер подсвечивается — так
+                            видно, какая ячейка уже принята
+                        </small>
+
+                    </div>
+
+                    <span class="badge"
+                          th:text="${batch.cellLabel}">
+                        1212 — Подсборка ЯПР56
+                    </span>
+                </div>
+
+                <div class="card-body">
+
+                    <ul class="warehouse-numbers" id="expectedNumbers">
+
+                        <li class="warehouse-numbers__item"
+                            th:each="number, iteration : ${numbers}"
+                            th:attr="data-number=${number}">
+
+                            <span class="warehouse-numbers__index"
+                                  th:text="'№ ' + ${iteration.count}">
+                                № 1
+                            </span>
+
+                            <span th:text="${number}">
+                                121200022
+                            </span>
+                        </li>
+
+                    </ul>
+
+                </div>
+            </section>
+
+        </div>
+    </main>
+</div>
+
+<th:block th:replace="~{warehouse/fragments/layout
+        :: commonScripts}">
+</th:block>
+
+<script th:src="@{/warehouse/js/receiving.js}"></script>
+
+</body>
+</html>

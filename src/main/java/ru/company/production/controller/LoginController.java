@@ -8,26 +8,22 @@ import org.springframework.web.bind.annotation.GetMapping;
 @Controller
 public class LoginController {
 
+    /*
+     * Вход в систему — только форма аутентификации. Старая «главная»
+     * вела на статическую страницу-заглушку, которой в шаблонах нет;
+     * теперь корень отдаёт рабочий стол, куда success-handler всё равно
+     * приводит по роли.
+     */
     @GetMapping("/")
     public String index() {
-        return "index";
+        return "redirect:/home";
     }
 
-    @GetMapping("/admin")
-    public String adminPage() {
-        return "admin/index";
-    }
-
-    @GetMapping("/quality")
-    public String qualityPage() {
-        return "quality";
-    }
-
-    @GetMapping("/production")
-    public String productionPage() {
-        return "production";
-    }
-
+    /*
+     * Адрес /admin принадлежит AdminModuleController: он переадресует на
+     * сводку. Дублирующий метод здесь ломал запуск приложения
+     * неоднозначным маппингом.
+     */
     @GetMapping("/login")
     public String login(HttpServletRequest request) {
         Object csrfAttribute =

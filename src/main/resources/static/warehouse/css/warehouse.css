@@ -1,0 +1,1355 @@
+/* ============================================================
+   МОДУЛЬ СКЛАДА ПОЛУФАБРИКАТОВ
+
+   Каркас карточек (таблицы, формы, статусы) приходит из
+   technology.css и common.css; здесь — собственный каркас меню
+   и компоненты оприходования. Имена переменных и классов
+   префиксованы warehouse-, чтобы модуль не зависел от настроек
+   других отделов.
+   ============================================================ */
+
+:root {
+    --warehouse-sidebar-collapsed-width: 72px;
+    --warehouse-sidebar-expanded-width: 286px;
+    --warehouse-sidebar-duration: 220ms;
+
+    --warehouse-sidebar-background: #2f3b45;
+    --warehouse-sidebar-background-dark: #222b33;
+    --warehouse-sidebar-border: rgba(255, 255, 255, 0.1);
+    --warehouse-sidebar-text: #ffffff;
+    --warehouse-sidebar-muted: #a9b7c2;
+    --warehouse-sidebar-active: rgba(255, 255, 255, 0.14);
+    --warehouse-accent: #ef7d00;
+
+    --warehouse-number-bg: #f4f7fa;
+    --warehouse-number-line: #cfd9e2;
+    --warehouse-number-hit: #18794e;
+    --warehouse-number-hit-bg: #e8f5ee;
+}
+
+html,
+body {
+    width: 100%;
+    min-height: 100%;
+    margin: 0;
+}
+
+body {
+    overflow-x: hidden;
+}
+
+
+/* ============================================================
+   Уточнения к каркасу карточек: сводка и счётчики не должны
+   выглядеть цифровыми показателями там, где текст длиннее числа.
+   ============================================================ */
+.stat strong.stat-text {
+    font-size: 19px;
+    line-height: 1.3;
+}
+
+.stat span {
+    color: var(--muted, #6c7b89);
+    font-size: 11px;
+}
+
+.stats--warehouse {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.trend.attention {
+    color: #a45c00;
+}
+
+.field-hint {
+    display: block;
+    margin-top: 6px;
+    color: var(--muted, #6c7b89);
+    font-size: 11px;
+    line-height: 1.45;
+}
+
+.btn.compact {
+    display: inline-block;
+
+    padding: 4px 8px;
+
+    font-size: 12px;
+    line-height: 1;
+
+    text-decoration: none;
+}
+
+.btn.danger {
+    background: #fdecee;
+    color: #a12d35;
+}
+
+.table-actions .btn {
+    text-decoration: none;
+}
+
+
+/* ============================================================
+   БОКОВОЕ МЕНЮ
+   ============================================================ */
+
+.warehouse-sidebar {
+    position: sticky;
+    top: 0;
+    z-index: 1000;
+
+    align-self: start;
+
+    box-sizing: border-box;
+    width: var(--warehouse-sidebar-collapsed-width) !important;
+    min-width: 0 !important;
+    height: 100vh;
+
+    padding: 0 !important;
+    overflow: hidden;
+
+    color: var(--warehouse-sidebar-text);
+
+    background:
+        linear-gradient(
+            180deg,
+            var(--warehouse-sidebar-background) 0%,
+            var(--warehouse-sidebar-background-dark) 100%
+        );
+
+    border-right: 1px solid var(--warehouse-sidebar-border);
+    box-shadow: 5px 0 18px rgba(16, 22, 28, 0.16);
+
+    transition:
+        width var(--warehouse-sidebar-duration) ease,
+        box-shadow var(--warehouse-sidebar-duration) ease;
+}
+
+.warehouse-sidebar:hover,
+.warehouse-sidebar:focus-within {
+    width: var(--warehouse-sidebar-expanded-width) !important;
+    box-shadow: 12px 0 34px rgba(16, 22, 28, 0.32);
+}
+
+.warehouse-sidebar__inner {
+    display: flex;
+    flex-direction: column;
+
+    box-sizing: border-box;
+    width: var(--warehouse-sidebar-expanded-width);
+    height: 100%;
+
+    padding: 12px 10px 18px;
+}
+
+.warehouse-sidebar .department-brand {
+    flex: 0 0 140px;
+    height: 140px;
+}
+
+.warehouse-sidebar:hover .department-brand__logo,
+.warehouse-sidebar:focus-within .department-brand__logo {
+    width: 248px;
+    height: 62px;
+    padding: 7px 10px;
+}
+
+/*
+ * Подпись под брендом: чем занят склад, видно сразу, без подсказок
+ * и без обращения к учётной записи.
+ */
+.warehouse-sidebar__note {
+    display: block;
+    width: 248px;
+    margin: -6px 0 12px;
+    padding: 8px 10px;
+
+    overflow: hidden;
+
+    color: var(--warehouse-sidebar-muted);
+    font-size: 11px;
+    font-weight: 600;
+    line-height: 1.35;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+
+    background: rgba(255, 255, 255, 0.06);
+    border-radius: 8px;
+
+    opacity: 0;
+    transform: translateX(-8px);
+
+    transition:
+        opacity 150ms ease 40ms,
+        transform 150ms ease 40ms;
+}
+
+.warehouse-sidebar:hover .warehouse-sidebar__note,
+.warehouse-sidebar:focus-within .warehouse-sidebar__note {
+    opacity: 1;
+    transform: translateX(0);
+}
+
+.warehouse-sidebar__divider {
+    flex: 0 0 1px;
+    width: 252px;
+    height: 1px;
+    margin: 0 0 16px;
+
+    background: var(--warehouse-sidebar-border);
+}
+
+
+/* ============================================================
+   НАВИГАЦИЯ
+   ============================================================ */
+
+.warehouse-navigation {
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    gap: 6px;
+
+    min-height: 0;
+    overflow-x: hidden;
+    overflow-y: auto;
+}
+
+.warehouse-navigation__item {
+    position: relative;
+
+    display: flex;
+    align-items: center;
+
+    box-sizing: border-box;
+    width: 266px;
+    min-height: 48px;
+    padding: 10px 13px;
+
+    overflow: hidden;
+
+    color: #dde7ee;
+    font-size: 14px;
+    font-weight: 500;
+    line-height: 1.2;
+    text-decoration: none;
+    white-space: nowrap;
+
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 10px;
+
+    transition:
+        color 160ms ease,
+        background-color 160ms ease,
+        border-color 160ms ease;
+}
+
+.warehouse-navigation__item:hover,
+.warehouse-navigation__item:focus-visible {
+    color: #ffffff;
+    text-decoration: none;
+    background: rgba(255, 255, 255, 0.08);
+}
+
+.warehouse-navigation__item.is-active {
+    color: #ffffff;
+    background: var(--warehouse-sidebar-active);
+    border-color: rgba(255, 255, 255, 0.08);
+    box-shadow: inset 3px 0 0 var(--warehouse-accent);
+}
+
+.warehouse-navigation__icon {
+    display: inline-flex;
+    flex: 0 0 24px;
+    align-items: center;
+    justify-content: center;
+
+    width: 24px;
+    height: 24px;
+    margin-right: 15px;
+}
+
+.warehouse-navigation__icon svg {
+    display: block;
+    width: 21px;
+    height: 21px;
+    fill: currentColor;
+}
+
+.warehouse-navigation__text {
+    min-width: 0;
+    overflow: hidden;
+
+    text-overflow: ellipsis;
+
+    opacity: 0;
+    transform: translateX(-6px);
+
+    transition:
+        opacity 130ms ease,
+        transform 130ms ease;
+}
+
+.warehouse-sidebar:hover .warehouse-navigation__text,
+.warehouse-sidebar:focus-within .warehouse-navigation__text {
+    opacity: 1;
+    transform: translateX(0);
+}
+
+/*
+ * Счётчик незакрытых приходов: партия с напечатанными этикетками,
+ * но без сканирования, держит зарезервированные номера — оператор
+ * обязан видеть это, не входя в раздел.
+ */
+.warehouse-navigation__counter {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+
+    min-width: 21px;
+    height: 21px;
+    margin-left: auto;
+    padding: 0 6px;
+
+    color: #ffffff;
+    font-size: 11px;
+    font-weight: 700;
+
+    background: #e44c4c;
+    border-radius: 20px;
+
+    opacity: 0;
+
+    transition: opacity 130ms ease;
+}
+
+.warehouse-sidebar:hover .warehouse-navigation__counter,
+.warehouse-sidebar:focus-within .warehouse-navigation__counter {
+    opacity: 1;
+}
+
+.warehouse-sidebar__footer {
+    padding: 14px 0 0;
+
+    color: var(--warehouse-sidebar-muted);
+    font-size: 11px;
+}
+
+.warehouse-sidebar__footer form {
+    margin: 0;
+}
+
+.warehouse-sidebar__logout {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+
+    box-sizing: border-box;
+    width: 266px;
+    min-height: 42px;
+    padding: 10px 13px;
+
+    overflow: hidden;
+
+    color: #dde7ee;
+    font: inherit;
+    font-size: 13px;
+    font-weight: 600;
+    white-space: nowrap;
+
+    cursor: pointer;
+
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 10px;
+
+    transition:
+        color 160ms ease,
+        background-color 160ms ease;
+}
+
+.warehouse-sidebar__logout:hover,
+.warehouse-sidebar__logout:focus-visible {
+    color: #ffffff;
+    background: rgba(255, 255, 255, 0.08);
+}
+
+.warehouse-sidebar__status-dot {
+    flex: 0 0 8px;
+    width: 8px;
+    height: 8px;
+    margin-left: 7px;
+
+    background: #38c172;
+    border-radius: 50%;
+}
+
+.warehouse-sidebar__logout-text {
+    opacity: 0;
+    transform: translateX(-6px);
+
+    transition:
+        opacity 130ms ease,
+        transform 130ms ease;
+}
+
+.warehouse-sidebar:hover .warehouse-sidebar__logout-text,
+.warehouse-sidebar:focus-within .warehouse-sidebar__logout-text {
+    opacity: 1;
+    transform: translateX(0);
+}
+
+
+/* ============================================================
+   ВЕРХНЯЯ ПАНЕЛЬ
+   ============================================================ */
+
+.warehouse-topbar {
+    position: sticky;
+    top: 0;
+    z-index: 800;
+
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 24px;
+
+    box-sizing: border-box;
+    width: 100%;
+    min-width: 0;
+    min-height: 74px;
+    padding: 0 22px;
+
+    background: rgba(255, 255, 255, 0.97);
+    border-bottom: 1px solid #e5eaf0;
+    box-shadow: 0 4px 18px rgba(18, 38, 63, 0.05);
+    backdrop-filter: blur(10px);
+}
+
+.warehouse-topbar__left {
+    display: flex;
+    flex: 1 1 auto;
+    align-items: center;
+
+    min-width: 160px;
+}
+
+.warehouse-topbar__section {
+    color: var(--navy, #073e75);
+    font-size: 13px;
+    font-weight: 700;
+}
+
+.warehouse-topbar__right {
+    display: flex;
+    flex: 0 0 auto;
+    align-items: center;
+    gap: 18px;
+}
+
+.warehouse-clock {
+    display: block;
+
+    min-width: 175px;
+
+    color: var(--navy, #153c63);
+    font-size: 13px;
+    font-weight: 700;
+    line-height: 1.25;
+    text-align: right;
+    white-space: nowrap;
+}
+
+.warehouse-topbar__user {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+
+    min-width: 180px;
+    padding-left: 18px;
+
+    border-left: 1px solid var(--line, #dfe6ed);
+}
+
+.warehouse-topbar__avatar {
+    display: inline-flex;
+    flex: 0 0 40px;
+    align-items: center;
+    justify-content: center;
+
+    box-sizing: border-box;
+    width: 40px;
+    height: 40px;
+
+    color: #ffffff;
+    font-size: 13px;
+    font-weight: 800;
+    letter-spacing: 0.02em;
+
+    background: #2f3b45;
+    border-radius: 50%;
+}
+
+.warehouse-topbar__user-data {
+    display: flex;
+    flex-direction: column;
+
+    min-width: 0;
+}
+
+.warehouse-topbar__username {
+    display: block;
+
+    max-width: 190px;
+    overflow: hidden;
+
+    color: #27394d;
+    font-size: 13px;
+    font-weight: 700;
+    line-height: 1.3;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.warehouse-topbar__specialty {
+    display: block;
+
+    max-width: 190px;
+    margin-top: 2px;
+    overflow: hidden;
+
+    color: var(--muted, #748397);
+    font-size: 10px;
+    line-height: 1.3;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+
+/* ============================================================
+   ЖУРНАЛ ПРИХОДОВ
+   ============================================================ */
+
+.warehouse-batch-table {
+    min-width: 1020px;
+}
+
+.warehouse-batch-table .table-actions {
+    white-space: nowrap;
+    text-align: right;
+}
+
+/*
+ * Диапазон номеров — не текст, а идентификаторы: их сравнивают по
+ * разрядам, поэтому моноширинный шрифт важнее размера.
+ */
+.warehouse-number-cell {
+    font-family: 'Consolas', 'Courier New', monospace;
+    font-size: 12px;
+    font-weight: 700;
+    white-space: nowrap;
+}
+
+
+/* ============================================================
+   ШАГИ ОПРИХОДОВАНИЯ
+   ============================================================ */
+
+.warehouse-steps {
+    counter-reset: warehouse-step;
+
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+
+    gap: 10px;
+
+    margin: 0 0 20px;
+    padding: 0;
+
+    list-style: none;
+}
+
+.warehouse-steps__item {
+    position: relative;
+
+    box-sizing: border-box;
+    padding: 12px 14px 12px 44px;
+
+    color: var(--muted, #6c7b89);
+    font-size: 12px;
+    font-weight: 700;
+    line-height: 1.3;
+
+    background: #fff;
+    border: 1px solid var(--line, #dce4eb);
+    border-radius: 12px;
+}
+
+.warehouse-steps__item::before {
+    content: counter(warehouse-step);
+    counter-increment: warehouse-step;
+
+    position: absolute;
+    top: 50%;
+    left: 13px;
+
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+
+    box-sizing: border-box;
+    width: 22px;
+    height: 22px;
+    margin-top: -11px;
+
+    color: #5f6d79;
+    font-size: 11px;
+    font-weight: 800;
+
+    background: #edf1f4;
+    border-radius: 50%;
+}
+
+.warehouse-steps__item.is-done {
+    color: #18794e;
+    background: #f2faf6;
+    border-color: #cbe7d8;
+}
+
+.warehouse-steps__item.is-done::before {
+    content: "\2713";
+
+    color: #ffffff;
+    background: var(--warehouse-number-hit);
+}
+
+.warehouse-steps__item.is-current {
+    color: #073e75;
+    background: #fff;
+    border-color: var(--warehouse-accent);
+    box-shadow: inset 0 -3px 0 var(--warehouse-accent);
+}
+
+.warehouse-steps__item.is-current::before {
+    color: #ffffff;
+    background: var(--warehouse-accent);
+}
+
+
+/* ============================================================
+   СВОДКА ПРИХОДА ПЕРЕД ПОДТВЕРЖДЕНИЕМ
+   ============================================================ */
+
+/*
+ * Реквизиты партии выводятся блоками — подписью вверх, значением
+ * вниз, без внутренних рамок: тот же приём, что «Карточка
+ * оприходования» и «Итог проверки» во входном контроле. Партию
+ * читают по блокам на всех этапах одинаково, поэтому оприходование,
+ * контроль и приёмка используют одну сетку, а не «плиточную» таблицу.
+ */
+.warehouse-summary {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+
+    gap: 16px 24px;
+
+    margin: 0;
+}
+
+.warehouse-summary__row {
+    display: grid;
+    gap: 4px;
+}
+
+.warehouse-summary__row.span-2 {
+    grid-column: span 2;
+}
+
+.warehouse-summary__row dt {
+    color: var(--muted, #6c7b89);
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+}
+
+.warehouse-summary__row dd {
+    margin: 0;
+
+    color: #1f2d3d;
+    font-size: 13px;
+    font-weight: 600;
+    line-height: 1.45;
+    overflow-wrap: anywhere;
+}
+
+.warehouse-summary__row dd.mono {
+    font-family: 'Consolas', 'Courier New', monospace;
+    font-size: 12px;
+    letter-spacing: 0.02em;
+}
+
+
+/* ============================================================
+   НОМЕРА ПАРТИИ И ПЕЧАТЬ QR
+   ============================================================ */
+
+.warehouse-numbers {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(132px, 1fr));
+
+    gap: 8px;
+
+    margin: 0;
+    padding: 0;
+
+    list-style: none;
+}
+
+.warehouse-numbers__item {
+    box-sizing: border-box;
+    padding: 9px 10px;
+
+    font-family: 'Consolas', 'Courier New', monospace;
+    font-size: 13px;
+    font-weight: 700;
+    text-align: center;
+
+    background: var(--warehouse-number-bg);
+    border: 1px solid var(--warehouse-number-line);
+    border-radius: 9px;
+}
+
+.warehouse-numbers__index {
+    display: block;
+
+    margin-bottom: 2px;
+
+    color: var(--muted, #6c7b89);
+    font-family: Inter, 'Segoe UI', Arial, sans-serif;
+    font-size: 9px;
+    font-weight: 800;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+}
+
+/*
+ * Подсветка уместна при сканировании: оператор видит не только
+ * счётчик, но и какая именно ячейка уже принята.
+ */
+.warehouse-numbers__item.is-hit {
+    color: var(--warehouse-number-hit);
+    background: var(--warehouse-number-hit-bg);
+    border-color: #b9dec9;
+}
+
+.warehouse-numbers__item.is-miss {
+    color: #a12d35;
+    background: #fff0f1;
+    border-color: #efc6ca;
+}
+
+.warehouse-print-note {
+    margin: 0 0 18px;
+    padding: 13px 15px;
+
+    color: #5b4a1f;
+    font-size: 12px;
+    line-height: 1.55;
+
+    background: #fff8e8;
+    border: 1px solid #f0dcb2;
+    border-left: 4px solid var(--warehouse-accent);
+    border-radius: 10px;
+}
+
+.warehouse-print-note strong {
+    display: block;
+    margin-bottom: 3px;
+    font-size: 12px;
+}
+
+.warehouse-counter {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+
+    padding: 7px 12px;
+
+    color: #073e75;
+    font-size: 12px;
+    font-weight: 800;
+
+    background: #eaf1f7;
+    border-radius: 99px;
+}
+
+.warehouse-counter.is-complete {
+    color: #18794e;
+    background: #e8f5ee;
+}
+
+
+/* ============================================================
+   СКАНИРОВАНИЕ
+   ============================================================ */
+
+.warehouse-scan-input {
+    display: flex;
+    gap: 10px;
+    align-items: flex-start;
+
+    margin-bottom: 14px;
+}
+
+.warehouse-scan-input input {
+    box-sizing: border-box;
+    flex: 1 1 auto;
+
+    height: 48px;
+    padding: 0 14px;
+
+    font-family: 'Consolas', 'Courier New', monospace;
+    font-size: 16px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+
+    border: 2px solid var(--navy, #073e75);
+    border-radius: 10px;
+}
+
+.warehouse-scan-input input:focus {
+    outline: none;
+
+    border-color: var(--warehouse-accent);
+    box-shadow: 0 0 0 3px rgba(239, 125, 0, 0.16);
+}
+
+.warehouse-scan-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+
+    min-height: 34px;
+    margin: 0 0 16px;
+    padding: 10px;
+
+    list-style: none;
+
+    background: #f8fafc;
+    border: 1px dashed var(--warehouse-number-line);
+    border-radius: 10px;
+}
+
+.warehouse-scan-list__item {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+
+    padding: 5px 9px;
+
+    font-family: 'Consolas', 'Courier New', monospace;
+    font-size: 12px;
+    font-weight: 700;
+
+    background: #fff;
+    border: 1px solid var(--warehouse-number-line);
+    border-radius: 99px;
+}
+
+.warehouse-scan-list__item.is-foreign {
+    color: #a12d35;
+    background: #fff0f1;
+    border-color: #efc6ca;
+}
+
+.warehouse-scan-list__item.is-duplicate {
+    color: #a45c00;
+    background: #fff1dd;
+    border-color: #f0dcb2;
+}
+
+.warehouse-scan-list__remove {
+    padding: 0;
+
+    color: inherit;
+    font: inherit;
+    font-size: 14px;
+    line-height: 1;
+
+    cursor: pointer;
+
+    background: none;
+    border: 0;
+}
+
+.warehouse-scan-empty {
+    color: var(--muted, #6c7b89);
+    font-size: 11px;
+}
+
+.warehouse-problems {
+    display: grid;
+    gap: 12px;
+
+    margin-top: 18px;
+}
+
+.warehouse-problem {
+    padding: 12px 14px;
+
+    border: 1px solid #efc6ca;
+    border-left: 4px solid var(--red, #c73a43);
+    border-radius: 10px;
+
+    background: #fff0f1;
+}
+
+.warehouse-problem h3 {
+    margin: 0 0 6px;
+
+    color: #a12d35;
+    font-size: 12px;
+    font-weight: 800;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+}
+
+.warehouse-problem ul {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+
+    margin: 0;
+    padding: 0;
+
+    list-style: none;
+}
+
+.warehouse-problem li {
+    padding: 4px 8px;
+
+    font-family: 'Consolas', 'Courier New', monospace;
+    font-size: 12px;
+    font-weight: 700;
+
+    background: #fff;
+    border: 1px solid #efc6ca;
+    border-radius: 7px;
+}
+
+.warehouse-actions {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+
+    margin-top: 20px;
+    padding-top: 17px;
+
+    border-top: 1px solid var(--line, #dce4eb);
+}
+
+.warehouse-actions__group {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+}
+
+.warehouse-actions .btn {
+    text-decoration: none;
+}
+
+.warehouse-confirm-note {
+    margin: 0 0 18px;
+    padding: 15px 17px;
+
+    color: #14532d;
+    font-size: 13px;
+    line-height: 1.6;
+
+    background: #e8f5ee;
+    border: 1px solid #b9dec9;
+    border-left: 4px solid var(--warehouse-number-hit);
+    border-radius: 10px;
+}
+
+.warehouse-confirm-note strong {
+    display: block;
+    margin-bottom: 5px;
+    font-size: 14px;
+}
+
+
+/* ============================================================
+   ПРИЁМКА ПОДСБОРКИ ПОСЛЕ БВК
+
+   Поле номеров приёмки — то же по смыслу, что сканирование
+   прихода, но вводится перечень частями (брак на склад не
+   возвращается), поэтому оно текстовое, как выборка в карточке
+   БВК. Отметки перечня различают приёмку и брак: кладовщик
+   обязан видеть и то, что уже принято, и то, что принять нельзя.
+   ============================================================ */
+
+.warehouse-field {
+    display: grid;
+    gap: 8px;
+}
+
+.warehouse-field > label {
+    color: #172738;
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: 0.3px;
+    text-transform: uppercase;
+}
+
+.warehouse-field textarea {
+    box-sizing: border-box;
+    width: 100%;
+    min-height: 132px;
+    padding: 11px 12px;
+
+    font-family: 'Consolas', 'Courier New', monospace;
+    font-size: 12px;
+    line-height: 1.6;
+
+    color: #172738;
+    background: #fff;
+    border: 1px solid var(--line, #dce4eb);
+    border-radius: 9px;
+
+    resize: vertical;
+}
+
+.warehouse-field textarea:focus {
+    outline: 2px solid rgba(239, 125, 0, 0.35);
+    border-color: var(--warehouse-accent);
+}
+
+/* Подпись «принять все» стоит рядом с заголовком поля, а не под ним. */
+.warehouse-field__row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 14px;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.warehouse-check {
+    display: inline-flex;
+    gap: 8px;
+    align-items: center;
+
+    color: #172738;
+    font-size: 12px;
+    font-weight: 700;
+    white-space: nowrap;
+
+    cursor: pointer;
+}
+
+.warehouse-check input {
+    width: 16px;
+    height: 16px;
+
+    accent-color: var(--warehouse-accent);
+}
+
+.field-hint--warn {
+    padding: 8px 10px;
+
+    color: #8a4b00;
+    font-weight: 600;
+
+    background: #fff7ec;
+    border: 1px solid #f3d7b4;
+    border-radius: 8px;
+}
+
+.warehouse-counter--danger {
+    color: #a12d35;
+    background: #fdecee;
+}
+
+/* Счётчик краснеет, пока в поле остаётся номер из изолятора брака. */
+.warehouse-counter.is-danger {
+    color: #a12d35;
+    background: #fdecee;
+}
+
+/*
+ * Принятая ячейка — тот же зелёный, что «is-hit» при сканировании:
+ * цвет читается как «ячейка на складе», а не как новый статус.
+ */
+.warehouse-numbers__item.is-accepted {
+    color: var(--warehouse-number-hit);
+    background: var(--warehouse-number-hit-bg);
+    border-color: #b9dec9;
+    font-weight: 700;
+}
+
+.warehouse-numbers__item.is-defect {
+    color: #a12d35;
+    background: #fdecee;
+    border-color: #f3c3c8;
+}
+
+.warehouse-numbers__item.is-chosen {
+    color: #073e75;
+    background: #eef3fe;
+    border-color: #b7c8ef;
+    font-weight: 700;
+}
+
+.warehouse-cell-note {
+    display: block;
+    margin-top: 3px;
+    color: var(--muted, #6c7b89);
+    font-size: 11px;
+    white-space: nowrap;
+}
+
+/*
+ * Бейдж «Подсборка принята на склад»: тем же зелёным, что и
+ * «Оприходовано», но с рамкой — приёмка замыкает маршрут партии, и
+ * в журнале её нужно отличать от простого прихода.
+ */
+.status.accepted {
+    color: #14532d;
+    background: #e8f5ee;
+    box-shadow: inset 0 0 0 1px #b9dec9;
+}
+
+/* Приёмка короче прихода: шагов четыре, но подписи длиннее. */
+.warehouse-steps--acceptance .warehouse-steps__item {
+    padding-right: 10px;
+    padding-left: 40px;
+    font-size: 11px;
+}
+
+
+/* ============================================================
+   ПОДТВЕРЖДЕНИЕ ПРИЁМКИ ПО ОТМЕТКЕ «ОТМЕТИТЬ ВСЕ НОМЕРА ЯЧЕЕК»
+
+   Диалог свой, а не window.confirm: состав партии после
+   проведения не изменить, и формулировка с двумя кнопками
+   («Подтверждаю» / «Отмена») обязана оставаться в интерфейсе
+   склада, а не системном окне браузера.
+   ============================================================ */
+
+.warehouse-accept-dialog {
+    position: fixed;
+    inset: 0;
+    z-index: 2000;
+
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    padding: 20px;
+
+    background: rgba(19, 31, 41, 0.55);
+}
+
+.warehouse-accept-dialog[hidden] {
+    display: none;
+}
+
+.warehouse-accept-dialog__box {
+    box-sizing: border-box;
+    width: 100%;
+    max-width: 520px;
+
+    padding: 22px 24px;
+
+    background: #fff;
+    border-radius: 14px;
+    box-shadow: 0 22px 48px rgba(16, 32, 45, 0.32);
+}
+
+.warehouse-accept-dialog__box h2 {
+    margin: 0 0 8px;
+
+    color: #8a1f27;
+    font-size: 16px;
+    line-height: 1.35;
+}
+
+.warehouse-accept-dialog__box p {
+    margin: 0;
+
+    color: #35455a;
+    font-size: 13px;
+    line-height: 1.6;
+}
+
+.warehouse-accept-dialog__actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    justify-content: flex-end;
+
+    margin-top: 20px;
+}
+
+.warehouse-accept-dialog__actions .btn {
+    text-decoration: none;
+}
+
+
+/* ============================================================
+   АДАПТИВ
+   ============================================================ */
+
+@media (max-width: 1100px) {
+    .warehouse-topbar {
+        gap: 15px;
+        padding-right: 16px;
+        padding-left: 16px;
+    }
+
+    .warehouse-topbar__right {
+        gap: 12px;
+    }
+
+    .warehouse-clock {
+        min-width: 150px;
+        font-size: 12px;
+    }
+
+    .warehouse-topbar__user {
+        min-width: 150px;
+        padding-left: 12px;
+    }
+
+    .warehouse-topbar__username,
+    .warehouse-topbar__specialty {
+        max-width: 130px;
+    }
+
+    .stats,
+    .stats--warehouse {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .warehouse-steps {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    /*
+     * Три колонки реквизитов держат ширину только на полном экране;
+     * за боковым меню остаётся меньше места, и блок уходит в две.
+     */
+    .warehouse-summary {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
+@media (max-width: 820px) {
+    :root {
+        --warehouse-sidebar-collapsed-width: 62px;
+    }
+
+    .warehouse-sidebar__inner {
+        padding-right: 6px;
+        padding-left: 6px;
+    }
+
+    .warehouse-navigation__item {
+        padding-right: 12px;
+        padding-left: 12px;
+    }
+
+    .warehouse-topbar {
+        flex-wrap: wrap;
+        gap: 10px;
+
+        min-height: 112px;
+        padding-top: 10px;
+        padding-bottom: 10px;
+    }
+
+    .warehouse-topbar__left {
+        flex-basis: 100%;
+        order: 2;
+    }
+
+    .warehouse-topbar__right {
+        order: 1;
+        width: 100%;
+        justify-content: flex-end;
+    }
+
+    .page-content {
+        padding: 16px;
+    }
+
+    .page-head {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .warehouse-summary {
+        grid-template-columns: 1fr;
+    }
+
+    .warehouse-summary__row.span-2 {
+        grid-column: auto;
+    }
+}
+
+@media (max-width: 560px) {
+    .warehouse-clock {
+        min-width: auto;
+        font-size: 11px;
+    }
+
+    .warehouse-topbar__user {
+        min-width: auto;
+    }
+
+    .warehouse-topbar__user-data {
+        display: none;
+    }
+
+    .warehouse-topbar__avatar {
+        flex-basis: 36px;
+        width: 36px;
+        height: 36px;
+    }
+
+    .page-content {
+        padding: 12px;
+    }
+
+    .stats,
+    .stats--warehouse,
+    .warehouse-steps {
+        grid-template-columns: 1fr;
+    }
+
+    .warehouse-scan-input {
+        flex-direction: column;
+    }
+
+    .warehouse-scan-input .btn {
+        width: 100%;
+        height: 44px;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .warehouse-sidebar,
+    .warehouse-sidebar__note,
+    .warehouse-navigation__item,
+    .warehouse-navigation__text,
+    .warehouse-navigation__counter,
+    .warehouse-sidebar__logout,
+    .warehouse-sidebar__logout-text {
+        transition: none !important;
+    }
+}

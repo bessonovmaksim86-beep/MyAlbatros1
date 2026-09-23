@@ -10,13 +10,20 @@ import org.springframework.stereotype.Component;
 import ru.company.production.entity.AppUser;
 import ru.company.production.entity.Role;
 import ru.company.production.repository.UserRepository;
+import ru.company.production.service.ModuleRoutes;
 
 import java.io.IOException;
-import java.util.Locale;
 
-import static ru.company.production.entity.Role.SDP_SERVICE_HEAD_DISPATCHER;
-import static ru.company.production.entity.Role.SDP_SERVICE_HEAD_TECHNOLOGY;
-
+/**
+ * Направление пользователя в его модуль сразу после входа.
+ *
+ * Маршрут берётся из {@link ModuleRoutes} — того же справочника, по
+ * которому администратор входит в чужой интерфейс. Раньше здесь
+ * повторялся перечень адресов и дополнительно сверялось название
+ * подразделения: «производственный отдел», «отдел качества» и «склад»
+ * вели на страницы, которых в системе нет, а роль диспетчера попадала на
+ * рабочий стол вместо диспетчерского отдела.
+ */
 @Component
 @RequiredArgsConstructor
 public class DepartmentAuthenticationSuccessHandler
@@ -31,68 +38,30 @@ public class DepartmentAuthenticationSuccessHandler
             Authentication authentication
     ) throws IOException, ServletException {
 
+        /*
+         * Подразделение нужно для границ модулей, а open-in-view отключён:
+         * связи загружаются тем же запросом, что и учётная запись.
+         */
         AppUser user = userRepository
-                .findByUsernameIgnoreCase(authentication.getName())
+                .findWithUnitsByUsernameIgnoreCase(authentication.getName())
                 .orElseThrow(() ->
                         new IllegalStateException(
-                                "Авторизованный пользователь не найден"
+                                "Вторично вызванный пользователь не найден"
                         )
                 );
 
         String targetUrl = determineTargetUrl(user);
-        System.out.println(
-                "LOGIN SUCCESS: username=" + authentication.getName()
-                        + ", role=" + user.getRole()
-                        + ", targetUrl=" + targetUrl
-        );
+
         response.sendRedirect(
                 request.getContextPath() + targetUrl
         );
     }
 
     private String determineTargetUrl(AppUser user) {
-
         if (user.getRole() == Role.ADMIN) {
             return "/admin";
         }
-        if (user.getRole() == SDP_SERVICE_HEAD_TECHNOLOGY) {
-            return "/technology";
-        }
-        if (user.getRole() == SDP_SERVICE_HEAD_DISPATCHER) {
-            return "/dispatcher";
-        }
-        if (user.getOrganizationUnit() == null) {
-            return "/";
-        }
 
-        /*
-         * Если OrganizationUnit является сущностью,
-         * используйте её код или название.
-         *
-         * Например:
-         * user.getOrganizationUnit().getCode()
-         */
-        String unit = user.getOrganizationUnit()
-                .getName()
-                .trim()
-                .toLowerCase(Locale.ROOT);
-
-        return switch (unit) {
-            case "технологический отдел",
-                 "отдел технологов",
-                 "технологи" -> "/technology";
-
-            case "производственный отдел",
-                 "производство" -> "/production";
-
-            case "отдел качества",
-                 "качество" -> "/quality";
-
-            case "склад",
-                 "складской отдел" -> "/warehouse";
-
-            default -> "/";
-        };
-
+        return ModuleRoutes.destinationFor(user.getRole()).url();
     }
 }

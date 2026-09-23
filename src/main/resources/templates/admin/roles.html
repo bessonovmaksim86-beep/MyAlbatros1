@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="ru"
+      xmlns:th="http://www.thymeleaf.org">
+
+<head>
+    <meta charset="UTF-8">
+
+    <meta name="viewport"
+          content="width=device-width, initial-scale=1">
+
+    <title>Роли и вход в интерфейс</title>
+
+    <link rel="stylesheet"
+          th:href="@{/technology/css/technology.css}">
+
+    <link rel="stylesheet"
+          th:href="@{/technology/css/common.css}">
+
+    <link rel="stylesheet"
+          th:href="@{/admin/css/admin.css}">
+</head>
+
+<body>
+
+<div class="app-shell">
+
+    <aside th:replace="~{admin/fragments/layout
+            :: sidebar('roles')}">
+    </aside>
+
+    <main class="main">
+
+        <header th:replace="~{admin/fragments/layout
+                :: topbar}">
+        </header>
+
+        <div class="page-content admin-page">
+
+            <div class="page-head">
+
+                <div>
+
+                    <h1>Роли и вход в интерфейс</h1>
+
+                    <p>
+                        Администратор не привязан к службе и подразделению,
+                        поэтому разделы отделов он открывает под реальной
+                        учётной записью сотрудника. Права и границы цеха при
+                        этом не расширяются: видно ровно то, что видит сотрудник.
+                    </p>
+                </div>
+
+                <span class="badge"
+                      th:text="${roleAccesses.size() + ' ролей'}">
+                    11 ролей
+                </span>
+            </div>
+
+            <div class="alert success"
+                 th:if="${successMessage}"
+                 th:text="${successMessage}">
+            </div>
+
+            <div class="alert danger"
+                 th:if="${errorMessage}"
+                 th:text="${errorMessage}">
+            </div>
+
+            <section class="card"
+                     th:each="access : ${roleAccesses}">
+
+                <div class="card-head">
+
+                    <div>
+
+                        <h2 th:text="${access.displayName}">
+                            Мастер участка сборки
+                        </h2>
+
+                        <p>
+                            Модуль:
+                            <span th:text="${access.moduleName}">
+                                Руководитель цеха
+                            </span>
+                            · код роли
+                            <span th:text="${access.role}">SDP_SPP_MASTER</span>
+                        </p>
+                    </div>
+
+                    <span class="badge"
+                          th:if="${access.canEnter()}"
+                          th:text="${
+                              access.userCount
+                              + (access.userCount == 1 ? ' учётная запись'
+                                 : (access.userCount < 5 ? ' учётные записи'
+                                    : ' учётных записей'))
+                          }">
+                        2 учётные записи
+                    </span>
+
+                    <span class="badge badge-warn"
+                          th:unless="${access.canEnter()}">
+                        нет действующих учётных записей
+                    </span>
+                </div>
+
+                <div class="card-body">
+
+                    <p class="empty-inline"
+                       th:unless="${access.canEnter()}">
+                        Войти в интерфейс этой роли не под кем: создайте
+                        пользователя с такой ролью в разделе «Пользователи».
+                    </p>
+
+                    <div class="table-wrap"
+                         th:if="${access.canEnter()}">
+
+                        <table>
+                            <thead>
+                            <tr>
+                                <th>Сотрудник</th>
+                                <th>Логин</th>
+                                <th>Должность</th>
+                                <th>Подразделение</th>
+                                <th>Интерфейс</th>
+                            </tr>
+                            </thead>
+
+                            <tbody>
+                            <tr th:each="user : ${access.users}">
+
+                                <td th:text="${user.displayName}">
+                                    Иванов Иван Иванович
+                                </td>
+
+                                <td th:text="${user.username}">
+                                    iivanov
+                                </td>
+
+                                <td th:text="${
+                                    user.specialty != null
+                                    and !#strings.isEmpty(user.specialty)
+                                        ? user.specialty
+                                        : '—'
+                                }">
+                                    Мастер участка
+                                </td>
+
+                                <td th:text="${
+                                    user.organizationUnit != null
+                                    and !#strings.isEmpty(user.organizationUnit)
+                                        ? user.organizationUnit
+                                        : '—'
+                                }">
+                                    Цех подготовки производства
+                                </td>
+
+                                <td>
+                                    <!--
+                                        Вход выполняется POST-запросом: он меняет
+                                        аутентификацию сессии, поэтому ссылка «назад»
+                                        не должна его повторять.
+                                    -->
+                                    <form th:action="@{/admin/switch/{id}(id=${user.id})}"
+                                          method="post">
+
+                                        <input th:if="${_csrf != null}"
+                                               type="hidden"
+                                               th:name="${_csrf.parameterName}"
+                                               th:value="${_csrf.token}">
+
+                                        <button type="submit"
+                                                class="btn primary compact">
+                                            Войти в интерфейс
+                                        </button>
+                                    </form>
+                                </td>
+                            </tr>
+                            </tbody>
+                        </table>
+                    </div>
+
+                </div>
+
+            </section>
+
+        </div>
+    </main>
+</div>
+
+<th:block th:replace="~{admin/fragments/layout
+        :: commonScripts}">
+</th:block>
+
+</body>
+</html>

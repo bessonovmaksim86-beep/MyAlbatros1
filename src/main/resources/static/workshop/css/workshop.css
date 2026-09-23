@@ -1,0 +1,1051 @@
+/* ============================================================
+   МОДУЛЬ РУКОВОДИТЕЛЯ ЦЕХА — ПЕРЕМЕННЫЕ
+
+   Каркас (карточки, таблицы, формы, статусы) приходит из
+   technology.css и common.css; здесь — собственный каркас меню
+   и компоненты модуля. Имена переменных и классов префиксованы,
+   чтобы модуль не зависел от настроек других разделов.
+   ============================================================ */
+
+:root {
+    --workshop-sidebar-collapsed-width: 72px;
+    --workshop-sidebar-expanded-width: 286px;
+    --workshop-sidebar-duration: 220ms;
+
+    --workshop-sidebar-background: #123a2e;
+    --workshop-sidebar-background-dark: #0c2a21;
+    --workshop-sidebar-border: rgba(255, 255, 255, 0.1);
+    --workshop-sidebar-text: #ffffff;
+    --workshop-sidebar-muted: #a4bdb2;
+    --workshop-sidebar-active: rgba(255, 255, 255, 0.14);
+    --workshop-accent: #ef7d00;
+
+    --workshop-vacation: #1f8f5f;
+    --workshop-vacation-bg: #e3f5ec;
+    --workshop-sick: #c73a43;
+    --workshop-sick-bg: #fdeaec;
+    --workshop-unpaid: #7a5cc4;
+    --workshop-unpaid-bg: #efeafb;
+}
+
+html,
+body {
+    width: 100%;
+    min-height: 100%;
+    margin: 0;
+}
+
+body {
+    overflow-x: hidden;
+}
+
+
+/* ============================================================
+   КОМПОНОВКА
+   ============================================================ */
+
+.app-shell {
+    display: grid !important;
+    grid-template-columns:
+        var(--workshop-sidebar-collapsed-width)
+        minmax(0, 1fr) !important;
+
+    width: 100%;
+    min-height: 100vh;
+}
+
+.main {
+    box-sizing: border-box;
+    width: 100% !important;
+    max-width: none !important;
+    min-width: 0;
+    margin: 0 !important;
+    overflow-x: hidden;
+}
+
+.page-content {
+    box-sizing: border-box;
+    width: 100%;
+    max-width: none !important;
+    margin: 0 !important;
+    padding: 20px;
+}
+
+.page-head-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+}
+
+.stats {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 14px;
+    margin-bottom: 20px;
+}
+
+.stat {
+    display: grid;
+    gap: 8px;
+    padding: 17px;
+    border: 1px solid var(--line, #dce4eb);
+    border-radius: 11px;
+    background: #fff;
+    box-shadow: var(--shadow, 0 10px 28px rgba(16, 47, 75, .08));
+}
+
+.stat small {
+    color: var(--muted, #6c7b89);
+    font-size: 11px;
+}
+
+.stat strong {
+    color: var(--navy, #073e75);
+    font-size: 27px;
+}
+
+/* Название месяца в карточке сводки: цифрами не измерить. */
+.stat strong.stat-text {
+    font-size: 19px;
+    line-height: 1.3;
+}
+
+.stat span {
+    color: var(--muted, #6c7b89);
+    font-size: 11px;
+}
+
+.field-hint {
+    display: block;
+    margin-top: 6px;
+    color: var(--muted, #6c7b89);
+    font-size: 11px;
+    line-height: 1.45;
+}
+
+.btn.compact {
+    padding: 4px 8px;
+    font-size: 12px;
+    line-height: 1;
+}
+
+.btn.danger {
+    background: #fdecee;
+    color: #a12d35;
+}
+
+.empty-inline {
+    color: var(--muted, #6c7b89);
+    font-size: 11px;
+}
+
+
+/* ============================================================
+   БОКОВОЕ МЕНЮ
+   ============================================================ */
+
+.workshop-sidebar {
+    position: sticky;
+    top: 0;
+    z-index: 1000;
+
+    align-self: start;
+
+    box-sizing: border-box;
+    width: var(--workshop-sidebar-collapsed-width) !important;
+    min-width: 0 !important;
+    height: 100vh;
+
+    padding: 0 !important;
+    overflow: hidden;
+
+    color: var(--workshop-sidebar-text);
+
+    background:
+        linear-gradient(
+            180deg,
+            var(--workshop-sidebar-background) 0%,
+            var(--workshop-sidebar-background-dark) 100%
+        );
+
+    border-right: 1px solid var(--workshop-sidebar-border);
+    box-shadow: 5px 0 18px rgba(6, 26, 20, 0.14);
+
+    transition:
+        width var(--workshop-sidebar-duration) ease,
+        box-shadow var(--workshop-sidebar-duration) ease;
+}
+
+.workshop-sidebar:hover,
+.workshop-sidebar:focus-within {
+    width: var(--workshop-sidebar-expanded-width) !important;
+    box-shadow: 12px 0 34px rgba(6, 26, 20, 0.3);
+}
+
+.workshop-sidebar__inner {
+    display: flex;
+    flex-direction: column;
+
+    box-sizing: border-box;
+    width: var(--workshop-sidebar-expanded-width);
+    height: 100%;
+
+    padding: 12px 10px 18px;
+}
+
+.workshop-sidebar .department-brand {
+    flex: 0 0 140px;
+    height: 140px;
+}
+
+.workshop-sidebar:hover .department-brand__logo,
+.workshop-sidebar:focus-within .department-brand__logo {
+    width: 248px;
+    height: 62px;
+    padding: 7px 10px;
+}
+
+/*
+ * Наименование цеха под логотипом: руководитель видит, каким цехом
+ * оперирует модуль, — подразделение берётся из его учётной записи.
+ */
+.workshop-sidebar__workshop {
+    display: block;
+    width: 248px;
+    margin: -6px 0 12px;
+    padding: 8px 10px;
+
+    overflow: hidden;
+
+    color: var(--workshop-sidebar-muted);
+    font-size: 11px;
+    font-weight: 600;
+    line-height: 1.35;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+
+    background: rgba(255, 255, 255, 0.06);
+    border-radius: 8px;
+
+    opacity: 0;
+    transform: translateX(-8px);
+
+    transition:
+        opacity 150ms ease 40ms,
+        transform 150ms ease 40ms;
+}
+
+.workshop-sidebar:hover .workshop-sidebar__workshop,
+.workshop-sidebar:focus-within .workshop-sidebar__workshop {
+    opacity: 1;
+    transform: translateX(0);
+}
+
+.workshop-sidebar__divider {
+    flex: 0 0 1px;
+    width: 252px;
+    height: 1px;
+    margin: 0 0 16px;
+
+    background: var(--workshop-sidebar-border);
+}
+
+
+/* ============================================================
+   НАВИГАЦИЯ
+   ============================================================ */
+
+.workshop-navigation {
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    gap: 6px;
+
+    min-height: 0;
+    overflow-x: hidden;
+    overflow-y: auto;
+}
+
+.workshop-navigation__item {
+    position: relative;
+
+    display: flex;
+    align-items: center;
+
+    box-sizing: border-box;
+    width: 266px;
+    min-height: 48px;
+    padding: 10px 13px;
+
+    overflow: hidden;
+
+    color: #d9e8e1;
+    font-size: 14px;
+    font-weight: 500;
+    line-height: 1.2;
+    text-decoration: none;
+    white-space: nowrap;
+
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 10px;
+
+    transition:
+        color 160ms ease,
+        background-color 160ms ease,
+        border-color 160ms ease;
+}
+
+.workshop-navigation__item:hover,
+.workshop-navigation__item:focus-visible {
+    color: #ffffff;
+    text-decoration: none;
+    background: rgba(255, 255, 255, 0.08);
+}
+
+.workshop-navigation__item.is-active {
+    color: #ffffff;
+    background: var(--workshop-sidebar-active);
+    border-color: rgba(255, 255, 255, 0.08);
+    box-shadow: inset 3px 0 0 var(--workshop-accent);
+}
+
+.workshop-navigation__icon {
+    display: inline-flex;
+    flex: 0 0 24px;
+    align-items: center;
+    justify-content: center;
+
+    width: 24px;
+    height: 24px;
+    margin-right: 15px;
+}
+
+.workshop-navigation__icon svg {
+    display: block;
+    width: 21px;
+    height: 21px;
+    fill: currentColor;
+}
+
+.workshop-navigation__text {
+    min-width: 0;
+    overflow: hidden;
+
+    text-overflow: ellipsis;
+
+    opacity: 0;
+    transform: translateX(-6px);
+
+    transition:
+        opacity 130ms ease,
+        transform 130ms ease;
+}
+
+.workshop-sidebar:hover .workshop-navigation__text,
+.workshop-sidebar:focus-within .workshop-navigation__text {
+    opacity: 1;
+    transform: translateX(0);
+}
+
+.workshop-navigation__counter {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+
+    min-width: 21px;
+    height: 21px;
+    margin-left: auto;
+    padding: 0 6px;
+
+    color: #ffffff;
+    font-size: 11px;
+    font-weight: 700;
+
+    background: #e44c4c;
+    border-radius: 20px;
+
+    opacity: 0;
+
+    transition: opacity 130ms ease;
+}
+
+.workshop-sidebar:hover .workshop-navigation__counter,
+.workshop-sidebar:focus-within .workshop-navigation__counter {
+    opacity: 1;
+}
+
+.workshop-sidebar__footer {
+    padding: 14px 0 0;
+
+    color: var(--workshop-sidebar-muted);
+    font-size: 11px;
+}
+
+.workshop-sidebar__footer form {
+    margin: 0;
+}
+
+.workshop-sidebar__logout {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+
+    box-sizing: border-box;
+    width: 266px;
+    min-height: 42px;
+    padding: 10px 13px;
+
+    overflow: hidden;
+
+    color: #d9e8e1;
+    font: inherit;
+    font-size: 13px;
+    font-weight: 600;
+    white-space: nowrap;
+
+    cursor: pointer;
+
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 10px;
+
+    transition:
+        color 160ms ease,
+        background-color 160ms ease;
+}
+
+.workshop-sidebar__logout:hover,
+.workshop-sidebar__logout:focus-visible {
+    color: #ffffff;
+    background: rgba(255, 255, 255, 0.08);
+}
+
+.workshop-sidebar__status-dot {
+    flex: 0 0 8px;
+    width: 8px;
+    height: 8px;
+    margin-left: 7px;
+
+    background: #38c172;
+    border-radius: 50%;
+}
+
+.workshop-sidebar__logout-text {
+    opacity: 0;
+    transform: translateX(-6px);
+
+    transition:
+        opacity 130ms ease,
+        transform 130ms ease;
+}
+
+.workshop-sidebar:hover .workshop-sidebar__logout-text,
+.workshop-sidebar:focus-within .workshop-sidebar__logout-text {
+    opacity: 1;
+    transform: translateX(0);
+}
+
+
+/* ============================================================
+   ВЕРХНЯЯ ПАНЕЛЬ
+   ============================================================ */
+
+.workshop-topbar {
+    position: sticky;
+    top: 0;
+    z-index: 800;
+
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 24px;
+
+    box-sizing: border-box;
+    width: 100%;
+    min-width: 0;
+    min-height: 74px;
+    padding: 0 22px;
+
+    background: rgba(255, 255, 255, 0.97);
+    border-bottom: 1px solid #e5eaf0;
+    box-shadow: 0 4px 18px rgba(18, 38, 63, 0.05);
+    backdrop-filter: blur(10px);
+}
+
+.workshop-topbar__left {
+    display: flex;
+    flex: 1 1 auto;
+    align-items: center;
+
+    min-width: 160px;
+}
+
+.workshop-topbar__section {
+    color: var(--navy, #073e75);
+    font-size: 13px;
+    font-weight: 700;
+}
+
+.workshop-topbar__right {
+    display: flex;
+    flex: 0 0 auto;
+    align-items: center;
+    gap: 18px;
+}
+
+.workshop-clock {
+    display: block;
+
+    min-width: 175px;
+
+    color: var(--navy, #153c63);
+    font-size: 13px;
+    font-weight: 700;
+    line-height: 1.25;
+    text-align: right;
+    white-space: nowrap;
+}
+
+.workshop-topbar__user {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+
+    min-width: 180px;
+    padding-left: 18px;
+
+    border-left: 1px solid var(--line, #dfe6ed);
+}
+
+.workshop-topbar__avatar {
+    display: inline-flex;
+    flex: 0 0 40px;
+    align-items: center;
+    justify-content: center;
+
+    box-sizing: border-box;
+    width: 40px;
+    height: 40px;
+
+    color: #ffffff;
+    font-size: 13px;
+    font-weight: 800;
+    letter-spacing: 0.02em;
+
+    background: #123a2e;
+    border-radius: 50%;
+}
+
+.workshop-topbar__user-data {
+    display: flex;
+    flex-direction: column;
+
+    min-width: 0;
+}
+
+.workshop-topbar__username {
+    display: block;
+
+    max-width: 190px;
+    overflow: hidden;
+
+    color: #27394d;
+    font-size: 13px;
+    font-weight: 700;
+    line-height: 1.3;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.workshop-topbar__specialty {
+    display: block;
+
+    max-width: 190px;
+    margin-top: 2px;
+    overflow: hidden;
+
+    color: var(--muted, #748397);
+    font-size: 10px;
+    line-height: 1.3;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+
+/* ============================================================
+   СПИСОК СОТРУДНИКОВ: ПРИВЯЗКИ-ЧИПЫ
+   ============================================================ */
+
+.workshop-staff-table {
+    min-width: 940px;
+}
+
+.workshop-staff-table .staff-cell strong {
+    color: var(--navy, #073e75);
+    font-size: 13px;
+}
+
+.workshop-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.workshop-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+
+    max-width: 100%;
+    padding: 5px 8px;
+
+    font-size: 11px;
+
+    background: #eef2f6;
+    border: 1px solid var(--line, #dce4eb);
+    border-radius: 99px;
+}
+
+/*
+ * Вид привязки кодируется цветом, а не только подписью: в плотной
+ * таблицеOperations и рабочие места различаются мгновенно.
+ */
+.workshop-chip.is-operation {
+    color: #0b5798;
+    background: #e6f0f9;
+    border-color: #cfe1f1;
+}
+
+.workshop-chip.is-place {
+    color: #4a6b57;
+    background: #eef5f0;
+    border-color: #d3e6da;
+}
+
+.workshop-chip__kind {
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    font-size: 9px;
+}
+
+.workshop-chip__code {
+    font-family: 'Consolas', 'Courier New', monospace;
+    font-weight: 700;
+}
+
+.workshop-chip__name {
+    max-width: 260px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.workshop-chip__remove {
+    display: inline-flex;
+    margin: 0;
+}
+
+.workshop-binding-form .form-actions {
+    margin-top: 18px;
+}
+
+
+/* ============================================================
+   ПРОИЗВОДСТВЕННЫЙ КАЛЕНДАРЬ
+   ============================================================ */
+
+.workshop-month-nav .btn {
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.workshop-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+}
+
+.workshop-legend__item {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+
+    color: var(--muted, #6c7b89);
+    font-size: 11px;
+    font-weight: 600;
+}
+
+.workshop-legend__mark {
+    width: 12px;
+    height: 12px;
+    border-radius: 4px;
+    background: #eef2f6;
+    border: 1px solid var(--line, #dce4eb);
+}
+
+.workshop-legend__item.is-vacation .workshop-legend__mark {
+    background: var(--workshop-vacation);
+    border-color: var(--workshop-vacation);
+}
+
+.workshop-legend__item.is-sick .workshop-legend__mark {
+    background: var(--workshop-sick);
+    border-color: var(--workshop-sick);
+}
+
+.workshop-legend__item.is-unpaid .workshop-legend__mark {
+    background: var(--workshop-unpaid);
+    border-color: var(--workshop-unpaid);
+}
+
+.workshop-legend__item.is-dayoff .workshop-legend__mark {
+    background: #64748b;
+    border-color: #64748b;
+}
+
+/*
+ * Множественный выбор сотрудников: список выше одной строки, чтобы
+ * цех был виден целиком и «все» выбирались протяжкой, а не Ctrl-кликами
+ * по каждому.
+ */
+.workshop-absence-form select[multiple] {
+    box-sizing: border-box;
+    width: 100%;
+    min-height: 168px;
+    padding: 6px;
+
+    font: inherit;
+    font-size: 12px;
+}
+
+.workshop-absence-form select[multiple] option {
+    padding: 5px 7px;
+    border-radius: 6px;
+}
+
+.workshop-weekend-form .form-actions {
+    margin-top: 14px;
+}
+
+.workshop-replace {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+
+    margin-top: 16px;
+
+    color: #40505f;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.workshop-replace input {
+    width: auto;
+    margin: 0;
+}
+
+.workshop-calendar-wrap {
+    overflow-x: auto;
+}
+
+.workshop-calendar {
+    width: 100%;
+    min-width: 1180px;
+    border-collapse: separate;
+    border-spacing: 0;
+    font-size: 12px;
+    table-layout: fixed;
+}
+
+.workshop-calendar th,
+.workshop-calendar td {
+    padding: 0;
+    border-top: 1px solid #e9eef2;
+    border-left: 1px solid #eef2f6;
+}
+
+.workshop-calendar thead th {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+
+    background: #f8fafc;
+    color: #748494;
+    font-size: 11px;
+    font-weight: 800;
+    text-align: center;
+    padding: 9px 0;
+}
+
+/*
+ * Шапка и первая колонка залипают при прокрутке: в цехе список
+ * сотрудников длиннее экрана, а месяц шире окна, поэтому без
+ * закрепления подписей таблица теряет смысл.
+ */
+.workshop-calendar__head {
+    position: sticky;
+    left: 0;
+    z-index: 3;
+
+    box-sizing: border-box;
+    width: 210px;
+    min-width: 210px;
+
+    padding: 9px 12px !important;
+
+    text-align: left !important;
+
+    background: #fff;
+    border-left: 0 !important;
+}
+
+.workshop-calendar thead .workshop-calendar__head {
+    z-index: 4;
+    background: #f8fafc;
+}
+
+.workshop-calendar__head strong {
+    display: block;
+    overflow: hidden;
+
+    color: var(--navy, #073e75);
+    font-size: 12px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.workshop-calendar__head small {
+    display: block;
+    overflow: hidden;
+
+    margin-top: 2px;
+
+    color: var(--muted, #6c7b89);
+    font-size: 10px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.workshop-calendar__count {
+    display: inline-block;
+    margin-top: 4px;
+    padding: 2px 7px;
+
+    color: #a12d35;
+    font-size: 10px;
+    font-weight: 800;
+
+    background: #fdecee;
+    border-radius: 99px;
+}
+
+.workshop-calendar__day.is-weekend {
+    background: #f7fafc;
+}
+
+.workshop-calendar__day.is-today {
+    background: #fff7ec;
+    box-shadow: inset 0 0 0 1px #f3c98a;
+}
+
+.workshop-calendar__day.is-empty {
+    background: #fbfcfd;
+}
+
+.workshop-calendar__day.is-empty .workshop-day {
+    visibility: hidden;
+}
+
+.workshop-day {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    box-sizing: border-box;
+    width: 100%;
+    height: 34px;
+    margin: 0;
+    padding: 0;
+
+    cursor: pointer;
+
+    color: var(--muted, #6c7b89);
+    font: inherit;
+    font-size: 11px;
+    font-weight: 800;
+
+    background: transparent;
+    border: 0;
+    border-radius: 0;
+
+    transition:
+        background-color 120ms ease,
+        box-shadow 120ms ease,
+        color 120ms ease;
+}
+
+.workshop-day:hover,
+.workshop-day:focus-visible {
+    background: #eaf1f7;
+    box-shadow: inset 0 0 0 2px #2c6da7;
+    outline: none;
+}
+
+.workshop-day.is-vacation {
+    color: #ffffff;
+    background: var(--workshop-vacation);
+}
+
+.workshop-day.is-sick {
+    color: #ffffff;
+    background: var(--workshop-sick);
+}
+
+.workshop-day.is-unpaid {
+    color: #ffffff;
+    background: var(--workshop-unpaid);
+}
+
+/*
+ * Выделение диапазона мышью: ячейки помечает скрипт, а форма
+ * в это же время получает границы диапазона, поэтому отметка и
+ * выделение всегда совпадают.
+ */
+.workshop-day.is-selected {
+    box-shadow: inset 0 0 0 2px #ef7d00;
+}
+
+.workshop-day.is-vacation.is-selected,
+.workshop-day.is-sick.is-selected,
+.workshop-day.is-unpaid.is-selected {
+    box-shadow:
+        inset 0 0 0 2px #ef7d00,
+        inset 0 0 0 4px rgba(255, 255, 255, 0.75);
+}
+
+
+/* ============================================================
+   АДАПТИВНОСТЬ
+   ============================================================ */
+
+@media (max-width: 1100px) {
+    .workshop-topbar {
+        gap: 15px;
+        padding-right: 16px;
+        padding-left: 16px;
+    }
+
+    .workshop-topbar__right {
+        gap: 12px;
+    }
+
+    .workshop-clock {
+        min-width: 150px;
+        font-size: 12px;
+    }
+
+    .workshop-topbar__user {
+        min-width: 150px;
+        padding-left: 12px;
+    }
+
+    .workshop-topbar__username,
+    .workshop-topbar__specialty {
+        max-width: 130px;
+    }
+
+    .stats {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
+@media (max-width: 820px) {
+    :root {
+        --workshop-sidebar-collapsed-width: 62px;
+    }
+
+    .workshop-sidebar__inner {
+        padding-right: 6px;
+        padding-left: 6px;
+    }
+
+    .workshop-navigation__item {
+        padding-right: 12px;
+        padding-left: 12px;
+    }
+
+    .workshop-topbar {
+        flex-wrap: wrap;
+        gap: 10px;
+
+        min-height: 112px;
+        padding-top: 10px;
+        padding-bottom: 10px;
+    }
+
+    .workshop-topbar__left {
+        flex-basis: 100%;
+        order: 2;
+    }
+
+    .workshop-topbar__right {
+        order: 1;
+        width: 100%;
+        justify-content: flex-end;
+    }
+
+    .page-content {
+        padding: 16px;
+    }
+
+    .page-head {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+}
+
+@media (max-width: 560px) {
+    .workshop-clock {
+        min-width: auto;
+        font-size: 11px;
+    }
+
+    .workshop-topbar__user {
+        min-width: auto;
+    }
+
+    .workshop-topbar__user-data {
+        display: none;
+    }
+
+    .workshop-topbar__avatar {
+        flex-basis: 36px;
+        width: 36px;
+        height: 36px;
+    }
+
+    .page-content {
+        padding: 12px;
+    }
+
+    .stats {
+        grid-template-columns: 1fr;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .workshop-sidebar,
+    .workshop-sidebar__workshop,
+    .workshop-navigation__item,
+    .workshop-navigation__text,
+    .workshop-navigation__counter,
+    .workshop-sidebar__logout,
+    .workshop-sidebar__logout-text,
+    .workshop-day {
+        transition: none !important;
+    }
+}

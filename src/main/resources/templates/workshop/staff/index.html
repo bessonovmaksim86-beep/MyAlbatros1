@@ -1,0 +1,429 @@
+<!DOCTYPE html>
+<html lang="ru"
+      xmlns:th="http://www.thymeleaf.org">
+
+<head>
+    <meta charset="UTF-8">
+
+    <meta name="viewport"
+          content="width=device-width, initial-scale=1">
+
+    <title>Сотрудники цеха</title>
+
+    <link rel="stylesheet"
+          th:href="@{/technology/css/technology.css}">
+
+    <link rel="stylesheet"
+          th:href="@{/technology/css/common.css}">
+
+    <link rel="stylesheet"
+          th:href="@{/workshop/css/workshop.css}">
+</head>
+
+<body>
+
+<div class="app-shell">
+
+    <aside th:replace="~{workshop/fragments/layout
+            :: sidebar('staff')}">
+    </aside>
+
+    <main class="main">
+
+        <header th:replace="~{workshop/fragments/layout
+                :: topbar}">
+        </header>
+
+        <div class="page-content workshop-page">
+
+            <div class="page-head">
+
+                <div class="page-title">
+
+                    <h1>Сотрудники</h1>
+
+                    <p th:text="${
+                        workshopName != null
+                            ? workshopName
+                              + ': список цеха, закреплённые операции и рабочие места'
+                            : 'Список цеха, закреплённые операции и рабочие места'
+                    }">
+                        Цех подготовки производства: сотрудники и привязки
+                    </p>
+
+                </div>
+
+            </div>
+
+            <div class="alert success"
+                 th:if="${successMessage}"
+                 th:text="${successMessage}">
+            </div>
+
+            <div class="alert danger"
+                 th:if="${errorMessage}"
+                 th:text="${errorMessage}">
+            </div>
+
+            <div class="stats">
+
+                <div class="stat">
+                    <small>Сотрудников цеха</small>
+                    <strong th:text="${#lists.size(staff)}">0</strong>
+                    <span>учётные записи с активным доступом</span>
+                </div>
+
+                <div class="stat">
+                    <small>Привязок всего</small>
+                    <strong th:text="${bindingTotal}">0</strong>
+                    <span>операций и рабочих мест закреплено</span>
+                </div>
+
+                <div class="stat">
+                    <small>Операций цеха</small>
+                    <strong th:text="${#lists.size(operations)}">0</strong>
+                    <span>роль исполнителя «Исполнитель»</span>
+                </div>
+
+                <div class="stat">
+                    <small>Рабочих мест цеха</small>
+                    <strong th:text="${#lists.size(workPlaces)}">0</strong>
+                    <span>действующие позиции справочника</span>
+                </div>
+
+            </div>
+
+            <section class="card">
+
+                <div class="card-head">
+
+                    <div>
+
+                        <h2>Закрепить операцию или рабочее место</h2>
+
+                        <p>
+                            Сотруднику закрепляют либо операцию цеха,
+                            либо рабочее место: вид привязки выбирается
+                            переключателем
+                        </p>
+
+                    </div>
+
+                </div>
+
+                <div class="card-body">
+
+                    <div class="alert danger"
+                         th:if="${#lists.isEmpty(staff)}">
+
+                        <p>
+                            В подразделении нет ни одного сотрудника:
+                            учётные записи заводит администратор,
+                            после чего они появятся в этом списке
+                        </p>
+
+                    </div>
+
+                    <form method="post"
+                          th:action="@{/workshop/staff/bind}"
+                          th:object="${bindingForm}"
+                          id="bindingForm"
+                          class="workshop-binding-form">
+
+                        <input th:if="${_csrf != null}"
+                               type="hidden"
+                               th:name="${_csrf.parameterName}"
+                               th:value="${_csrf.token}">
+
+                        <div class="form-grid">
+
+                            <div class="field">
+
+                                <label for="bindingType">Вид привязки</label>
+
+                                <select id="bindingType"
+                                        th:field="*{bindingType}"
+                                        data-binding-switch>
+
+                                    <option value="">— выберите —</option>
+
+                                    <option th:each="type : ${bindingTypes}"
+                                            th:value="${type.name()}"
+                                            th:text="${type.displayName}">
+                                        Операция
+                                    </option>
+
+                                </select>
+
+                            </div>
+
+                            <div class="field">
+
+                                <label for="employeeId">Сотрудник цеха</label>
+
+                                <select id="employeeId"
+                                        th:field="*{employeeId}">
+
+                                    <option value="">— выберите —</option>
+
+                                    <option th:each="member : ${staff}"
+                                            th:value="${member.id}"
+                                            th:text="${
+                                                member.fullName
+                                                + (member.specialty != null
+                                                   and !#strings.isEmpty(member.specialty)
+                                                       ? ' — ' + member.specialty
+                                                       : '')
+                                            }">
+                                        Иванов И. И.
+                                    </option>
+
+                                </select>
+
+                            </div>
+
+                            <div class="field" data-binding-target="OPERATION">
+
+                                <label for="operationId">Операция цеха</label>
+
+                                <select id="operationId"
+                                        th:field="*{operationId}">
+
+                                    <option value="">— выберите —</option>
+
+                                    <option th:each="operation : ${operations}"
+                                            th:value="${operation.id}"
+                                            th:text="${
+                                                (operation.operationName != null
+                                                 ? operation.operationName.code + ' — '
+                                                   + operation.operationName.name
+                                                 : 'Операция №' + operation.id)
+                                                + (operation.operationType != null
+                                                   ? ' (' + operation.operationType.name + ')'
+                                                   : '')
+                                            }">
+                                        OP-01 — Сборка (Сборочные)
+                                    </option>
+
+                                </select>
+
+                                <small class="field-hint">
+                                    Операции цеха с ролью исполнителя
+                                    «Исполнитель»
+                                </small>
+
+                            </div>
+
+                            <div class="field"
+                                 data-binding-target="WORK_PLACE"
+                                 hidden>
+
+                                <label for="workPlaceId">Рабочее место цеха</label>
+
+                                <select id="workPlaceId"
+                                        th:field="*{workPlaceId}">
+
+                                    <option value="">— выберите —</option>
+
+                                    <option th:each="place : ${workPlaces}"
+                                            th:value="${place.id}"
+                                            th:text="${
+                                                place.code + ' — ' + place.name
+                                            }">
+                                        РМ-01 — Участок сборки
+                                    </option>
+
+                                </select>
+
+                                <small class="field-hint">
+                                    Действующие рабочие места вашего
+                                    подразделения
+                                </small>
+
+                            </div>
+
+                        </div>
+
+                        <div class="form-actions">
+
+                            <button type="submit" class="btn primary">
+                                Закрепить
+                            </button>
+
+                        </div>
+
+                    </form>
+
+                </div>
+
+            </section>
+
+            <section class="card">
+
+                <div class="card-head">
+
+                    <div>
+
+                        <h2>Список сотрудников и привязки</h2>
+
+                        <p>
+                            Снятие привязки убирает только закрепление:
+                            операция и рабочее место остаются
+                            в справочнике
+                        </p>
+
+                    </div>
+
+                </div>
+
+                <div class="card-body">
+
+                    <div class="alert danger"
+                         th:if="${#lists.isEmpty(staff)}">
+
+                        <p>
+                            Список цеха пуст: сотруднику нужно назначить
+                            ваше подразделение в административном разделе
+                        </p>
+
+                    </div>
+
+                    <div class="table-wrap" th:unless="${#lists.isEmpty(staff)}">
+
+                        <table class="data-table workshop-staff-table">
+
+                            <thead>
+
+                            <tr>
+                                <th>Сотрудник</th>
+                                <th>Должность</th>
+                                <th>Логин</th>
+                                <th>Привязки</th>
+                                <th>Всего</th>
+                            </tr>
+
+                            </thead>
+
+                            <tbody>
+
+                            <tr th:each="member : ${staff}">
+
+                                <td class="staff-cell">
+                                    <strong th:text="${member.fullName}">
+                                        Иванов И. И.
+                                    </strong>
+                                </td>
+
+                                <td th:text="${
+                                    member.specialty != null
+                                    and !#strings.isEmpty(member.specialty)
+                                        ? member.specialty
+                                        : '—'
+                                }">
+                                    Сборщик
+                                </td>
+
+                                <td th:text="${member.username}">
+                                    ivanov
+                                </td>
+
+                                <td class="bindings-cell">
+
+                                    <div class="workshop-chips"
+                                         th:if="${member.bindingCount() > 0}">
+
+                                        <span class="workshop-chip"
+                                              th:each="binding : ${member.bindings}"
+                                              th:classappend="${binding.kind == 'Операция'}
+                                                  ? ' is-operation'
+                                                  : ' is-place'"
+                                              th:title="${binding.kind + ': '
+                                                  + binding.code + ' — ' + binding.name
+                                                  + (binding.type != null
+                                                     ? ' (' + binding.type + ')' : '')
+                                                  + (binding.executorRole != null
+                                                     ? ', роль: ' + binding.executorRole : '')}">
+
+                                            <span class="workshop-chip__kind"
+                                                  th:text="${binding.kind}">
+                                                Операция
+                                            </span>
+
+                                            <span class="workshop-chip__code"
+                                                  th:text="${binding.code}">
+                                                OP-01
+                                            </span>
+
+                                            <span class="workshop-chip__name"
+                                                  th:text="${binding.name}">
+                                                Сборка корпуса
+                                            </span>
+
+                                            <form th:action="@{/workshop/staff/unbind}"
+                                                  method="post"
+                                                  class="workshop-chip__remove">
+
+                                                <input th:if="${_csrf != null}"
+                                                       type="hidden"
+                                                       th:name="${_csrf.parameterName}"
+                                                       th:value="${_csrf.token}">
+
+                                                <input type="hidden"
+                                                       name="bindingId"
+                                                       th:value="${binding.id}">
+
+                                                <button type="submit"
+                                                        class="btn danger compact"
+                                                        th:data-employee="${member.fullName}"
+                                                        th:data-binding="${binding.kind + ' ' + binding.name}"
+                                                        data-remove-binding
+                                                        title="Снять привязку">
+                                                    &times;
+                                                </button>
+
+                                            </form>
+
+                                        </span>
+
+                                    </div>
+
+                                    <span class="empty-inline"
+                                          th:if="${member.bindingCount() == 0}">
+                                        Привязок нет
+                                    </span>
+
+                                </td>
+
+                                <td>
+                                    <span class="badge"
+                                          th:text="${member.bindingCount()}">
+                                        0
+                                    </span>
+                                </td>
+
+                            </tr>
+
+                            </tbody>
+
+                        </table>
+
+                    </div>
+
+                </div>
+
+            </section>
+
+        </div>
+
+    </main>
+
+</div>
+
+<th:block th:replace="~{workshop/fragments/layout
+        :: commonScripts}">
+</th:block>
+
+<script th:src="@{/workshop/js/staff.js}"></script>
+
+</body>
+</html>

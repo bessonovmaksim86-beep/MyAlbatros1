@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="ru"
+      xmlns:th="http://www.thymeleaf.org">
+
+<head>
+    <meta charset="UTF-8">
+
+    <meta name="viewport"
+          content="width=device-width, initial-scale=1">
+
+    <title>Поставщики</title>
+
+    <link rel="stylesheet"
+          th:href="@{/technology/css/technology.css}">
+
+    <link rel="stylesheet"
+          th:href="@{/technology/css/common.css}">
+
+    <link rel="stylesheet"
+          th:href="@{/warehouse/css/warehouse.css}">
+</head>
+
+<body>
+
+<div class="app-shell">
+
+    <aside th:replace="~{warehouse/fragments/layout
+            :: sidebar('suppliers')}">
+    </aside>
+
+    <main class="main">
+
+        <header th:replace="~{warehouse/fragments/layout
+                :: topbar}">
+        </header>
+
+        <div class="page-content warehouse-page">
+
+            <div class="page-head">
+
+                <div class="page-title">
+
+                    <h1>Поставщики</h1>
+
+                    <p>
+                        Наименования поставщиков полуфабрикатов и сводка
+                        приходов по каждому: партии, ячейки и незакрытые
+                        оприходования
+                    </p>
+
+                </div>
+
+                <div class="page-head-actions">
+
+                    <a class="btn secondary"
+                       th:href="@{/warehouse/receiving}">
+                        Оприходование
+                    </a>
+
+                </div>
+            </div>
+
+            <div class="alert success"
+                 th:if="${successMessage}"
+                 th:text="${successMessage}">
+            </div>
+
+            <div class="alert danger"
+                 th:if="${errorMessage}"
+                 th:text="${errorMessage}">
+            </div>
+
+            <section class="card">
+
+                <div class="card-head">
+
+                    <div>
+
+                        <h2>Добавить поставщика</h2>
+
+                        <small>
+                            Наименование фиксируется в справочнике и
+                            подсказывается в форме прихода: свободный ввод
+                            имени в партии раскалывает сводку по одному
+                            поставщику на несколько строк
+                        </small>
+
+                    </div>
+
+                </div>
+
+                <div class="card-body">
+
+                    <form method="post"
+                          th:action="@{/warehouse/suppliers/create}"
+                          th:object="${supplierForm}"
+                          id="supplierForm">
+
+                        <input th:if="${_csrf != null}"
+                               type="hidden"
+                               th:name="${_csrf.parameterName}"
+                               th:value="${_csrf.token}">
+
+                        <div class="alert danger"
+                             th:if="${#fields.hasGlobalErrors()}">
+
+                            <p th:each="error : ${#fields.globalErrors()}"
+                               th:text="${error}">
+                                Поставщик не добавлен
+                            </p>
+
+                        </div>
+
+                        <div class="form-grid">
+
+                            <div class="field">
+
+                                <label for="name">Наименование поставщика</label>
+
+                                <input id="name"
+                                       type="text"
+                                       maxlength="255"
+                                       autocomplete="off"
+                                       placeholder="Например: ООО «Компонент»"
+                                       th:field="*{name}">
+
+                                <span class="field-error"
+                                      th:if="${#fields.hasErrors('name')}"
+                                      th:errors="*{name}">
+                                </span>
+
+                            </div>
+
+                            <div class="field">
+
+                                <label for="note">Примечание</label>
+
+                                <input id="note"
+                                       type="text"
+                                       maxlength="1000"
+                                       autocomplete="off"
+                                       placeholder="Например: поставка по договору 12-П"
+                                       th:field="*{note}">
+
+                                <small class="field-hint">
+                                    Необязательно: сверка поставок, договор,
+                                    особенности приёмки
+                                </small>
+
+                                <span class="field-error"
+                                      th:if="${#fields.hasErrors('note')}"
+                                      th:errors="*{note}">
+                                </span>
+
+                            </div>
+                        </div>
+
+                        <div class="form-actions">
+
+                            <button type="submit" class="btn primary">
+                                Добавить
+                            </button>
+
+                        </div>
+
+                    </form>
+
+                </div>
+
+            </section>
+
+            <section class="card">
+
+                <div class="card-head">
+
+                    <div>
+
+                        <h2>Сводка по поставщикам</h2>
+
+                        <small>
+                            Считается по партиям прихода: строка без
+                            записи в справочнике означает, что поставщик
+                            приходил, но его написание ещё не зафиксировано
+                        </small>
+
+                    </div>
+
+                </div>
+
+                <div class="card-body">
+
+                    <div class="alert danger"
+                         th:if="${suppliers == null or #lists.isEmpty(suppliers)}">
+
+                        <p>
+                            Поставщиков пока нет: добавьте наименование выше
+                            или оформите приход в разделе «Оприходование»
+                        </p>
+
+                    </div>
+
+                    <div class="table-wrap"
+                         th:unless="${suppliers == null or #lists.isEmpty(suppliers)}">
+
+                        <table class="data-table warehouse-batch-table">
+
+                            <thead>
+
+                            <tr>
+                                <th>Поставщик</th>
+                                <th>Партий</th>
+                                <th>Ячеек</th>
+                                <th>Оприходовано</th>
+                                <th>Незакрыто</th>
+                                <th>Последний приход</th>
+                                <th>Справочник</th>
+                            </tr>
+
+                            </thead>
+
+                            <tbody>
+
+                            <tr th:each="supplier : ${suppliers}">
+
+                                <td>
+                                    <strong th:text="${supplier.name}">
+                                        ООО «Компонент»
+                                    </strong>
+
+                                    <small class="field-hint"
+                                           th:if="${supplier.note != null
+                                                   and !#strings.isEmpty(supplier.note)}"
+                                           th:text="${supplier.note}">
+                                        поставка по договору 12-П
+                                    </small>
+                                </td>
+
+                                <td th:text="${supplier.batchCount}">
+                                    3
+                                </td>
+
+                                <td th:text="${supplier.cellCount}">
+                                    12
+                                </td>
+
+                                <td th:text="${supplier.receivedCells}">
+                                    8
+                                </td>
+
+                                <td>
+                                    <span class="status work"
+                                          th:if="${supplier.pendingBatches > 0}"
+                                          th:text="${supplier.pendingBatches}">
+                                        1
+                                    </span>
+
+                                    <span th:if="${supplier.pendingBatches == 0}">
+                                        —
+                                    </span>
+                                </td>
+
+                                <td th:text="${supplier.lastReceivedAt}">
+                                    12.02.2026 09:40
+                                </td>
+
+                                <td>
+                                    <span class="status done"
+                                          th:if="${supplier.registered}">
+                                        зафиксировано
+                                    </span>
+
+                                    <span class="status draft"
+                                          th:unless="${supplier.registered}">
+                                        только в партиях
+                                    </span>
+                                </td>
+
+                            </tr>
+
+                            </tbody>
+
+                        </table>
+
+                    </div>
+
+                </div>
+
+            </section>
+
+        </div>
+
+        <th:block th:replace="~{warehouse/fragments/layout
+                :: commonScripts}">
+        </th:block>
+
+    </main>
+</div>
+
+</body>
+</html>

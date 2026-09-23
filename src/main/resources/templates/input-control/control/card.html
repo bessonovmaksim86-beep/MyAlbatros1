@@ -1,0 +1,754 @@
+<!DOCTYPE html>
+<html lang="ru"
+      xmlns:th="http://www.thymeleaf.org">
+
+<head>
+    <meta charset="UTF-8">
+
+    <meta name="viewport"
+          content="width=device-width, initial-scale=1">
+
+    <title>Карточка входного контроля</title>
+
+    <link rel="stylesheet"
+          th:href="@{/technology/css/technology.css}">
+
+    <link rel="stylesheet"
+          th:href="@{/technology/css/common.css}">
+
+    <link rel="stylesheet"
+          th:href="@{/input-control/css/input-control.css}">
+</head>
+
+<body>
+
+<div class="app-shell">
+
+    <aside th:replace="~{input-control/fragments/layout
+            :: sidebar('control')}">
+    </aside>
+
+    <main class="main">
+
+        <header th:replace="~{input-control/fragments/layout
+                :: topbar}">
+        </header>
+
+        <div class="bvk-page">
+
+            <div class="page-head">
+
+                <div class="page-title">
+
+                    <h1>
+                        Входной контроль партии
+                        <span class="mono"
+                              th:text="${batch.cellLabel}">
+                            1212 — Подсборка ЯПР56
+                        </span>
+                    </h1>
+
+                    <p th:text="${
+                        card.inWork
+                            ? 'Проверка идёт с ' + card.formattedStartedAt
+                              + ', контролёр: ' + card.checkerName
+                            : 'Проверка завершена ' + card.formattedCompletedAt
+                              + ', контролёр: ' + card.checkerName
+                    }">
+                        Проверка идёт с 22.09.2026 10:05, контролёр: Иванов И. И.
+                    </p>
+
+                </div>
+
+                <div class="page-head-actions">
+
+                    <span class="status"
+                          th:classappend="' ' + ${card.statusBadgeClass}"
+                          th:text="${card.statusLabel}">
+                        В работе
+                    </span>
+
+                </div>
+            </div>
+
+            <div class="alert success"
+                 th:if="${successMessage}"
+                 th:text="${successMessage}">
+            </div>
+
+            <div class="alert danger"
+                 th:if="${errorMessage}"
+                 th:text="${errorMessage}">
+            </div>
+
+            <ol class="bvk-steps">
+
+                <li class="bvk-steps__item">
+                    Карточка оприходования
+                </li>
+
+                <li class="bvk-steps__item"
+                    th:classappend="${card.inWork} ? ' is-current' : ''">
+                    Выборочный контроль
+                </li>
+
+                <li class="bvk-steps__item"
+                    th:if="${card.inWork}">
+                    Изолятор брака и причина
+                </li>
+
+                <li class="bvk-steps__item"
+                    th:if="${card.inWork}">
+                    Решение по партии
+                </li>
+
+            </ol>
+
+
+            <!-- =====================================================
+                 КАРТОЧКА ОПРИХОДОВАНИЯ
+                 ===================================================== -->
+            <section class="card bvk-section">
+
+                <div class="card-head">
+
+                    <div>
+
+                        <h2>Карточка оприходования</h2>
+
+                        <small>
+                            Реквизиты прихода склада: по ним сверяют
+                            этикетки и оформляют рекламацию
+                        </small>
+
+                    </div>
+
+                    <span class="bvk-counter"
+                          th:text="${batch.quantity} + ' яч.'">
+                        4 яч.
+                    </span>
+                </div>
+
+                <div class="card-body">
+
+                    <dl class="bvk-receipt">
+
+                        <div class="bvk-receipt__item">
+
+                            <dt>Поставщик</dt>
+
+                            <dd th:text="${batch.supplierName}">
+                                ООО «Компонент»
+                            </dd>
+                        </div>
+
+                        <div class="bvk-receipt__item">
+
+                            <dt>Приходный ордер</dt>
+
+                            <dd class="mono"
+                                th:text="${batch.incomingOrderNumber}">
+                                ТОРГ-12/44
+                            </dd>
+                        </div>
+
+                        <div class="bvk-receipt__item">
+
+                            <dt>Номер изменения</dt>
+
+                            <dd class="mono"
+                                th:text="${batch.changeNumber}">
+                                Изм. 3
+                            </dd>
+                        </div>
+
+                        <div class="bvk-receipt__item">
+
+                            <dt>Подсборка</dt>
+
+                            <dd th:text="${batch.cellLabel}">
+                                1212 — Подсборка ЯПР56
+                            </dd>
+                        </div>
+
+                        <div class="bvk-receipt__item">
+
+                            <dt>Количество</dt>
+
+                            <dd th:text="${batch.quantity} + ' шт.'">
+                                4 шт.
+                            </dd>
+                        </div>
+
+                        <div class="bvk-receipt__item">
+
+                            <dt>Оприходовано складом</dt>
+
+                            <dd th:text="${batch.formattedConfirmedAt}">
+                                21.09.2026 09:40
+                            </dd>
+                        </div>
+
+                        <div class="bvk-receipt__item">
+
+                            <dt>Диапазон номеров</dt>
+
+                            <dd class="mono"
+                                th:text="${batch.numberRangeLabel}">
+                                121200022 … 121200025
+                            </dd>
+                        </div>
+
+                        <div class="bvk-receipt__item">
+
+                            <dt>Оформил приход</dt>
+
+                            <dd th:text="${batch.authorName}">
+                                Петров П. П.
+                            </dd>
+                        </div>
+
+                        <div class="bvk-receipt__item">
+
+                            <dt>Примечание склада</dt>
+
+                            <dd th:text="${
+                                batch.note != null and !#strings.isEmpty(batch.note)
+                                    ? batch.note
+                                    : 'не указано'
+                            }">
+                                Партия по договору 14-П
+                            </dd>
+                        </div>
+
+                    </dl>
+
+                </div>
+            </section>
+
+
+            <!-- =====================================================
+                 ЗАКРЫТАЯ КАРТОЧКА: ИТОГ ПРОВЕРКИ
+                 ===================================================== -->
+            <section class="card bvk-section"
+                     th:unless="${card.inWork}">
+
+                <div class="card-head">
+
+                    <div>
+
+                        <h2>Итог проверки</h2>
+
+                        <small>
+                            Карточка закрыта: списки и решение
+                            зафиксированы, изменить их нельзя
+                        </small>
+
+                    </div>
+
+                    <a class="btn secondary"
+                       th:href="@{/input-control/control}">
+                        К списку партий
+                    </a>
+                </div>
+
+                <div class="card-body">
+
+                    <div class="bvk-result">
+
+                        <!--
+                            Итог проверки оформлен так же, как карточка
+                            оприходования: закрытую проверку читают по
+                            тем же реквизитам, и два блока рядом должны
+                            читаться как одна карточка, а не как две
+                            разные формы.
+
+                            Проверяющий и метод контроля стоят первыми:
+                            по ним сверяют подпись и объём проверки —
+                            визуальный контроль или визуальный и
+                            технический дают разное основание приёмки.
+                        -->
+                        <dl class="bvk-receipt">
+
+                            <div class="bvk-receipt__item">
+
+                                <dt>Проверяющий</dt>
+
+                                <dd th:text="${card.checkerName}">
+                                    Иванов И. И.
+                                </dd>
+                            </div>
+
+                            <div class="bvk-receipt__item">
+
+                                <dt>Метод входного контроля</dt>
+
+                                <dd th:text="${card.inputControlTypeLabel}">
+                                    Визуальный
+                                </dd>
+                            </div>
+
+                            <div class="bvk-receipt__item">
+
+                                <dt>Проверка начата</dt>
+
+                                <dd th:text="${card.formattedStartedAt}">
+                                    22.09.2026 10:05
+                                </dd>
+                            </div>
+
+                            <div class="bvk-receipt__item">
+
+                                <dt>Проверка завершена</dt>
+
+                                <dd th:text="${card.formattedCompletedAt}">
+                                    22.09.2026 11:20
+                                </dd>
+                            </div>
+
+                            <div class="bvk-receipt__item">
+
+                                <dt>Выборочный контроль</dt>
+
+                                <dd th:if="${card.sampleAll}">
+                                    все ячейки партии
+                                </dd>
+
+                                <dd class="mono"
+                                    th:unless="${card.sampleAll}"
+                                    th:text="${
+                                        #lists.isEmpty(sampleNumbers)
+                                            ? 'не внесён'
+                                            : #lists.size(sampleNumbers) + ' яч.: '
+                                              + #strings.listJoin(sampleNumbers, ', ')
+                                    }">
+                                    3 яч.: 121200022, 121200023, 121200024
+                                </dd>
+                            </div>
+
+                            <div class="bvk-receipt__item">
+
+                                <dt>Изолятор брака</dt>
+
+                                <dd th:if="${#lists.isEmpty(defectGroups)}">
+                                    брак не выявлен
+                                </dd>
+
+                                <dd th:unless="${#lists.isEmpty(defectGroups)}"
+                                    th:text="${#lists.size(defectGroups)} + ' гр.'">
+                                    2 гр.
+                                </dd>
+                            </div>
+
+                        </dl>
+
+                        <!--
+                            Группы брака: у каждой свои ячейки, причина и
+                            решение. Партию бракуют частями, поэтому
+                            перечень читают по группам, а не одной строкой.
+                        -->
+                        <div class="bvk-groups"
+                             th:unless="${#lists.isEmpty(defectGroups)}">
+
+                            <div class="bvk-group-result"
+                                 th:each="grp, stat : ${defectGroups}">
+
+                                <div class="bvk-group-result__head">
+
+                                    <span class="bvk-group-result__title"
+                                          th:text="'Группа ' + ${stat.count}">
+                                        Группа 1
+                                    </span>
+
+                                    <span class="status"
+                                          th:classappend="' ' + ${grp.group.decisionBadgeClass}"
+                                          th:text="${grp.group.decisionLabel}">
+                                        Перемещение в изолятор брака
+                                    </span>
+
+                                </div>
+
+                                <div class="bvk-group-result__cells"
+                                     th:text="${grp.compositionLabel}">
+                                    2 яч.: 121200023, 121200024
+                                </div>
+
+                                <ul class="bvk-chosen"
+                                    th:unless="${#lists.isEmpty(grp.reasons)}">
+
+                                    <li class="bvk-chosen__item"
+                                        th:each="chosen : ${grp.reasons}">
+
+                                        <span class="bvk-chosen__level"
+                                              th:text="${chosen.levelNumber} + '.'">
+                                            1.
+                                        </span>
+
+                                        <span th:text="${chosen.displayLabel}">
+                                            Механическое повреждение
+                                        </span>
+                                    </li>
+
+                                </ul>
+
+                            </div>
+
+                        </div>
+
+                        <dl class="bvk-receipt">
+
+                            <div class="bvk-receipt__item bvk-receipt__item--wide">
+
+                                <dt>Примечание контролёра</dt>
+
+                                <dd th:text="${
+                                    card.note != null and !#strings.isEmpty(card.note)
+                                        ? card.note
+                                        : 'не указано'
+                                }">
+                                    Скол корпуса на двух ячейках
+                                </dd>
+                            </div>
+
+                        </dl>
+
+                    </div>
+
+                </div>
+            </section>
+
+
+            <!-- =====================================================
+                 ОТКРЫТАЯ КАРТОЧКА: ФОРМА ПРОВЕРКИ
+                 ===================================================== -->
+            <form class="bvk-form"
+                  id="bvkControlForm"
+                  method="post"
+                  th:if="${card.inWork}"
+                  th:action="@{/input-control/control/{id}(id=${card.id})}"
+                  th:attr="data-batch-numbers=${#strings.listJoin(batchNumbers, ',')}">
+
+                <input th:if="${_csrf != null}"
+                       type="hidden"
+                       th:name="${_csrf.parameterName}"
+                       th:value="${_csrf.token}">
+
+                <input type="hidden"
+                       name="batchId"
+                       th:value="${batch.id}">
+
+                <!-- ============ ВЫБОРОЧНЫЙ КОНТРОЛЬ ============ -->
+                <section class="card bvk-section">
+
+                    <div class="card-head">
+
+                        <div>
+
+                            <h2>Выборочный контроль</h2>
+
+                            <small>
+                                Внесите осмотренные ячейки: их может
+                                быть меньше, чем в партии
+                            </small>
+
+                        </div>
+
+                        <span class="bvk-counter"
+                              id="bvkSampleCounter"
+                              th:data-total="${batch.quantity}">
+                            0 из 4
+                        </span>
+                    </div>
+
+                    <div class="card-body">
+
+                        <div class="bvk-field">
+
+                            <div class="bvk-field__row">
+
+                                <label for="bvkSampleCellsText">
+                                    Номера ячеек выборочного контроля
+                                </label>
+
+                                <label class="bvk-check">
+                                    <input type="checkbox"
+                                           id="bvkSampleAll"
+                                           name="sampleAll"
+                                           value="true"
+                                           th:checked="${inputControlForm.sampleAll}">
+
+                                    все ячейки партии
+                                </label>
+
+                            </div>
+
+                            <textarea id="bvkSampleCellsText"
+                                      name="sampleCellsText"
+                                      placeholder="121200022&#10;121200023"
+                                      th:text="${inputControlForm.sampleCellsText}"></textarea>
+
+                            <span class="bvk-field__hint">
+                                По одному номеру в строке; сканер и
+                                разделители «,» и «;» тоже подходят.
+                                Номер, которого нет в партии, не
+                                принимается
+                            </span>
+
+                        </div>
+
+                        <span class="bvk-field__hint"
+                              id="bvkSampleUnknown"
+                              hidden>
+                            Номера не из этой партии:
+                            <span id="bvkSampleUnknownList"></span>
+                        </span>
+
+                        <ul class="bvk-numbers"
+                            id="bvkBatchNumbers">
+
+                            <!--
+                                Отметка контроля берётся из реестра
+                                (serialMarks): отмеченную ячейку видно
+                                до перерисовки скриптом — класс
+                                is-controlled скрипт подсветки не снимает.
+                            -->
+                            <li class="bvk-numbers__item"
+                                th:each="number : ${batchNumbers}"
+                                th:with="serial=${serialMarks != null ? serialMarks.get(number) : null}"
+                                th:classappend="${serial != null and serial.inputControlPassed}
+                                    ? ' is-controlled' : ''"
+                                th:attr="data-number=${number},
+                                         title=${serial != null and serial.inputControlPassed
+                                                 ? serial.inputControlMarkLabel : ''}"
+                                th:text="${number}">
+                                121200022
+                            </li>
+
+                        </ul>
+
+                        <span class="bvk-field__hint"
+                              th:if="${serialMarks != null and !#maps.isEmpty(serialMarks)}">
+                            Ячейки, отмеченные зелёным, уже прошли входной
+                            контроль; наведите курсор, чтобы увидеть вид,
+                            дату и контролёра
+                        </span>
+
+                    </div>
+                </section>
+
+
+                <!-- ============ ИЗОЛЯТОР БРАКА ============ -->
+                <section class="card bvk-section">
+
+                    <div class="card-head">
+
+                        <div>
+
+                            <h2>Изолятор брака</h2>
+
+                            <small>
+                                Группа брака — это ячейки с одним
+                                дефектом и одним решением: партию можно
+                                частью вернуть поставщику, а частью
+                                оставить в изоляторе
+                            </small>
+
+                        </div>
+
+                        <span class="bvk-counter bvk-counter--danger"
+                              id="bvkDefectCounter">
+                            брака нет
+                        </span>
+                    </div>
+
+                    <div class="card-body">
+
+                        <p class="bvk-defect__hint">
+                            В изолятор отправляют только проверенные
+                            ячейки: номер обязан стоять в выборочном
+                            контроле, а без причины и решения группу не
+                            сохранить. Один номер не может быть в двух
+                            группах сразу.
+                        </p>
+
+                        <!--
+                            Группы брака. th:block обязателен: th:replace
+                            выполняется раньше th:each на одном элементе,
+                            поэтому каждую группу вставляют в отдельный
+                            блок-обёртку.
+                        -->
+                        <div class="bvk-groups" id="bvkDefectGroups">
+
+                            <th:block th:each="
+                                    groupForm, stat
+                                        : ${inputControlForm.defectGroups}">
+
+                                <div th:replace="~{
+                                        input-control/fragments/defect-group
+                                            :: block(
+                                                ${stat.index},
+                                                ${stat.count},
+                                                ${groupForm}
+                                            )}">
+                                </div>
+
+                            </th:block>
+
+                        </div>
+
+                        <div class="bvk-actions bvk-actions--plain">
+
+                            <span class="field-hint">
+                                Если при осмотре найдены дефектные
+                                ячейки — добавьте группу брака внизу
+                                окна и заполните её отдельно
+                            </span>
+
+                            <button type="button"
+                                    class="btn danger"
+                                    id="bvkAddGroup">
+                                Добавить группу брака
+                            </button>
+
+                        </div>
+
+                    </div>
+                </section>
+
+                <!-- ============ ПРИМЕЧАНИЕ И СОХРАНЕНИЕ ============ -->
+                <section class="card bvk-section">
+
+                    <div class="card-body">
+
+                        <div class="bvk-field">
+
+                            <label for="bvkNote">
+                                Примечание контролёра
+                            </label>
+
+                            <textarea id="bvkNote"
+                                      name="note"
+                                      class="bvk-note"
+                                      th:text="${inputControlForm.note}"></textarea>
+
+                        </div>
+
+                        <!--
+                            Вид входного контроля.
+
+                            Единственный способ задать вид: отдельными
+                            кнопками отметку больше не ставят, поэтому
+                            выбор берётся отсюда и записывается вместе
+                            с завершением проверки. По умолчанию выбран
+                            визуальный контроль — его проводят почти
+                            всегда, и контролёру не нужно трогать форму
+                            в типовом случае.
+                        -->
+                        <div class="bvk-field bvk-field--spaced">
+
+                            <span class="bvk-field__caption">
+                                Вид входного контроля
+                            </span>
+
+                            <div class="bvk-check-row">
+
+                                <label class="bvk-check"
+                                       th:each="type, stat : ${controlTypes}">
+
+                                    <input type="radio"
+                                           name="inputControlType"
+                                           th:value="${type}"
+                                           th:checked="${
+                                               !#strings.isEmpty(
+                                                   inputControlForm.inputControlType
+                                               )
+                                                   ? inputControlForm.inputControlType
+                                                       == type.name()
+                                                   : stat.first
+                                           }">
+
+                                    <span th:text="${type.displayName}">
+                                        Визуальный
+                                    </span>
+                                </label>
+
+                            </div>
+
+                            <span class="bvk-field__hint">
+                                Отмечает незабракованные ячейки партии:
+                                вид, дату и контролёра пишут на каждую
+                                ячейку реестра. Ячейки, попавшие в брак,
+                                контролем не отмечают
+                            </span>
+
+                        </div>
+
+                        <div class="bvk-actions">
+
+                            <a class="btn secondary"
+                               th:href="@{/input-control/control}">
+                                К списку партий
+                            </a>
+
+                            <div class="bvk-actions__group">
+
+                                <button type="submit" class="btn primary">
+                                    Сохранить и завершить проверку
+                                </button>
+
+                            </div>
+
+                        </div>
+
+                    </div>
+                </section>
+
+            </form>
+
+            <!--
+                Чистый экземпляр группы: скрипт берёт его, когда
+                добавляют группу внизу окна, и подставляет вместо
+                "@IDX@" номер новой группы в имена, id и title.
+                Блок стоит вне формы — до подстановки индекса имена
+                полей в нём неполные, и в отправку они попасть не могут.
+            -->
+            <div id="bvkGroupTemplate" hidden>
+
+                <div th:replace="~{
+                        input-control/fragments/defect-group
+                            :: block('@IDX@', '@IDX@', null)}">
+                </div>
+
+            </div>
+
+            <!--
+                Источник дерева причин: строка на причину, ступень
+                собирается скриптом по parent-id. Справочник отдают
+                целиком, поэтому дереву не нужен запрос на каждую
+                ступень; каскад строят все группы из одного списка.
+            -->
+            <ul id="bvkReasonSource" class="visually-hidden">
+
+                <li th:each="reason : ${reasons}"
+                    th:attr="data-id=${reason.id},
+                             data-parent=${reason.parent == null ? '' : reason.parent.id},
+                             data-custom=${reason.custom ? 'true' : 'false'},
+                             data-name=${reason.name}">
+                </li>
+
+            </ul>
+
+        </div>
+    </main>
+</div>
+
+<th:block th:replace="~{input-control/fragments/layout
+        :: commonScripts}">
+</th:block>
+
+<script th:if="${card.inWork}"
+        th:src="@{/input-control/js/card.js}">
+</script>
+
+</body>
+</html>

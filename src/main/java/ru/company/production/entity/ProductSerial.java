@@ -20,14 +20,19 @@ import lombok.Setter;
 import org.hibernate.annotations.CreationTimestamp;
 
 import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 
 /**
  * Серийный номер изделия в реестре.
  *
- * Реестр один на все типы изделий: тип хранится колонкой, а уникальный
- * ключ (product_type, serial) даёт независимую нумерацию в пределах типа.
- * Это проще четырёх отдельных таблиц: поиск и выдача номера остаются
- * одним запросом.
+ * Реестр один на все типы изделий. Порядок нумерации задан не типом,
+ * а областью (numbering_key):
+ *
+ *     888800122 → 888800123   прибор, ячейка, система — ряд своего
+ *                             классификатора
+ *
+ *     119200111 → 119400112   датчик — ряд рода (sensor_catalog),
+ *                             общий для всех классификаторов рода
  *
  * Полный номер изделия = 4 цифры кода классификатора + 5 цифр серии:
  *
@@ -42,8 +47,8 @@ import java.time.LocalDateTime;
 @Table(
         name = "product_serials",
         uniqueConstraints = @UniqueConstraint(
-                name = "uk_product_serial_type_serial",
-                columnNames = {"product_type", "serial"}
+                name = "uk_product_serial_numbering",
+                columnNames = {"numbering_key", "serial"}
         )
 )
 public class ProductSerial {
@@ -52,12 +57,12 @@ public class ProductSerial {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    /* Тип изделия: нумерация ведётся независимо по каждому типу. */
+    /* Тип изделия: определяет, что считается областью нумерации. */
     @Enumerated(EnumType.STRING)
     @Column(name = "product_type", nullable = false, length = 20)
     private ProductType productType;
 
-    /* Порядковый номер в пределах типа: 1..99999. */
+    /* Порядковый номер в пределах области нумерации: 1..99999. */
     @Column(name = "serial", nullable = false)
     private int serial;
 
@@ -75,6 +80,34 @@ public class ProductSerial {
     )
     private ProductClassifier productClassifier;
 
+    /*
+     * Род датчика — область нумерации для типа SENSOR. У классификаторов
+     * остальных типов null, и тогда областью служит сам классификатор.
+     *
+     * Колонка повторяет род классификатора сознательно: сгенерированный
+     * столбец numbering_key не может обратиться к product_classifier, а
+     * уникальный ключ обязан опираться на физическое значение.
+     */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(
+            name = "sensor_catalog_id",
+            foreignKey = @ForeignKey(
+                    name = "fk_product_serial_sensor_catalog"
+            )
+    )
+    private SensorCatalog sensorCatalog;
+
+    /*
+     * Область нумерации: «C<классификатор>» либо «S<род датчика>».
+     * Значение считает MySQL, приложение только читает его.
+     */
+    @Column(
+            name = "numbering_key",
+            insertable = false,
+            updatable = false
+    )
+    private String numberingKey;
+
     /* Заказ на производство, в рамках которого выдан номер. */
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(
@@ -85,9 +118,67 @@ public class ProductSerial {
     )
     private ProductionOrder issuedProductionOrder;
 
+    /*
+     * Партия оприходования склада, если номер выпущен приходом, а не
+     * заказом на производство. У номеров выпуска она null.
+     */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(
+            name = "receiving_batch_id",
+            foreignKey = @ForeignKey(
+                    name = "fk_product_serial_receiving_batch"
+            )
+    )
+    private CellReceivingBatch receivingBatch;
+
     @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false, length = 20)
     private ProductSerialStatus status = ProductSerialStatus.NEW;
+
+    /*
+     * Отметка входного контроля: какой вид контроля проведён, когда и
+     * кем.
+     *
+     * Отметка стоит ОТДЕЛЬНО от status, а не внутри него: status
+     * принадлежит производству и закреплён CHECK, и у одной колонки не
+     * может быть двух хозяев — иначе производство затирало бы отметку
+     * приёмки, а приёмка сбрасывала бы статус сборки.
+     */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "input_control_type", length = 20)
+    private InputControlType inputControlType;
+
+    @Column(name = "input_control_at")
+    private LocalDateTime inputControlAt;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(
+            name = "input_control_by",
+            foreignKey = @ForeignKey(
+                    name = "fk_product_serial_input_control_by"
+            )
+    )
+    private AppUser inputControlBy;
+
+    /*
+     * Отметка приёмки на склад полуфабрикатов: ячейку принял кладовщик
+     * после того, как партию проверило БВК.
+     *
+     * Стоит ОТДЕЛЬНО от input_control_* и от status: контроль отмечает
+     * БВК, приёмку — склад, а status остаётся производством. Три
+     * разных хозяина в одной колонке затёрли бы друг друга.
+     */
+    @Column(name = "accepted_at")
+    private LocalDateTime acceptedAt;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(
+            name = "accepted_by",
+            foreignKey = @ForeignKey(
+                    name = "fk_product_serial_accepted_by"
+            )
+    )
+    private AppUser acceptedBy;
 
     @CreationTimestamp
     @Column(name = "issued_at", nullable = false, updatable = false)
@@ -152,5 +243,90 @@ public class ProductSerial {
     @Transient
     public String getTypeName() {
         return productType == null ? "—" : productType.getDisplayName();
+    }
+
+    /** Ячейку отмечали входным контролем. */
+    @Transient
+    public boolean isInputControlPassed() {
+        return inputControlType != null;
+    }
+
+    /** Ячейку принял склад полуфабрикатов после БВК. */
+    @Transient
+    public boolean isAccepted() {
+        return acceptedAt != null;
+    }
+
+    /*
+     * Диалект Thymeleaf java8time в проект не подключён, поэтому даты
+     * для шаблонов форматируют сами сущности — как CellReceivingBatch.
+     */
+    private static final DateTimeFormatter DATE_TIME_FORMATTER =
+            DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm");
+
+    /** Вид контроля для строки реестра: «Визуальный и технический». */
+    @Transient
+    public String getInputControlLabel() {
+        return inputControlType == null
+                ? "контроль не проведён"
+                : inputControlType.getDisplayName();
+    }
+
+    @Transient
+    public String getFormattedInputControlAt() {
+        return inputControlAt == null
+                ? "—"
+                : inputControlAt.format(DATE_TIME_FORMATTER);
+    }
+
+    /** Контролёра выводят фамилией, а не логином учётной записи. */
+    @Transient
+    public String getInputControlByName() {
+        if (inputControlBy == null) {
+            return "—";
+        }
+
+        String fullName = inputControlBy.getFullName();
+
+        return fullName == null || fullName.isBlank()
+                ? inputControlBy.getUsername()
+                : fullName;
+    }
+
+    /**
+     * Готовая подпись прохода ячейки для карточки контроля:
+     * «Визуальный · 22.09.2026 14:10 · Иванов И. И.».
+     *
+     * Строка собирает все три реквизита сразу: контролёр обязан
+     * видеть не только факт отметки, но и кто и когда её поставил.
+     */
+    @Transient
+    public String getInputControlMarkLabel() {
+        return inputControlType == null
+                ? "контроль не проведён"
+                : inputControlType.getDisplayName()
+                  + " · " + getFormattedInputControlAt()
+                  + " · " + getInputControlByName();
+    }
+
+    @Transient
+    public String getFormattedAcceptedAt() {
+        return acceptedAt == null
+                ? "—"
+                : acceptedAt.format(DATE_TIME_FORMATTER);
+    }
+
+    /** Кладовщика выводят фамилией, а не логином учётной записи. */
+    @Transient
+    public String getAcceptedByName() {
+        if (acceptedBy == null) {
+            return "—";
+        }
+
+        String fullName = acceptedBy.getFullName();
+
+        return fullName == null || fullName.isBlank()
+                ? acceptedBy.getUsername()
+                : fullName;
     }
 }

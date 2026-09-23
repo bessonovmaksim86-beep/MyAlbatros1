@@ -1,0 +1,705 @@
+/* ============================================================
+   МОДУЛЬ АДМИНИСТРИРОВАНИЯ
+
+   Карточки, таблицы, кнопки и формы берутся из technology.css и
+   common.css; здесь — только каркас меню и компоненты админки.
+   Имена классов и переменных prefиксированы admin-, чтобы раздел не
+   зависел от настроек других модулей.
+   ============================================================ */
+
+:root {
+    --admin-sidebar-collapsed-width: 72px;
+    --admin-sidebar-expanded-width: 286px;
+    --admin-sidebar-duration: 220ms;
+
+    --admin-sidebar-background: #0b3a63;
+    --admin-sidebar-background-dark: #07294a;
+    --admin-sidebar-border: rgba(255, 255, 255, 0.1);
+    --admin-sidebar-text: #ffffff;
+    --admin-sidebar-muted: #a7c1d8;
+    --admin-sidebar-active: rgba(255, 255, 255, 0.14);
+    --admin-accent: #ef7d00;
+
+    --admin-holiday: #b0273a;
+    --admin-holiday-bg: #fdeaec;
+    --admin-dayoff: #5f6d79;
+    --admin-dayoff-bg: #edf1f4;
+}
+
+html,
+body {
+    width: 100%;
+    min-height: 100%;
+    margin: 0;
+}
+
+body {
+    overflow-x: hidden;
+}
+
+.app-shell {
+    display: grid !important;
+    grid-template-columns:
+        var(--admin-sidebar-collapsed-width)
+        minmax(0, 1fr) !important;
+
+    width: 100%;
+    min-height: 100vh;
+}
+
+.main {
+    box-sizing: border-box;
+    width: 100% !important;
+    max-width: none !important;
+    min-width: 0;
+    margin: 0 !important;
+    overflow-x: hidden;
+}
+
+.page-content {
+    box-sizing: border-box;
+    width: 100%;
+    max-width: none !important;
+    margin: 0 !important;
+    padding: 20px;
+}
+
+/* ============================================================
+   БОКОВОЕ МЕНЮ
+   ============================================================ */
+
+.admin-sidebar {
+    padding: 0 !important;
+    width: var(--admin-sidebar-collapsed-width) !important;
+    min-width: var(--admin-sidebar-collapsed-width);
+    overflow: hidden;
+    color: var(--admin-sidebar-text);
+    background: linear-gradient(
+            180deg,
+            var(--admin-sidebar-background) 0%,
+            var(--admin-sidebar-background-dark) 100%
+    );
+    border-right: 1px solid var(--admin-sidebar-border);
+    transition:
+        width var(--admin-sidebar-duration) ease,
+        box-shadow var(--admin-sidebar-duration) ease;
+}
+
+.admin-sidebar:hover,
+.admin-sidebar:focus-within {
+    width: var(--admin-sidebar-expanded-width) !important;
+    box-shadow: 12px 0 30px rgba(9, 40, 66, 0.22);
+}
+
+.admin-sidebar__inner {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    padding: 20px 14px;
+    box-sizing: border-box;
+    width: var(--admin-sidebar-expanded-width);
+}
+
+.admin-sidebar .department-brand {
+    padding: 0 6px 20px;
+}
+
+.admin-sidebar__section-title {
+    padding: 16px 12px 8px;
+    color: var(--admin-sidebar-muted);
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: 1.4px;
+    text-transform: uppercase;
+    white-space: nowrap;
+    opacity: 0;
+    transition: opacity var(--admin-sidebar-duration) ease;
+}
+
+.admin-sidebar:hover .admin-sidebar__section-title,
+.admin-sidebar:focus-within .admin-sidebar__section-title {
+    opacity: 1;
+}
+
+.admin-sidebar__divider {
+    height: 1px;
+    margin: 14px 6px;
+    background: var(--admin-sidebar-border);
+}
+
+.admin-navigation {
+    display: grid;
+    gap: 6px;
+}
+
+.admin-navigation__item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 11px 12px;
+    border-radius: 10px;
+    color: #dceaf5;
+    font-size: 13px;
+    font-weight: 600;
+    white-space: nowrap;
+    transition: background 140ms ease, color 140ms ease;
+}
+
+.admin-navigation__item:hover,
+.admin-navigation__item:focus-visible {
+    background: rgba(255, 255, 255, 0.1);
+}
+
+.admin-navigation__item.is-active {
+    background: var(--admin-sidebar-active);
+    color: #fff;
+    box-shadow: inset 3px 0 0 var(--admin-accent);
+}
+
+.admin-navigation__icon {
+    flex: 0 0 auto;
+    width: 22px;
+    height: 22px;
+    display: grid;
+    place-items: center;
+    color: inherit;
+}
+
+.admin-navigation__icon svg {
+    width: 20px;
+    height: 20px;
+    fill: currentColor;
+}
+
+.admin-navigation__text {
+    flex: 1 1 auto;
+    opacity: 0;
+    transition: opacity var(--admin-sidebar-duration) ease;
+}
+
+.admin-sidebar:hover .admin-navigation__text,
+.admin-sidebar:focus-within .admin-navigation__text {
+    opacity: 1;
+}
+
+.admin-navigation__counter {
+    min-width: 22px;
+    padding: 2px 7px;
+    border-radius: 99px;
+    background: rgba(255, 255, 255, 0.16);
+    font-size: 11px;
+    font-weight: 800;
+    text-align: center;
+    opacity: 0;
+    transition: opacity var(--admin-sidebar-duration) ease;
+}
+
+.admin-sidebar:hover .admin-navigation__counter,
+.admin-sidebar:focus-within .admin-navigation__counter {
+    opacity: 1;
+}
+
+/*
+ * Навигация прокручивается внутри сайдбара: интерфейсов ролей больше, чем
+ * помещается в колонку, а кнопка выхода обязана оставаться внизу.
+ */
+.admin-sidebar__scroll {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-x: hidden;
+    overflow-y: auto;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255, 255, 255, 0.22) transparent;
+}
+
+.admin-navigation__item_button {
+    width: 100%;
+    border: 0;
+    background: transparent;
+    font: inherit;
+    font-size: 13px;
+    font-weight: 600;
+    text-align: left;
+    cursor: pointer;
+}
+
+.admin-navigation_roles {
+    gap: 2px;
+}
+
+/*
+ * Подзаголовок группы ролей: модуль, интерфейс которого открывают роли ниже.
+ * Как и подписи разделов, виден только в раскрытом меню.
+ */
+.admin-navigation__group {
+    padding: 9px 12px 3px;
+    color: var(--admin-sidebar-muted);
+    font-size: 9px;
+    font-weight: 800;
+    letter-spacing: 1.1px;
+    text-transform: uppercase;
+    white-space: nowrap;
+    opacity: 0;
+    transition: opacity var(--admin-sidebar-duration) ease;
+}
+
+.admin-sidebar:hover .admin-navigation__group,
+.admin-sidebar:focus-within .admin-navigation__group {
+    opacity: 1;
+}
+
+/*
+ * Роль без действующих учётных записей остаётся в списке, но не кликабельна:
+ * вход «в пустую роль» не выполним, и обещать его нельзя.
+ */
+.admin-navigation__item.is-disabled {
+    color: rgba(220, 234, 245, 0.42);
+    cursor: not-allowed;
+}
+
+.admin-navigation__item.is-disabled:hover,
+.admin-navigation__item.is-disabled:focus-visible {
+    background: transparent;
+}
+
+.admin-navigation_roles form {
+    margin: 0;
+}
+
+.admin-sidebar__footer {
+    margin-top: auto;
+    padding-top: 14px;
+    color: var(--admin-sidebar-muted);
+}
+
+.admin-sidebar__footer form {
+    width: 100%;
+}
+
+.admin-sidebar__logout {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    width: 100%;
+    padding: 11px 12px;
+    border: 0;
+    border-radius: 10px;
+    background: transparent;
+    color: #dceaf5;
+    font: inherit;
+    font-weight: 600;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: background 140ms ease;
+}
+
+.admin-sidebar__logout:hover,
+.admin-sidebar__logout:focus-visible {
+    background: rgba(255, 255, 255, 0.1);
+}
+
+.admin-sidebar__status-dot {
+    flex: 0 0 auto;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: #37c78a;
+    box-shadow: 0 0 0 3px rgba(55, 199, 138, 0.2);
+}
+
+.admin-sidebar__logout-text {
+    opacity: 0;
+    transition: opacity var(--admin-sidebar-duration) ease;
+}
+
+.admin-sidebar:hover .admin-sidebar__logout-text,
+.admin-sidebar:focus-within .admin-sidebar__logout-text {
+    opacity: 1;
+}
+
+/* ============================================================
+   ВЕРХНЯЯ ПАНЕЛЬ
+   ============================================================ */
+
+.admin-topbar {
+    height: 74px;
+    background: #fff;
+    border-bottom: 1px solid var(--line, #dce4eb);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 20px;
+    padding: 0 24px;
+    position: sticky;
+    top: 0;
+    z-index: 3;
+}
+
+.admin-topbar__left {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    min-width: 0;
+}
+
+.admin-topbar__section {
+    color: var(--navy, #073e75);
+    font-weight: 800;
+    font-size: 15px;
+    white-space: nowrap;
+}
+
+.admin-topbar__right {
+    display: flex;
+    align-items: center;
+    gap: 18px;
+}
+
+.admin-clock {
+    color: var(--muted, #6c7b89);
+    font-size: 12px;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+
+.admin-topbar__user {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding-left: 18px;
+    border-left: 1px solid var(--line, #dce4eb);
+}
+
+.admin-topbar__avatar {
+    width: 38px;
+    height: 38px;
+    border-radius: 50%;
+    background: #0b5798;
+    color: #fff;
+    display: grid;
+    place-items: center;
+    font-weight: 800;
+    font-size: 13px;
+}
+
+.admin-topbar__user-data {
+    display: flex;
+    flex-direction: column;
+    line-height: 1.25;
+}
+
+.admin-topbar__username {
+    color: var(--navy, #073e75);
+    font-size: 13px;
+}
+
+.admin-topbar__specialty {
+    color: var(--muted, #6c7b89);
+    font-size: 11px;
+}
+
+/* ============================================================
+   РАЗДЕЛ «ВЫХОДНЫЕ И ПРАЗДНИКИ»
+   ============================================================ */
+
+.admin-month-nav {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.admin-month-nav .btn {
+    padding: 8px 12px;
+}
+
+.admin-month-nav__label {
+    min-width: 168px;
+    text-align: center;
+    color: var(--navy, #073e75);
+    font-weight: 800;
+    font-size: 14px;
+    text-transform: capitalize;
+}
+
+.admin-holiday-kind {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 10px;
+    border-radius: 99px;
+    font-size: 11px;
+    font-weight: 800;
+    white-space: nowrap;
+}
+
+.admin-holiday-kind.is-holiday {
+    color: var(--admin-holiday);
+    background: var(--admin-holiday-bg);
+}
+
+.admin-holiday-kind.is-dayoff {
+    color: var(--admin-dayoff);
+    background: var(--admin-dayoff-bg);
+}
+
+.admin-holiday-date {
+    font-variant-numeric: tabular-nums;
+    font-weight: 700;
+    color: var(--navy, #073e75);
+}
+
+.admin-weekend-form {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 18px;
+}
+
+.admin-weekend-form .form-actions {
+    margin-top: 0;
+    padding-top: 0;
+    border-top: 0;
+}
+
+.admin-replace {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+    color: var(--muted, #6c7b89);
+    cursor: pointer;
+}
+
+.admin-replace input {
+    width: auto;
+}
+
+/* ============================================================
+   СПИСОК РОЛЕЙ И ВХОДА
+   ============================================================ */
+
+.admin-role-card {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+}
+
+.admin-role-card__title {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.admin-role-card__module {
+    color: var(--muted, #6c7b89);
+    font-size: 11px;
+    margin-top: 4px;
+}
+
+.admin-role-card__form {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px;
+    padding-top: 14px;
+    border-top: 1px solid var(--line, #dce4eb);
+}
+
+.admin-role-card__form select {
+    min-width: 220px;
+    border: 1px solid var(--line, #dce4eb);
+    border-radius: 9px;
+    padding: 9px 11px;
+    font: inherit;
+    font-size: 12px;
+}
+
+/* ============================================================
+   АДАПТИВ
+   ============================================================ */
+
+@media (max-width: 760px) {
+    .app-shell {
+        grid-template-columns: 1fr !important;
+    }
+
+    .admin-sidebar {
+        position: fixed;
+        left: 0;
+        z-index: 6;
+        box-shadow: 12px 0 30px rgba(9, 40, 66, 0.28);
+    }
+
+    .admin-sidebar:hover,
+    .admin-sidebar:focus-within {
+        width: var(--admin-sidebar-expanded-width) !important;
+    }
+
+    .admin-clock {
+        display: none;
+    }
+
+    .admin-topbar {
+        padding: 0 14px;
+    }
+
+    .impersonation-bar {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+}
+
+/* ============================================================
+   КНОПКИ И ТАБЛИЦА РАЗДЕЛА
+   ============================================================ */
+
+.btn.compact {
+    padding: 6px 10px;
+    font-size: 12px;
+    line-height: 1.2;
+}
+
+.btn.danger {
+    background: #fdecee;
+    color: #a12d35;
+}
+
+.btn.danger:hover {
+    background: #fbdde0;
+}
+
+.admin-password-row {
+    display: flex;
+    gap: 10px;
+    align-items: stretch;
+}
+
+.admin-password-row input {
+    flex: 1 1 auto;
+    min-width: 0;
+    border: 1px solid var(--line, #dce4eb);
+    border-radius: 9px;
+    padding: 11px 12px;
+    font: inherit;
+}
+
+.admin-password-row button {
+    flex: 0 0 auto;
+}
+
+/*
+ * Таблица пользователей шире остальных: одиннадцать колонок, и без
+ * горизонтальной прокрутки они бы сжались в нечитаемые столбцы.
+ */
+.admin-users-table {
+    min-width: 1180px;
+}
+
+.admin-users-table code {
+    font-family: "Consolas", "Menlo", monospace;
+    font-size: 11px;
+    color: var(--navy, #073e75);
+}
+
+.admin-users-table .visible-password {
+    display: block;
+    margin-top: 5px;
+    color: #8a4b00;
+    word-break: break-all;
+}
+
+.admin-users-table form {
+    margin: 0;
+}
+
+
+/* ============================================================
+   ДОПОЛНИТЕЛЬНЫЕ ЭЛЕМЕНТЫ ФОРМ И ТАБЛИЦ
+
+   Общие карточки и таблицы приходят из technology.css, но компактные
+   кнопки, подсказки под полем и «удаление» там описаны только для
+   блоков-уведомлений. В админке они нужны как элементы таблицы,
+   поэтому переопределены в префиксованном виде.
+   ============================================================ */
+
+.page-head-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px;
+}
+
+.btn.compact {
+    padding: 6px 10px;
+    font-size: 12px;
+    line-height: 1.2;
+}
+
+.btn.danger {
+    background: #fdecee;
+    color: #a12d35;
+}
+
+.btn.danger:hover,
+.btn.danger:focus-visible {
+    background: #fbdde0;
+}
+
+.field-hint {
+    display: block;
+    margin-top: 6px;
+    color: var(--muted, #6c7b89);
+    font-size: 11px;
+    line-height: 1.45;
+}
+
+.empty-inline {
+    margin: 0;
+    color: var(--muted, #6c7b89);
+    font-size: 12px;
+}
+
+.admin-password-row {
+    display: flex;
+    gap: 10px;
+}
+
+.admin-password-row input {
+    flex: 1 1 auto;
+    min-width: 0;
+    border: 1px solid var(--line, #dce4eb);
+    border-radius: 9px;
+    padding: 11px 12px;
+    font: inherit;
+}
+
+.admin-password-row .btn {
+    flex: 0 0 auto;
+}
+
+.cell .btn {
+    margin-top: 12px;
+}
+
+/*
+ * Кнопка раздела стоит в строку к его названию, справа. Правило
+ * выше добавляло ей верхний отступ — в строке заголовка он сдвигал
+ * кнопку ниже названия, поэтому здесь отступ снят и кнопка сделана
+ * компактнее, чтобы не растягивать строку на узких экранах.
+ */
+.cell-top {
+    align-items: center;
+}
+
+.cell-top .btn {
+    margin-top: 0;
+    padding: 7px 12px;
+    font-size: 12px;
+    line-height: 1.2;
+    white-space: nowrap;
+}
+
+.cell p {
+    margin: 8px 0 0;
+}

@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="ru"
+      xmlns:th="http://www.thymeleaf.org">
+
+<head>
+    <meta charset="UTF-8">
+
+    <meta name="viewport"
+          content="width=device-width, initial-scale=1">
+
+    <title>Рабочий стол</title>
+
+    <link rel="stylesheet"
+          th:href="@{/technology/css/technology.css}">
+
+    <link rel="stylesheet"
+          th:href="@{/technology/css/common.css}">
+
+    <link rel="stylesheet"
+          th:href="@{/technology/css/general.css}">
+</head>
+
+<body>
+
+<div class="app">
+
+    <aside class="sidebar">
+
+        <div class="brand">
+            <span class="brand-mark"></span>
+
+            <div>
+                <b>Альбатрос</b>
+                <small>Производственная система</small>
+            </div>
+        </div>
+
+        <div class="nav-title">
+            Раздел
+        </div>
+
+        <div class="nav">
+            <span class="nav-btn active">
+                <span class="ico">•</span>
+                <span th:text="${workspaceName}">Рабочий стол</span>
+            </span>
+        </div>
+
+        <div class="sidebar-foot">
+            <span th:text="${userRoleName}">Сотрудник</span>
+        </div>
+    </aside>
+
+    <main class="main">
+
+        <header class="topbar">
+
+            <span class="clock">
+                <strong th:text="${workspaceName}">Рабочий стол</strong>
+                <small>Собственный модуль для роли настраивается отдельно</small>
+            </span>
+
+            <div class="user">
+
+                <span class="avatar"
+                      th:text="${
+                          #strings.substring(userDisplayName, 0, 1)
+                      }">
+                    С
+                </span>
+
+                <div>
+                    <strong th:text="${userDisplayName}">
+                        Петров П.
+                    </strong>
+                    <small th:text="${userPosition}">Сотрудник</small>
+                </div>
+            </div>
+        </header>
+
+        <div class="content">
+
+            <div class="page-head">
+
+                <div>
+
+                    <h1 th:text="${'Здравствуйте, ' + userDisplayName}">
+                        Здравствуйте
+                    </h1>
+
+                    <p th:text="${
+                        'Ваша роль: ' + userRoleName
+                        + '. Рабочий стол открывается для ролей, у которых нет '
+                        + 'своего модуля: диспетчерского отдела, технологического '
+                        + 'бюро или цеха.'
+                    }">
+                        Ваша роль: сотрудник
+                    </p>
+                </div>
+
+                <form th:action="@{/logout}" method="post">
+                    <input th:if="${_csrf != null}"
+                           type="hidden"
+                           th:name="${_csrf.parameterName}"
+                           th:value="${_csrf.token}">
+
+                    <button type="submit" class="btn secondary">
+                        Выйти
+                    </button>
+                </form>
+            </div>
+
+            <!-- Режим входа в интерфейс другой роли: возврат с любой страницы -->
+            <div th:replace="~{fragments/impersonation :: bar}"></div>
+
+            <section class="card">
+
+                <div class="card-head">
+
+                    <div>
+
+                        <h2>Что доступно</h2>
+
+                        <p>
+                            Задачи этой роли выполняются в разделах, которые
+                            появятся по мере настройки системы.
+                        </p>
+                    </div>
+                </div>
+
+                <div class="card-body">
+
+                    <p class="empty">
+                        Сохранений и заказов этой роли пока нет.
+                    </p>
+
+                </div>
+
+            </section>
+
+        </div>
+    </main>
+</div>
+
+</body>
+</html>

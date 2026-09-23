@@ -750,9 +750,11 @@ public class ProductionOrderService {
     /**
      * Выдаёт следующий серийный номер для изделия.
      *
-     * Нумерация ведётся по типу изделия (уникальный ключ
-     * uk_product_serial_type_serial), поэтому максимум берётся по типу,
-     * а не по классификатору.
+     * Ряд номеров привязан к области (numbering_key): для прибора,
+     * ячейки и системы это сам классификатор, для датчика — его род.
+     * Поэтому максимум берётся по области, а не по типу изделия:
+     * 888800122 → 888800123, а у датчиков одного рода ряд сквозной
+     * (119200111 → 119400112).
      */
     private ProductSerial issueSerial(ProductClassifier classifier,
                                       ProductionOrder order) {
@@ -766,29 +768,31 @@ public class ProductionOrderService {
             );
         }
 
+        String numberingKey = SerialNumbering.keyFor(classifier);
+
         Integer max = productSerialRepository
-                .findMaxSerialByProductType(productType);
+                .findMaxSerialByNumberingKey(numberingKey);
 
         int candidate = (max == null ? 0 : max) + 1;
 
         /*
          * Все номера текущего выпуска уже видны в persistence-контексте,
-         * но ещё не записаны, поэтому занятые значения собираются
-         * из уже выданных в этом заказе серийников.
+         * но ещё не записаны, поэтому занятые значения собираются из
+         * уже выданных в этом заказе серийников.
          */
-        Set<Integer> taken = takenSerials(productType, order);
+        Set<Integer> taken = takenSerials(numberingKey, order);
 
         while (candidate <= MAX_SERIAL
                 && (taken.contains(candidate)
                 || productSerialRepository
-                .existsByProductTypeAndSerial(productType, candidate))) {
+                .existsByNumberingKeyAndSerial(numberingKey, candidate))) {
             candidate++;
         }
 
         if (candidate > MAX_SERIAL) {
             throw new IllegalStateException(
-                    "Серии типа «" + productType.getDisplayName()
-                            + "» исчерпаны: пятизначной нумерации не хватит"
+                    "Серии изделия «" + classifier.getCode()
+                            + "» исчерпаны: пятизначной нумерации не хватает"
             );
         }
 
@@ -797,6 +801,18 @@ public class ProductionOrderService {
         serial.setProductType(productType);
         serial.setSerial(candidate);
         serial.setProductClassifier(classifier);
+
+        /*
+         * Род датчика записывается рядом с номером: для типа SENSOR он
+         * и есть область нумерации, а сгенерированный столбец
+         * numbering_key считается именно по этой колонке.
+         */
+        serial.setSensorCatalog(
+                productType == ProductType.SENSOR
+                        ? classifier.getSensorCatalog()
+                        : null
+        );
+
         serial.setIssuedProductionOrder(order);
         serial.setStatus(ProductSerialStatus.NEW);
 
@@ -804,9 +820,9 @@ public class ProductionOrderService {
     }
 
     /**
-     * Номера, уже выданные этому заказу в рамках типа изделия.
+     * Серии, занятые этому заказу в пределах той же области нумерации.
      */
-    private Set<Integer> takenSerials(ProductType productType,
+    private Set<Integer> takenSerials(String numberingKey,
                                       ProductionOrder order) {
 
         Set<Integer> taken = new HashSet<>();
@@ -814,7 +830,12 @@ public class ProductionOrderService {
         for (ProductionOrderItem item : order.getItems()) {
             ProductSerial serial = item.getSerial();
 
-            if (serial != null && serial.getProductType() == productType) {
+            if (serial == null || serial.getProductClassifier() == null) {
+                continue;
+            }
+
+            if (numberingKey.equals(
+                    SerialNumbering.keyFor(serial.getProductClassifier()))) {
                 taken.add(serial.getSerial());
             }
         }

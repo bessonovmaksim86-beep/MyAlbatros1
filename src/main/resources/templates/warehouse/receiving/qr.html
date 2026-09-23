@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="ru"
+      xmlns:th="http://www.thymeleaf.org">
+
+<head>
+    <meta charset="UTF-8">
+
+    <meta name="viewport"
+          content="width=device-width, initial-scale=1">
+
+    <title>Номера ячеек и печать QR</title>
+
+    <link rel="stylesheet"
+          th:href="@{/technology/css/technology.css}">
+
+    <link rel="stylesheet"
+          th:href="@{/technology/css/common.css}">
+
+    <link rel="stylesheet"
+          th:href="@{/warehouse/css/warehouse.css}">
+</head>
+
+<body>
+
+<div class="app-shell">
+
+    <aside th:replace="~{warehouse/fragments/layout
+            :: sidebar('receiving')}">
+    </aside>
+
+    <main class="main">
+
+        <header th:replace="~{warehouse/fragments/layout
+                :: topbar}">
+        </header>
+
+        <div class="page-content warehouse-page">
+
+            <div class="page-head">
+
+                <div class="page-title">
+
+                    <h1>Номера ячеек и печать QR</h1>
+
+                    <p th:text="${
+                        'Партия ' + batch.numberRangeLabel
+                        + ' — ' + batch.quantity + ' шт., выдавать под приход '
+                        + batch.incomingOrderNumber
+                    }">
+                        Партия 121200022 … 121200025 — 4 шт.
+                    </p>
+
+                </div>
+
+                <div class="page-head-actions">
+
+                    <a class="btn secondary"
+                       th:href="@{/warehouse/receiving}">
+                        К оформлению прихода
+                    </a>
+
+                </div>
+            </div>
+
+            <div class="alert success"
+                 th:if="${successMessage}"
+                 th:text="${successMessage}">
+            </div>
+
+            <div class="alert danger"
+                 th:if="${errorMessage}"
+                 th:text="${errorMessage}">
+            </div>
+
+            <ol class="warehouse-steps">
+
+                <li class="warehouse-steps__item is-done">
+                    Приход
+                </li>
+
+                <li class="warehouse-steps__item is-current">
+                    Номера и печать QR
+                </li>
+
+                <li class="warehouse-steps__item">
+                    Проверка данных
+                </li>
+
+                <li class="warehouse-steps__item">
+                    Сканирование ячеек
+                </li>
+
+            </ol>
+
+            <section class="card">
+
+                <div class="card-head">
+
+                    <div>
+
+                        <h2>Выпущенные номера партии</h2>
+
+                        <small>
+                            Серия продолжается от последнего номера
+                            классификатора; диапазон занят партией и
+                            не будет выдан производству
+                        </small>
+
+                    </div>
+
+                    <span class="badge"
+                          th:text="${batch.cellLabel}">
+                        1212 — Подсборка ЯПР56
+                    </span>
+                </div>
+
+                <div class="card-body">
+
+                    <div class="warehouse-print-note">
+
+                        <strong>Печать этикеток — внешней программой</strong>
+
+                        Программа рассылки штрихкодов ещё подключена не
+                        была: кнопка ниже работает как заглушка и ничего
+                        не печатает. Номера партии можно скопировать и
+                        передать в неё вручную, а когда интеграция будет
+                        настроена — шаг станет автоматическим.
+
+                    </div>
+
+                    <ul class="warehouse-numbers">
+
+                        <li class="warehouse-numbers__item"
+                            th:each="number, iteration : ${numbers}"
+                            th:attr="data-number=${number}">
+
+                            <span class="warehouse-numbers__index"
+                                  th:text="'№ ' + ${iteration.count}">
+                                № 1
+                            </span>
+
+                            <span th:text="${number}">
+                                121200022
+                            </span>
+                        </li>
+
+                    </ul>
+
+                    <div class="warehouse-actions">
+
+                        <div class="warehouse-actions__group">
+
+                            <button type="button"
+                                    class="btn secondary"
+                                    id="copyNumbers"
+                                    data-numbers-path="numbers">
+                                Скопировать номера
+                            </button>
+
+                            <button type="button"
+                                    class="btn secondary"
+                                    id="printQrStub">
+                                Печать QR
+                            </button>
+
+                            <span class="warehouse-scan-empty"
+                                  id="copyStatus"
+                                  role="status"></span>
+                        </div>
+
+                        <form method="post"
+                              th:action="@{/warehouse/receiving/{id}/qr(id=${batch.id})}">
+
+                            <input th:if="${_csrf != null}"
+                                   type="hidden"
+                                   th:name="${_csrf.parameterName}"
+                                   th:value="${_csrf.token}">
+
+                            <button type="submit" class="btn primary">
+                                Этикетки напечатаны, продолжить
+                            </button>
+                        </form>
+                    </div>
+
+                </div>
+            </section>
+
+        </div>
+    </main>
+</div>
+
+<th:block th:replace="~{warehouse/fragments/layout
+        :: commonScripts}">
+</th:block>
+
+<script th:src="@{/warehouse/js/receiving.js}"></script>
+
+</body>
+</html>

@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="ru"
+      xmlns:th="http://www.thymeleaf.org">
+
+<head>
+    <meta charset="UTF-8">
+
+    <meta name="viewport"
+          content="width=device-width, initial-scale=1">
+
+    <title>Обзор склада</title>
+
+    <link rel="stylesheet"
+          th:href="@{/technology/css/technology.css}">
+
+    <link rel="stylesheet"
+          th:href="@{/technology/css/common.css}">
+
+    <link rel="stylesheet"
+          th:href="@{/warehouse/css/warehouse.css}">
+</head>
+
+<body>
+
+<div class="app-shell">
+
+    <aside th:replace="~{warehouse/fragments/layout
+            :: sidebar('general')}">
+    </aside>
+
+    <main class="main">
+
+        <header th:replace="~{warehouse/fragments/layout
+                :: topbar}">
+        </header>
+
+        <div class="page-content warehouse-page">
+
+            <div class="page-head">
+
+                <div class="page-title">
+
+                    <h1>Обзор склада</h1>
+
+                    <p>
+                        Приход полуфабрикатов, номера ячеек и их
+                        оприходование в реестр
+                    </p>
+
+                </div>
+
+                <div class="page-head-actions">
+
+                    <a class="btn secondary"
+                       th:href="@{/warehouse/acceptance}">
+
+                        Приёмка с БВК
+
+                        <strong th:if="${awaitingAcceptanceCount != null
+                                        and awaitingAcceptanceCount > 0}"
+                                th:text="'(' + ${awaitingAcceptanceCount} + ')'">
+                            (1)
+                        </strong>
+                    </a>
+
+                    <a class="btn primary"
+                       th:href="@{/warehouse/receiving}">
+                        Оприходование
+                    </a>
+
+                </div>
+            </div>
+
+            <div class="alert success"
+                 th:if="${successMessage}"
+                 th:text="${successMessage}">
+            </div>
+
+            <div class="alert danger"
+                 th:if="${errorMessage}"
+                 th:text="${errorMessage}">
+            </div>
+
+            <div class="stats stats--warehouse">
+
+                <div class="stat">
+                    <small>Незакрытые приходы</small>
+
+                    <strong th:text="${pendingCount ?: 0}">
+                        0
+                    </strong>
+
+                    <span class="trend attention">
+                        Номера зарезервированы, но ячеек в реестре нет
+                    </span>
+                </div>
+
+                <div class="stat">
+                    <small>Партий всего</small>
+
+                    <strong th:text="${batchTotal ?: 0}">
+                        0
+                    </strong>
+
+                    <span class="trend">
+                        Все приходы склада
+                    </span>
+                </div>
+
+                <div class="stat">
+                    <small>Ячеек на складе</small>
+
+                    <strong th:text="${receivedCells ?: 0}">
+                        0
+                    </strong>
+
+                    <span class="trend">
+                        Внесено приходом склада в реестр
+                    </span>
+                </div>
+            </div>
+
+            <section class="card">
+
+                <div class="card-head">
+
+                    <div>
+
+                        <h2>Журнал приходов</h2>
+
+                        <small>
+                            Партия, доведённая до сканирования, меняет
+                            статус на «Оприходовано»; незакрытая строка
+                            держит зарезервированные номера
+                        </small>
+
+                    </div>
+
+                    <a class="btn secondary"
+                       th:href="@{/warehouse/receiving}">
+                        Перейти к оприходованию
+                    </a>
+                </div>
+
+                <div class="card-body">
+
+                    <div class="alert danger"
+                         th:if="${batches == null or #lists.isEmpty(batches)}">
+
+                        <p>
+                            Приходов пока нет: нажмите
+                            «Оприходование», укажите поставщика,
+                            приходный ордер и название подсборки —
+                            под приход будет выпущена серия номеров
+                        </p>
+
+                    </div>
+
+                    <div class="table-wrap"
+                         th:unless="${batches == null or #lists.isEmpty(batches)}">
+
+                        <table class="data-table warehouse-batch-table">
+
+                            <thead>
+
+                            <tr>
+                                <th>Поставщик</th>
+                                <th>Ордер</th>
+                                <th>Подсборка</th>
+                                <th>Кол-во</th>
+                                <th>Номера</th>
+                                <th>Изм.</th>
+                                <th>Статус</th>
+                                <th>Оформлен</th>
+                                <th></th>
+                            </tr>
+
+                            </thead>
+
+                            <tbody>
+
+                            <tr th:each="batch : ${batches}">
+
+                                <td th:text="${batch.supplierName}">
+                                    ООО «Компонент»
+                                </td>
+
+                                <td th:text="${batch.incomingOrderNumber}">
+                                    ТОРГ-12/44
+                                </td>
+
+                                <td th:text="${batch.cellLabel}">
+                                    1212 — Подсборка ЯПР56
+                                </td>
+
+                                <td th:text="${batch.quantity}">
+                                    4
+                                </td>
+
+                                <td class="warehouse-number-cell"
+                                    th:text="${batch.numberRangeLabel}">
+                                    121200022 … 121200025
+                                </td>
+
+                                <td th:text="${batch.changeNumber}">
+                                    Изм. 3
+                                </td>
+
+                                <td>
+                                    <span class="status"
+                                          th:classappend="' ' + ${batch.statusBadgeClass}"
+                                          th:text="${batch.statusLabel}">
+                                        Ждёт сканирования
+                                    </span>
+                                </td>
+
+                                <td th:text="${batch.formattedCreatedAt}">
+                                    21.09.2026 09:14
+                                </td>
+
+                                <td class="table-actions">
+
+                                    <a class="btn secondary compact"
+                                       th:if="${batch.pending}"
+                                       th:href="@{/warehouse/receiving/{id}/qr(id=${batch.id})}">
+                                        Продолжить
+                                    </a>
+
+                                    <a class="btn secondary compact"
+                                       th:unless="${batch.pending}"
+                                       th:href="@{/warehouse/receiving/{id}/confirm(id=${batch.id})}">
+                                        Смотреть
+                                    </a>
+
+                                </td>
+
+                            </tr>
+
+                            </tbody>
+                        </table>
+
+                    </div>
+
+                </div>
+            </section>
+
+        </div>
+    </main>
+</div>
+
+<th:block th:replace="~{warehouse/fragments/layout
+        :: commonScripts}">
+</th:block>
+
+</body>
+</html>

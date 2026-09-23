@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="ru" xmlns:th="http://www.thymeleaf.org">
+<body>
+<!--
+    Блок группы брака: ячейки с одной причиной и одним решением.
+
+    Фрагмент параметризован индексом, потому что одна и та же разметка
+    нужна дважды: сервер выводит ею уже заполненные группы (порядок
+    групп задаёт контролёр), а скрипт берёт её чистым экземпляром из
+    <template>, когда добавляет группу внизу окна. Имена полей и id
+    собираются из индекса: для чистого экземпляра вместо индекса
+    передают маркер "@IDX@", который скрипт заменяет на номер новой
+    группы — иначе шаблон и реальные группы давали бы одинаковые имена.
+
+    title передают отдельно: в чистом экземпляре номера группы ещё нет,
+    и подставлять в него арифметику было бы ошибкой.
+-->
+<div class="bvk-group"
+     th:fragment="block (idx, title, groupForm)"
+     th:attr="data-index=${idx},
+              data-chosen=${groupForm != null
+                  ? #strings.listJoin(groupForm.reasonIds, ',')
+                  : ''}">
+
+    <div class="bvk-group__head">
+
+        <span class="bvk-group__title">
+            Группа брака <span th:text="${title}">1</span>
+        </span>
+
+        <button type="button"
+                class="btn secondary compact"
+                data-bvk-remove-group>
+            Убрать группу
+        </button>
+
+    </div>
+
+    <!-- ============ НОМЕРА ЯЧЕЕК ГРУППЫ ============ -->
+    <div class="bvk-field">
+
+        <div class="bvk-field__row">
+
+            <label th:attr="for=${'bvkGroupCells_' + idx}">
+                Забракованные номера этой группы
+            </label>
+
+            <label class="bvk-check">
+                <input type="checkbox"
+                       th:name="'defectGroups[' + ${idx} + '].defectAll'"
+                       th:id="'bvkGroupAll_' + ${idx}"
+                       value="true"
+                       th:checked="${groupForm != null and groupForm.defectAll}">
+
+                забраковать всю партию
+            </label>
+
+            <span class="bvk-counter bvk-counter--danger"
+                  th:id="'bvkGroupCounter_' + ${idx}">
+                0 яч.
+            </span>
+
+        </div>
+
+        <textarea th:id="'bvkGroupCells_' + ${idx}"
+                  th:name="'defectGroups[' + ${idx} + '].defectCellsText'"
+                  placeholder="121200023"
+                  th:text="${groupForm != null ? groupForm.defectCellsText : ''}"></textarea>
+
+        <span class="bvk-field__hint bvk-field__hint--danger"
+              th:id="'bvkGroupUnknown_' + ${idx}"
+              hidden></span>
+
+    </div>
+
+    <!-- ============ ПРИЧИНА ЭТОЙ ГРУППЫ ============ -->
+    <div class="bvk-field bvk-field--spaced">
+
+        <span class="bvk-reasons__caption">
+            Причина брака этой группы
+        </span>
+
+        <div class="bvk-reasons"
+             th:id="'bvkGroupReasons_' + ${idx}"></div>
+
+        <div class="bvk-reasons__custom"
+             th:id="'bvkGroupCustom_' + ${idx}"
+             hidden>
+
+            <label class="bvk-reasons__caption bvk-reasons__caption--custom"
+                   th:attr="for=${'bvkGroupCustomText_' + idx}">
+                Причина «Другое» — текст
+            </label>
+
+            <input type="text"
+                   th:id="'bvkGroupCustomText_' + ${idx}"
+                   th:name="'defectGroups[' + ${idx} + '].customReasonText'"
+                   maxlength="500"
+                   th:value="${groupForm != null ? groupForm.customReasonText : ''}"
+                   placeholder="Например: отсутствие маркировки на корпусе">
+
+            <span class="bvk-field__hint">
+                Введённое написание попадёт в справочник причин и будет
+                предлагаться при следующих проверках
+            </span>
+
+        </div>
+
+    </div>
+
+    <!-- ============ РЕШЕНИЕ ПО ЯЧЕЙКАМ ГРУППЫ ============ -->
+    <div class="bvk-field bvk-field--spaced">
+
+        <span class="bvk-reasons__caption">
+            Решение по ячейкам этой группы
+        </span>
+
+        <div class="bvk-decisions">
+
+            <label class="bvk-decision"
+                   th:each="decision : ${decisions}">
+
+                <input type="radio"
+                       th:name="'defectGroups[' + ${idx} + '].decision'"
+                       th:value="${decision}"
+                       th:checked="${
+                           groupForm != null
+                           and groupForm.decision != null
+                           and groupForm.decision == decision.name()
+                       }">
+
+                <span class="bvk-decision__text">
+
+                    <span class="bvk-decision__name"
+                          th:text="${decision.displayName}">
+                        Перемещение в изолятор брака
+                    </span>
+
+                    <span class="bvk-decision__note"
+                          th:text="${
+                              decision.name() == 'QUARANTINE'
+                                  ? 'ячейки остаются на предприятии и ждут решения о ремонте или списании'
+                                  : 'партия возвращается поставщику по рекламации'
+                          }">
+                        ячейки остаются на предприятии
+                    </span>
+                </span>
+            </label>
+
+        </div>
+
+    </div>
+
+</div>
+</body>
+</html>

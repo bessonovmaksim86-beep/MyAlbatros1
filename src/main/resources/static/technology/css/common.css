@@ -924,3 +924,54 @@ body {
         grid-template-columns: 1fr;
     }
 }
+
+/* ============================================================
+   ПЛАШКА РЕЖИМА «В ИНТЕРФЕЙСЕ ДРУГОЙ РОЛИ»
+
+   Общий компонент: fragment templates/fragments/impersonation
+   подключается topbar'ом каждого модуля, поэтому стили лежат здесь,
+   а не в css отдельного раздела.
+   ============================================================ */
+
+.impersonation-bar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 14px;
+    margin: 0 0 20px;
+    padding: 14px 18px;
+    border-radius: 12px;
+    background: #fff4e6;
+    border: 1px solid #f2ce9a;
+    border-left: 4px solid #ef7d00;
+}
+
+.impersonation-bar__text {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    min-width: 0;
+}
+
+.impersonation-bar__title {
+    color: #8a4b00;
+    font-weight: 800;
+    font-size: 13px;
+}
+
+.impersonation-bar__note {
+    color: #7a5a30;
+    font-size: 12px;
+}
+
+.impersonation-bar form {
+    margin: 0;
+}
+
+@media (max-width: 760px) {
+    .impersonation-bar {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+}

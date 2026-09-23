@@ -1,0 +1,491 @@
+<!DOCTYPE html>
+<html lang="ru"
+      xmlns:th="http://www.thymeleaf.org">
+
+<head>
+    <meta charset="UTF-8">
+
+    <meta name="viewport"
+          content="width=device-width, initial-scale=1">
+
+    <title>Производственный календарь</title>
+
+    <link rel="stylesheet"
+          th:href="@{/technology/css/technology.css}">
+
+    <link rel="stylesheet"
+          th:href="@{/technology/css/common.css}">
+
+    <link rel="stylesheet"
+          th:href="@{/workshop/css/workshop.css}">
+</head>
+
+<body>
+
+<div class="app-shell">
+
+    <aside th:replace="~{workshop/fragments/layout
+            :: sidebar('calendar')}">
+    </aside>
+
+    <main class="main">
+
+        <header th:replace="~{workshop/fragments/layout
+                :: topbar}">
+        </header>
+
+        <div class="page-content workshop-page">
+
+            <div class="page-head">
+
+                <div class="page-title">
+
+                    <h1>Производственный календарь</h1>
+
+                    <p th:text="${
+                        workshopName != null
+                            ? workshopName + ': отсутствия сотрудников и нерабочие дни'
+                            : 'Отсутствия сотрудников и нерабочие дни'
+                    }">
+                        Цех подготовки производства: отсутствия по дням месяца
+                    </p>
+
+                </div>
+
+                <div class="page-head-actions workshop-month-nav">
+
+                    <a class="btn secondary"
+                       th:href="@{/workshop/calendar(month=${previousMonthParam})}">
+
+                        &larr; <span th:text="${previousMonthLabel}">дек</span>
+                    </a>
+
+                    <a class="btn secondary"
+                       th:href="@{/workshop/calendar}">
+                        Текущий месяц
+                    </a>
+
+                    <a class="btn secondary"
+                       th:href="@{/workshop/calendar(month=${nextMonthParam})}">
+
+                        <span th:text="${nextMonthLabel}">фев</span> &rarr;
+                    </a>
+
+                </div>
+
+            </div>
+
+            <div class="alert success"
+                 th:if="${successMessage}"
+                 th:text="${successMessage}">
+            </div>
+
+            <div class="alert danger"
+                 th:if="${errorMessage}"
+                 th:text="${errorMessage}">
+            </div>
+
+            <div class="stats">
+
+                <div class="stat">
+                    <small>Месяц</small>
+                    <strong class="stat-text"
+                            th:text="${monthLabel + ' ' + month.year}">
+                        Сентябрь 2026
+                    </strong>
+                    <span th:text="${daysInMonth + ' календарных дней'}">
+                        30 календарных дней
+                    </span>
+                </div>
+
+                <div class="stat">
+                    <small>Сотрудников</small>
+                    <strong th:text="${#lists.size(rows)}">0</strong>
+                    <span>в списке цеха</span>
+                </div>
+
+                <div class="stat">
+                    <small>Выходных в месяце</small>
+                    <strong th:text="${weekendCount}">8</strong>
+                    <span>суббот и воскресений</span>
+                </div>
+
+                <div class="stat">
+                    <small>Дней отсутствия</small>
+                    <strong th:text="${absenceDaysTotal}">0</strong>
+                    <span>отмечено в этом месяце</span>
+                </div>
+
+            </div>
+
+            <section class="card">
+
+                <div class="card-head">
+
+                    <div>
+
+                        <h2>Отметка отсутствия</h2>
+
+                        <p>
+                            Исполнителей можно выбрать несколько — отметка
+                            уйдёт каждому выбранному. Конечная дата
+                            необязательна: без неё отмечается один день.
+                            Дни можно выделять в таблице календаря одним
+                            щелчком или щелчком с протяжкой
+                        </p>
+
+                    </div>
+
+                    <div class="workshop-legend">
+
+                        <span class="workshop-legend__item"
+                              th:each="type : ${absenceTypes}"
+                              th:classappend="'is-' + ${type.cssSuffix}">
+
+                            <span class="workshop-legend__mark"></span>
+
+                            <span th:text="${type.displayName}">Отпуск</span>
+                        </span>
+
+                    </div>
+
+                </div>
+
+                <div class="card-body">
+
+                    <div class="alert danger"
+                         th:if="${#lists.isEmpty(rows)}">
+
+                        <p>
+                            В подразделении нет сотрудников: отмечать
+                            отсутствие можно только у сотрудников своего цеха
+                        </p>
+
+                    </div>
+
+                    <form method="post"
+                          th:action="@{/workshop/calendar/mark}"
+                          th:object="${absenceForm}"
+                          id="absenceForm"
+                          class="workshop-absence-form"
+                          th:if="${not #lists.isEmpty(rows)}">
+
+                        <input th:if="${_csrf != null}"
+                               type="hidden"
+                               th:name="${_csrf.parameterName}"
+                               th:value="${_csrf.token}">
+
+                        <input type="hidden"
+                               name="month"
+                               th:value="${monthParam}">
+
+                        <div class="form-grid">
+
+                            <div class="field span-2">
+
+                                <label for="employeeIds">Исполнители</label>
+
+                                <!--
+                                    Список, а не одиночный select:
+                                    праздничные дни задают на весь цех,
+                                    и выбирать людей по одному для этого
+                                    слишком долго.
+                                -->
+                                <select id="employeeIds"
+                                        size="8"
+                                        multiple
+                                        th:field="*{employeeIds}"
+                                        data-absence-employees>
+
+                                    <option th:each="row : ${rows}"
+                                            th:value="${row.employeeId}"
+                                            th:text="${
+                                                row.fullName
+                                                + (row.specialty != null
+                                                   and !#strings.isEmpty(row.specialty)
+                                                       ? ' — ' + row.specialty
+                                                       : '')
+                                            }">
+                                        Иванов И. И. — Сборщик
+                                    </option>
+
+                                </select>
+
+                                <small class="field-hint">
+                                    Ctrl (или Cmd) — выбрать несколько
+                                    сотрудников; ничего не выбрано —
+                                    отметка пойдёт всем сотрудникам цеха
+                                </small>
+
+                            </div>
+
+                            <div class="field">
+
+                                <label for="absenceType">Вид отсутствия</label>
+
+                                <select id="absenceType"
+                                        th:field="*{absenceType}">
+
+                                    <option value="">— выберите —</option>
+
+                                    <option th:each="type : ${markableAbsenceTypes}"
+                                            th:value="${type.name()}"
+                                            th:text="${type.displayName}">
+                                        Отпуск
+                                    </option>
+
+                                </select>
+
+                            </div>
+
+                            <div class="field">
+
+                                <label for="fromDate">Начало (с)</label>
+
+                                <input id="fromDate"
+                                       type="text"
+                                       autocomplete="off"
+                                       placeholder="дд.мм.гггг"
+                                       th:field="*{fromDate}"
+                                       data-absence-from>
+
+                            </div>
+
+                            <div class="field">
+
+                                <label for="toDate">Окончание (по)</label>
+
+                                <input id="toDate"
+                                       type="text"
+                                       autocomplete="off"
+                                       placeholder="дд.мм.гггг"
+                                       th:field="*{toDate}"
+                                       data-absence-to>
+
+                                <small class="field-hint">
+                                    Второй щелчок по календарю заполняет
+                                    эту дату; пусто — один день
+                                </small>
+
+                            </div>
+
+                            <div class="field span-2">
+
+                                <label for="note">Примечание</label>
+
+                                <input id="note"
+                                       type="text"
+                                       maxlength="1000"
+                                       placeholder="Например: отпуск ежегодный, приказ № 128"
+                                       th:field="*{note}">
+
+                            </div>
+
+                        </div>
+
+                        <label class="workshop-replace">
+
+                            <input type="checkbox"
+                                   th:field="*{replaceExisting}">
+
+                            <span>
+                                Перезаписать уже стоящие отметки другого вида
+                            </span>
+
+                        </label>
+
+                        <div class="form-actions">
+
+                            <button type="submit" class="btn primary">
+                                Отметить
+                            </button>
+
+                            <button type="submit"
+                                    class="btn danger"
+                                    th:formaction="@{/workshop/calendar/unmark}"
+                                    data-unmark>
+                                Снять отметки
+                            </button>
+
+                        </div>
+
+                    </form>
+
+                </div>
+
+            </section>
+
+            <section class="card">
+
+                <div class="card-head">
+
+                    <div>
+
+                        <h2>Выходные и праздники месяца</h2>
+
+                        <p th:text="${
+                            'Суббот и воскресений в '
+                            + monthLabel.toLowerCase()
+                            + ' ' + month.year + ' — ' + weekendCount
+                            + ' дн. Нерабочие дни задаёт администратор в'
+                            + ' справочнике «Выходные и праздники»: они'
+                            + ' проставляются всем сотрудникам предприятия,'
+                            + ' поэтому отмечать их здесь не нужно'
+                        }">
+                            Суббот и воскресений — 8 дн.
+                        </p>
+
+                    </div>
+
+                    <span class="badge"
+                          th:text="${weekendCount + ' дн.'}">
+                        8 дн.
+                    </span>
+
+                </div>
+
+                <div class="card-body">
+
+                    <p class="empty-inline">
+                        Выходные и перенесённые праздники помечены в таблице
+                        ниже цветом «Выходной». Если нужного дня нет, а
+                        предприятие в него не работает — попросите
+                        администратора завести его в справочнике: отметка
+                        появится у всех сотрудников разом.
+                    </p>
+
+                </div>
+
+            </section>
+
+            <section class="card">
+
+                <div class="card-head">
+
+                    <div>
+
+                        <h2 th:text="${monthLabel + ' ' + month.year}">
+                            Сентябрь 2026
+                        </h2>
+
+                        <p>
+                            Строка — сотрудник, ячейка — число месяца.
+                            Первый щелчок задаёт дату «с», второй — дату «по»
+                        </p>
+
+                    </div>
+
+                    <span class="badge"
+                          th:text="${absenceDaysTotal + ' дн.'}">
+                        0 дн.
+                    </span>
+
+                </div>
+
+                <div class="card-body">
+
+                    <div class="workshop-calendar-wrap"
+                         th:unless="${#lists.isEmpty(rows)}">
+
+                        <table class="workshop-calendar">
+
+                            <thead>
+
+                            <tr>
+
+                                <th class="workshop-calendar__head">
+                                    Сотрудник
+                                </th>
+
+                                <th class="workshop-calendar__day"
+                                    th:each="cell : ${header}"
+                                    th:if="${not cell.empty}"
+                                    th:classappend="${cell.cellClass}">
+
+                                    <span th:text="${cell.day}">1</span>
+
+                                </th>
+
+                            </tr>
+
+                            </thead>
+
+                            <tbody>
+
+                            <tr th:each="row : ${rows}">
+
+                                <td class="workshop-calendar__head">
+
+                                    <strong th:text="${row.fullName}">
+                                        Иванов И. И.
+                                    </strong>
+
+                                    <small th:text="${
+                                        row.specialty != null
+                                        and !#strings.isEmpty(row.specialty)
+                                            ? row.specialty
+                                            : '—'
+                                    }">
+                                        Сборщик
+                                    </small>
+
+                                    <span class="workshop-calendar__count"
+                                          th:if="${row.absenceDays > 0}"
+                                          th:text="${row.absenceDays}">
+                                        3
+                                    </span>
+
+                                </td>
+
+                                <td class="workshop-calendar__day"
+                                    th:each="cell : ${row.days}"
+                                    th:if="${not cell.empty}"
+                                    th:classappend="${cell.cellClass}">
+
+                                    <button type="button"
+                                            class="workshop-day"
+                                            th:classappend="${cell.cellClass}"
+                                            th:attr="data-employee=${row.employeeId},
+                                                     data-date=${cell.date}"
+                                            th:title="${cell.title}"
+                                            th:text="${cell.mark}">
+                                        О
+                                    </button>
+
+                                </td>
+
+                            </tr>
+
+                            </tbody>
+
+                        </table>
+
+                    </div>
+
+                    <div class="alert danger"
+                         th:if="${#lists.isEmpty(rows)}">
+
+                        <p>
+                            Календарь пуст: сотрудников в подразделении нет
+                        </p>
+
+                    </div>
+
+                </div>
+
+            </section>
+
+        </div>
+
+    </main>
+
+</div>
+
+<th:block th:replace="~{workshop/fragments/layout
+        :: commonScripts}">
+</th:block>
+
+<script th:src="@{/workshop/js/calendar.js}"></script>
+
+</body>
+</html>

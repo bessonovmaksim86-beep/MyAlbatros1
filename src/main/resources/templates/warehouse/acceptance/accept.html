@@ -1,0 +1,667 @@
+<!DOCTYPE html>
+<html lang="ru"
+      xmlns:th="http://www.thymeleaf.org">
+
+<head>
+    <meta charset="UTF-8">
+
+    <meta name="viewport"
+          content="width=device-width, initial-scale=1">
+
+    <title>Приёмка подсборки на склад</title>
+
+    <link rel="stylesheet"
+          th:href="@{/technology/css/technology.css}">
+
+    <link rel="stylesheet"
+          th:href="@{/technology/css/common.css}">
+
+    <link rel="stylesheet"
+          th:href="@{/warehouse/css/warehouse.css}">
+</head>
+
+<body>
+
+<div class="app-shell">
+
+    <aside th:replace="~{warehouse/fragments/layout
+            :: sidebar('acceptance')}">
+    </aside>
+
+    <main class="main">
+
+        <header th:replace="~{warehouse/fragments/layout
+                :: topbar}">
+        </header>
+
+        <div class="page-content warehouse-page">
+
+            <div class="page-head">
+
+                <div class="page-title">
+
+                    <h1>
+                        Приёмка на склад
+                        <span class="mono"
+                              th:text="${batch.cellLabel}">
+                            1212 — Подсборка ЯПР56
+                        </span>
+                    </h1>
+
+                    <p th:text="${
+                        'Партия ' + batch.numberRangeLabel + ' проверена БВК '
+                        + card.formattedCompletedAt + ', контролёр: '
+                        + card.checkerName
+                    }">
+                        Партия 121200022 … 121200025 проверена БВК 22.09.2026 11:20
+                    </p>
+
+                </div>
+
+                <div class="page-head-actions">
+
+                    <span class="status"
+                          th:classappend="' ' + ${batch.statusBadgeClass}"
+                          th:text="${batch.statusLabel}">
+                        Оприходовано
+                    </span>
+
+                    <a class="btn secondary"
+                       th:href="@{/warehouse/acceptance}">
+                        К списку партий
+                    </a>
+
+                </div>
+            </div>
+
+            <div class="alert success"
+                 th:if="${successMessage}"
+                 th:text="${successMessage}">
+            </div>
+
+            <div class="alert danger"
+                 th:if="${errorMessage}"
+                 th:text="${errorMessage}">
+            </div>
+
+            <ol class="warehouse-steps warehouse-steps--acceptance">
+
+                <li class="warehouse-steps__item is-done">
+                    Приход и оприходование
+                </li>
+
+                <li class="warehouse-steps__item is-done">
+                    Входной контроль БВК
+                </li>
+
+                <li class="warehouse-steps__item"
+                    th:classappend="${batch.accepted} ? ' is-done' : ' is-current'">
+                    Номера принятых ячеек
+                </li>
+
+                <li class="warehouse-steps__item"
+                    th:classappend="${batch.accepted} ? ' is-done' : ''">
+                    Подсборка принята на склад
+                </li>
+
+            </ol>
+
+            <div class="warehouse-confirm-note"
+                 th:if="${batch.accepted}">
+
+                <strong>Подсборка принята на склад</strong>
+
+                Приёмку провёл
+                <span th:text="${batch.acceptedByName}">
+                    Петров П. П.
+                </span>
+
+                <span th:text="${batch.formattedAcceptedAt}">
+                    23.09.2026 14:05
+                </span>
+
+                — принято
+                <span th:text="${batch.acceptedQuantity}">
+                    2
+                </span>
+                яч.; состав партии зафиксирован и изменению не подлежит.
+
+            </div>
+
+            <!-- =====================================================
+                 РЕКВИЗИТЫ ПАРТИИ И ИТОГ БВК
+                 ===================================================== -->
+            <!-- =====================================================
+                 КАРТОЧКА ОПРИХОВАНИЯ
+
+                 Разбивка та же, что в карточке входного контроля:
+                 кладовщик сверяет приход и результат проверки двумя
+                 отдельными блоками, а не одной сводкой, где реквизиты
+                 склада перемешаны с итогом БВК.
+                 ===================================================== -->
+            <section class="card">
+
+                <div class="card-head">
+
+                    <div>
+
+                        <h2>Карточка оприходования</h2>
+
+                        <small>
+                            Реквизиты прихода склада: по ним сверяют
+                            этикетки и оформляют рекламацию
+                        </small>
+
+                    </div>
+
+                    <span class="warehouse-counter"
+                          th:text="${batch.quantity} + ' яч.'">
+                        4 яч.
+                    </span>
+                </div>
+
+                <div class="card-body">
+
+                    <dl class="warehouse-summary">
+
+                        <div class="warehouse-summary__row">
+
+                            <dt>Поставщик</dt>
+
+                            <dd th:text="${batch.supplierName}">
+                                ООО «Компонент»
+                            </dd>
+                        </div>
+
+                        <div class="warehouse-summary__row">
+
+                            <dt>Номер приходного ордера</dt>
+
+                            <dd class="mono"
+                                th:text="${batch.incomingOrderNumber}">
+                                ТОРГ-12/44
+                            </dd>
+                        </div>
+
+                        <div class="warehouse-summary__row">
+
+                            <dt>Подсборка</dt>
+
+                            <dd th:text="${batch.cellLabel}">
+                                1212 — Подсборка ЯПР56
+                            </dd>
+                        </div>
+
+                        <div class="warehouse-summary__row">
+
+                            <dt>Количество в партии</dt>
+
+                            <dd th:text="${batch.quantity} + ' шт.'">
+                                4 шт.
+                            </dd>
+                        </div>
+
+                        <div class="warehouse-summary__row">
+
+                            <dt>Номер изменения</dt>
+
+                            <dd class="mono"
+                                th:text="${batch.changeNumber}">
+                                Изм. 3
+                            </dd>
+                        </div>
+
+                        <div class="warehouse-summary__row">
+
+                            <dt>Диапазон номеров</dt>
+
+                            <dd class="mono"
+                                th:text="${batch.numberRangeLabel}">
+                                121200022 … 121200025
+                            </dd>
+                        </div>
+
+                        <div class="warehouse-summary__row">
+
+                            <dt>Оприходовано складом</dt>
+
+                            <dd th:text="${batch.formattedConfirmedAt}">
+                                21.09.2026 09:40
+                            </dd>
+                        </div>
+
+                        <div class="warehouse-summary__row">
+
+                            <dt>Оформил приход</dt>
+
+                            <dd th:text="${batch.authorName}">
+                                Петров П. П.
+                            </dd>
+                        </div>
+
+                        <div class="warehouse-summary__row span-2">
+
+                            <dt>Примечание склада</dt>
+
+                            <dd th:text="${
+                                batch.note != null and !#strings.isEmpty(batch.note)
+                                    ? batch.note
+                                    : 'не указано'
+                            }">
+                                Партия по договору 14-П
+                            </dd>
+                        </div>
+
+                    </dl>
+
+                </div>
+            </section>
+
+
+            <!-- =====================================================
+                 ИТОГ ВХОДНОГО КОНТРОЛЯ
+
+                 Состав приёмки определяет именно этот блок: ячейки,
+                 отправленные в изолятор или поставщику, на склад не
+                 возвращаются и в перечень приёмки не попадают.
+                 ===================================================== -->
+            <section class="card">
+
+                <div class="card-head">
+
+                    <div>
+
+                        <h2>Итог входного контроля</h2>
+
+                        <small>
+                            Проверка закрыта: годные ячейки вернутся на
+                            склад, остальное принимать нельзя
+                        </small>
+
+                    </div>
+
+                    <span class="warehouse-counter"
+                          th:text="${
+                              'вернётся ' + #lists.size(availableNumbers)
+                              + ' из ' + batch.quantity
+                          }">
+                        вернётся 2 из 4
+                    </span>
+                </div>
+
+                <div class="card-body">
+
+                    <dl class="warehouse-summary">
+
+                        <div class="warehouse-summary__row">
+
+                            <dt>Метод входного контроля</dt>
+
+                            <dd th:text="${card.inputControlTypeLabel}">
+                                Визуальный
+                            </dd>
+                        </div>
+
+                        <div class="warehouse-summary__row">
+
+                            <dt>Проверка завершена</dt>
+
+                            <dd th:text="${card.formattedCompletedAt}">
+                                22.09.2026 11:20
+                            </dd>
+                        </div>
+
+                        <div class="warehouse-summary__row">
+
+                            <dt>Контролёр БВК</dt>
+
+                            <dd th:text="${card.checkerName}">
+                                Иванов И. И.
+                            </dd>
+                        </div>
+
+                        <div class="warehouse-summary__row">
+
+                            <dt>Отсеяно на брак</dt>
+
+                            <dd th:text="${
+                                #lists.isEmpty(defectNumbers)
+                                    ? 'брак не выявлен'
+                                    : #lists.size(defectNumbers) + ' яч.'
+                            }">
+                                2 яч.
+                            </dd>
+                        </div>
+
+                        <div class="warehouse-summary__row span-2">
+
+                            <dt>Номера, возвращённые со склада</dt>
+
+                            <dd class="mono"
+                                th:if="${!#lists.isEmpty(defectNumbers)}"
+                                th:text="${#strings.listJoin(defectNumbers, ', ')}">
+                                121200023, 121200024
+                            </dd>
+
+                            <dd th:if="${#lists.isEmpty(defectNumbers)}">
+                                партия вернулась целиком
+                            </dd>
+                        </div>
+
+                    </dl>
+
+                </div>
+            </section>
+
+
+            <!-- =====================================================
+                 ПРИЁМКА: НОМЕРА ВЕРНУВШИХСЯ ЯЧЕЕК
+                 ===================================================== -->
+            <section class="card">
+
+                <div class="card-head">
+
+                    <div>
+
+                        <h2>Номера принимаемых ячеек</h2>
+
+                        <small>
+                            Вносите только те ячейки, что реально
+                            вернулись от БВК: брак в перечень не
+                            входит и принять его нельзя
+                        </small>
+
+                    </div>
+
+                    <span class="warehouse-counter"
+                          id="acceptanceCounter"
+                          th:if="${!batch.accepted and !#lists.isEmpty(availableNumbers)}"
+                          th:data-total="${#lists.size(availableNumbers)}">
+                        0 из 0
+                    </span>
+
+                    <span class="warehouse-counter"
+                          th:if="${batch.accepted}"
+                          th:text="'принято ' + ${batch.acceptedQuantity} + ' яч.'">
+                        принято 2 яч.
+                    </span>
+                </div>
+
+                <div class="card-body">
+
+                    <!--
+                        Партию, у которой БВК забраковал всё, провести
+                        нельзя: форма здесь не предлагается, но экран
+                        обязан объяснять причину, а не выглядеть
+                        сломанным.
+                    -->
+                    <div class="warehouse-problem"
+                         th:if="${!batch.accepted
+                                 and #lists.isEmpty(availableNumbers)}">
+
+                        <h3>Принимать на склад нечего</h3>
+
+                        <p>
+                            Всю партию «
+                            <span th:text="${batch.cellLabel}">
+                                1212 — Подсборка ЯПР56
+                            </span>
+                            » отсеяли на брак во входном контроле:
+                            ячейки остались в изоляторе брака или
+                            возвращены поставщику. Приёмку не проводят —
+                            партию закрывают по результатам контроля.
+                        </p>
+
+                    </div>
+
+                    <form method="post"
+                          id="acceptanceForm"
+                          th:if="${!batch.accepted and !#lists.isEmpty(availableNumbers)}"
+                          th:action="@{/warehouse/acceptance/{id}(id=${batch.id})}"
+                          th:attr="data-available=${#strings.listJoin(availableNumbers, ',')}">
+
+                        <input th:if="${_csrf != null}"
+                               type="hidden"
+                               th:name="${_csrf.parameterName}"
+                               th:value="${_csrf.token}">
+
+                        <input type="hidden"
+                               name="batchId"
+                               th:value="${batch.id}">
+
+                        <div class="warehouse-field">
+
+                            <div class="warehouse-field__row">
+
+                                <label for="cellNumbersText">
+                                    Номера ячеек, вернувшихся от БВК
+                                </label>
+
+                                <label class="warehouse-check"
+                                       for="allCells">
+
+                                    <input type="checkbox"
+                                           id="allCells"
+                                           name="allCells"
+                                           value="true"
+                                           th:checked="${acceptanceForm.allCells}">
+
+                                    отметить все номера ячеек
+                                </label>
+
+                            </div>
+
+                            <textarea id="cellNumbersText"
+                                      name="cellNumbersText"
+                                      placeholder="121200022&#10;121200023"
+                                      autocomplete="off"
+                                      spellcheck="false"
+                                      th:text="${acceptanceForm.cellNumbersText}"></textarea>
+
+                            <span class="field-hint">
+                                По одному номеру в строке; сканер и
+                                разделители «,» и «;» тоже подходят.
+                                Отмеченные зелёным уже приняты, красным —
+                                ячейки брака, они не принимаются
+                            </span>
+
+                            <span class="field-hint field-hint--warn"
+                                  id="allCellsHint"
+                                  hidden>
+                                Отметка «отметить все номера ячеек»
+                                принимает все ячейки партии, не попавшие
+                                в брак:
+                                <strong id="allCellsCount"
+                                        th:text="${#lists.size(availableNumbers)}">
+                                    2
+                                </strong>
+                                яч. При проведении появится подтверждение —
+                                после него состав партии изменить нельзя.
+                            </span>
+
+                        </div>
+
+                        <div class="warehouse-actions">
+
+                            <a class="btn secondary"
+                               th:href="@{/warehouse/acceptance}">
+                                К списку партий
+                            </a>
+
+                            <button type="submit"
+                                    class="btn primary"
+                                    id="acceptButton">
+                                Провести приёмку на склад
+                            </button>
+
+                        </div>
+
+                    </form>
+
+                </div>
+            </section>
+
+
+            <!-- =====================================================
+                 ПЕРЕЧНИ НОМЕРОВ
+                 ===================================================== -->
+            <section class="card">
+
+                <div class="card-head">
+
+                    <div>
+
+                        <h2>Ячейки, прошедшие контроль</h2>
+
+                        <small>
+                            Сверяйте этикетки с этим перечнем: номер
+                            брака или чужой номер приёмку не пропустят
+                        </small>
+
+                    </div>
+
+                    <span class="warehouse-counter"
+                          th:text="${#lists.size(availableNumbers)} + ' шт.'">
+                        2 шт.
+                    </span>
+                </div>
+
+                <div class="card-body">
+
+                    <ul class="warehouse-numbers" id="availableNumbers">
+
+                        <!--
+                            Отметку приёмки берут из реестра
+                            (serialMarks): принятую ячейку видно до
+                            перепроведения, и скрипт её подсветку не
+                            снимает — как отметка контроля в карточке БВК.
+                        -->
+                        <li class="warehouse-numbers__item"
+                            th:each="number, iteration : ${availableNumbers}"
+                            th:with="serial=${serialMarks != null ? serialMarks.get(number) : null}"
+                            th:classappend="${serial != null and serial.accepted}
+                                ? ' is-accepted' : ''"
+                            th:attr="data-number=${number},
+                                     title=${serial != null and serial.accepted
+                                             ? 'Принята ' + serial.formattedAcceptedAt
+                                               + ' · ' + serial.acceptedByName : ''}">
+
+                            <span class="warehouse-numbers__index"
+                                  th:text="'№ ' + ${iteration.count}">
+                                № 1
+                            </span>
+
+                            <span th:text="${number}">
+                                121200022
+                            </span>
+                        </li>
+
+                    </ul>
+
+                    <p class="warehouse-scan-empty"
+                       th:if="${#lists.isEmpty(availableNumbers)}">
+                        Годных ячеек нет: всю партию отсеяли на брак
+                    </p>
+
+                </div>
+            </section>
+
+            <section class="card"
+                     th:unless="${#lists.isEmpty(defectNumbers)}">
+
+                <div class="card-head">
+
+                    <div>
+
+                        <h2>Отсеяно на брак</h2>
+
+                        <small>
+                            Эти ячейки остались в изоляторе брака или
+                            отправлены поставщику — на склад их не
+                            принимают
+                        </small>
+
+                    </div>
+
+                    <span class="warehouse-counter warehouse-counter--danger"
+                          th:text="${#lists.size(defectNumbers)} + ' шт.'">
+                        2 шт.
+                    </span>
+                </div>
+
+                <div class="card-body">
+
+                    <ul class="warehouse-numbers" id="defectNumbers">
+
+                        <li class="warehouse-numbers__item is-defect"
+                            th:each="number : ${defectNumbers}"
+                            th:attr="data-number=${number}"
+                            th:text="${number}">
+                            121200023
+                        </li>
+
+                    </ul>
+
+                </div>
+            </section>
+
+        </div>
+    </main>
+</div>
+
+<!-- =============================================================
+     ПОДТВЕРЖДЕНИЕ ПРИёма ПО ОТМЕТКЕ «ОТМЕТИТЬ ВСЕ НОМЕРА ЯЧЕЕК»
+
+     Состав партии по этой отметке подставляет сервер, и после
+     проведения его не изменить: поэтому подтверждение берут
+     отдельным экраном с двумя кнопками, а не молча проводят
+     проверку. Форма при этом не отправляется, пока кладовщик не
+     нажал «Подтверждаю».
+     ============================================================= -->
+<div class="warehouse-accept-dialog"
+     id="acceptDialog"
+     hidden>
+
+    <div class="warehouse-accept-dialog__box"
+         role="alertdialog"
+         aria-modal="true"
+         aria-labelledby="acceptDialogText"
+         aria-describedby="acceptDialogNote">
+
+        <h2 id="acceptDialogText">
+            Внимательно проверьте номера ячеек и их количество
+        </h2>
+
+        <p id="acceptDialogNote">
+            После проведения информацию изменить будет невозможно.
+            Принимается
+            <strong id="acceptDialogCount">0</strong>
+            яч. — все ячейки партии, не попавшие в брак.
+        </p>
+
+        <div class="warehouse-accept-dialog__actions">
+
+            <button type="button"
+                    class="btn secondary"
+                    id="acceptDialogCancel">
+                Отмена
+            </button>
+
+            <button type="button"
+                    class="btn primary"
+                    id="acceptDialogConfirm">
+                Подтверждаю
+            </button>
+
+        </div>
+    </div>
+</div>
+
+<th:block th:replace="~{warehouse/fragments/layout
+        :: commonScripts}">
+</th:block>
+
+<script th:src="@{/warehouse/js/acceptance.js}"></script>
+
+</body>
+</html>

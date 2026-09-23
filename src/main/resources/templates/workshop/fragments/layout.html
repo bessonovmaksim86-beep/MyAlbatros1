@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="ru"
+      xmlns:th="http://www.thymeleaf.org">
+
+<body>
+
+<!-- =========================================================
+     БОКОВОЕ МЕНЮ МОДУЛЯ РУКОВОДИТЕЛЯ ЦЕХА
+     ========================================================= -->
+<aside th:fragment="sidebar(activePage)"
+       id="workshopSidebar"
+       class="sidebar workshop-sidebar"
+       aria-label="Навигация модуля руководителя цеха">
+
+    <div class="workshop-sidebar__inner">
+
+        <a class="department-brand"
+           th:href="@{/workshop/staff}"
+           title="Перейти к сотрудникам цеха">
+
+            <span class="department-brand__logo">
+                <img th:src="@{/images/albatros-logo.jpg}"
+                     src="/images/albatros-logo.jpg"
+                     alt="Предприятие Альбатрос">
+            </span>
+
+            <span class="department-brand__system">
+                Производственная система
+            </span>
+
+            <strong class="department-brand__department">
+                Руководитель цеха
+            </strong>
+        </a>
+
+        <div class="workshop-sidebar__workshop"
+             th:text="${workshopName}">
+            Цех подготовки производства
+        </div>
+
+        <div class="workshop-sidebar__divider"></div>
+
+        <nav class="workshop-navigation">
+
+            <a class="workshop-navigation__item"
+               th:classappend="${activePage == 'staff'} ? ' is-active' : ''"
+               th:href="@{/workshop/staff}"
+               title="Сотрудники цеха и их привязки">
+
+                <span class="workshop-navigation__icon">
+                    <svg viewBox="0 0 24 24" aria-hidden="true">
+                        <path d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8Zm0 2c-3.31 0-8 1.66-8 5v3h16v-3c0-3.34-4.69-5-8-5Zm-6 6v-1c0-1.96 3.03-3.5 6-3.5s6 1.54 6 3.5v1H6Z"/>
+                    </svg>
+                </span>
+
+                <span class="workshop-navigation__text">
+                    Сотрудники
+                </span>
+
+                <span class="workshop-navigation__counter"
+                      th:if="${staffCount != null and staffCount > 0}"
+                      th:text="${staffCount}">
+                    4
+                </span>
+            </a>
+
+            <a class="workshop-navigation__item"
+               th:classappend="${activePage == 'calendar'} ? ' is-active' : ''"
+               th:href="@{/workshop/calendar}"
+               title="Производственный календарь отсутствий">
+
+                <span class="workshop-navigation__icon">
+                    <svg viewBox="0 0 24 24" aria-hidden="true">
+                        <path d="M7 2h2v2h6V2h2v2h3a1 1 0 0 1 1 1v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a1 1 0 0 1 1-1h3V2Zm12 8H5v9h14V10ZM7 12h2v2H7v-2Zm4 0h2v2h-2v-2Zm4 0h2v2h-2v-2Zm-8 4h2v2H7v-2Zm4 0h2v2h-2v-2Z"/>
+                    </svg>
+                </span>
+
+                <span class="workshop-navigation__text">
+                    Производственный календарь
+                </span>
+            </a>
+
+        </nav>
+
+        <div class="workshop-sidebar__footer">
+            <form th:action="@{/logout}" method="post">
+                <input th:if="${_csrf != null}"
+                       type="hidden"
+                       th:name="${_csrf.parameterName}"
+                       th:value="${_csrf.token}">
+
+                <button type="submit" class="workshop-sidebar__logout">
+                    <span class="workshop-sidebar__status-dot"></span>
+                    <span class="workshop-sidebar__logout-text">
+                        Выйти
+                    </span>
+                </button>
+            </form>
+        </div>
+    </div>
+</aside>
+
+<!-- =========================================================
+     ВЕРХНЯЯ ПАНЕЛЬ
+     ========================================================= -->
+<th:block th:fragment="topbar">
+
+    <header class="topbar workshop-topbar">
+
+        <div class="workshop-topbar__left">
+
+            <span class="workshop-topbar__section">
+                Модуль руководителя цеха
+            </span>
+        </div>
+
+        <div class="workshop-topbar__right">
+
+            <time id="workshopDateTime"
+                  class="workshop-clock"
+                  datetime="">
+                01.01.2026, 00:00:00
+            </time>
+
+            <div th:with="
+                    fullName=${
+                        currentUser != null
+                        and !#strings.isEmpty(currentUser.fullName)
+                            ? #strings.trim(currentUser.fullName)
+                            : (
+                                #authentication != null
+                                and !#strings.isEmpty(#authentication.name)
+                                    ? #authentication.name
+                                    : 'Пользователь'
+                            )
+                    }
+                 ">
+
+                <div class="workshop-topbar__user"
+                     th:with="nameParts=${#strings.arraySplit(fullName, ' ')}">
+
+                    <span class="workshop-topbar__avatar"
+                          th:text="${
+                              #arrays.length(nameParts) > 1
+                                  ? #strings.toUpperCase(
+                                      #strings.substring(nameParts[0], 0, 1)
+                                      +
+                                      #strings.substring(nameParts[1], 0, 1)
+                                  )
+                                  : #strings.toUpperCase(
+                                      #strings.substring(nameParts[0], 0, 1)
+                                  )
+                          }">
+                        ИИ
+                    </span>
+
+                    <span class="workshop-topbar__user-data">
+
+                        <strong class="workshop-topbar__username"
+                                th:text="${
+                                    #arrays.length(nameParts) > 1
+                                        ? nameParts[0]
+                                          + ' '
+                                          + #strings.substring(nameParts[1], 0, 1)
+                                          + '.'
+                                        : fullName
+                                }">
+                            Иванов И.
+                        </strong>
+
+                        <small class="workshop-topbar__specialty"
+                               th:text="${
+                                   currentUser != null
+                                   and !#strings.isEmpty(currentUser.specialty)
+                                       ? currentUser.specialty
+                                       : 'Должность не указана'
+                               }">
+                            Мастер участка
+                        </small>
+                    </span>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Режим входа в интерфейс другой роли: возврат доступен с любой страницы -->
+    <div th:replace="~{fragments/impersonation :: bar}"></div>
+</th:block>
+
+
+<!-- =========================================================
+     ОБЩИЕ СКРИПТЫ
+     ========================================================= -->
+<th:block th:fragment="commonScripts">
+    <script th:src="@{/workshop/js/common.js}"></script>
+</th:block>
+
+</body>
+</html>

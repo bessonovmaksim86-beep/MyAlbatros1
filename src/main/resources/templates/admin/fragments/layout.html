@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="ru"
+      xmlns:th="http://www.thymeleaf.org">
+
+<body>
+
+<!-- =========================================================
+     БОКОВОЕ МЕНЮ МОДУЛЯ АДМИНИСТРИРОВАНИЯ
+
+     Пункт «Операции» отсутствует намеренно: операции ведёт
+     технологический отдел (/technology/operation), и второй вход в ту же
+     таблицу означал бы два набора правил на один справочник.
+
+     Второй блок меню — интерфейсы ролей: данные отдаёт AdminViewAdvice,
+     поэтому список виден на каждой странице модуля, а не только на
+     странице «Роли и вход».
+     ========================================================= -->
+<aside th:fragment="sidebar(activePage)"
+       id="adminSidebar"
+       class="sidebar admin-sidebar"
+       aria-label="Навигация модуля администрирования">
+
+    <div class="admin-sidebar__inner">
+
+        <a class="department-brand"
+           th:href="@{/admin/general}"
+           title="Перейти к сводке администратора">
+
+            <span class="department-brand__logo">
+                <img th:src="@{/images/albatros-logo.jpg}"
+                     src="/images/albatros-logo.jpg"
+                     alt="Предприятие Альбатрос">
+            </span>
+
+            <span class="department-brand__system">
+                Производственная система
+            </span>
+
+            <strong class="department-brand__department">
+                Администрирование
+            </strong>
+        </a>
+
+        <!--
+            Ролей в системе больше, чем помещается в колонку, поэтому навигация
+            вынесена в прокручиваемую область: футер с выходом остаётся внизу.
+        -->
+        <div class="admin-sidebar__scroll">
+
+            <div class="admin-sidebar__divider"></div>
+
+            <div class="admin-sidebar__section-title">
+                Система
+            </div>
+
+            <nav class="admin-navigation">
+
+                <a class="admin-navigation__item"
+                   th:classappend="${activePage == 'general'} ? ' is-active' : ''"
+                   th:href="@{/admin/general}"
+                   title="Сводка по базе данных">
+
+                    <span class="admin-navigation__icon">
+                        <svg viewBox="0 0 24 24" aria-hidden="true">
+                            <path d="M3 13h8V3H3v10Zm0 8h8v-6H3v6Zm10 0h8V11h-8v10Zm0-18v6h8V3h-8Z"/>
+                        </svg>
+                    </span>
+
+                    <span class="admin-navigation__text">
+                        Сводка
+                    </span>
+                </a>
+
+                <a class="admin-navigation__item"
+                   th:classappend="${activePage == 'users'} ? ' is-active' : ''"
+                   th:href="@{/admin/users}"
+                   title="Учётные записи сотрудников">
+
+                    <span class="admin-navigation__icon">
+                        <svg viewBox="0 0 24 24" aria-hidden="true">
+                            <path d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8Zm0 2c-3.31 0-8 1.66-8 5v3h16v-3c0-3.34-4.69-5-8-5Z"/>
+                        </svg>
+                    </span>
+
+                    <span class="admin-navigation__text">
+                        Пользователи
+                    </span>
+                </a>
+
+                <a class="admin-navigation__item"
+                   th:classappend="${activePage == 'roles'} ? ' is-active' : ''"
+                   th:href="@{/admin/roles}"
+                   title="Роли и вход в интерфейс другой роли">
+
+                    <span class="admin-navigation__icon">
+                        <svg viewBox="0 0 24 24" aria-hidden="true">
+                            <path d="M12 2 4 5v6c0 5 3.4 9.7 8 11 4.6-1.3 8-6 8-11V5l-8-3Zm0 9h6c-.4 3.7-2.7 7.1-6 8.3V11H6V6.3l6-2.2V11Z"/>
+                        </svg>
+                    </span>
+
+                    <span class="admin-navigation__text">
+                        Роли и вход
+                    </span>
+                </a>
+
+                <a class="admin-navigation__item"
+                   th:classappend="${activePage == 'holidays'} ? ' is-active' : ''"
+                   th:href="@{/admin/holidays}"
+                   title="Выходные и праздничные дни всего предприятия">
+
+                    <span class="admin-navigation__icon">
+                        <svg viewBox="0 0 24 24" aria-hidden="true">
+                            <path d="M7 2h2v2h6V2h2v2h3a1 1 0 0 1 1 1v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a1 1 0 0 1 1-1h3V2Zm12 8H5v9h14V10Zm-9.6 2.6 1.5 1.5 3-3 1.4 1.4-4.4 4.4-2.9-2.9 1.4-1.4Z"/>
+                        </svg>
+                    </span>
+
+                    <span class="admin-navigation__text">
+                        Выходные и праздники
+                    </span>
+                </a>
+
+            </nav>
+
+            <div class="admin-sidebar__divider"></div>
+
+            <div class="admin-sidebar__section-title">
+                Интерфейсы ролей
+            </div>
+
+            <!--
+                Вход в чужой интерфейс меняет аутентификацию сессии, поэтому
+                это POST-форма, а не ссылка: кнопка «назад» в браузере не должна
+                его повторять. Тот же принцип, что в разделе «Роли и вход».
+            -->
+            <div class="admin-navigation admin-navigation_roles"
+                 th:if="${roleMenuSections != null}">
+
+                <th:block th:each="section : ${roleMenuSections}">
+
+                    <div class="admin-navigation__group"
+                         th:text="${section.title}">
+                        Руководитель цеха
+                    </div>
+
+                    <th:block th:each="entry : ${section.entries}">
+
+                        <form th:if="${entry.canEnter()}"
+                              th:action="@{/admin/switch/{id}(id=${entry.userId})}"
+                              method="post">
+
+                            <input th:if="${_csrf != null}"
+                                   type="hidden"
+                                   th:name="${_csrf.parameterName}"
+                                   th:value="${_csrf.token}">
+
+                            <button type="submit"
+                                    class="admin-navigation__item admin-navigation__item_button"
+                                    th:title="${
+                                        'Войти в интерфейс роли «'
+                                        + entry.displayName
+                                        + '» от имени '
+                                        + entry.userName
+                                    }">
+
+                                <span class="admin-navigation__icon">
+                                    <svg viewBox="0 0 24 24" aria-hidden="true">
+                                        <path d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8Zm0 2c-3.31 0-8 1.66-8 5v3h16v-3c0-3.34-4.69-5-8-5Z"/>
+                                    </svg>
+                                </span>
+
+                                <span class="admin-navigation__text"
+                                      th:text="${entry.displayName}">
+                                    Мастер цеха
+                                </span>
+
+                                <span class="admin-navigation__counter"
+                                      th:if="${entry.userCount > 1}"
+                                      th:text="${entry.userCount}">
+                                    3
+                                </span>
+                            </button>
+                        </form>
+
+                        <span class="admin-navigation__item is-disabled"
+                              th:unless="${entry.canEnter()}"
+                              title="Нет действующих учётных записей с этой ролью">
+
+                            <span class="admin-navigation__icon">
+                                <svg viewBox="0 0 24 24" aria-hidden="true">
+                                    <path d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8Zm0 2c-3.31 0-8 1.66-8 5v3h16v-3c0-3.34-4.69-5-8-5Z"/>
+                                </svg>
+                            </span>
+
+                            <span class="admin-navigation__text"
+                                  th:text="${entry.displayName}">
+                                Мастер цеха
+                            </span>
+                        </span>
+                    </th:block>
+                </th:block>
+            </div>
+
+        </div>
+
+        <div class="admin-sidebar__footer">
+            <form th:action="@{/logout}" method="post">
+                <input th:if="${_csrf != null}"
+                       type="hidden"
+                       th:name="${_csrf.parameterName}"
+                       th:value="${_csrf.token}">
+
+                <button type="submit" class="admin-sidebar__logout">
+                    <span class="admin-sidebar__status-dot"></span>
+                    <span class="admin-sidebar__logout-text">
+                        Выйти
+                    </span>
+                </button>
+            </form>
+        </div>
+    </div>
+</aside>
+
+<!-- =========================================================
+     ВЕРХНЯЯ ПАНЕЛЬ
+     ========================================================= -->
+<th:block th:fragment="topbar">
+
+    <header class="topbar admin-topbar">
+
+        <div class="admin-topbar__left">
+
+            <span class="admin-topbar__section">
+                Модуль администрирования
+            </span>
+        </div>
+
+        <div class="admin-topbar__right">
+
+            <time id="adminDateTime"
+                  class="admin-clock"
+                  datetime="">
+                01.01.2026, 00:00:00
+            </time>
+
+            <div th:with="nameParts=${#strings.arraySplit(userDisplayName, ' ')}"
+                 class="admin-topbar__user">
+
+                <span class="admin-topbar__avatar"
+                      th:text="${
+                          #arrays.length(nameParts) > 1
+                              ? #strings.toUpperCase(
+                                  #strings.substring(nameParts[0], 0, 1)
+                                  +
+                                  #strings.substring(nameParts[1], 0, 1)
+                              )
+                              : #strings.toUpperCase(
+                                  #strings.substring(nameParts[0], 0, 1)
+                              )
+                      }">
+                    АА
+                </span>
+
+                <span class="admin-topbar__user-data">
+
+                    <strong class="admin-topbar__username"
+                            th:text="${userDisplayName}">
+                        Администратор А.
+                    </strong>
+
+                    <small class="admin-topbar__specialty"
+                           th:text="${userPosition}">
+                        Администратор системы
+                    </small>
+                </span>
+            </div>
+        </div>
+    </header>
+
+    <!-- Режим входа в интерфейс другой роли: возврат доступен с любой страницы -->
+    <div th:replace="~{fragments/impersonation :: bar}"></div>
+</th:block>
+
+
+<!-- =========================================================
+     ОБЩИЕ СКРИПТЫ
+     ========================================================= -->
+<th:block th:fragment="commonScripts">
+    <script th:src="@{/admin/js/common.js}"></script>
+</th:block>
+
+</body>
+</html>

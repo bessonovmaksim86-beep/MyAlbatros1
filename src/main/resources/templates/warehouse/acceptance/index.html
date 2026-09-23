@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="ru"
+      xmlns:th="http://www.thymeleaf.org">
+
+<head>
+    <meta charset="UTF-8">
+
+    <meta name="viewport"
+          content="width=device-width, initial-scale=1">
+
+    <title>Приёмка подсборок из БВК</title>
+
+    <link rel="stylesheet"
+          th:href="@{/technology/css/technology.css}">
+
+    <link rel="stylesheet"
+          th:href="@{/technology/css/common.css}">
+
+    <link rel="stylesheet"
+          th:href="@{/warehouse/css/warehouse.css}">
+</head>
+
+<body>
+
+<div class="app-shell">
+
+    <aside th:replace="~{warehouse/fragments/layout
+            :: sidebar('acceptance')}">
+    </aside>
+
+    <main class="main">
+
+        <header th:replace="~{warehouse/fragments/layout
+                :: topbar}">
+        </header>
+
+        <div class="page-content warehouse-page">
+
+            <div class="page-head">
+
+                <div class="page-title">
+
+                    <h1>Приёмка подсборок из БВК</h1>
+
+                    <p>
+                        Партии, вернувшиеся от бюро входного контроля:
+                        кладовщик вносит номера ячеек, которые реально
+                        вернулись на склад, и проводит приёмку
+                    </p>
+
+                </div>
+
+                <div class="page-head-actions">
+
+                    <a class="btn secondary"
+                       th:href="@{/warehouse/receiving}">
+                        Оприходование
+                    </a>
+
+                    <a class="btn secondary"
+                       th:href="@{/warehouse/general}">
+                        Обзор склада
+                    </a>
+
+                </div>
+            </div>
+
+            <div class="alert success"
+                 th:if="${successMessage}"
+                 th:text="${successMessage}">
+            </div>
+
+            <div class="alert danger"
+                 th:if="${errorMessage}"
+                 th:text="${errorMessage}">
+            </div>
+
+            <section class="card">
+
+                <div class="card-head">
+
+                    <div>
+
+                        <h2>Партии после входного контроля</h2>
+
+                        <small>
+                            В список попадают партии с закрытой
+                            проверкой БВК. Ячейки, отсеянные на брак,
+                            на склад не возвращаются — в поле приёмки
+                            они не предлагаются
+                        </small>
+
+                    </div>
+
+                    <span class="badge"
+                          th:if="${awaitingAcceptanceCount != null
+                                  and awaitingAcceptanceCount > 0}">
+
+                        Ожидают приёмки:
+
+                        <strong th:text="${awaitingAcceptanceCount}">
+                            1
+                        </strong>
+                    </span>
+                </div>
+
+                <div class="card-body">
+
+                    <div class="alert danger"
+                         th:if="${batches == null or #lists.isEmpty(batches)}">
+
+                        <p>
+                            Партий, вернувшихся от БВК, пока нет:
+                            приёмку открывают по приходу, по которому
+                            бюро входного контроля закрыло карточку
+                            проверки
+                        </p>
+
+                    </div>
+
+                    <div class="table-wrap"
+                         th:unless="${batches == null or #lists.isEmpty(batches)}">
+
+                        <table class="data-table warehouse-batch-table">
+
+                            <thead>
+
+                            <tr>
+                                <th>Поставщик</th>
+                                <th>Ордер</th>
+                                <th>Подсборка</th>
+                                <th>В партии</th>
+                                <th>На брак</th>
+                                <th>Вернётся</th>
+                                <th>Номера</th>
+                                <th>Статус</th>
+                                <th></th>
+                            </tr>
+
+                            </thead>
+
+                            <tbody>
+
+                            <tr th:each="row : ${batches}">
+
+                                <td th:text="${row.batch.supplierName}">
+                                    ООО «Компонент»
+                                </td>
+
+                                <td th:text="${row.batch.incomingOrderNumber}">
+                                    ТОРГ-12/44
+                                </td>
+
+                                <td th:text="${row.batch.cellLabel}">
+                                    1212 — Подсборка ЯПР56
+                                </td>
+
+                                <td th:text="${row.batch.quantity}">
+                                    4
+                                </td>
+
+                                <td>
+                                    <span th:if="${row.defectCount > 0}"
+                                          th:text="${row.defectCount}">
+                                        2
+                                    </span>
+
+                                    <span th:unless="${row.defectCount > 0}">
+                                        —
+                                    </span>
+                                </td>
+
+                                <td>
+                                    <strong th:text="${row.availableCount}">
+                                        2
+                                    </strong>
+                                </td>
+
+                                <td class="warehouse-number-cell"
+                                    th:text="${row.batch.numberRangeLabel}">
+                                    121200022 … 121200025
+                                </td>
+
+                                <td>
+                                    <span class="status"
+                                          th:classappend="' ' + ${row.batch.statusBadgeClass}"
+                                          th:text="${row.batch.statusLabel}">
+                                        Оприходовано
+                                    </span>
+
+                                    <small class="warehouse-cell-note"
+                                           th:if="${row.batch.accepted}"
+                                           th:text="${
+                                               row.batch.acceptedQuantity
+                                               + ' яч. · '
+                                               + row.batch.formattedAcceptedAt
+                                           }">
+                                        2 яч. · 23.09.2026 14:05
+                                    </small>
+                                </td>
+
+                                <td class="table-actions">
+
+                                    <!--
+                                        Проводить приёмку можно только
+                                        по партии, откуда хоть одна
+                                        ячейка вернулась: если всю её
+                                        отсеяли на брак, принимать
+                                        нечего, и кнопка проведения
+                                        предлагаться не должна.
+                                    -->
+                                    <a class="btn primary compact"
+                                       th:if="${!row.batch.accepted
+                                               and row.availableCount > 0}"
+                                       th:href="@{/warehouse/acceptance/{id}(id=${row.batch.id})}">
+                                        Принять на склад
+                                    </a>
+
+                                    <a class="btn secondary compact"
+                                       th:unless="${!row.batch.accepted
+                                               and row.availableCount > 0}"
+                                       th:href="@{/warehouse/acceptance/{id}(id=${row.batch.id})}">
+                                        <span th:if="${row.batch.accepted}">
+                                            Смотреть приёмку
+                                        </span>
+
+                                        <span th:unless="${row.batch.accepted}">
+                                            Смотреть
+                                        </span>
+                                    </a>
+
+                                </td>
+
+                            </tr>
+
+                            </tbody>
+                        </table>
+
+                    </div>
+
+                </div>
+            </section>
+
+        </div>
+    </main>
+</div>
+
+<th:block th:replace="~{warehouse/fragments/layout
+        :: commonScripts}">
+</th:block>
+
+</body>
+</html>

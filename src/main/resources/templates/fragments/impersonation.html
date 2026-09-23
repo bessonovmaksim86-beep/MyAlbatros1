@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="ru"
+      xmlns:th="http://www.thymeleaf.org">
+
+<body>
+
+<!-- =========================================================
+     ПЛАШКА РЕЖИМА «В ИНТЕРФЕЙСЕ ДРУГОЙ РОЛИ»
+
+     Общий фрагмент для всех модулей: администратор, вошедший под
+     сотрудника, прав на /admin/** уже не имеет, поэтому ссылка на
+     возврат обязана быть видна на любой странице, а не только в
+     админке. Форма ведёт на /switch/exit — адрес вне /admin/**.
+     ========================================================= -->
+<div th:fragment="bar"
+     class="impersonation-bar"
+     th:if="${impersonation != null}">
+
+    <span class="impersonation-bar__text">
+
+        <strong class="impersonation-bar__title"
+                th:text="${
+                    'Вы просматриваете интерфейс роли «'
+                    + impersonation.roleDisplayName
+                    + '» от имени '
+                    + impersonation.displayName
+                }">
+            Вы просматриваете интерфейс роли «Мастер цеха»
+        </strong>
+
+        <span class="impersonation-bar__note"
+              th:text="${
+                  'Ваша учётная запись: '
+                  + impersonation.adminUsername
+                  + '. Действия сохраняются за сотрудником, под которого вы вошли.'
+              }">
+            Ваша учётная запись: admin
+        </span>
+    </span>
+
+    <form th:action="@{/switch/exit}" method="post">
+        <input th:if="${_csrf != null}"
+               type="hidden"
+               th:name="${_csrf.parameterName}"
+               th:value="${_csrf.token}">
+
+        <button type="submit" class="btn primary">
+            Вернуться в администрирование
+        </button>
+    </form>
+</div>
+
+</body>
+</html>

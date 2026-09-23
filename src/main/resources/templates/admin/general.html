@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="ru"
+      xmlns:th="http://www.thymeleaf.org">
+
+<head>
+    <meta charset="UTF-8">
+
+    <meta name="viewport"
+          content="width=device-width, initial-scale=1">
+
+    <title>Сводка администратора</title>
+
+    <link rel="stylesheet"
+          th:href="@{/technology/css/technology.css}">
+
+    <link rel="stylesheet"
+          th:href="@{/technology/css/common.css}">
+
+    <link rel="stylesheet"
+          th:href="@{/admin/css/admin.css}">
+</head>
+
+<body>
+
+<div class="app-shell">
+
+    <aside th:replace="~{admin/fragments/layout
+            :: sidebar('general')}">
+    </aside>
+
+    <main class="main">
+
+        <header th:replace="~{admin/fragments/layout
+                :: topbar}">
+        </header>
+
+        <div class="page-content admin-page">
+
+            <div class="page-head">
+
+                <div>
+
+                    <h1>Сводка по системе</h1>
+
+                    <p>
+                        Сколько записей в базе и чем заняты учётные записи.
+                        Данные справочников и заказов считаются по всей базе,
+                        без границы подразделения.
+                    </p>
+                </div>
+
+                <a class="btn primary"
+                   th:href="@{/admin/users}">
+                    Управление пользователями
+                </a>
+            </div>
+
+            <div class="alert success"
+                 th:if="${successMessage}"
+                 th:text="${successMessage}">
+            </div>
+
+            <div class="alert danger"
+                 th:if="${errorMessage}"
+                 th:text="${errorMessage}">
+            </div>
+
+            <div class="stats">
+
+                <div class="stat">
+                    <small>Учётных записей</small>
+                    <strong th:text="${userCount}">18</strong>
+                    <span>из них действующих
+                        <b th:text="${activeUserCount}">16</b>
+                    </span>
+                </div>
+
+                <div class="stat">
+                    <small>Администраторов</small>
+                    <strong th:text="${administratorCount}">1</strong>
+                    <span>доступ к этому разделу</span>
+                </div>
+
+                <div class="stat">
+                    <small>Ролей в системе</small>
+                    <strong th:text="${roleCount}">12</strong>
+                    <span>справочник ролей</span>
+                </div>
+
+                <div class="stat">
+                    <small>Техпроцессов</small>
+                    <strong th:text="${techProcessCount}">7</strong>
+                    <span>действующих</span>
+                </div>
+
+                <div class="stat">
+                    <small>Рабочих мест</small>
+                    <strong th:text="${workPlaceCount}">24</strong>
+                    <span>действующих</span>
+                </div>
+            </div>
+
+            <section class="card gap">
+
+                <div class="card-head">
+
+                    <div>
+
+                        <h2>Справочники</h2>
+
+                        <p>
+                            Записи, которые наполняют технологический отдел и
+                            диспетчерский отдел; администратор видит их объём,
+                            но не редактирует из этого раздела.
+                        </p>
+                    </div>
+
+                    <a class="btn secondary"
+                       th:href="@{/technology/general}">
+                        Технологический отдел
+                    </a>
+                </div>
+
+                <div class="card-body">
+
+                    <div class="table-wrap">
+
+                        <table>
+                            <thead>
+                            <tr>
+                                <th>Справочник</th>
+                                <th>Записей</th>
+                                <th>Где ведётся</th>
+                            </tr>
+                            </thead>
+
+                            <tbody>
+                            <tr>
+                                <td>Классификаторы изделий</td>
+                                <td th:text="${classifierCount}">40</td>
+                                <td>Технологический отдел</td>
+                            </tr>
+                            <tr>
+                                <td>Операции</td>
+                                <td th:text="${operationCount}">65</td>
+                                <td>Технологический отдел</td>
+                            </tr>
+                            <tr>
+                                <td>Заказы покупателей</td>
+                                <td th:text="${customerOrderCount}">12</td>
+                                <td>Диспетчерский отдел</td>
+                            </tr>
+                            <tr>
+                                <td>Производственные заказы</td>
+                                <td th:text="${productionOrderCount}">18</td>
+                                <td>Диспетчерский отдел</td>
+                            </tr>
+                            <tr>
+                                <td>Контрагенты</td>
+                                <td th:text="${customerCount}">9</td>
+                                <td>Диспетчерский отдел</td>
+                            </tr>
+                            <tr>
+                                <td>Приоритеты заказов</td>
+                                <td th:text="${priorityCount}">4</td>
+                                <td>Диспетчерский отдел</td>
+                            </tr>
+                            <tr>
+                                <td>Привязки сотрудников к цехам</td>
+                                <td th:text="${staffBindingCount}">15</td>
+                                <td>Модуль руководителя цеха</td>
+                            </tr>
+                            </tbody>
+                        </table>
+                    </div>
+
+                </div>
+
+            </section>
+
+            <section class="card">
+
+                <div class="card-head">
+
+                    <div>
+
+                        <h2>Разделы администратора</h2>
+
+                        <p>
+                            Всё, что меняется только здесь: учётные записи,
+                            вход в интерфейс другой роли и нерабочие дни
+                            всего предприятия.
+                        </p>
+                    </div>
+                </div>
+
+                <div class="card-body">
+
+                    <div class="cell-grid">
+
+                        <!--
+                            Кнопку раздела ставят в строку заголовка,
+                            справа: под описанием она наезжала на подпись,
+                            когда описание переносилось на две строки.
+                        -->
+                        <div class="cell">
+                            <div class="cell-top">
+                                <strong>Пользователи</strong>
+
+                                <a class="btn secondary"
+                                   th:href="@{/admin/users}">
+                                    Открыть
+                                </a>
+                            </div>
+
+                            <p class="cell-meta">
+                                Создание, блокировка и сброс паролей
+                            </p>
+                        </div>
+
+                        <div class="cell">
+                            <div class="cell-top">
+                                <strong>Роли и вход</strong>
+
+                                <a class="btn secondary"
+                                   th:href="@{/admin/roles}">
+                                    Открыть
+                                </a>
+                            </div>
+
+                            <p class="cell-meta">
+                                Проверка интерфейса любой роли из списка
+                            </p>
+                        </div>
+
+                        <div class="cell">
+                            <div class="cell-top">
+                                <strong>Выходные и праздники</strong>
+
+                                <a class="btn secondary"
+                                   th:href="@{/admin/holidays}">
+                                    Открыть
+                                </a>
+                            </div>
+
+                            <p class="cell-meta">
+                                Нерабочие дни для всех сотрудников
+                            </p>
+                        </div>
+                    </div>
+
+                </div>
+
+            </section>
+
+        </div>
+    </main>
+</div>
+
+<th:block th:replace="~{admin/fragments/layout
+        :: commonScripts}">
+</th:block>
+
+</body>
+</html>
