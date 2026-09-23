@@ -86,6 +86,15 @@ public class SecurityConfig {
                          */
                         .requestMatchers("/input-control", "/input-control/**")
                         .hasRole("BVK_EXECUTOR")
+                        /*
+                         * Интерфейс руководителя службы качества: разбор
+                         * изолятора брака и заказы на ремонт. Модуль читает
+                         * те же карточки входного контроля, что и бюро, но
+                         * решает по ним свою задачу — поэтому право на него
+                         * есть только у роли руководителя СК.
+                         */
+                        .requestMatchers("/quality", "/quality/**")
+                        .hasRole("SK_GENERAL")
                         .anyRequest().authenticated()
                 )
                 .formLogin(form -> form

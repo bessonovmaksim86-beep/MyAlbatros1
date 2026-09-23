@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="ru"
+      xmlns:th="http://www.thymeleaf.org">
+
+<head>
+    <meta charset="UTF-8">
+
+    <meta name="viewport"
+          content="width=device-width, initial-scale=1">
+
+    <title>Изолятор брака</title>
+
+    <link rel="stylesheet"
+          th:href="@{/technology/css/technology.css}">
+
+    <link rel="stylesheet"
+          th:href="@{/technology/css/common.css}">
+
+    <link rel="stylesheet"
+          th:href="@{/input-control/css/input-control.css}">
+</head>
+
+<body>
+
+<div class="app-shell">
+
+    <aside th:replace="~{input-control/fragments/layout
+            :: sidebar('quarantine')}">
+    </aside>
+
+    <main class="main">
+
+        <header th:replace="~{input-control/fragments/layout
+                :: topbar}">
+        </header>
+
+        <div class="bvk-page">
+
+            <div class="page-head">
+
+                <div class="page-title">
+
+                    <h1>Изолятор брака</h1>
+
+                    <p>
+                        Забракованные ячейки, оставленные на
+                        предприятии: в производство они не пойдут, а
+                        причины и номера нужны для разбора брака
+                    </p>
+
+                </div>
+
+                <div class="page-head-actions">
+
+                    <a class="btn secondary"
+                       th:href="@{/input-control/control}">
+                        К списку партий
+                    </a>
+
+                </div>
+            </div>
+
+            <div class="alert success"
+                 th:if="${successMessage}"
+                 th:text="${successMessage}">
+            </div>
+
+            <div class="alert danger"
+                 th:if="${errorMessage}"
+                 th:text="${errorMessage}">
+            </div>
+
+            <section class="card">
+
+                <div class="card-head">
+
+                    <div>
+
+                        <h2>Ячейки в изоляторе</h2>
+
+                        <small>
+                            В реестр попадают группы брака закрытых
+                            проверок с решением «Перемещение в изолятор
+                            брака»: партию бракуют частями, поэтому на
+                            одну партию может приходиться несколько
+                            строк — по каждой изоляторной группе
+                        </small>
+
+                    </div>
+
+                    <span class="bvk-counter"
+                          th:if="${quarantine != null and !#lists.isEmpty(quarantine)}">
+
+                        Строк брака:
+
+                        <strong th:text="${#lists.size(quarantine)}">
+                            1
+                        </strong>
+                    </span>
+                </div>
+
+                <div class="card-body">
+
+                    <div class="alert danger"
+                         th:if="${quarantine == null or #lists.isEmpty(quarantine)}">
+
+                        <p>
+                            В изоляторе брака пусто: реестр заполняется,
+                            когда контролёр закрывает проверку с
+                            решением «Перемещение в изолятор брака»
+                            по группе брака
+                        </p>
+
+                    </div>
+
+                    <div class="table-wrap"
+                         th:unless="${quarantine == null or #lists.isEmpty(quarantine)}">
+
+                        <table class="data-table bvk-batch-table">
+
+                            <thead>
+
+                            <tr>
+                                <th>Поставщик</th>
+                                <th>Ордер</th>
+                                <th>Подсборка</th>
+                                <th>Состав брака</th>
+                                <th>Причина</th>
+                                <th>Проверка</th>
+                                <th>Контролёр</th>
+                                <th></th>
+                            </tr>
+
+                            </thead>
+
+                            <tbody>
+
+                            <tr th:each="rec : ${quarantine}">
+
+                                <td th:text="${rec.batch.supplierName}">
+                                    ООО «Компонент»
+                                </td>
+
+                                <td th:text="${rec.batch.incomingOrderNumber}">
+                                    ТОРГ-12/44
+                                </td>
+
+                                <td th:text="${rec.batch.cellLabel}">
+                                    1212 — Подсборка ЯПР56
+                                </td>
+
+                                <td class="bvk-number-cell"
+                                    th:text="${rec.compositionLabel}">
+                                    2 яч.: 121200023, 121200024
+                                </td>
+
+                                <td th:text="${rec.reasonChainLabel}">
+                                    Механическое повреждение → Скол корпуса
+                                </td>
+
+                                <td>
+                                    <div class="bvk-cell-stack">
+
+                                        <span class="status"
+                                              th:classappend="' ' + ${rec.group.decisionBadgeClass}"
+                                              th:text="${rec.group.decisionLabel}">
+                                            Перемещение в изолятор брака
+                                        </span>
+
+                                        <small class="mono"
+                                               th:text="${rec.card.formattedCompletedAt}">
+                                            21.09.2026 11:20
+                                        </small>
+                                    </div>
+                                </td>
+
+                                <td th:text="${rec.card.checkerName}">
+                                    Иванов И.И.
+                                </td>
+
+                                <td class="table-actions">
+
+                                    <!--
+                                        Состав изолятора на месте не
+                                        правят: решение по партии меняют
+                                        новой проверкой, поэтому строку
+                                        ведут к карточке, которая
+                                        поместила ячейки в изолятор.
+                                    -->
+                                    <a class="btn secondary compact"
+                                       th:href="@{/input-control/control/{id}(id=${rec.card.id})}">
+                                        Карточка проверки
+                                    </a>
+
+                                </td>
+
+                            </tr>
+
+                            </tbody>
+                        </table>
+
+                    </div>
+
+                </div>
+            </section>
+
+        </div>
+    </main>
+</div>
+
+<th:block th:replace="~{input-control/fragments/layout
+        :: commonScripts}">
+</th:block>
+
+</body>
+</html>

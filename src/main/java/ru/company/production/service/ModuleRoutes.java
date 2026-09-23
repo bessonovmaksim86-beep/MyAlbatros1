@@ -55,7 +55,10 @@ public final class ModuleRoutes {
             new Destination("Склад полуфабрикатов", "/warehouse/general"),
 
             Role.BVK_EXECUTOR,
-            new Destination("Бюро входного контроля", "/input-control/general")
+            new Destination("Бюро входного контроля", "/input-control/general"),
+
+            Role.SK_GENERAL,
+            new Destination("Служба качества", "/quality/general")
     );
 
     private ModuleRoutes() {

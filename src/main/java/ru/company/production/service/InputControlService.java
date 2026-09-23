@@ -6,6 +6,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import ru.company.production.dto.InputControlForm;
 import ru.company.production.dto.InputControlResult;
+import ru.company.production.dto.QuarantineFilter;
 import ru.company.production.entity.AppUser;
 import ru.company.production.entity.CellReceivingBatch;
 import ru.company.production.entity.InputControlCard;
@@ -18,6 +19,7 @@ import ru.company.production.entity.InputControlDefectReason;
 import ru.company.production.entity.InputControlStatus;
 import ru.company.production.entity.InputControlType;
 import ru.company.production.entity.ProductSerial;
+import ru.company.production.entity.QuarantineCellKind;
 import ru.company.production.repository.CellReceivingBatchRepository;
 import ru.company.production.repository.InputControlCardCellRepository;
 import ru.company.production.repository.InputControlCardReasonRepository;
@@ -164,10 +166,90 @@ public class InputControlService {
      * обращалась бы к базе по разу на каждую возвратную группу.
      */
     @Transactional(readOnly = true)
-    public List<ReturnRecordView> findReturns() {
+    public List<DefectRecordView> findReturns() {
+        return defectRecords(groupRepository.findReturnGroupsDetailed());
+    }
 
-        List<InputControlDefectGroup> groups =
-                groupRepository.findReturnGroupsDetailed();
+    /** Партний, отправленных на возврат: счётчик в боковом меню. */
+    @Transactional(readOnly = true)
+    public long countReturns() {
+        return groupRepository.countReturnCards();
+    }
+
+    /**
+     * Реестр изолятора брака: группы брака, оставленные на
+     * предприятии.
+     *
+     * Устроен так же, как возврат, и собирает те же данные: у группы
+     * одинаковая структура независимо от исхода, поэтому строке
+     * изолятора нужны те же реквизиты партии, номера и цепочка причин.
+     * Смысл перечня другой — это не основание рекламации, а список
+     * ячеек, которые остались на предприятии и в производство не
+     * пойдут, поэтому его читают по группам, а не по партиям: у одной
+     * партии дефекты разные, и разбирать их построчно нужно именно
+     * здесь.
+     */
+    @Transactional(readOnly = true)
+    public List<DefectRecordView> findQuarantine() {
+        return defectRecords(groupRepository.findQuarantineGroupsDetailed());
+    }
+
+    /** Партний с ячейками в изоляторе брака: счётчик в боковом меню. */
+    @Transactional(readOnly = true)
+    public long countQuarantine() {
+        return groupRepository.countQuarantineCards();
+    }
+
+    /**
+     * Изолятор брака с отбором по фильтру службы качества.
+     *
+     * Разновидность, классификатор и причина отсекают группы в запросе,
+     * а не в памяти: руководителю нужен перечень конкретных ячеек, и
+     * отобранные до сборки строки не тянут номера и причины лишних
+     * групп. Причина берётся узлом дерева — выбранная причина верхнего
+     * уровня захватывает и её уточнения.
+     *
+     * Пустой фильтр равносилен {@link #findQuarantine()}: перечень
+     * открывают без отбора, условия добавляют по мере надобности.
+     */
+    @Transactional(readOnly = true)
+    public List<DefectRecordView> findQuarantine(QuarantineFilter filter) {
+        QuarantineFilter applied =
+                filter == null ? QuarantineFilter.empty() : filter;
+
+        return defectRecords(
+                groupRepository.findQuarantineGroupsFiltered(
+                        applied.kind(),
+                        applied.classifierId(),
+                        applied.reasonId()
+                )
+        );
+    }
+
+    /** Классификаторы, чьи ячейки есть в изоляторе: опции фильтра. */
+    @Transactional(readOnly = true)
+    public List<InputControlDefectGroupRepository.QuarantineClassifierOption>
+    findQuarantineClassifierOptions() {
+        return groupRepository.findQuarantineClassifierOptions();
+    }
+
+    /** Причины брака первого уровня: опции фильтра по типу брака. */
+    @Transactional(readOnly = true)
+    public List<InputControlDefectReason> findQuarantineReasonOptions() {
+        return defectReasonRepository.findRoots();
+    }
+
+    /**
+     * Строки реестра брака по выбранным группам.
+     *
+     * Сборку выносят в один метод, потому что возврат и изолятор
+     * различаются только отбором групп в репозитории: номера и причины
+     * подтягивают двумя пакетными запросами на весь список, и
+     * повторяющий этот код второй реестр обращался бы к базе дважды
+     * на тех же данных.
+     */
+    private List<DefectRecordView> defectRecords(
+            List<InputControlDefectGroup> groups) {
 
         if (groups.isEmpty()) {
             return List.of();
@@ -197,7 +279,7 @@ public class InputControlService {
                         ));
 
         return groups.stream()
-                .map(group -> new ReturnRecordView(
+                .map(group -> new DefectRecordView(
                         group.getCard(),
                         group.getCard().getBatch(),
                         group,
@@ -205,12 +287,6 @@ public class InputControlService {
                         reasonsByGroup.getOrDefault(group.getId(), List.of())
                 ))
                 .toList();
-    }
-
-    /** Партний, отправленных на возврат: счётчик в боковом меню. */
-    @Transactional(readOnly = true)
-    public long countReturns() {
-        return groupRepository.countReturnCards();
     }
 
     @Transactional(readOnly = true)
@@ -1166,15 +1242,17 @@ public class InputControlService {
     }
 
     /**
-     * Строка реестра возвратов: группа брака, ушедшая поставщику,
-     * вместе с партией и карточкой, породившими возврат.
+     * Строка реестра брака: группа с её партией и карточкой.
+     *
+     * Служит обоим реестрам — возврату поставщику и изолятору брака:
+     * у группы одинаковый набор реквизитов независимо от исхода,
+     * поэтому различать их двумя типами незачем.
      *
      * Партия и карточка переданы отдельно, а не читались бы из
      * ленивых связей: {@code open-in-view} выключен, а реестру нужны
-     * реквизиты рекламации (поставщик, ордер, диапазон) прямо в
-     * строке таблицы.
+     * реквизиты (поставщик, ордер, диапазон) прямо в строке таблицы.
      */
-    public record ReturnRecordView(
+    public record DefectRecordView(
             InputControlCard card,
             CellReceivingBatch batch,
             InputControlDefectGroup group,
@@ -1183,7 +1261,7 @@ public class InputControlService {
     ) {
 
         /**
-         * Состав возврата: «вся партия» подписывается диапазоном
+         * Состав группы: «вся партия» подписывается диапазоном
          * партии — перечислять её номера построчно незачем, состав
          * восстановлен по отметке группы.
          */
@@ -1195,13 +1273,31 @@ public class InputControlService {
                     : numbers.size() + " яч.: " + String.join(", ", numbers);
         }
 
-        /** Основание рекламации: цепочка причин через «→». */
+        /** Основание решения: цепочка причин через «→». */
         public String getReasonChainLabel() {
             return reasons.isEmpty()
                     ? "—"
                     : reasons.stream()
                     .map(InputControlCardReason::getDisplayLabel)
                     .collect(Collectors.joining(" → "));
+        }
+
+        /**
+         * Разновидность изделия строки: ячейка либо подсборка.
+         *
+         * Граница проходит по факту приёмки партии складом, а не по
+         * типу классификатора, — поэтому разновидность выводят из
+         * {@code batch.acceptedAt}, а не хранят в группе.
+         */
+        public QuarantineCellKind getKind() {
+            return QuarantineCellKind.ofAccepted(
+                    batch != null && batch.getAcceptedAt() != null
+            );
+        }
+
+        /** Подпись разновидности для колонок перечня качества. */
+        public String getKindLabel() {
+            return getKind().getDisplayName();
         }
     }
 

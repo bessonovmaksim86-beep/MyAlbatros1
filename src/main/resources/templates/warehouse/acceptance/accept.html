@@ -106,31 +106,6 @@
 
             </ol>
 
-            <div class="warehouse-confirm-note"
-                 th:if="${batch.accepted}">
-
-                <strong>Подсборка принята на склад</strong>
-
-                Приёмку провёл
-                <span th:text="${batch.acceptedByName}">
-                    Петров П. П.
-                </span>
-
-                <span th:text="${batch.formattedAcceptedAt}">
-                    23.09.2026 14:05
-                </span>
-
-                — принято
-                <span th:text="${batch.acceptedQuantity}">
-                    2
-                </span>
-                яч.; состав партии зафиксирован и изменению не подлежит.
-
-            </div>
-
-            <!-- =====================================================
-                 РЕКВИЗИТЫ ПАРТИИ И ИТОГ БВК
-                 ===================================================== -->
             <!-- =====================================================
                  КАРТОЧКА ОПРИХОВАНИЯ
 
@@ -345,6 +320,121 @@
 
                             <dd th:if="${#lists.isEmpty(defectNumbers)}">
                                 партия вернулась целиком
+                            </dd>
+                        </div>
+
+                    </dl>
+
+                </div>
+            </section>
+
+
+            <!-- =====================================================
+                 ПРИЁМКА НА СКЛАД
+
+                 Третий блок маршрута партии — по составу он такой же,
+                 как приход и итог контроля: подписи и значения, а не
+                 сплошная строка. Приёмку провести можно только раз,
+                 поэтому её реквизиты обязаны оставаться читаемыми и
+                 после проведения, когда форма уже не предлагается.
+                 ===================================================== -->
+            <section class="card">
+
+                <div class="card-head">
+
+                    <div>
+
+                        <h2>Приёмка на склад</h2>
+
+                        <small>
+                            <span th:if="${batch.accepted}">
+                                Приёмку провели — состав партии
+                                зафиксирован и изменению не подлежит
+                            </span>
+
+                            <span th:unless="${batch.accepted}">
+                                Приёмку проводят один раз: после
+                                проведения перечень принятых ячеек
+                                изменить нельзя
+                            </span>
+                        </small>
+
+                    </div>
+
+                    <span class="status"
+                          th:classappend="' ' + ${batch.statusBadgeClass}"
+                          th:text="${batch.statusLabel}">
+                        Подсборка принята на склад
+                    </span>
+                </div>
+
+                <div class="card-body">
+
+                    <dl class="warehouse-summary">
+
+                        <div class="warehouse-summary__row">
+
+                            <dt>Принято ячеек</dt>
+
+                            <dd th:if="${batch.accepted}"
+                                th:text="${batch.acceptedQuantity} + ' шт.'">
+                                2 шт.
+                            </dd>
+
+                            <dd th:unless="${batch.accepted}">
+                                приёмка не проведена
+                            </dd>
+                        </div>
+
+                        <div class="warehouse-summary__row">
+
+                            <dt>Принял на склад</dt>
+
+                            <dd th:text="${batch.acceptedByName}">
+                                Петров П. П.
+                            </dd>
+                        </div>
+
+                        <div class="warehouse-summary__row">
+
+                            <dt>Дата и время приёмки</dt>
+
+                            <dd th:text="${batch.formattedAcceptedAt}">
+                                23.09.2026 14:05
+                            </dd>
+                        </div>
+
+                        <div class="warehouse-summary__row">
+
+                            <dt>Не принято на брак</dt>
+
+                            <dd th:text="${
+                                #lists.isEmpty(defectNumbers)
+                                    ? 'нет'
+                                    : #lists.size(defectNumbers) + ' яч.'
+                            }">
+                                2 яч.
+                            </dd>
+                        </div>
+
+                        <div class="warehouse-summary__row span-2">
+
+                            <dt>Состав приёмки</dt>
+
+                            <dd class="mono"
+                                th:if="${batch.accepted
+                                        and !#lists.isEmpty(availableNumbers)}"
+                                th:text="${#strings.listJoin(availableNumbers, ', ')}">
+                                121200022, 121200025
+                            </dd>
+
+                            <dd th:if="${!batch.accepted}">
+                                приёмка не проведена
+                            </dd>
+
+                            <dd th:if="${batch.accepted
+                                        and #lists.isEmpty(availableNumbers)}">
+                                партия целиком осталась в браке
                             </dd>
                         </div>
 

@@ -45,6 +45,16 @@ public class InputControlViewAdvice {
                 inputControlService.countReturns()
         );
 
+        /*
+         * Счётчик изолятора — партии, а не ячейки: он отвечает на
+         * вопрос «по скольким партиям в изоляторе что-то лежит», а не
+         * «сколько ячеек там лежит» — второе видно в самом реестре.
+         */
+        model.addAttribute(
+                "quarantineCount",
+                inputControlService.countQuarantine()
+        );
+
         if (authentication == null
                 || !authentication.isAuthenticated()
                 || authentication instanceof AnonymousAuthenticationToken) {

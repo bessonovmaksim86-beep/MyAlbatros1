@@ -101,6 +101,24 @@ public class InputControlController {
     }
 
     /**
+     * Реестр изолятора брака.
+     *
+     * Список строят по группам брака с решением «изолятор»: в отличие
+     * от возврата он отвечает не на вопрос «кому вернуть», а на вопрос
+     * «какие ячейки остались на предприятии и в производство не
+     * пойдут». Поэтому строкой остаётся группа, а не партия: у одной
+     * партии дефекты разные, и в изоляторе их разбирают по отдельности.
+     */
+    @GetMapping({"/quarantine", "/quarantine/"})
+    public String quarantine(Model model) {
+
+        model.addAttribute("activePage", "quarantine");
+        model.addAttribute("quarantine", inputControlService.findQuarantine());
+
+        return "input-control/quarantine/index";
+    }
+
+    /**
      * Берёт партию в работу и открывает её карточку.
      *
      * POST, а не GET: создаётся запись карточки. Повторный вызов для

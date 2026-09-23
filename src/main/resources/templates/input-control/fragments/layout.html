@@ -115,6 +115,33 @@
                 </span>
             </a>
 
+            <a class="bvk-navigation__item"
+               th:classappend="${activePage == 'quarantine'} ? ' is-active' : ''"
+               th:href="@{/input-control/quarantine}"
+               title="Ячейки, оставленные в изоляторе брака">
+
+                <span class="bvk-navigation__icon">
+                    <svg viewBox="0 0 24 24" aria-hidden="true">
+                        <path d="M12 2 4 5v6.09c0 5.05 3.41 9.76 8 10.91 4.59-1.15 8-5.86 8-10.91V5l-8-3Zm1 15h-2v-2h2v2Zm0-4h-2V9h2v4Z"/>
+                    </svg>
+                </span>
+
+                <span class="bvk-navigation__text">
+                    Изолятор брака
+                </span>
+
+                <!--
+                    Счётчик — партии, а не ячейки: в меню нужно видеть,
+                    по скольким партиям в изоляторе что-то лежит, а не
+                    сколько именно ячеек там лежит.
+                -->
+                <span class="bvk-navigation__counter"
+                      th:if="${quarantineCount != null and quarantineCount > 0}"
+                      th:text="${quarantineCount}">
+                    1
+                </span>
+            </a>
+
         </nav>
 
         <div class="bvk-sidebar__footer">
