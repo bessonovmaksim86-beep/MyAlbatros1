@@ -209,6 +209,14 @@ public class InputControlService {
      * групп. Причина берётся узлом дерева — выбранная причина верхнего
      * уровня захватывает и её уточнения.
      *
+     * Разновидность уходит в запрос именем, а не перечислением: для
+     * enum-параметра в предикате {@code is null} Hibernate 6 не строит
+     * отображение значения
+     * ({@code Could not determine ValueMapping for SqmParameter}), а
+     * условие «фильтр не выбран» строит именно такой предикат. Строка
+     * сравнивается с тем же написанием, что лежит в колонке по
+     * {@code EnumType.STRING}, поэтому отсечение в базе не теряется.
+     *
      * Пустой фильтр равносилен {@link #findQuarantine()}: перечень
      * открывают без отбора, условия добавляют по мере надобности.
      */
@@ -217,9 +225,11 @@ public class InputControlService {
         QuarantineFilter applied =
                 filter == null ? QuarantineFilter.empty() : filter;
 
+        QuarantineCellKind kind = applied.kind();
+
         return defectRecords(
                 groupRepository.findQuarantineGroupsFiltered(
-                        applied.kind(),
+                        kind == null ? null : kind.name(),
                         applied.classifierId(),
                         applied.reasonId()
                 )
@@ -233,10 +243,19 @@ public class InputControlService {
         return groupRepository.findQuarantineClassifierOptions();
     }
 
-    /** Причины брака первого уровня: опции фильтра по типу брака. */
+    /**
+     * Причины брака всего дерева: опции фильтра по типу брака.
+     *
+     * Отдают типы вместе с уточнениями, а не только первый уровень:
+     * руководителю службы качества разбирать изолятор по конкретному
+     * виду дефекта («Скол корпуса»), а не только по типу («Механическое
+     * повреждение»), поэтому перечень фильтра строят по всему дереву.
+     * Родителя подтягивают {@code fetch} — {@code open-in-view}
+     * выключен, а шаблон группирует уточнения по ступени выше.
+     */
     @Transactional(readOnly = true)
     public List<InputControlDefectReason> findQuarantineReasonOptions() {
-        return defectReasonRepository.findRoots();
+        return defectReasonRepository.findAllActiveWithParent();
     }
 
     /**

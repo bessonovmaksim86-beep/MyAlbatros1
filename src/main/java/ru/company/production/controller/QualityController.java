@@ -62,6 +62,15 @@ public class QualityController {
         model.addAttribute("inWorkOrders", qualityService.countInWorkOrders());
         model.addAttribute("doneOrders", qualityService.countDoneOrders());
 
+        /*
+         * Сводку изолятора считают один раз и целиком: распределения по
+         * типам брака и поставщикам сводят в сервисе, где перечень ещё
+         * читается как данные. В шаблоне сводить строки было бы нельзя —
+         * open-in-view выключен, и счёт по поставщику обращался бы к
+         * ленивой связи уже при отрисовке.
+         */
+        model.addAttribute("overview", qualityService.overview());
+
         return "quality/general";
     }
 
@@ -93,7 +102,12 @@ public class QualityController {
                 "classifierOptions",
                 qualityService.findClassifierOptions()
         );
-        model.addAttribute("reasonOptions", qualityService.findReasonOptions());
+        /*
+         * Группы причин отдаёт сервис: тип и его виды сопоставляют там,
+         * где список ещё читается как данные. Шаблон на это не способен
+         * без риска оборвать рендеринг (см. QualityService.findReasonGroups).
+         */
+        model.addAttribute("reasonGroups", qualityService.findReasonGroups());
 
         return "quality/quarantine/index";
     }
@@ -295,18 +309,64 @@ public class QualityController {
         return "redirect:/quality/orders/" + id;
     }
 
-    /** Данные страницы выбора поставщика: состав, вид заказа, справочник. */
+    /**
+     * Данные страницы оформления ЗНП: состав, поставщик, справочники.
+     *
+     * Вид заказа передают подсказкой по составу — его не выбирают:
+     * однородный состав (одна разновидность и одно наименование, см.
+     * QualityService.requireHomogeneous) определяет назначение заказа
+     * однозначно. Разновидность и наименование отдают отдельными
+     * атрибутами, чтобы страница показывала их как уже известное, а не
+     * как поле ввода.
+     *
+     * Маршруты на ремонт (техпроцессы) на страницу не кладут: выбор
+     * техпроцесса из формы убран, а заказ силами СДП без маршрута база
+     * не принимает (chk_repair_order_sdp), поэтому и исполнителя на
+     * втором шаге выбирают только из поставщиков.
+     */
     private void renderNewOrder(
             Model model,
             RepairOrderForm form,
             List<QualityService.QuarantineCellRow> picked
     ) {
+        RepairOrderType suggested = QualityService.suggestOrderType(picked);
+
         model.addAttribute("activePage", "quarantine");
         model.addAttribute("pickedCells", picked);
         model.addAttribute("cellCount", picked.size());
-        model.addAttribute("orderTypes", RepairOrderType.values());
         model.addAttribute("suppliers", qualityService.findSuppliers());
+        model.addAttribute("suggestedOrderType", suggested);
+        model.addAttribute("suggestedOrderTypeLabel",
+                suggested == null ? "—" : suggested.getDisplayName());
+        model.addAttribute("orderKindLabel", orderKindLabel(picked));
+        model.addAttribute("orderClassifierLabel", orderClassifierLabel(picked));
         model.addAttribute("repairOrderForm", form);
+    }
+
+    /** Разновидность изделий состава: «Ячейка» или «Подсборка». */
+    private static String orderKindLabel(
+            List<QualityService.QuarantineCellRow> picked) {
+
+        if (picked == null || picked.isEmpty()) {
+            return "—";
+        }
+
+        QuarantineCellKind kind = picked.get(0).kind();
+
+        return kind == null ? "—" : kind.getDisplayName();
+    }
+
+    /** Наименование изделий состава — одно на весь заказ. */
+    private static String orderClassifierLabel(
+            List<QualityService.QuarantineCellRow> picked) {
+
+        if (picked == null || picked.isEmpty()) {
+            return "—";
+        }
+
+        String label = picked.get(0).getCellLabel();
+
+        return label == null || label.isBlank() ? "—" : label;
     }
 
     /**

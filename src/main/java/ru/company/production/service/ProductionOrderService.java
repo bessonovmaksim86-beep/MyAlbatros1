@@ -17,12 +17,18 @@ import ru.company.production.entity.ProductType;
 import ru.company.production.entity.ProductionItemStatus;
 import ru.company.production.entity.ProductionOrder;
 import ru.company.production.entity.ProductionOrderItem;
-import ru.company.production.entity.ProductionOrderStatus;
+import ru.company.production.entity.ProductionOrderStatus;      
+import ru.company.production.entity.TechProcess;
+import ru.company.production.entity.ZnpKind;
+import ru.company.production.repository.ClassifierRouteOptionView;
 import ru.company.production.repository.CustomerOrderRepository;
 import ru.company.production.repository.OperationRepository;
+import ru.company.production.repository.ProductClassifierRepository;
 import ru.company.production.repository.ProductSerialRepository;
 import ru.company.production.repository.ProductionOrderItemRepository;
 import ru.company.production.repository.ProductionOrderRepository;
+import ru.company.production.repository.TechProcessClassifierRepository;
+import ru.company.production.repository.TechProcessRepository;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -57,6 +63,9 @@ public class ProductionOrderService {
     private final ProductSerialRepository productSerialRepository;
     private final CustomerOrderRepository customerOrderRepository;
     private final OperationRepository operationRepository;
+    private final ProductClassifierRepository productClassifierRepository;
+    private final TechProcessRepository techProcessRepository;
+    private final TechProcessClassifierRepository techProcessClassifierRepository;
 
     /*
      * Комплектование ЗНП: привязка заказа к уже выпущенным серийникам.
@@ -120,6 +129,42 @@ public class ProductionOrderService {
         return operationRepository.findByOperationTypeCode(
                 OperationTypeCode.KITTING.name()
         );
+    }
+
+    /**
+     * Изделия указанного типа — выбор для группового или ремонтного
+     * заказа-комплектующего (миграция V37).
+     *
+     * Пустой тип (вид «комплектование») даёт пустой список: там состав
+     * образуется из серийников выпуска, и справочник изделий форме не
+     * нужен.
+     */
+    public List<ProductClassifier> findClassifierOptions(ProductType type) {
+        if (type == null) {
+            return List.of();
+        }
+
+        return productClassifierRepository.findByProductTypeOptions(type);
+    }
+
+    /**
+     * Маршруты, применимые к изделию, — выбор техпроцесса в форме
+     * группового заказа (миграция V40).
+     *
+     * Список строит репозиторий: базовый маршрут изделия идёт первым,
+     * остальные по коду, и признак базовости отдаётся вместе с кодом,
+     * чтобы шаблон подписывал его, а не вычислял заново.
+     *
+     * Пустое изделие даёт пустой список: без изделия выбирать маршрут
+     * не из чего, и показывать в форме все маршруты подряд значило бы
+     * предлагать диспетчеру чужие изделия.
+     */
+    public List<ClassifierRouteOptionView> findTechProcessOptions(
+            Long classifierId) {
+
+        return classifierId == null
+                ? List.of()
+                : techProcessRepository.findRoutesForClassifier(classifierId);
     }
 
     /**
@@ -187,26 +232,85 @@ public class ProductionOrderService {
     public ProductionOrder create(ProductionOrderForm form, AppUser author) {
 
         /*
-         * Уровень дерева (миграция V21): родитель задан — это заказ-
-         * комплектующий (ЗНП), родителя нет — заказ на производство (ЗП).
+         * Уровень дерева (миграции V21, V37): выпуск (ЗП) или заказ-
+         * комплектующий (ЗНП). Определяется не родителем, а выбором в
+         * форме: групповой и ремонтный ЗНП существуют без родительского
+         * выпуска, и «родителя нет» перестало означать «это выпуск».
          */
-        ProductionOrder parent = resolveParent(
-                form.getParentProductionOrderId()
-        );
+        ZnpKind kind = ZnpKind.ofNullable(form.getZnpKind());
 
-        boolean component = parent != null;
+        boolean component = form.isComponentLevel();
 
         /*
-         * Заказ покупателя для ЗНП берётся от родительского выпуска, а
-         * не из формы. Комплектующий по смыслу делается для того же
-         * заказчика, что и выпуск: выбирать его заново нельзя, потому
+         * Заказ верхнего уровня вида не выбирает — ему оставляют
+         * комплектование как значение по умолчанию, смысл из него не
+         * извлекается.
+         */
+        if (!component) {
+            kind = ZnpKind.KITTING;
+        }
+
+        /*
+         * Родитель нужен только комплекту, вписываемому в выпуск:
+         * он выбирает серийники этого выпуска и наследует заказчика.
+         * Групповой и ремонтный заказы самостоятельны, и родитель для
+         * них не предусмотрен — принятое из формы значение игнорируется.
+         */
+        ProductionOrder parent =
+                component && kind.isSerialBased()
+                        ? requireParent(
+                                form.getParentProductionOrderId()
+                        )
+                        : null;
+
+        /*
+         * Состав «изделием и количеством» обязателен для всех видов,
+         * кроме комплектования: групповой заказ без наименования и
+         * количества не описывает ничего, и по нему нельзя ни набрать
+         * ячейки, ни поставить работу в график.
+         */
+        ProductClassifier groupClassifier = null;
+        BigDecimal groupQuantity = null;
+
+        if (component && !kind.isSerialBased()) {
+            groupClassifier = requireClassifier(
+                    form.getProductClassifierId(),
+                    kind
+            );
+
+            groupQuantity = requireQuantity(form.getQuantity(), kind);
+        }
+
+        /*
+         * Заказ покупателя для комплектующего внутри выпуска берётся от
+         * родителя, а не из формы: комплектующий делается для того же
+         * заказчика, что и выпуск, и выбирать его заново нельзя, потому
          * что заказчик уже занят этим ЗП и в список свободных не
          * попадает. Собственное значение формы игнорируется сознательно
          * — иначе ЗНП мог бы «уйти» к чужому заказчику, минуя родителя.
+         *
+         * Самостоятельному заказу наследовать не от чего, поэтому его
+         * заказчик выбирается в форме.
          */
-        CustomerOrder customerOrder = component
+        /*
+         * Заказ покупателя для комплектовщика внутри выпуска берётся от
+         * родителя, а не из формы: комплектующий делают для того же
+         * заказчика, что и выпуск, и выбирать его заново нельзя, потому
+         * что заказчик уже занят этим ЗП и в список свободных не
+         * попадает. Значение формы игнорируется сознательно — иначе ЗНП
+         * переприсвоили бы себе чужой заказ.
+         *
+         * Групповому заказу (V38) заказчика не назначают вовсе: он
+         * самостоятелен, наследовать не от чего, а ограничение «один
+         * заказ покупателя — один выпуск» отклоняло бы второй групповой
+         * заказ того же заказчика. Заказ у группового заказа — свой
+         * внутренний документ, а не заявка покупателя.
+         */
+        CustomerOrder customerOrder = parent != null
                 ? requireCustomerOrder(parent)
-                : findCustomerOrder(form.getCustomerOrderId());
+                : kind.isReleaseBound()
+                        ? findCustomerOrder(form.getCustomerOrderId())
+                        : null;
 
         /*
          * Состав ЗП строится из позиций заказа покупателя, поэтому без
@@ -235,9 +339,29 @@ public class ProductionOrderService {
             );
         }
 
-        Operation operation = requireKittingOperation(
-                form.getProductionOperationId()
-        );
+        /*
+         * Комплектовочная операция нужна заказу, привязанному к выпуску:
+         * он выполняется операцией этого выпуска. Групповому заказу
+         * операцию назначать нечем — в выпуск он не входит, поэтому
+         * поле формы для него пустое, а работы задаёт техпроцесс
+         * (см. requireTechProcess ниже).
+         */
+        Operation operation = kind.isReleaseBound()
+                ? requireKittingOperation(form.getProductionOperationId())
+                : null;
+
+        /*
+         * Маршрут группового заказа (V40): работы ведут по техпроцессу
+         * заказанного изделия, поэтому выбор обязателен и проверяется
+         * вместе с изделием и количеством.
+         */
+        TechProcess techProcess = kind.requiresTechProcess()
+                ? requireTechProcess(
+                        form.getTechProcessId(),
+                        groupClassifier,
+                        kind
+                )
+                : null;
 
         LocalDate dueDate = resolveDueDate(customerOrder);
 
@@ -258,12 +382,18 @@ public class ProductionOrderService {
         }
 
         /*
-         * Выбор датчиков обязателен для комплектующего: без него заказ
-         * не привязан ни к одному изделию и в матрице выпуска не
-         * участвует. Проверяется до записи номера, чтобы при отказе не
-         * оставалось заказа без состава.
+         * Выбор датчиков обязателен для комплектующего на комплектование:
+         * без него заказ не привязан ни к одному изделию и в матрице
+         * выпуска не участвует. Проверяется до записи номера, чтобы при
+         * отказе не оставалось заказа без состава.
+         *
+         * Групповым и ремонтным видам номера не нужны — их состав задан
+         * изделием и количеством (см. ZnpKind.isSerialBased), поэтому
+         * требование к ним неприменимо и отклонило бы корректную заявку.
          */
-        if (component && isEmpty(form.getSerialIds())) {
+        if (component
+                && kind.isSerialBased()
+                && isEmpty(form.getSerialIds())) {
             throw new IllegalArgumentException(
                     "Выберите номера датчиков, в которые входит заказ"
             );
@@ -284,7 +414,11 @@ public class ProductionOrderService {
         order.setNumber(number);
         order.setCustomerOrder(customerOrder);
         order.setParentProductionOrder(parent);
+        order.setZnpKind(kind);
+        order.setProductClassifier(groupClassifier);
+        order.setQuantity(groupQuantity);
         order.setProductionOperation(operation);
+        order.setTechProcess(techProcess);
         order.setOrderDate(form.getOrderDate());
         order.setDueDate(dueDate);
 
@@ -319,15 +453,20 @@ public class ProductionOrderService {
         }
 
         /*
-         * Датчики выбираются из выпуска родителя: комплектующий без
-         * них не имеет смысла — непонятно, в какое изделие он входит.
+         * Датчики выбираются из выпуска родителя: комплектующий на
+         * комплектование без них не имеет смысла — непонятно, в какое
+         * изделие он входит. Групповому и ремонтному заказу номера не
+         * назначаются: они заявлены изделием и количеством, а конкретные
+         * номера появятся по ходу выпуска.
          */
-        serialKittingService.attach(
-                saved,
-                form.getSerialIds(),
-                operation,
-                author
-        );
+        if (kind.isSerialBased()) {
+            serialKittingService.attach(
+                    saved,
+                    form.getSerialIds(),
+                    operation,
+                    author
+            );
+        }
 
         return saved;
     }
@@ -370,17 +509,55 @@ public class ProductionOrderService {
                 form.getParentProductionOrderId()
         );
 
-        boolean root = order.getParentProductionOrder() == null;
+        /*
+         * Выпуск или комплектующий — по сущности, а не по признаку
+         * «родитель пуст»: групповой и ремонтный ЗНП (V37) существуют
+         * самостоятельно, и выпуск из них не получается.
+         */
+        boolean root = order.isRoot();
 
         /*
-         * Заказчик заказа-комплектующего наследуется от родительского
-         * выпуска (см. create): в списке свободных заказов он не
-         * числится, поэтому значение формы для ЗНП игнорируется —
-         * иначе правка ЗНП падала бы с «выберите заказ покупателя».
+         * Вид ЗНП при правке неизменный — по той же причине, что и
+         * уровень дерева: смена вида меняет природу состава (перечень
+         * серийников ↔ изделие с количеством), и прежний состав при
+         * этом либо теряется, либо повисает незачем. Заказ пересоздают
+         * заново.
+         *
+         * Разбор стоит выше заказчика: вид решает, положен ли заказу
+         * заказ покупателя вовсе (см. ZnpKind#isReleaseBound).
          */
-        CustomerOrder customerOrder = root
-                ? findCustomerOrder(form.getCustomerOrderId())
-                : requireCustomerOrder(order.getParentProductionOrder());
+        ZnpKind kind = root
+                ? ZnpKind.KITTING
+                : ZnpKind.ofNullable(form.getZnpKind());
+
+        if (!root) {
+            assertKindUnchanged(order, kind);
+        }
+
+        /*
+         * Заказчик наследуется от родительского выпуска только у
+         * комплектующего внутри выпуска (см. create): в списке
+         * свободных заказов он не числится, поэтому значение формы для
+         * такого заказа игнорируется — иначе правка падала бы с
+         * «выберите заказ покупателя».
+         *
+         * Выпуску выбирать заказчика есть из чего, он читает его из
+         * формы. Групповому заказу (V38) заказчика не назначают: он
+         * самостоятелен, и в форме поля заказчика нет.
+         */
+        boolean inheritsCustomer =
+                order.getParentProductionOrder() != null;
+
+        CustomerOrder customerOrder;
+
+        if (inheritsCustomer) {
+            customerOrder =
+                    requireCustomerOrder(order.getParentProductionOrder());
+        } else if (kind.isReleaseBound()) {
+            customerOrder = findCustomerOrder(form.getCustomerOrderId());
+        } else {
+            customerOrder = null;
+        }
 
         /*
          * Заказ может остаться привязанным к себе же: тогда смена
@@ -405,9 +582,14 @@ public class ProductionOrderService {
             );
         }
 
-        Operation operation = requireKittingOperation(
-                form.getProductionOperationId()
-        );
+        /*
+         * Комплектовочная операция — только заказу внутри выпуска
+         * (см. create): групповой заказ в выпуск не входит, и поле
+         * формы для него пустое.
+         */
+        Operation operation = kind.isReleaseBound()
+                ? requireKittingOperation(form.getProductionOperationId())
+                : null;
 
         LocalDate dueDate = resolveDueDate(customerOrder);
 
@@ -426,11 +608,40 @@ public class ProductionOrderService {
             );
         }
 
+        ProductClassifier groupClassifier = null;
+        BigDecimal groupQuantity = null;
+
+        if (!root && !kind.isSerialBased()) {
+            groupClassifier = requireClassifier(
+                    form.getProductClassifierId(),
+                    kind
+            );
+
+            groupQuantity = requireQuantity(form.getQuantity(), kind);
+        }
+
+        /*
+         * Маршрут группового заказа при правке проверяется так же, как
+         * при создании: он обязателен этим видам и должен относиться к
+         * заказанному изделию.
+         */
+        TechProcess techProcess = kind.requiresTechProcess()
+                ? requireTechProcess(
+                        form.getTechProcessId(),
+                        groupClassifier,
+                        kind
+                )
+                : null;
+
         /*
          * Состав комплектующего при правке обязателен так же, как при
          * создании: заказ без датчиков не участвует в матрице выпуска.
+         * Групповым и ремонтным видам вместо датчиков нужны изделие и
+         * количество — они проверены выше.
          */
-        if (!root && isEmpty(form.getSerialIds())) {
+        if (!root
+                && kind.isSerialBased()
+                && isEmpty(form.getSerialIds())) {
             throw new IllegalArgumentException(
                     "Выберите номера датчиков, в которые входит заказ"
             );
@@ -438,7 +649,11 @@ public class ProductionOrderService {
 
         order.setNumber(number);
         order.setCustomerOrder(customerOrder);
+        order.setZnpKind(kind);
+        order.setProductClassifier(groupClassifier);
+        order.setQuantity(groupQuantity);
         order.setProductionOperation(operation);
+        order.setTechProcess(techProcess);
         order.setOrderDate(form.getOrderDate());
         order.setDueDate(dueDate);
         order.setNote(blankToNull(form.getNote()));
@@ -455,8 +670,12 @@ public class ProductionOrderService {
          * снятые в форме номера должны отвязаться. Отвязка с уже
          * записанными операциями отклоняется внутри сервиса, поэтому
          * история выполнения не теряется.
+         *
+         * Синхронизация нужна только заказам на комплектование: у
+         * групповых и ремонтных видов связей с серийниками нет, и
+         * вызов с пустым списком снимал бы их при каждой правке.
          */
-        if (!root) {
+        if (!root && kind.isSerialBased()) {
             serialKittingService.sync(
                     saved,
                     form.getSerialIds(),
@@ -862,6 +1081,25 @@ public class ProductionOrderService {
     }
 
     /**
+     * Родитель для комплектующего внутри выпуска.
+     *
+     * Отдельный метод потому, что обязательность родителя зависит от
+     * вида: комплектование обязано ссылаться на выпуск, а групповой и
+     * ремонтный заказ самостоятельны, и для них родитель не спрашивается.
+     */
+    private ProductionOrder requireParent(Long parentId) {
+
+        if (parentId == null) {
+            throw new IllegalArgumentException(
+                    "Выберите заказ верхнего уровня, внутрь которого "
+                            + "входит заказ на комплектование"
+            );
+        }
+
+        return resolveParent(parentId);
+    }
+
+    /**
      * Родитель будущего заказа: по идентификатору из формы.
      *
      * Пустой идентификатор — заказ верхнего уровня (ЗП), заполненный —
@@ -1045,14 +1283,187 @@ public class ProductionOrderService {
     }
 
     /**
+     * Изделие группового или ремонтного заказа (миграция V37).
+     *
+     * Тип изделия проверяется, а не принимается любой: групповой заказ
+     * на приборы, заведённый на классификатор ячейки, показал бы в
+     * реесте количество приборов там, где их нет. Ремонтные виды
+     * ограничены «Ячейкой» — подсборка и ячейка различаются стадией
+     * движения, а не типом классификатора (см. QuarantineCellKind),
+     * поэтому справочник у них общий, а различие несёт сам вид.
+     */
+    private ProductClassifier requireClassifier(Long classifierId,
+                                                ZnpKind kind) {
+
+        if (classifierId == null) {
+            throw new IllegalArgumentException(
+                    "Выберите изделие для заказа «"
+                            + kind.getDisplayName() + "»"
+            );
+        }
+
+        ProductClassifier classifier = productClassifierRepository
+                .findDetailedById(classifierId)
+                .orElseThrow(() ->
+                        new EntityNotFoundException(
+                                "Изделие не найдено"
+                        )
+                );
+
+        ProductType required = kind.requiredProductType();
+
+        if (required != null
+                && classifier.getProductType() != required) {
+            throw new IllegalArgumentException(
+                    "Для заказа «" + kind.getDisplayName()
+                            + "» подходит изделие типа «"
+                            + required.getDisplayName()
+                            + "», а выбрано «"
+                            + (classifier.getProductType() == null
+                                    ? "—"
+                                    : classifier.getProductType()
+                                    .getDisplayName())
+                            + "»"
+            );
+        }
+
+        return classifier;
+    }
+
+    /**
+     * Количество заказанных изделий.
+     *
+     * Проверка своя, а не аннотация на форме: поле обязательно только
+     * части видов, и @NotNull ломал бы форму комплектования.
+     */
+    private BigDecimal requireQuantity(BigDecimal quantity, ZnpKind kind) {
+
+        if (quantity == null || quantity.signum() <= 0) {
+            throw new IllegalArgumentException(
+                    "Укажите количество для заказа «"
+                            + kind.getDisplayName() + "»"
+            );
+        }
+
+        return quantity;
+    }
+
+    /**
+     * Техпроцесс группового заказа (миграция V40).
+     *
+     * Обязателен групповым видам: без маршрута непонятно, какие работы
+     * выполняют заказ, и в график такую заявку ставить нечем. Проверка
+     * держится сервисом, а не аннотацией — комплектованию маршрут не
+     * полагается, и @NotNull отклонил бы его корректную форму.
+     *
+     * Маршрут проверяется на применимость к заказанному изделию:
+     * выбор в форме строится по изделию, но изделие могли сменить, пока
+     * форма открыта, и заказ с чужим маршрутом повесил бы на изделие
+     * работы, которых для него не заводили. Разрешается маршрут,
+     * применённый к изделию любым способом (базовый или обычный), —
+     * требование «только базовый» лишило бы диспетчера выбора, когда у
+     * изделия несколько маршрутов.
+     */
+    private TechProcess requireTechProcess(Long techProcessId,
+                                           ProductClassifier classifier,
+                                           ZnpKind kind) {
+
+        if (techProcessId == null) {
+            throw new IllegalArgumentException(
+                    "Выберите техпроцесс для заказа «"
+                            + kind.getDisplayName() + "»"
+            );
+        }
+
+        TechProcess process = techProcessRepository
+                .findHeaderById(techProcessId)
+                .orElseThrow(() ->
+                        new EntityNotFoundException(
+                                "Техпроцесс не найден"
+                        )
+                );
+
+        if (!process.isActive()) {
+            throw new IllegalStateException(
+                    "Техпроцесс «" + process.getCode()
+                            + "» снят из работы"
+            );
+        }
+
+        if (classifier == null) {
+            return process;
+        }
+
+        /*
+         * Изделие маршрута сравнивается по идентификатору: у справочника
+         * own equals сравнивает строку целиком, а здесь нужен именно
+         * тот же элемент справочника.
+         */
+        Long routeClassifierId = process.getProductClassifier() == null
+                ? null
+                : process.getProductClassifier().getId();
+
+        boolean applicable = classifier.getId().equals(routeClassifierId)
+                || !techProcessClassifierRepository
+                        .findByTechProcess_IdAndClassifier_Id(
+                                process.getId(),
+                                classifier.getId()
+                        )
+                        .isEmpty();
+
+        if (!applicable) {
+            throw new IllegalArgumentException(
+                    "Техпроцесс «" + process.getCode()
+                            + "» не применён к изделию «"
+                            + classifier.getDisplayName()
+                            + "» — выберите маршрут этого изделия"
+            );
+        }
+
+        return process;
+    }
+
+    /**
+     * Вид ЗНП задаётся при создании и при правке не меняется: он
+     * определяет, чем задан состав заказа, а прежний состав при смене
+     * вида либо теряется, либо повисает незачем.
+     */
+    private void assertKindUnchanged(ProductionOrder order,
+                                     ZnpKind requested) {
+
+        ZnpKind bound = order.getZnpKind() == null
+                ? ZnpKind.KITTING
+                : order.getZnpKind();
+
+        if (bound == requested) {
+            return;
+        }
+
+        throw new IllegalArgumentException(
+                "Нельзя менять вид заказа «" + order.getNumber()
+                        + "»: было «" + bound.getDisplayName()
+                        + "», стало «" + requested.getDisplayName()
+                        + "» — заказ пересоздаётся заново"
+        );
+    }
+
+    /**
      * Срок выпуска берётся из привязанного заказа покупателя.
      *
      * В форме выпуска срока нет: он совпадает со сроком поставки
      * и нигде больше не переопределяется, поэтому источником служит
      * только заказ покупателя.
      */
+    /*
+     * Срок исполнения подтягивается из заказа покупателя — но только
+     * когда заказ покупателя есть. Групповой заказ (V38) заводят без
+     * заявки, и срока извне у него нет: он остаётся незаполненным и
+     * правится в карточке.
+     */
     private LocalDate resolveDueDate(CustomerOrder customerOrder) {
-        return customerOrder.getDueDate();
+        return customerOrder == null
+                ? null
+                : customerOrder.getDueDate();
     }
 
     private void validateDates(LocalDate orderDate, LocalDate dueDate) {

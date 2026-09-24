@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html lang="ru"
+      xmlns:th="http://www.thymeleaf.org">
+
+<head>
+    <meta charset="UTF-8">
+
+    <meta name="viewport"
+          content="width=device-width, initial-scale=1">
+
+    <title>Групповые ЗНП</title>
+
+    <link rel="stylesheet"
+          th:href="@{/technology/css/technology.css}">
+
+    <link rel="stylesheet"
+          th:href="@{/dispatcher/css/dispatcher.css}">
+</head>
+
+<body>
+
+<div class="app-shell">
+
+    <aside th:replace="~{dispatcher/fragments/layout
+            :: sidebar('groupZnp')}">
+    </aside>
+
+    <main class="main">
+
+        <header th:replace="~{dispatcher/fragments/layout
+                :: topbar}">
+        </header>
+
+        <div class="page-content dispatcher-page">
+
+            <div class="page-head">
+
+                <div class="page-title">
+
+                    <h1>Групповые ЗНП</h1>
+
+                    <p>
+                        Заказы, заявленные изделием и количеством:
+                        группа ячеек, группа приборов или ремонт.
+                        В чужой выпуск не вписываются и серийные
+                        номера не выпускают
+                    </p>
+
+                </div>
+
+                <div class="page-head-actions create-actions">
+
+                    <!--
+                        По кнопке на каждый вид раздела (V38): набор
+                        видов берётся из того же признака, что и отбор
+                        строк списка (ZnpKind.groupKinds()), поэтому
+                        добавленный в enum вид появляется здесь без
+                        правки шаблона.
+
+                        Выпуск (ЗП) на этой странице не создаётся:
+                        он рождается из заказа покупателя и остаётся
+                        в разделе «Заказы на производство».
+
+                        Надпись кнопки — название вида из enum
+                        (ZnpKind.getCreateButtonLabel), как в колонке
+                        «Вид» ниже и в заголовке формы.
+                    -->
+                    <span class="create-actions__label">
+                        Новый групповой заказ
+                    </span>
+
+                    <div class="kind-buttons">
+
+                        <a class="btn kind-button"
+                           th:each="kind : ${znpKinds}"
+                           th:href="@{/dispatcher/production-order/create(
+                               kind=${kind.name()}
+                           )}">
+
+                            <span class="kind-button__title"
+                                  th:text="${kind.createButtonLabel}">
+                                Групповой ЗНП на ячейки
+                            </span>
+
+                            <span class="kind-button__hint"
+                                  th:text="${kind.compositionHint}">
+                                изделие и количество
+                            </span>
+                        </a>
+
+                    </div>
+
+                </div>
+            </div>
+
+            <div class="alert success"
+                 th:if="${successMessage}"
+                 th:text="${successMessage}">
+            </div>
+
+            <div class="alert danger"
+                 th:if="${errorMessage}"
+                 th:text="${errorMessage}">
+            </div>
+
+            <!--
+                Карточки считаются по статусам внутри видов этого
+                раздела (см. groupZnp()); общий счётчик всех заказов
+                здесь не используется: он показал бы выпуски, которых
+                на странице нет.
+            -->
+            <div class="stats">
+
+                <div class="stat">
+                    <small>Всего групповых заказов</small>
+
+                    <strong th:text="${groupZnpCount ?: 0}">
+                        0
+                    </strong>
+
+                    <span class="trend">
+                        Все действующие заказы этого раздела
+                    </span>
+                </div>
+
+                <div class="stat">
+                    <small>Новые</small>
+
+                    <strong th:text="${groupZnpNewCount ?: 0}">
+                        0
+                    </strong>
+
+                    <span class="trend attention">
+                        Ожидают запуска в работу
+                    </span>
+                </div>
+
+                <div class="stat">
+                    <small>В работе</small>
+
+                    <strong th:text="${groupZnpInWorkCount ?: 0}">
+                        0
+                    </strong>
+
+                    <span class="trend attention">
+                        Находятся в исполнении
+                    </span>
+                </div>
+
+                <div class="stat">
+                    <small>Выполнены</small>
+
+                    <strong th:text="${groupZnpDoneCount ?: 0}">
+                        0
+                    </strong>
+
+                    <span class="trend">
+                        Закрытые заказы
+                    </span>
+                </div>
+            </div>
+
+            <section class="card">
+
+                <div class="card-head">
+
+                    <div>
+
+                        <h2>Список групповых заказов</h2>
+
+                        <small>
+                            Показано записей:
+
+                            <strong th:text="${
+                                groupOrders != null
+                                    ? #lists.size(groupOrders)
+                                    : 0
+                            }">
+                                0
+                            </strong>
+                        </small>
+
+                    </div>
+
+                </div>
+
+                <div class="card-body">
+
+                    <div class="table-wrap">
+
+                        <table class="data-table">
+
+                            <thead>
+                            <tr>
+                                <th>Номер заказа</th>
+                                <th>Вид</th>
+                                <th>Дата открытия</th>
+                                <th>Изделие заказа</th>
+                                <th>Количество</th>
+                                <th>Техпроцесс</th>
+                                <th>Готово</th>
+                                <th>Срок</th>
+                                <th>Статус</th>
+                                <th>Действия</th>
+                            </tr>
+                            </thead>
+
+                            <tbody>
+
+                            <tr th:if="${
+                                    groupOrders == null
+                                    or #lists.isEmpty(groupOrders)
+                                 }">
+
+                                <td colspan="10"
+                                    class="empty-table">
+                                    Групповые заказы пока не добавлены
+                                </td>
+
+                            </tr>
+
+                            <tr th:each="order : ${groupOrders}">
+
+                                <td th:text="${order.number}">
+                                    ПЗ-ГР-001
+                                </td>
+
+                                <!--
+                                    Вид заказа (V37): по нему видно,
+                                    чем задан состав — изделие с
+                                    количеством. Родительский выпуск у
+                                    этих заказов отсутствует, а заказ
+                                    покупателя им не назначается (V38),
+                                    поэтому колонок «Заказ покупателя» и
+                                    «Операция выпуска» из страницы
+                                    выпусков здесь нет: состав задают
+                                    изделие с количеством, а работы —
+                                    техпроцесс (V40).
+                                -->
+                                <td>
+                                    <span class="status work"
+                                          th:text="${order.kindColumn}">
+                                        Групповой ЗНП на ячейки
+                                    </span>
+                                </td>
+
+                                <td th:text="${order.formattedOrderDate}">
+                                    01.01.2026
+                                </td>
+
+                                <td th:text="${order.classifierLabel}">
+                                    ЯЧ-01 — Ячейка 19''
+                                </td>
+
+                                <td th:text="${order.formattedQuantity}">
+                                    24
+                                </td>
+
+                                <td th:text="${order.techProcessDisplay}">
+                                    ТП-ЯЧ-01
+                                </td>
+
+                                <td th:text="${order.doneProgress}">
+                                    0 из 24
+                                </td>
+
+                                <td th:text="${order.formattedDueDate}">
+                                    01.01.2026
+                                </td>
+
+                                <td>
+                                    <span class="status"
+                                          th:classappend="${order.statusBadgeClass}"
+                                          th:text="${order.statusDisplayName}">
+                                        Статус
+                                    </span>
+                                </td>
+
+                                <td>
+
+                                    <div class="table-actions">
+
+                                        <a class="btn secondary compact"
+                                           th:href="@{/dispatcher/production-order/{id}(id=${order.id})}">
+                                            Открыть
+                                        </a>
+
+                                    </div>
+
+                                </td>
+
+                            </tr>
+
+                            </tbody>
+                        </table>
+
+                    </div>
+                </div>
+            </section>
+
+            <div class="empty-state"
+                 th:if="${
+                     groupOrders == null
+                     or #lists.isEmpty(groupOrders)
+                 }">
+                <h3>Групповых заказов пока нет</h3>
+
+                <p>
+                    Нажмите нужный вид заказа, выберите изделие из
+                    справочника и укажите количество: заказ заведётся
+                    самостоятельно, без заказа покупателя и без
+                    родительского выпуска.
+                </p>
+            </div>
+
+        </div>
+    </main>
+</div>
+
+<th:block th:replace="~{dispatcher/fragments/layout
+        :: commonScripts}">
+</th:block>
+
+</body>
+</html>

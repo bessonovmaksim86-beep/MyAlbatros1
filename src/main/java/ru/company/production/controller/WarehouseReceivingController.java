@@ -16,10 +16,12 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 import ru.company.production.dto.CellReceivingForm;
 import ru.company.production.dto.CellScanningResult;
+import ru.company.production.dto.LabelPrintResult;
 import ru.company.production.entity.AppUser;
 import ru.company.production.entity.CellReceivingBatch;
 import ru.company.production.repository.UserRepository;
 import ru.company.production.service.CellReceivingService;
+import ru.company.production.service.LabelPrintService;
 import ru.company.production.service.WarehouseSupplierService;
 
 import java.util.List;
@@ -46,6 +48,7 @@ public class WarehouseReceivingController {
     private final CellReceivingService receivingService;
     private final WarehouseSupplierService supplierService;
     private final UserRepository userRepository;
+    private final LabelPrintService labelPrintService;
 
     /** Форма прихода и журнал партий. */
     @GetMapping({"", "/"})
@@ -123,16 +126,71 @@ public class WarehouseReceivingController {
         model.addAttribute("numbers", batch.fullNumbers());
         model.addAttribute("step", "qr");
 
+        /*
+         * Состояние печати приходит с сервера, а не живёт текстом в
+         * разметке: оператор должен видеть, настроено ли это рабочее
+         * место, до нажатия кнопки, а не получать ошибку после.
+         */
+        String problem = labelPrintService.configurationProblem();
+
+        model.addAttribute("printReady", problem == null);
+        model.addAttribute("printProblem", problem);
+
         return "warehouse/receiving/qr";
+    }
+
+    /**
+     * Передаёт номера партии в BarTender.
+     *
+     * Печать и переход по шагам разнесены намеренно: задание ушло на
+     * принтер ещё не значит, что кладовщик проверил вышедший лист.
+     * Поэтому после успешной отправки страница остаётся на месте с
+     * числом этикеток, а дальше оператор идёт сам.
+     *
+     * Партия помечается напечатанной только при коде возврата 0 —
+     * иначе она ушла бы на сканирование по этикеткам, которых нет.
+     */
+    @PostMapping("/{id}/qr/print")
+    public String printLabels(
+            @PathVariable Long id,
+            RedirectAttributes redirectAttributes
+    ) {
+        CellReceivingBatch batch;
+
+        try {
+            batch = receivingService.get(id);
+        } catch (EntityNotFoundException exception) {
+            redirectAttributes.addFlashAttribute(
+                    "errorMessage",
+                    exception.getMessage()
+            );
+
+            return "redirect:/warehouse/receiving";
+        }
+
+        LabelPrintResult result = labelPrintService.printBatch(batch);
+
+        if (!result.printed()) {
+            redirectAttributes.addFlashAttribute("errorMessage", result.message());
+
+            return "redirect:/warehouse/receiving/" + id + "/qr";
+        }
+
+        receivingService.markQrPrinted(id);
+
+        redirectAttributes.addFlashAttribute("successMessage", result.message());
+
+        return "redirect:/warehouse/receiving/" + id + "/qr";
     }
 
     /**
      * Отмечает печать и переводит к подтверждению.
      *
-     * Печать выполняется внешней программой (она будет подключена
-     * позже), поэтому шаг фиксирует только передачу номеров: без него
-     * нельзя отличить партию, по которой этикетки ещё не напечатаны,
-     * от партии, готовой к сканированию.
+     * Шаг обязателен: без него нельзя отличить партию, по которой
+     * этикетки ещё не напечатаны, от партии, готовой к сканированию.
+     * Когда BarTender не настроен, это единственный способ закрыть
+     * шаг — номера передаются в него вручную, и оператор подтверждает
+     * это сам.
      */
     @PostMapping("/{id}/qr")
     public String markPrinted(

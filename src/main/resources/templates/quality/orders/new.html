@@ -1,0 +1,528 @@
+<!DOCTYPE html>
+<html lang="ru"
+      xmlns:th="http://www.thymeleaf.org">
+
+<head>
+    <meta charset="UTF-8">
+
+    <meta name="viewport"
+          content="width=device-width, initial-scale=1">
+
+    <title>ЗНП на ремонт — оформление</title>
+
+    <link rel="stylesheet"
+          th:href="@{/technology/css/technology.css}">
+
+    <link rel="stylesheet"
+          th:href="@{/technology/css/common.css}">
+
+    <link rel="stylesheet"
+          th:href="@{/quality/css/quality.css}">
+</head>
+
+<body>
+
+<div class="app-shell">
+
+    <aside th:replace="~{quality/fragments/layout
+            :: sidebar('quarantine')}">
+    </aside>
+
+    <main class="main">
+
+        <header th:replace="~{quality/fragments/layout
+                :: topbar}">
+        </header>
+
+        <div class="sk-page">
+
+            <div class="page-head">
+
+                <div class="page-title">
+
+                    <h1>ЗНП на ремонт</h1>
+
+                    <p>
+                        Второй шаг разбора: номер по журналу, исполнитель
+                        ремонта и, при необходимости, выдача комплектации.
+                        Заказ ещё не сформирован — состав и выбор
+                        проверяются при отправке
+                    </p>
+
+                </div>
+
+                <div class="page-head-actions">
+
+                    <a class="btn secondary"
+                       th:href="@{/quality/quarantine}">
+                        Вернуться к перечню
+                    </a>
+
+                </div>
+            </div>
+
+            <div class="alert danger"
+                 th:if="${errorMessage}"
+                 th:text="${errorMessage}">
+            </div>
+
+            <!--
+                Состав передают скрытыми полями: ключ пары «группа |
+                номер» нужен сервису целиком, потому что один и тот же
+                номер могли забраковать в двух группах с разными
+                причинами, и заказ обязан ссылаться на конкретную
+                группу.
+
+                Страницу возвращают той же отправкой (не redirect'ом) с
+                уже отмеченным составом: перечень размечают долго, и
+                терять его из-за невыбранного исполнителя незачем.
+            -->
+            <form class="card"
+                  id="skOrderForm"
+                  method="post"
+                  th:action="@{/quality/orders}"
+                  th:object="${repairOrderForm}">
+
+                <input th:if="${_csrf != null}"
+                       type="hidden"
+                       th:name="${_csrf.parameterName}"
+                       th:value="${_csrf.token}">
+
+                <input type="hidden"
+                       th:each="cell : ${pickedCells}"
+                       name="cells"
+                       th:value="${cell.cellKey}">
+
+                <!--
+                    Вид заказа форма не выбирает: состав заказа
+                    однородный (одна разновидность и одно наименование —
+                    иначе сервис отвергает отметку), и вид следует из
+                    него однозначно. Поле оставлено скрытым только чтобы
+                    выбранное значение пережило возврат страницы.
+                -->
+                <input type="hidden" th:field="*{orderType}">
+
+                <div class="card-head">
+
+                    <div>
+
+                        <h2>Состав заказа</h2>
+
+                        <small>
+                            Отмеченные ячейки изолятора: все одной
+                            разновидности и одного наименования —
+                            смешанный состав в один ЗНП не оформляют
+                        </small>
+
+                    </div>
+
+                    <span class="sk-counter">
+
+                        Ячеек:
+
+                        <strong th:text="${cellCount}">
+                            2
+                        </strong>
+                    </span>
+                </div>
+
+                <div class="card-body">
+
+                    <!--
+                        Разновидность и наименование показывают как уже
+                        известное, а не как поле ввода: их задал состав
+                        отмеченных ячеек, и изменить их можно только
+                        сняв отметки в перечне.
+                    -->
+                    <div class="sk-resolved">
+
+                        <div class="sk-resolved__item">
+
+                            <small>Вид заказа</small>
+
+                            <strong th:text="${suggestedOrderTypeLabel}">
+                                ЗНП на ремонт ячеек
+                            </strong>
+
+                            <span class="sk-resolved__note">
+                                Определён составом отмеченных ячеек
+                            </span>
+                        </div>
+
+                        <div class="sk-resolved__item">
+
+                            <small>Разновидность</small>
+
+                            <strong th:text="${orderKindLabel}">
+                                Ячейка
+                            </strong>
+
+                            <span class="sk-resolved__note">
+                                Ячейки и подсборки в один заказ не
+                                смешивают
+                            </span>
+                        </div>
+
+                        <div class="sk-resolved__item">
+
+                            <small>Наименование</small>
+
+                            <strong th:text="${orderClassifierLabel}">
+                                1212 — Подсборка ЯПР56
+                            </strong>
+
+                            <span class="sk-resolved__note">
+                                Одно изделие на весь заказ
+                            </span>
+                        </div>
+
+                    </div>
+
+                    <ul class="sk-picked-list">
+
+                        <li class="sk-picked-list__item"
+                            th:each="cell : ${pickedCells}">
+
+                            <span th:text="${cell.fullNumber}">
+                                121200023
+                            </span>
+
+                            <span class="sk-filter__hint"
+                                  th:text="${cell.kindLabel}">
+                                Ячейка
+                            </span>
+                        </li>
+
+                    </ul>
+
+                    <div class="table-wrap"
+                         style="margin-top: 18px;">
+
+                        <table class="data-table sk-cell-table">
+
+                            <thead>
+
+                            <tr>
+                                <th>Тип</th>
+                                <th>Класс / наименование</th>
+                                <th>Номер ячейки</th>
+                                <th>Причина брака</th>
+                                <th>Поставщик партии</th>
+                            </tr>
+
+                            </thead>
+
+                            <tbody>
+
+                            <tr th:each="cell : ${pickedCells}">
+
+                                <td th:text="${cell.kindLabel}">
+                                    Ячейка
+                                </td>
+
+                                <td th:text="${cell.cellLabel}">
+                                    1212 — Подсборка ЯПР56
+                                </td>
+
+                                <td class="sk-number-cell"
+                                    th:text="${cell.fullNumber}">
+                                    121200023
+                                </td>
+
+                                <td th:text="${cell.reasonChain}">
+                                    Механическое повреждение → Скол корпуса
+                                </td>
+
+                                <td th:text="${cell.supplierName}">
+                                    ООО «Компонент»
+                                </td>
+
+                            </tr>
+
+                            </tbody>
+                        </table>
+
+                    </div>
+
+                    <div class="sk-form" style="margin-top: 24px;">
+
+                        <div class="sk-form-grid">
+
+                            <!--
+                                Номер стоит первым: бумажный ЗНП заводят
+                                по журналу подразделения, и руководитель
+                                вносит номер из журнала до остального.
+                                Пустое поле означает «подобрать номер
+                                ряда года» — форму оставляют и для тех,
+                                кто журнал не ведёт.
+                            -->
+                            <div class="sk-field">
+
+                                <label for="number">
+                                    Номер ЗНП
+                                </label>
+
+                                <input type="text"
+                                       maxlength="50"
+                                       placeholder="Например: ЗНР-2026-007"
+                                       th:field="*{number}">
+
+                                <span class="sk-field__hint">
+                                    Номер журнала подразделения; оставите
+                                    пустым — подставим ближайший свободный
+                                    ряда текущего года
+                                </span>
+                            </div>
+
+                            <div class="sk-field">
+
+                                <span class="sk-field__caption">
+                                    Исполнитель ремонта
+                                </span>
+
+                                <!--
+                                    Ремонт ведут либо собственные силы
+                                    (СДП) — тогда заказ остаётся на
+                                    предприятии и получает маршрут, либо
+                                    поставщик — тогда заказ уходит наружу.
+                                    Способ один на заказ, поэтому
+                                    переключатель, а не два независимых
+                                    чекбокса.
+                                -->
+                                <label class="sk-check"
+                                       for="skBySdp">
+
+                                    <input type="checkbox"
+                                           id="skBySdp"
+                                           th:field="*{bySdp}">
+
+                                    <span>
+                                        Силами СДП
+                                    </span>
+                                </label>
+
+                                <span class="sk-field__hint">
+                                    Отметьте, если ремонт выполняют
+                                    собственные силы, а не поставщик
+                                </span>
+                            </div>
+
+                            <!--
+                                Маршрут ремонта для СДП. Список берут из
+                                справочника техпроцессов; когда заведут
+                                отдельный справочник «ТП на ремонт»,
+                                источник поменяют на сервере — разметка
+                                страницы останется прежней.
+                            -->
+                            <div class="sk-field sk-field--wide sk-field--sdp"
+                                 hidden
+                                 id="skSdpField">
+
+                                <label for="techProcessId">
+                                    Техпроцесс на ремонт
+                                </label>
+
+                                <select th:field="*{techProcessId}">
+
+                                    <option value="">
+                                        Выберите маршрут ремонта
+                                    </option>
+
+                                    <option th:each="route : ${routes}"
+                                            th:value="${route.id}"
+                                            th:text="${
+                                                (route.code == null ? 'Без кода' : route.code)
+                                                + ' — '
+                                                + (route.classifierCode == null ? '' : route.classifierCode + ' ')
+                                                + (route.classifierName == null ? '' : route.classifierName)
+                                            }">
+                                        ТП-14 — 1212 Подсборка ЯПР56
+                                    </option>
+
+                                </select>
+
+                                <span class="sk-field__hint">
+                                    Маршрут обязателен: по нему СДП
+                                    понимает состав операций ремонта
+                                </span>
+                            </div>
+
+                            <div class="sk-field sk-field--catalog"
+                                 id="skCatalogField">
+
+                                <label for="supplierId">
+                                    Поставщик из справочника склада
+                                </label>
+
+                                <select th:field="*{supplierId}">
+
+                                    <option value="">
+                                        Не выбирать из справочника
+                                    </option>
+
+                                    <option th:each="sup : ${suppliers}"
+                                            th:value="${sup.id}"
+                                            th:text="${sup.name}">
+                                        ООО «Компонент»
+                                    </option>
+
+                                </select>
+
+                                <span class="sk-field__hint">
+                                    Выбор фиксирует заказ ссылкой на
+                                    справочник — по нему соберут сводку
+                                    по поставщику
+                                </span>
+                            </div>
+
+                            <div class="sk-field sk-field--catalog"
+                                 id="skCustomSupplierField">
+
+                                <span class="sk-field__caption">
+                                    Поставщика нет в справочнике
+                                </span>
+
+                                <label class="sk-check"
+                                       for="skCustomSupplier">
+
+                                    <input type="checkbox"
+                                           id="skCustomSupplier"
+                                           name="supplierChoice"
+                                           value="CUSTOM"
+                                           th:checked="*{customSupplier}">
+
+                                    <span>
+                                        Написать наименование вручную
+                                    </span>
+                                </label>
+
+                                <span class="sk-field__hint">
+                                    Поставщика ещё не заводили в
+                                    справочник — заказ оформляют
+                                    наименованием
+                                </span>
+                            </div>
+
+                            <div class="sk-field sk-field--wide sk-field--catalog sk-field--custom"
+                                 hidden
+                                 id="skCustomNameField">
+
+                                <label for="supplierName">
+                                    Наименование поставщика
+                                </label>
+
+                                <input type="text"
+                                       maxlength="255"
+                                       placeholder="ООО «Компонент», ИНН ..."
+                                       th:field="*{supplierName}">
+
+                                <span class="sk-field__hint">
+                                    Заказ печатают по этому написанию;
+                                    ссылка на справочник к нему не
+                                    подставляется
+                                </span>
+                            </div>
+
+                            <div class="sk-field">
+
+                                <span class="sk-field__caption">
+                                    Комплектация
+                                </span>
+
+                                <label class="sk-check"
+                                       for="skKitsIssue">
+
+                                    <input type="checkbox"
+                                           id="skKitsIssue"
+                                           th:field="*{kitsIssue}">
+
+                                    <span>
+                                        Ремонт с выдачей комплектации
+                                    </span>
+                                </label>
+
+                                <span class="sk-field__hint">
+                                    Вместе с ремонтом выдают компоненты:
+                                    их перечень пишут ниже
+                                </span>
+                            </div>
+
+                            <div class="sk-field sk-field--wide sk-field--kits"
+                                 hidden
+                                 id="skKitsListField">
+
+                                <label for="kitsList">
+                                    Перечень компонентов для выдачи
+                                </label>
+
+                                <textarea name="kitsList"
+                                          id="skKitsListField_input"
+                                          maxlength="2000"
+                                          placeholder="Например: корпус — 2 шт., плата АЛБ.4 — 1 шт., уплотнение — 4 шт."
+                                          th:field="*{kitsList}">
+                                </textarea>
+
+                                <span class="sk-field__hint">
+                                    Свободный текст: состав, количество и
+                                    примечания к выдаче
+                                </span>
+                            </div>
+
+                            <div class="sk-field sk-field--wide">
+
+                                <label for="note">
+                                    Примечание к заказу
+                                </label>
+
+                                <textarea name="note"
+                                          maxlength="2000"
+                                          placeholder="Например: вернуть по акту приёмки до конца месяца"
+                                          th:field="*{note}">
+                                </textarea>
+
+                                <span class="sk-field__hint">
+                                    Необязательно: что должен учесть
+                                    исполнитель ремонта
+                                </span>
+                            </div>
+
+                        </div>
+
+                        <div class="sk-form-actions">
+
+                            <a class="btn secondary"
+                               th:href="@{/quality/quarantine}">
+                                Изменить отметку ячеек
+                            </a>
+
+                            <div class="sk-form-actions__group">
+
+                                <a class="btn secondary"
+                                   th:href="@{/quality/orders}">
+                                    К реестру заказов
+                                </a>
+
+                                <button type="submit" class="btn primary">
+                                    Сформировать заказ
+                                </button>
+
+                            </div>
+                        </div>
+
+                    </div>
+
+                </div>
+            </form>
+
+        </div>
+    </main>
+</div>
+
+<th:block th:replace="~{quality/fragments/layout
+        :: commonScripts}">
+</th:block>
+
+<script th:src="@{/quality/js/order-form.js}"></script>
+
+</body>
+</html>

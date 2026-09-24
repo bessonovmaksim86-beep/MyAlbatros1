@@ -1,0 +1,662 @@
+<!DOCTYPE html>
+<html lang="ru"
+      xmlns:th="http://www.thymeleaf.org">
+
+<head>
+    <meta charset="UTF-8">
+
+    <meta name="viewport"
+          content="width=device-width, initial-scale=1">
+
+    <title>Служба качества</title>
+
+    <link rel="stylesheet"
+          th:href="@{/technology/css/technology.css}">
+
+    <link rel="stylesheet"
+          th:href="@{/technology/css/common.css}">
+
+    <link rel="stylesheet"
+          th:href="@{/quality/css/quality.css}">
+</head>
+
+<body>
+
+<div class="app-shell">
+
+    <aside th:replace="~{quality/fragments/layout
+            :: sidebar('general')}">
+    </aside>
+
+    <main class="main">
+
+        <header th:replace="~{quality/fragments/layout
+                :: topbar}">
+        </header>
+
+        <div class="sk-page">
+
+            <div class="page-head">
+
+                <div class="page-title">
+
+                    <h1>Служба качества</h1>
+
+                    <p>
+                        Разбор изолятора брака по ячейкам и заказы на
+                        ремонт (ЗНП): чем занят изолятор сегодня, по
+                        каким типам брака и поставщикам, что уже
+                        закреплено заказами
+                    </p>
+
+                </div>
+
+                <div class="page-head-actions">
+
+                    <a class="btn secondary"
+                       th:href="@{/quality/orders}">
+                        Заказы на ремонт
+                    </a>
+
+                    <a class="btn primary"
+                       th:href="@{/quality/quarantine}">
+                        Разобрать изолятор
+                    </a>
+
+                </div>
+            </div>
+
+            <div class="alert success"
+                 th:if="${successMessage}"
+                 th:text="${successMessage}">
+            </div>
+
+            <div class="alert danger"
+                 th:if="${errorMessage}"
+                 th:text="${errorMessage}">
+            </div>
+
+            <div class="stats stats--sk">
+
+                <div class="stat">
+                    <small>Ячеек в изоляторе</small>
+
+                    <strong th:text="${overview.cellCount}">
+                        14
+                    </strong>
+
+                    <span class="trend">
+                        Классов изделия:
+
+                        <span th:text="${overview.classifierCount}">
+                            3
+                        </span>
+                    </span>
+                </div>
+
+                <div class="stat">
+                    <small>Подсборок / ячеек</small>
+
+                    <strong>
+                        <span th:text="${overview.subassemblyCount}">
+                            5
+                        </span>
+
+                        /
+
+                        <span th:text="${overview.cellKindCount}">
+                            9
+                        </span>
+                    </strong>
+
+                    <span class="trend">
+                        Подсборка — позиция, ещё не принятая складом
+                    </span>
+                </div>
+
+                <div class="stat">
+                    <small>Закреплено заказами</small>
+
+                    <strong th:text="${overview.orderedCount}">
+                        3
+                    </strong>
+
+                    <span class="trend"
+                          th:classappend="${overview.orderedCount > 0}
+                              ? ' attention'
+                              : ''">
+                        Свободных ячеек:
+
+                        <span th:text="${overview.freeCount}">
+                            11
+                        </span>
+                    </span>
+                </div>
+
+                <div class="stat">
+                    <small>Заказов незакрыто</small>
+
+                    <strong th:text="${openOrders ?: 0}">
+                        2
+                    </strong>
+
+                    <span class="trend">
+                        Из них в работе:
+
+                        <span th:text="${inWorkOrders ?: 0}">
+                            1
+                        </span>
+                    </span>
+                </div>
+
+                <div class="stat">
+                    <small>Выполнено заказов</small>
+
+                    <strong th:text="${doneOrders ?: 0}">
+                        3
+                    </strong>
+
+                    <span class="trend">
+                        Закрытые ЗНП по акту приёмки ремонта
+                    </span>
+                </div>
+            </div>
+
+            <!--
+                ============================================================
+                ЧЕМ ЖИВЁТ ИЗОЛЯТОР
+
+                Распределения считают в сервисе по строкам того же
+                перечня, что открывают в разборе: цифра обзора и цифра
+                перечня обязаны сходиться. Полосы дают долю от общего
+                числа ячеек, а не от показанных строк, поэтому список
+                «первые пять» читается честно.
+                ============================================================
+            -->
+            <div class="two-cols">
+
+                <section class="card">
+
+                    <div class="card-head">
+
+                        <div>
+
+                            <h2>Брак по типам</h2>
+
+                            <small>
+                                Верхний уровень причины: уточнение вида
+                                («Скол корпуса») сводится к своему типу
+                            </small>
+
+                        </div>
+
+                        <a class="btn secondary compact"
+                           th:href="@{/quality/quarantine}">
+                            Разобрать по ячейкам
+                        </a>
+                    </div>
+
+                    <div class="card-body">
+
+                        <div class="alert danger"
+                             th:if="${overview.cellCount == 0}">
+
+                            <p>
+                                Изолятор брака пуст: ячейки попадают в
+                                него, когда контролёр закрывает проверку
+                                с решением «Перемещение в изолятор брака»
+                            </p>
+
+                        </div>
+
+                        <div class="sk-share"
+                             th:unless="${overview.cellCount == 0}">
+
+                            <div class="sk-share__row"
+                                 th:each="row : ${overview.reasons}">
+
+                                <span class="sk-share__label"
+                                      th:text="${row.label}">
+                                    Механическое повреждение
+                                </span>
+
+                                <span class="sk-share__track">
+
+                                    <span class="sk-share__fill"
+                                          th:style="'width: '
+                                              + ${overview.cellCount > 0
+                                                  ? (row.count * 100 / overview.cellCount)
+                                                  : 0}
+                                              + '%;'">
+                                    </span>
+                                </span>
+
+                                <span class="sk-share__value"
+                                      th:text="${row.count}">
+                                    6
+                                </span>
+                            </div>
+
+                        </div>
+
+                    </div>
+                </section>
+
+                <section class="card">
+
+                    <div class="card-head">
+
+                        <div>
+
+                            <h2>Брак по поставщикам</h2>
+
+                            <small>
+                                Написание партии прихода: основание
+                                рекламации поставщику
+                            </small>
+
+                        </div>
+
+                    </div>
+
+                    <div class="card-body">
+
+                        <div class="alert danger"
+                             th:if="${overview.cellCount == 0}">
+
+                            <p>
+                                Распределение появится вместе с первыми
+                                ячейками в изоляторе
+                            </p>
+
+                        </div>
+
+                        <div class="sk-share"
+                             th:unless="${overview.cellCount == 0}">
+
+                            <div class="sk-share__row"
+                                 th:each="row : ${overview.suppliers}">
+
+                                <span class="sk-share__label"
+                                      th:text="${row.label}">
+                                    ООО «Компонент»
+                                </span>
+
+                                <span class="sk-share__track">
+
+                                    <span class="sk-share__fill"
+                                          th:style="'width: '
+                                              + ${overview.cellCount > 0
+                                                  ? (row.count * 100 / overview.cellCount)
+                                                  : 0}
+                                              + '%;'">
+                                    </span>
+                                </span>
+
+                                <span class="sk-share__value"
+                                      th:text="${row.count}">
+                                    4
+                                </span>
+                            </div>
+
+                        </div>
+
+                    </div>
+                </section>
+
+            </div>
+
+            <section class="card">
+
+                <div class="card-head">
+
+                    <div>
+
+                        <h2>Ячейки изолятора</h2>
+
+                        <small>
+                            Свежие ячейки изолятора, перечисленные
+                            поштучно: полный перечень с отбором по типу,
+                            классу и виду брака открывают в разборе
+                        </small>
+
+                    </div>
+
+                    <a class="btn secondary compact"
+                       th:href="@{/quality/quarantine}">
+                        Открыть перечень
+                    </a>
+                </div>
+
+                <div class="card-body">
+
+                    <div class="alert danger"
+                         th:if="${overview.cellCount == 0}">
+
+                        <p>
+                            Отмечать нечего: как только контролёр оставит
+                            ячейки в изоляторе, здесь появятся номера для
+                            разбора и формирования ЗНП
+                        </p>
+
+                    </div>
+
+                    <div class="table-wrap"
+                         th:unless="${overview.cellCount == 0}">
+
+                        <table class="data-table sk-cell-table">
+
+                            <thead>
+
+                            <tr>
+                                <th>Тип</th>
+                                <th>Класс / наименование</th>
+                                <th>Номер ячейки</th>
+                                <th>Причина брака</th>
+                                <th>Поставщик</th>
+                                <th>Проверка</th>
+                                <th>Состояние</th>
+                            </tr>
+
+                            </thead>
+
+                            <tbody>
+
+                            <tr th:each="cell : ${overview.recentCells}"
+                                th:classappend="${cell.alreadyOrdered}
+                                    ? ' is-ordered'
+                                    : ''">
+
+                                <td th:text="${cell.kindLabel}">
+                                    Ячейка
+                                </td>
+
+                                <td th:text="${cell.cellLabel}">
+                                    1212 — Подсборка ЯПР56
+                                </td>
+
+                                <td class="sk-number-cell"
+                                    th:text="${cell.fullNumber}">
+                                    121200023
+                                </td>
+
+                                <td th:text="${cell.reasonChain}">
+                                    Механическое повреждение → Скол корпуса
+                                </td>
+
+                                <td th:text="${cell.supplierName}">
+                                    ООО «Компонент»
+                                </td>
+
+                                <td>
+                                    <div class="sk-cell-stack">
+
+                                        <span th:text="${cell.completedLabel}">
+                                            21.09.2026 11:20
+                                        </span>
+
+                                        <small class="sk-filter__hint"
+                                               th:text="${cell.checkerName}">
+                                            Иванов И.И.
+                                        </small>
+                                    </div>
+                                </td>
+
+                                <td>
+
+                                    <span class="sk-state sk-state--danger"
+                                          th:if="${cell.alreadyOrdered}">
+                                        Уже в заказе
+                                    </span>
+
+                                    <span class="sk-state sk-state--free"
+                                          th:unless="${cell.alreadyOrdered}">
+                                        Свободна
+                                    </span>
+                                </td>
+
+                            </tr>
+
+                            </tbody>
+                        </table>
+
+                    </div>
+
+                </div>
+            </section>
+
+            <section class="card">
+
+                <div class="card-head">
+
+                    <div>
+
+                        <h2>Как устроен разбор</h2>
+
+                        <small>
+                            Руководитель службы размечает не партии, а
+                            конкретные ячейки — заказ оформляют на
+                            отмеченные номера
+                        </small>
+
+                    </div>
+
+                </div>
+
+                <div class="card-body">
+
+                    <ol class="sk-steps">
+
+                        <li class="sk-steps__item is-current">
+                            Отбор: тип ячеек, класс, тип и вид брака
+                        </li>
+
+                        <li class="sk-steps__item is-current">
+                            Отметка ячеек в перечне изолятора
+                        </li>
+
+                        <li class="sk-steps__item is-current">
+                            Вид заказа и тип поставщика
+                        </li>
+
+                        <li class="sk-steps__item">
+                            Заказ в работе и закрытие по акту
+                        </li>
+
+                    </ol>
+
+                    <div class="table-wrap">
+
+                        <table class="data-table">
+
+                            <thead>
+
+                            <tr>
+                                <th>Раздел</th>
+                                <th>Что здесь делают</th>
+                                <th></th>
+                            </tr>
+
+                            </thead>
+
+                            <tbody>
+
+                            <tr>
+                                <td>Изолятор брака</td>
+
+                                <td>
+                                    Перечень ячеек, оставленных в
+                                    изоляторе закрытыми проверками входного
+                                    контроля: отбор по условиям и отметка
+                                    состава будущего заказа
+                                </td>
+
+                                <td class="table-actions">
+
+                                    <a class="btn secondary compact"
+                                       th:href="@{/quality/quarantine}">
+                                        Открыть перечень
+                                    </a>
+
+                                </td>
+                            </tr>
+
+                            <tr>
+                                <td>Заказы на ремонт</td>
+
+                                <td>
+                                    Реестр ЗНП: номер, вид заказа,
+                                    поставщик и состав отмеченных
+                                    номеров, переходы по статусу
+                                </td>
+
+                                <td class="table-actions">
+
+                                    <a class="btn secondary compact"
+                                       th:href="@{/quality/orders}">
+                                        Открыть реестр
+                                    </a>
+
+                                </td>
+                            </tr>
+
+                            </tbody>
+                        </table>
+
+                    </div>
+
+                </div>
+            </section>
+
+            <section class="card">
+
+                <div class="card-head">
+
+                    <div>
+
+                        <h2>Заказы на ремонт</h2>
+
+                        <small>
+                            Заказ создают из перечня изолятора; номер
+                            формируют автоматически в ряду текущего года
+                            (ЗНР-ГГГГ-NNN)
+                        </small>
+
+                    </div>
+
+                    <span class="sk-counter"
+                          th:if="${orders != null and !#lists.isEmpty(orders)}">
+
+                        Заказов:
+
+                        <strong th:text="${#lists.size(orders)}">
+                            3
+                        </strong>
+                    </span>
+                </div>
+
+                <div class="card-body">
+
+                    <div class="alert danger"
+                         th:if="${orders == null or #lists.isEmpty(orders)}">
+
+                        <p>
+                            Заказов на ремонт пока нет: их оформляют по
+                            отмеченным ячейкам изолятора кнопкой
+                            «Сформировать ЗНП на ремонт»
+                        </p>
+
+                    </div>
+
+                    <div class="table-wrap"
+                         th:unless="${orders == null or #lists.isEmpty(orders)}">
+
+                        <table class="data-table sk-cell-table">
+
+                            <thead>
+
+                            <tr>
+                                <th>Номер</th>
+                                <th>Дата</th>
+                                <th>Вид заказа</th>
+                                <th>Поставщик</th>
+                                <th>Статус</th>
+                                <th>Оформил</th>
+                                <th></th>
+                            </tr>
+
+                            </thead>
+
+                            <tbody>
+
+                            <tr th:each="ord : ${orders}">
+
+                                <td class="sk-number-cell"
+                                    th:text="${ord.number}">
+                                    ЗНР-2026-001
+                                </td>
+
+                                <td th:text="${ord.formattedOrderDate}">
+                                    21.09.2026
+                                </td>
+
+                                <td>
+                                    <div class="sk-cell-stack">
+
+                                        <span th:text="${ord.orderTypeLabel}">
+                                            ЗНП на ремонт ячеек
+                                        </span>
+
+                                        <small class="sk-filter__hint"
+                                               th:text="${ord.kindLabel}">
+                                            Ячейка
+                                        </small>
+                                    </div>
+                                </td>
+
+                                <td th:text="${ord.supplierName}">
+                                    ООО «Компонент»
+                                </td>
+
+                                <td>
+
+                                    <span class="status"
+                                          th:classappend="' ' + ${ord.statusBadgeClass}"
+                                          th:text="${ord.statusDisplayName}">
+                                        Сформирован
+                                    </span>
+                                </td>
+
+                                <td th:text="${ord.createdByName}">
+                                    Иванов И.И.
+                                </td>
+
+                                <td class="table-actions">
+
+                                    <a class="btn secondary compact"
+                                       th:href="@{/quality/orders/{id}(id=${ord.id})}">
+                                        Карточка заказа
+                                    </a>
+
+                                </td>
+
+                            </tr>
+
+                            </tbody>
+                        </table>
+
+                    </div>
+
+                </div>
+            </section>
+
+        </div>
+    </main>
+</div>
+
+<th:block th:replace="~{quality/fragments/layout
+        :: commonScripts}">
+</th:block>
+
+</body>
+</html>

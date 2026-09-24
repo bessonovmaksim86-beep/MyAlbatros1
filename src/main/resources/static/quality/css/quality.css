@@ -1,0 +1,1332 @@
+/* ============================================================
+   СЛУЖБА КАЧЕСТВА
+
+   Каркас карточек (таблицы, формы, статусы) приходит из
+   technology.css и common.css; здесь — собственный каркас меню
+   и компоненты разбора изолятора. Имена переменных и классов
+   префиксованы sk-, чтобы модуль не зависел от настроек других
+   отделов и скрипты разделов не перехватывали разметку друг
+   друга.
+   ============================================================ */
+
+:root {
+    --sk-sidebar-collapsed-width: 72px;
+    --sk-sidebar-expanded-width: 286px;
+    --sk-sidebar-duration: 220ms;
+
+    --sk-sidebar-background: #33272a;
+    --sk-sidebar-background-dark: #241b1e;
+    --sk-sidebar-border: rgba(255, 255, 255, 0.1);
+    --sk-sidebar-text: #ffffff;
+    --sk-sidebar-muted: #b6a7ab;
+    --sk-sidebar-active: rgba(255, 255, 255, 0.14);
+    --sk-accent: #b4232c;
+
+    --sk-line: #dce4eb;
+    --sk-muted: #6c7b89;
+    --sk-navy: #073e75;
+
+    --sk-number-bg: #f4f7fa;
+    --sk-number-line: #cfd9e2;
+
+    --sk-danger: #a12d35;
+    --sk-danger-bg: #fff0f1;
+    --sk-danger-line: #efc6ca;
+
+    --sk-warning: #a45c00;
+    --sk-warning-bg: #fff1dd;
+
+    --sk-ok: #18794e;
+    --sk-ok-bg: #e8f5ee;
+}
+
+html,
+body {
+    width: 100%;
+    min-height: 100%;
+    margin: 0;
+}
+
+body {
+    overflow-x: hidden;
+}
+
+
+/* ============================================================
+   БОКОВОЕ МЕНЮ
+
+   Внутреннему блоку задают развёрнутую ширину напрямую, поэтому
+   подписи не сжимаются, а обрезаются панелью, и каждая подпись
+   скрыта opacity до :hover. Без этого свёрнутое меню показывало
+   названия пунктов — базовые правила .department-brand привязаны
+   к селекторам других разделов и до службы качества не доходили.
+   ============================================================ */
+
+.sk-sidebar {
+    position: sticky;
+    top: 0;
+    z-index: 1000;
+
+    align-self: start;
+
+    box-sizing: border-box;
+    width: var(--sk-sidebar-collapsed-width) !important;
+    min-width: 0 !important;
+    height: 100vh;
+
+    padding: 0 !important;
+    overflow: hidden;
+
+    color: var(--sk-sidebar-text);
+
+    background:
+        linear-gradient(
+            180deg,
+            var(--sk-sidebar-background) 0%,
+            var(--sk-sidebar-background-dark) 100%
+        );
+
+    border-right: 1px solid var(--sk-sidebar-border);
+    box-shadow: 5px 0 18px rgba(20, 12, 14, 0.18);
+
+    transition:
+        width var(--sk-sidebar-duration) ease,
+        box-shadow var(--sk-sidebar-duration) ease;
+}
+
+.sk-sidebar:hover,
+.sk-sidebar:focus-within {
+    width: var(--sk-sidebar-expanded-width) !important;
+    box-shadow: 12px 0 34px rgba(20, 12, 14, 0.34);
+}
+
+.sk-sidebar__inner {
+    display: flex;
+    flex-direction: column;
+
+    box-sizing: border-box;
+    width: var(--sk-sidebar-expanded-width);
+    height: 100%;
+
+    padding: 12px 10px 18px;
+}
+
+.sk-sidebar .department-brand {
+    flex: 0 0 140px;
+    height: 140px;
+}
+
+.sk-sidebar:hover .department-brand__logo,
+.sk-sidebar:focus-within .department-brand__logo {
+    width: 248px;
+    height: 62px;
+    padding: 7px 10px;
+}
+
+.sk-sidebar .department-brand__system,
+.sk-sidebar .department-brand__department {
+    opacity: 0;
+    transform: translateX(-8px);
+
+    transition:
+        opacity 150ms ease 40ms,
+        transform 150ms ease 40ms;
+}
+
+.sk-sidebar:hover .department-brand__system,
+.sk-sidebar:hover .department-brand__department,
+.sk-sidebar:focus-within .department-brand__system,
+.sk-sidebar:focus-within .department-brand__department {
+    opacity: 1;
+    transform: translateX(0);
+}
+
+.sk-sidebar__note {
+    display: block;
+    width: 248px;
+    margin: -6px 0 12px;
+    padding: 8px 10px;
+
+    overflow: hidden;
+
+    color: var(--sk-sidebar-muted);
+    font-size: 11px;
+    font-weight: 600;
+    line-height: 1.35;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+
+    background: rgba(255, 255, 255, 0.06);
+    border-radius: 8px;
+
+    opacity: 0;
+    transform: translateX(-8px);
+
+    transition:
+        opacity 150ms ease 40ms,
+        transform 150ms ease 40ms;
+}
+
+.sk-sidebar:hover .sk-sidebar__note,
+.sk-sidebar:focus-within .sk-sidebar__note {
+    opacity: 1;
+    transform: translateX(0);
+}
+
+.sk-sidebar__divider {
+    flex: 0 0 1px;
+    width: 252px;
+    height: 1px;
+    margin: 0 0 16px;
+
+    background: var(--sk-sidebar-border);
+}
+
+.sk-navigation {
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    gap: 6px;
+
+    min-height: 0;
+    overflow-x: hidden;
+    overflow-y: auto;
+}
+
+.sk-navigation__item {
+    position: relative;
+
+    display: flex;
+    align-items: center;
+
+    box-sizing: border-box;
+    width: 266px;
+    min-height: 48px;
+    padding: 10px 13px;
+
+    overflow: hidden;
+
+    color: #f0e6e8;
+    font-size: 14px;
+    font-weight: 500;
+    line-height: 1.2;
+    text-decoration: none;
+    white-space: nowrap;
+
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 10px;
+
+    transition:
+        color 160ms ease,
+        background-color 160ms ease,
+        border-color 160ms ease;
+}
+
+.sk-navigation__item:hover,
+.sk-navigation__item:focus-visible {
+    color: #ffffff;
+    text-decoration: none;
+    background: var(--sk-sidebar-active);
+}
+
+.sk-navigation__item.is-active {
+    color: #ffffff;
+    background: var(--sk-sidebar-active);
+    border-color: rgba(255, 255, 255, 0.08);
+    box-shadow: inset 3px 0 0 var(--sk-accent);
+}
+
+.sk-navigation__icon {
+    display: inline-flex;
+    flex: 0 0 24px;
+    align-items: center;
+    justify-content: center;
+
+    width: 24px;
+    height: 24px;
+    margin-right: 15px;
+}
+
+.sk-navigation__icon svg {
+    display: block;
+    width: 21px;
+    height: 21px;
+    fill: currentColor;
+}
+
+.sk-navigation__text {
+    min-width: 0;
+    overflow: hidden;
+
+    text-overflow: ellipsis;
+
+    opacity: 0;
+    transform: translateX(-6px);
+
+    transition:
+        opacity 130ms ease,
+        transform 130ms ease;
+}
+
+.sk-sidebar:hover .sk-navigation__text,
+.sk-sidebar:focus-within .sk-navigation__text {
+    opacity: 1;
+    transform: translateX(0);
+}
+
+/*
+ * Счётчик держат скрытым и в свёрнутом меню: на 72px он налезает на
+ * соседний пункт.
+ */
+.sk-navigation__counter {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+
+    min-width: 21px;
+    height: 21px;
+    margin-left: auto;
+    padding: 0 6px;
+
+    color: #ffffff;
+    font-size: 11px;
+    font-weight: 700;
+
+    background: var(--sk-accent);
+    border-radius: 20px;
+
+    opacity: 0;
+
+    transition: opacity 130ms ease;
+}
+
+.sk-sidebar:hover .sk-navigation__counter,
+.sk-sidebar:focus-within .sk-navigation__counter {
+    opacity: 1;
+}
+
+.sk-sidebar__footer {
+    margin-top: auto;
+    padding: 14px 0 0;
+
+    color: var(--sk-sidebar-muted);
+    font-size: 11px;
+}
+
+.sk-sidebar__footer form {
+    margin: 0;
+}
+
+.sk-sidebar__logout {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+
+    box-sizing: border-box;
+    width: 266px;
+    min-height: 42px;
+    padding: 10px 13px;
+
+    overflow: hidden;
+
+    color: #f0e6e8;
+    font: inherit;
+    font-size: 13px;
+    font-weight: 600;
+    white-space: nowrap;
+
+    cursor: pointer;
+
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 10px;
+
+    transition:
+        color 160ms ease,
+        background-color 160ms ease;
+}
+
+.sk-sidebar__logout:hover,
+.sk-sidebar__logout:focus-visible {
+    color: #ffffff;
+    background: var(--sk-sidebar-active);
+}
+
+.sk-sidebar__status-dot {
+    flex: 0 0 8px;
+    width: 8px;
+    height: 8px;
+    margin-left: 7px;
+
+    background: #38c172;
+    border-radius: 50%;
+}
+
+.sk-sidebar__logout-text {
+    opacity: 0;
+    transform: translateX(-6px);
+
+    transition:
+        opacity 130ms ease,
+        transform 130ms ease;
+}
+
+.sk-sidebar:hover .sk-sidebar__logout-text,
+.sk-sidebar:focus-within .sk-sidebar__logout-text {
+    opacity: 1;
+    transform: translateX(0);
+}
+
+
+/* ============================================================
+   ВЕРХНЯЯ ПАНЕЛЬ
+   ============================================================ */
+
+.sk-topbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 20px;
+    height: 74px;
+    padding: 0 30px;
+    background: #ffffff;
+    border-bottom: 1px solid var(--sk-line);
+    position: sticky;
+    top: 0;
+    z-index: 3;
+}
+
+.sk-topbar__section {
+    color: var(--sk-navy);
+    font-size: 13px;
+    font-weight: 800;
+    letter-spacing: 0.4px;
+    text-transform: uppercase;
+}
+
+.sk-topbar__right {
+    display: flex;
+    align-items: center;
+    gap: 18px;
+}
+
+.sk-clock {
+    color: var(--sk-muted);
+    font-size: 12px;
+    font-variant-numeric: tabular-nums;
+}
+
+.sk-topbar__user {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding-left: 18px;
+    border-left: 1px solid var(--sk-line);
+}
+
+.sk-topbar__avatar {
+    display: grid;
+    place-items: center;
+    width: 38px;
+    height: 38px;
+    border-radius: 50%;
+    background: var(--sk-accent);
+    color: #ffffff;
+    font-size: 13px;
+    font-weight: 800;
+}
+
+.sk-topbar__user-data {
+    display: grid;
+    gap: 2px;
+}
+
+.sk-topbar__username {
+    color: var(--sk-navy);
+    font-size: 13px;
+}
+
+.sk-topbar__specialty {
+    color: var(--sk-muted);
+    font-size: 11px;
+}
+
+.sk-page {
+    max-width: 1400px;
+    margin: 0 auto;
+    padding: 28px 30px 56px;
+}
+
+
+/* ============================================================
+   ШАПКА СТРАНИЦЫ И РЯД КНОПОК
+
+   Базовый каркас описывает .page-head, но не описывает ряд кнопок:
+   .page-head-actions задан только в стилях цеха, диспетчерской и
+   админ-консоли, которые сюда не подключены. Без display:flex ссылки
+   остаются inline-элементами — у inline вертикальный padding не
+   участвует в высоте строки, поэтому кнопки выравниваются по базовой
+   линии, вылезают за свой блок и наезжают на подзаголовок, а шаг
+   между ними задаётся переносом пробелом вместо ровного gap.
+
+   Ряд делают flex'ом, а кнопку — inline-flex (тот же приём, что у
+   .table-actions .btn): высота считается по содержимому, и кнопки
+   стоят на одной линии независимо от длины подписи.
+   ============================================================ */
+
+.sk-page .page-head {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 16px 28px;
+    flex-wrap: wrap;
+
+    margin-bottom: 22px;
+}
+
+/* Длинный подзаголовок обязан сжиматься, а не выталкивать кнопки. */
+.sk-page .page-title {
+    flex: 1 1 320px;
+    min-width: 0;
+}
+
+.sk-page .page-head-actions {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 10px;
+    flex-wrap: wrap;
+
+    flex: none;
+}
+
+.sk-page .page-head-actions .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+
+    font-size: 13px;
+    line-height: 1.2;
+    white-space: nowrap;
+    text-decoration: none;
+}
+
+/*
+ * Форма перехода по статусу в шапке карточки — не отдельный блок:
+ * иначе она добавила бы перенос и свои отступы в ряд кнопок.
+ */
+.sk-page .page-head-actions form {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+
+    margin: 0;
+}
+
+
+/* ============================================================
+   ОБЩИЕ ЭЛЕМЕНТЫ СТРАНИЦ
+   ============================================================ */
+
+.data-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.sk-cell-stack {
+    display: grid;
+    gap: 4px;
+    justify-items: start;
+}
+
+.sk-page .mono {
+    font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
+    font-size: 0.92em;
+}
+
+/* Отменённый заказ: модификатор бейджа есть только в диспетчерской. */
+.status.deleted {
+    color: #6b7683;
+    background: #eceff2;
+}
+
+.stat strong.stat-text {
+    font-size: 17px;
+    line-height: 1.35;
+}
+
+.stat span {
+    display: block;
+    color: var(--sk-muted);
+    font-size: 11px;
+    line-height: 1.45;
+}
+
+.stats--sk {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
+
+/* ============================================================
+   РАСПРЕДЕЛЕНИЕ БРАКА ПО ТИПАМ И ПОСТАВЩИКАМ
+
+   Долю считают от общего числа ячеек изолятора, а не от показанных
+   строк: перечень на обзоре — первые пять написаний, и полоса должна
+   читаться как «часть изолятора», иначе список «первые пять»
+   выглядел бы полным распределением.
+   ============================================================ */
+
+.sk-share {
+    display: grid;
+    gap: 12px;
+}
+
+.sk-share__row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(90px, 1.1fr) 34px;
+    align-items: center;
+    gap: 12px;
+}
+
+.sk-share__label {
+    overflow: hidden;
+
+    color: var(--sk-navy);
+    font-size: 12px;
+    font-weight: 600;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.sk-share__track {
+    display: block;
+    height: 9px;
+    overflow: hidden;
+    background: var(--sk-number-bg);
+    border-radius: 99px;
+}
+
+.sk-share__fill {
+    display: block;
+    height: 100%;
+    background: linear-gradient(90deg, var(--sk-accent), #d9534f);
+    border-radius: 99px;
+}
+
+.sk-share__value {
+    color: var(--sk-navy);
+    font-size: 12px;
+    font-weight: 800;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+}
+
+.trend.attention {
+    color: var(--sk-warning);
+}
+
+.btn.danger {
+    background: var(--sk-danger-bg);
+    color: var(--sk-danger);
+    border: 1px solid var(--sk-danger-line);
+}
+
+.btn.compact {
+    padding: 5px 9px;
+    font-size: 12px;
+    line-height: 1;
+}
+
+/*
+ * Базовый каркас кнопок disabled-состояния не описывает, а кнопку
+ * формирования заказа держат заблокированной, пока не отмечено ни
+ * одной ячейки: без серого вида руководитель не понял бы, почему
+ * нажатие ничего не делает.
+ */
+.btn:disabled {
+    cursor: not-allowed;
+    opacity: 0.5;
+}
+
+.btn.primary:disabled {
+    background: #d7a26a;
+}
+
+.table-actions {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 6px;
+
+    white-space: nowrap;
+}
+
+.table-actions .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+
+    text-decoration: none;
+    white-space: nowrap;
+}
+
+.table-actions form {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+
+    margin: 0;
+}
+
+.sk-counter {
+    padding: 5px 10px;
+    border-radius: 99px;
+    background: var(--sk-number-bg);
+    color: var(--sk-navy);
+    font-size: 11px;
+    font-weight: 800;
+    font-variant-numeric: tabular-nums;
+}
+
+.sk-counter--danger {
+    background: var(--sk-danger-bg);
+    color: var(--sk-danger);
+}
+
+.sk-state {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 9px;
+    border-radius: 99px;
+    font-size: 10px;
+    font-weight: 800;
+    white-space: nowrap;
+}
+
+.sk-state--free {
+    background: var(--sk-number-bg);
+    color: var(--sk-muted);
+}
+
+.sk-state--work {
+    background: var(--sk-warning-bg);
+    color: var(--sk-warning);
+}
+
+.sk-state--done {
+    background: var(--sk-ok-bg);
+    color: var(--sk-ok);
+}
+
+.sk-state--danger {
+    background: var(--sk-danger-bg);
+    color: var(--sk-danger);
+}
+
+
+/* ============================================================
+   ФИЛЬТР ПЕРЕЧНЯ ИЗОЛЯТОРА
+
+   Отбор ведут GET'ом: ссылку на отобранный перечень можно
+   передать коллеге, и она обязана открывать тот же список.
+   Поэтому форма — обычный сабмит, а не асинхронная подгрузка.
+   ============================================================ */
+
+.sk-filter {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr)) auto;
+    gap: 14px 18px;
+
+    /*
+     * Поля выравнивают по верхнему краю, а не по нижнему: подсказки под
+     * списками разной длины, и при выравнивании вниз сами списки
+     * разъезжались бы по вертикали.
+     */
+    align-items: start;
+
+    margin-bottom: 20px;
+    padding: 18px 20px;
+
+    background: #ffffff;
+    border: 1px solid var(--sk-line);
+    border-radius: 14px;
+    box-shadow: 0 10px 28px rgba(16, 47, 75, .08);
+}
+
+.sk-filter__field {
+    display: grid;
+    gap: 7px;
+    min-width: 0;
+}
+
+.sk-filter__field > label {
+    color: var(--sk-navy);
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: 0.3px;
+    text-transform: uppercase;
+
+    /*
+     * Высоту подписи и подсказки фиксируют на уровне двух строк.
+     * Без этого подписи «Тип ячеек» (одна строка) и «Класс /
+     * наименование ячейки» (две строки на узкой колонке) тянут свои
+     * списки на разные уровни, и ряд фильтров выглядит косым.
+     */
+    min-height: 28px;
+    line-height: 1.25;
+}
+
+.sk-filter__field select {
+    width: 100%;
+    height: 42px;
+    border: 1px solid var(--sk-line);
+    border-radius: 9px;
+    padding: 11px 12px;
+    font: inherit;
+    font-size: 13px;
+    color: #172738;
+    background: #ffffff;
+}
+
+.sk-filter__field select:focus {
+    outline: 2px solid rgba(180, 35, 53, 0.3);
+    border-color: var(--sk-accent);
+}
+
+.sk-filter__hint {
+    color: var(--sk-muted);
+    font-size: 11px;
+    line-height: 1.4;
+
+    /* Две строки — как у подписи: ряд заканчивается на одной высоте. */
+    min-height: 30px;
+}
+
+.sk-filter__actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+
+    /*
+     * Кнопки держат на уровне списков: поле фильтров начинается
+     * подписью, поэтому без отступа ряд кнопок встал бы выше полей.
+     */
+    padding-top: 35px;
+}
+
+
+/* ============================================================
+   ПЕРЕЧЕНЬ ЯЧЕЕК ИЗОЛЯТОРА
+
+   Строку перечня отмечают чекбоксом, поэтому вся строка — зона
+   нажатия: label оборачивает содержимое tr, и руководителю не
+   нужно попадать мышью в 16-пиксельный квадрат.
+   ============================================================ */
+
+.sk-cell-table td {
+    vertical-align: middle;
+}
+
+.sk-cell-table .sk-number-cell {
+    font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
+    font-size: 11px;
+    color: var(--sk-navy);
+    white-space: nowrap;
+}
+
+.sk-cell-table tbody tr {
+    cursor: pointer;
+}
+
+.sk-cell-table tbody tr:hover {
+    background: #fffaf9;
+}
+
+/* Ячейка уже закреплена незакрытым заказом — её не отмечают. */
+.sk-cell-table tr.is-ordered {
+    background: var(--sk-number-bg);
+    cursor: default;
+}
+
+.sk-cell-table tr.is-ordered:hover {
+    background: var(--sk-number-bg);
+}
+
+.sk-cell-table tr.is-picked {
+    background: #fff6ef;
+    box-shadow: inset 3px 0 0 var(--sk-accent);
+}
+
+.sk-cell-table td.sk-pick-cell {
+    width: 44px;
+    text-align: center;
+}
+
+.sk-check {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--sk-navy);
+    font-size: 12px;
+    font-weight: 700;
+    cursor: pointer;
+    white-space: nowrap;
+}
+
+.sk-check input {
+    width: 16px;
+    height: 16px;
+    accent-color: var(--sk-accent);
+}
+
+.sk-check input:disabled {
+    cursor: not-allowed;
+}
+
+.sk-check--muted {
+    color: var(--sk-muted);
+    font-weight: 600;
+}
+
+
+/* ============================================================
+   ИТОГ ОТМЕТКИ И ПЕРЕХОД К ЗАКАЗУ
+
+   Кнопка формирования заказа стоит в клеймящейся панели: состав
+   размечают по длинному перечню, и уходить в конец страницы за
+   кнопкой незачем. Пока не отмечено ни одной ячейки, кнопка
+   заблокирована — пустой состав сервис всё равно отклоняет.
+   ============================================================ */
+
+.sk-picked-bar {
+    position: sticky;
+    bottom: 0;
+    z-index: 4;
+
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    flex-wrap: wrap;
+
+    margin-top: 18px;
+    padding: 14px 20px;
+
+    background: #ffffff;
+    border: 1px solid var(--sk-line);
+    border-left: 4px solid var(--sk-accent);
+    border-radius: 12px;
+    box-shadow: 0 -8px 24px rgba(16, 47, 75, .1);
+}
+
+/* Верхняя панель — не клеймящая: она стоит над перечнем и уходит при
+   прокрутке, внизу остаётся вторая, липкая. */
+.sk-picked-bar--top {
+    position: static;
+
+    margin: 0 0 18px;
+    border-left: 4px solid var(--sk-accent);
+    box-shadow: 0 10px 28px rgba(16, 47, 75, .08);
+}
+
+.sk-picked-bar__summary {
+    display: grid;
+    gap: 3px;
+    min-width: 0;
+}
+
+.sk-picked-bar__count {
+    color: var(--sk-navy);
+    font-size: 14px;
+    font-weight: 800;
+}
+
+.sk-picked-bar__hint {
+    color: var(--sk-muted);
+    font-size: 11px;
+    line-height: 1.45;
+}
+
+.sk-picked-bar__actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+/* Состав, перенесённый на второй шаг, читают списком, а не таблицей. */
+.sk-picked-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 7px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.sk-picked-list__item {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 10px;
+    border: 1px solid var(--sk-number-line);
+    border-radius: 99px;
+    background: var(--sk-number-bg);
+    color: var(--sk-navy);
+    font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
+    font-size: 11px;
+    font-weight: 700;
+}
+
+
+/* ============================================================
+   ФОРМА ЗАКАЗА НА РЕМОНТ
+   ============================================================ */
+
+.sk-form {
+    display: grid;
+    gap: 18px;
+}
+
+.sk-form-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 16px 20px;
+}
+
+.sk-field {
+    display: grid;
+    gap: 7px;
+    min-width: 0;
+}
+
+.sk-field--wide {
+    grid-column: span 2;
+}
+
+.sk-field > label {
+    color: var(--sk-navy);
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: 0.3px;
+    text-transform: uppercase;
+}
+
+/*
+ * Заголовок блока без управляемого контроля: подпись чекбокса даёт
+ * обёртка, поэтому заголовок — span, а не второй label.
+ */
+.sk-field__caption {
+    color: var(--sk-navy);
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: 0.3px;
+    text-transform: uppercase;
+}
+
+.sk-field select,
+.sk-field input[type="text"],
+.sk-field textarea {
+    width: 100%;
+    border: 1px solid var(--sk-line);
+    border-radius: 9px;
+    padding: 11px 12px;
+    font: inherit;
+    font-size: 13px;
+    color: #172738;
+    background: #ffffff;
+}
+
+.sk-field textarea {
+    min-height: 96px;
+    resize: vertical;
+}
+
+.sk-field select:focus,
+.sk-field input[type="text"]:focus,
+.sk-field textarea:focus {
+    outline: 2px solid rgba(180, 35, 53, 0.3);
+    border-color: var(--sk-accent);
+}
+
+.sk-field__hint {
+    color: var(--sk-muted);
+    font-size: 11px;
+    line-height: 1.45;
+}
+
+/*
+ * Поле ручного написания поставщика скрыто, пока в списке выбран
+ * справочник: противоречивое состояние (ссылка и текст разом)
+ * сервис отвергает, поэтому форма его просто не показывает.
+ */
+.sk-field--custom[hidden] {
+    display: none;
+}
+
+/*
+ * Тип поставщика — две карточки-подписи на одном радио-поле.
+ *
+ * Выбор держат рядом, потому что он определяет не просто написание, а
+ * то, чем запишут исполнителя: ссылкой на справочник или текстом.
+ * Выбранную карточку выделяют рамкой и фоном, чтобы тип читался до
+ * прокрутки к списку поставщиков.
+ */
+.sk-choice {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+}
+
+.sk-choice__option {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+
+    padding: 12px 14px;
+
+    background: #ffffff;
+    border: 1px solid var(--sk-line);
+    border-radius: 11px;
+    cursor: pointer;
+}
+
+.sk-choice__option:hover {
+    border-color: #c8d3dd;
+    background: #fcfdfe;
+}
+
+.sk-choice__option input {
+    flex: none;
+    width: 16px;
+    height: 16px;
+    margin-top: 2px;
+    accent-color: var(--sk-accent);
+}
+
+.sk-choice__option:has(input:checked) {
+    border-color: var(--sk-accent);
+    background: #fffafa;
+    box-shadow: inset 3px 0 0 var(--sk-accent);
+}
+
+.sk-choice__option:has(input:focus-visible) {
+    outline: 2px solid rgba(180, 35, 53, 0.3);
+}
+
+.sk-choice__text {
+    display: grid;
+    gap: 3px;
+    min-width: 0;
+}
+
+.sk-choice__text strong {
+    color: var(--sk-navy);
+    font-size: 13px;
+    font-weight: 800;
+}
+
+.sk-choice__text small {
+    color: var(--sk-muted);
+    font-size: 11px;
+    line-height: 1.45;
+}
+
+.sk-field select:disabled,
+.sk-field input[type="text"]:disabled {
+    background: var(--sk-number-bg);
+    color: var(--sk-muted);
+}
+
+.sk-form-actions {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+
+    margin-top: 20px;
+    padding-top: 18px;
+    border-top: 1px solid var(--sk-line);
+}
+
+.sk-form-actions__group {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+
+/* ============================================================
+   РЕЕСТР И КАРТОЧКА ЗАКАЗОВ
+   ============================================================ */
+
+.sk-order-meta {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 14px 22px;
+    margin: 0;
+}
+
+.sk-order-meta__item {
+    display: grid;
+    gap: 3px;
+}
+
+.sk-order-meta__item--wide {
+    grid-column: span 2;
+}
+
+.sk-order-meta__item dt {
+    color: var(--sk-muted);
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: 0.4px;
+    text-transform: uppercase;
+}
+
+.sk-order-meta__item dd {
+    margin: 0;
+    color: var(--sk-navy);
+    font-size: 13px;
+    line-height: 1.45;
+}
+
+.sk-order-meta__item dd.mono {
+    font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
+    font-size: 12px;
+}
+
+/*
+ * Шаги разбора подписаны по порядку: заказ на ремонт ведут не по
+ * строкам выпуска, а по статусу, и руководителю важно видеть,
+ * какая кнопка идёт следующей.
+ */
+.sk-steps {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin: 0 0 20px;
+    padding: 0;
+    list-style: none;
+}
+
+.sk-steps__item {
+    padding: 7px 13px;
+    border: 1px solid var(--sk-line);
+    border-radius: 99px;
+    background: #ffffff;
+    color: var(--sk-muted);
+    font-size: 11px;
+    font-weight: 700;
+}
+
+.sk-steps__item.is-current {
+    border-color: #f4c98d;
+    background: var(--sk-warning-bg);
+    color: var(--sk-warning);
+}
+
+.sk-steps__item.is-done {
+    border-color: #b9dec9;
+    background: var(--sk-ok-bg);
+    color: var(--sk-ok);
+}
+
+
+/* ============================================================
+   АДАПТАЦИЯ
+   ============================================================ */
+
+@media (max-width: 1320px) {
+    .stats--sk {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+}
+
+@media (max-width: 1150px) {
+    .sk-filter {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .sk-order-meta {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .sk-share__row {
+        grid-template-columns: minmax(0, 1fr) minmax(70px, 1fr) 30px;
+    }
+}
+
+@media (max-width: 1050px) {
+    .sk-form-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .sk-field--wide {
+        grid-column: auto;
+    }
+
+    .sk-choice {
+        grid-template-columns: 1fr;
+    }
+}
+
+@media (max-width: 820px) {
+    .stats--sk {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    :root {
+        --sk-sidebar-collapsed-width: 62px;
+    }
+
+    .sk-sidebar__inner {
+        padding-right: 6px;
+        padding-left: 6px;
+    }
+
+    .sk-navigation__item {
+        padding-right: 12px;
+        padding-left: 12px;
+    }
+}
+
+@media (max-width: 760px) {
+    .sk-topbar {
+        padding: 0 14px;
+    }
+
+    .sk-clock {
+        display: none;
+    }
+
+    .sk-page {
+        padding: 20px 14px 40px;
+    }
+
+    .sk-filter,
+    .sk-order-meta {
+        grid-template-columns: 1fr;
+    }
+
+    .sk-order-meta__item--wide {
+        grid-column: auto;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .sk-sidebar,
+    .sk-sidebar__note,
+    .sk-sidebar__logout,
+    .sk-sidebar__logout-text,
+    .sk-navigation__item,
+    .sk-navigation__text,
+    .sk-navigation__counter,
+    .sk-sidebar .department-brand__system,
+    .sk-sidebar .department-brand__department {
+        transition: none !important;
+    }
+}

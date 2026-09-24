@@ -39,3 +39,21 @@ application:
   initial-admin:
     username: ${INITIAL_ADMIN_USERNAME:admin}
     password: ${INITIAL_ADMIN_PASSWORD:ChangeMe123!}
+
+  # Печать этикеток партии через BarTender (шаг «Номера и печать QR»).
+  #
+  # Выключено по умолчанию: BarTender установлен только на рабочих
+  # местах склада, а вызывать внешний процесс «потому что он есть в
+  # PATH» нельзя — оператор получил бы ошибку вместо этикеток. На
+  # машине кладовщика включают переменными окружения без правки файла.
+  label-printing:
+    enabled: ${LABEL_PRINT_ENABLED:false}
+    bartender-path: ${LABEL_PRINT_BARTENDER_PATH:}
+    template-path: ${LABEL_PRINT_TEMPLATE_PATH:}
+    printer: ${LABEL_PRINT_PRINTER:}
+    data-dir: ${LABEL_PRINT_DATA_DIR:}
+    delimiter: ${LABEL_PRINT_DELIMITER:tab}
+    encoding: ${LABEL_PRINT_ENCODING:UTF-8}
+    header: true
+    copies: ${LABEL_PRINT_COPIES:1}
+    timeout-seconds: ${LABEL_PRINT_TIMEOUT:60}

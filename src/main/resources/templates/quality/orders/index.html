@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="ru"
+      xmlns:th="http://www.thymeleaf.org">
+
+<head>
+    <meta charset="UTF-8">
+
+    <meta name="viewport"
+          content="width=device-width, initial-scale=1">
+
+    <title>Заказы на ремонт (ЗНП)</title>
+
+    <link rel="stylesheet"
+          th:href="@{/technology/css/technology.css}">
+
+    <link rel="stylesheet"
+          th:href="@{/technology/css/common.css}">
+
+    <link rel="stylesheet"
+          th:href="@{/quality/css/quality.css}">
+</head>
+
+<body>
+
+<div class="app-shell">
+
+    <aside th:replace="~{quality/fragments/layout
+            :: sidebar('orders')}">
+    </aside>
+
+    <main class="main">
+
+        <header th:replace="~{quality/fragments/layout
+                :: topbar}">
+        </header>
+
+        <div class="sk-page">
+
+            <div class="page-head">
+
+                <div class="page-title">
+
+                    <h1>Заказы на ремонт</h1>
+
+                    <p>
+                        ЗНП, оформленные по отмеченным ячейкам изолятора
+                        брака: вид заказа, поставщик и переходы по
+                        статусу
+                    </p>
+
+                </div>
+
+                <div class="page-head-actions">
+
+                    <a class="btn primary"
+                       th:href="@{/quality/quarantine}">
+                        Разобрать изолятор
+                    </a>
+
+                </div>
+            </div>
+
+            <div class="alert success"
+                 th:if="${successMessage}"
+                 th:text="${successMessage}">
+            </div>
+
+            <div class="alert danger"
+                 th:if="${errorMessage}"
+                 th:text="${errorMessage}">
+            </div>
+
+            <section class="card">
+
+                <div class="card-head">
+
+                    <div>
+
+                        <h2>Реестр заказов</h2>
+
+                        <small>
+                            Заказ создаётся только из перечня изолятора и
+                            нумеруется автоматически в ряду текущего года
+                            (ЗНР-ГГГГ-NNN); отменённый заказ возвращает
+                            ячейки в изолятор
+                        </small>
+
+                    </div>
+
+                    <span class="sk-counter"
+                          th:if="${orders != null and !#lists.isEmpty(orders)}">
+
+                        Заказов:
+
+                        <strong th:text="${#lists.size(orders)}">
+                            3
+                        </strong>
+                    </span>
+                </div>
+
+                <div class="card-body">
+
+                    <div class="alert danger"
+                         th:if="${orders == null or #lists.isEmpty(orders)}">
+
+                        <p>
+                            Заказов на ремонт пока нет: их оформляют по
+                            отмеченным ячейкам изолятора брака кнопкой
+                            «Сформировать ЗНП на ремонт»
+                        </p>
+
+                    </div>
+
+                    <div class="table-wrap"
+                         th:unless="${orders == null or #lists.isEmpty(orders)}">
+
+                        <table class="data-table sk-cell-table">
+
+                            <thead>
+
+                            <tr>
+                                <th>Номер</th>
+                                <th>Дата</th>
+                                <th>Вид заказа</th>
+                                <th>Поставщик</th>
+                                <th>Статус</th>
+                                <th>Оформил</th>
+                                <th></th>
+                            </tr>
+
+                            </thead>
+
+                            <tbody>
+
+                            <tr th:each="ord : ${orders}">
+
+                                <td class="sk-number-cell"
+                                    th:text="${ord.number}">
+                                    ЗНР-2026-001
+                                </td>
+
+                                <td th:text="${ord.formattedOrderDate}">
+                                    21.09.2026
+                                </td>
+
+                                <td>
+                                    <div class="sk-cell-stack">
+
+                                        <span th:text="${ord.orderTypeLabel}">
+                                            ЗНП на ремонт ячеек
+                                        </span>
+
+                                        <small class="sk-filter__hint"
+                                               th:text="${ord.kindLabel}">
+                                            Ячейка
+                                        </small>
+                                    </div>
+                                </td>
+
+                                <td>
+                                    <div class="sk-cell-stack">
+
+                                        <span th:text="${ord.supplierName}">
+                                            ООО «Компонент»
+                                        </span>
+
+                                        <!--
+                                            Ссылка на справочник есть не у
+                                            каждого заказа: поставщика
+                                            могли вписать наименованием, и
+                                            по этому признаку реестр
+                                            различает написания.
+                                        -->
+                                        <small class="sk-filter__hint"
+                                               th:if="${ord.supplier == null}">
+                                            Вписано наименованием
+                                        </small>
+                                    </div>
+                                </td>
+
+                                <td>
+
+                                    <span class="status"
+                                          th:classappend="' ' + ${ord.statusBadgeClass}"
+                                          th:text="${ord.statusDisplayName}">
+                                        Сформирован
+                                    </span>
+                                </td>
+
+                                <td th:text="${ord.createdByName}">
+                                    Иванов И.И.
+                                </td>
+
+                                <td class="table-actions">
+
+                                    <a class="btn secondary compact"
+                                       th:href="@{/quality/orders/{id}(id=${ord.id})}">
+                                        Карточка заказа
+                                    </a>
+
+                                </td>
+
+                            </tr>
+
+                            </tbody>
+                        </table>
+
+                    </div>
+
+                </div>
+            </section>
+
+        </div>
+    </main>
+</div>
+
+<th:block th:replace="~{quality/fragments/layout
+        :: commonScripts}">
+</th:block>
+
+</body>
+</html>

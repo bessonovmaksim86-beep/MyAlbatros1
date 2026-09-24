@@ -53,7 +53,23 @@
 
                 <div class="page-head-actions">
 
+                    <!--
+                        Возврат ведёт в тот раздел, где заказ и виден:
+                        групповые и ремонтные виды живут в «Групповых
+                        ЗНП», выпуск и комплектование — в «Заказах на
+                        производство» (см. ProductionOrder#isGroupZnp).
+                        Ссылка одна для обеих страниц, иначе из карточки
+                        группового заказа диспетчер попадал бы в чужой
+                        список.
+                    -->
                     <a class="btn secondary"
+                       th:if="${order != null and order.groupZnp}"
+                       th:href="@{/dispatcher/group-znp}">
+                        К списку групповых заказов
+                    </a>
+
+                    <a class="btn secondary"
+                       th:unless="${order != null and order.groupZnp}"
                        th:href="@{/dispatcher/production-order}">
                         К списку заказов
                     </a>
@@ -270,6 +286,11 @@
                                 или заказ-комплектующий (ЗНП). Ссылка на
                                 родителя сделана отдельной веткой, потому
                                 что @{...} внутрь ${...} не вкладывается.
+
+                                У комплектующего показан и вид (V37):
+                                комплектование, групповой на ячейки или
+                                приборы, ремонт ячеек или подсборок — по
+                                нему понимают, чем задан состав заказа.
                             -->
                             <div class="field">
                                 <label>Уровень заказа</label>
@@ -285,7 +306,8 @@
                                        class="status work"
                                        th:href="@{/dispatcher/production-order/{id}(id=${order.parentId})}"
                                        th:text="${
-                                           'Комплектующий · '
+                                           order.znpKindDisplayName
+                                           + ' · '
                                            + order.parentOrderNumber
                                        }">
                                         Заказ-комплектующий
@@ -293,7 +315,37 @@
                                 </div>
                             </div>
 
-                            <div class="field">
+                            <!--
+                                Изделие группового или ремонтного заказа
+                                (V37). Количество здесь не повторяют: оно
+                                стоит рядом с изделием в блоке состава
+                                ниже, и две одинаковые строки в карточке
+                                читались бы как разные данные.
+                            -->
+                            <div class="field"
+                                 th:if="${
+                                     order.kindApplicable
+                                     and order.classifierId != null
+                                 }">
+
+                                <label>Изделие заказа</label>
+
+                                <input type="text"
+                                       th:value="${order.classifierLabel}"
+                                       readonly>
+                            </div>
+
+                            <!--
+                                Заказ покупателя и операция выпуска есть
+                                только у заказа, привязанного к выпуску
+                                (см. ZnpKind#isReleaseBound). Групповой
+                                заказ (V38) заводят без заявки, а работы
+                                ему задаёт техпроцесс (V40), поэтому для
+                                него эти две строки убраны и показана
+                                строка маршрута.
+                            -->
+                            <div class="field"
+                                 th:unless="${order.groupZnp}">
                                 <label>Заказ покупателя</label>
 
                                 <input type="text"
@@ -301,11 +353,26 @@
                                        readonly>
                             </div>
 
-                            <div class="field">
+                            <div class="field"
+                                 th:unless="${order.groupZnp}">
                                 <label>Операция выпуска</label>
 
                                 <input type="text"
                                        th:value="${order.operationName}"
+                                       readonly>
+                            </div>
+
+                            <div class="field"
+                                 th:if="${order.groupZnp}">
+                                <label>Техпроцесс</label>
+
+                                <input type="text"
+                                       th:value="${
+                                           order.techProcessCode != null
+                                           and !#strings.isEmpty(order.techProcessCode)
+                                               ? order.techProcessCode
+                                               : 'Не указан'
+                                       }"
                                        readonly>
                             </div>
 
@@ -404,10 +471,46 @@
 
                         </div>
 
-                        <a class="btn secondary"
-                           th:href="@{/dispatcher/production-order/create}">
-                            Добавить комплектующий
-                        </a>
+                        <!--
+                            Родитель передаётся сразу: иначе форма
+                            открылась бы с невыбранным заказом верхнего
+                            уровня, а вид ЗНП спрашивают только у
+                            комплектующего — диспетчер не увидел бы
+                            выбора вида, хотя пришёл именно за ним.
+
+                            Кнопки те же, что в шапке списка заказов,
+                            но каждая ссылка несёт ещё и parentId: без
+                            него добавление из карточки ЗП потеряло бы
+                            связь с выпуском. Комплектованию родитель
+                            обязателен, остальным видам он в POST всё
+                            равно обнуляется (см. createProduction),
+                            поэтому ссылка на него безвредна.
+
+                            Кнопки собраны в группу: пять ссылок рядом с
+                            заголовком иначе растянули бы card-head и
+                            выдавили подпись блока на отдельную строку.
+                        -->
+                        <div class="kind-button-group">
+
+                            <a class="btn secondary kind-button"
+                               th:each="kind : ${znpKinds}"
+                               th:href="@{/dispatcher/production-order/create(
+                                   parentId=${order.id},
+                                   kind=${kind.name()}
+                               )}">
+
+                                <span class="kind-button__title"
+                                      th:text="${kind.createButtonLabel}">
+                                    Создать ЗНП на комплектование
+                                </span>
+
+                                <span class="kind-button__hint"
+                                      th:text="${kind.compositionHint}">
+                                    отмечаете датчики выпуска
+                                </span>
+                            </a>
+
+                        </div>
 
                     </div>
 
@@ -420,6 +523,7 @@
                                 <thead>
                                 <tr>
                                     <th style="width: 160px;">Номер</th>
+                                    <th style="width: 220px;">Вид</th>
                                     <th>Операция</th>
                                     <th style="width: 130px;">Статус</th>
                                     <th style="width: 110px;"></th>
@@ -433,7 +537,7 @@
                                         or #lists.isEmpty(children)
                                      }">
 
-                                    <td colspan="4"
+                                    <td colspan="5"
                                         class="empty-table">
                                         В заказ не входит ни одного
                                         заказ-комплектующего
@@ -445,6 +549,10 @@
 
                                     <td th:text="${child.number}">
                                         333-01
+                                    </td>
+
+                                    <td th:text="${child.znpKindDisplayName}">
+                                        ЗНП на комплектование
                                     </td>
 
                                     <td th:text="${child.operationName}">
@@ -487,6 +595,11 @@
                     датчики он комплектует. Без неё ЗНП был бы виден
                     только как строка в списке — непонятно, в какие
                     именно изделия он вошёл.
+
+                    Блок датчиков относится к заказам на комплектование:
+                    только они привязываются к серийникам. Групповой и
+                    ремонтный заказ (V37) заявлен изделием и количеством,
+                    поэтому вместо пустой таблицы показывается его состав.
                 -->
                 <section class="card"
                          th:unless="${order.root}">
@@ -495,9 +608,15 @@
 
                         <div>
 
-                            <h2>Датчики этого заказа</h2>
+                            <h2 th:text="${
+                                order.serialBasedKind
+                                    ? 'Датчики этого заказа'
+                                    : 'Состав заказа'
+                            }">
+                                Датчики этого заказа
+                            </h2>
 
-                            <small>
+                            <small th:if="${order.serialBasedKind}">
                                 Изделия выбранного выпуска, в которые
                                 вошёл заказ; номера выпускает заказ
                                 верхнего уровня
@@ -513,16 +632,23 @@
                                 </strong>
                             </small>
 
+                            <small th:unless="${order.serialBasedKind}">
+                                Заказ заявлен изделием и количеством:
+                                конкретные номера появятся по ходу
+                                выпуска
+                            </small>
+
                         </div>
 
                         <a class="btn secondary"
                            th:href="@{/dispatcher/production-order/{id}/edit(id=${order.id})}">
-                            Изменить состав
+                            Изменить заказ
                         </a>
 
                     </div>
 
-                    <div class="card-body">
+                    <div class="card-body"
+                         th:if="${order.serialBasedKind}">
 
                         <div class="table-wrap">
 
@@ -575,6 +701,42 @@
                                 </tbody>
 
                             </table>
+
+                        </div>
+
+                    </div>
+
+                    <div class="card-body"
+                         th:unless="${order.serialBasedKind}">
+
+                        <div class="form-grid">
+
+                            <div class="field">
+
+                                <label>Вид заказа</label>
+
+                                <input type="text"
+                                       th:value="${order.znpKindDisplayName}"
+                                       readonly>
+                            </div>
+
+                            <div class="field">
+
+                                <label>Изделие</label>
+
+                                <input type="text"
+                                       th:value="${order.classifierLabel}"
+                                       readonly>
+                            </div>
+
+                            <div class="field">
+
+                                <label>Количество</label>
+
+                                <input type="text"
+                                       th:value="${order.formattedQuantity}"
+                                       readonly>
+                            </div>
 
                         </div>
 

@@ -1243,6 +1243,94 @@ body {
 
 
 /* ============================================================
+   ВЫБОР ВИДА ЗАКАЗА-КОМПЛЕКТУЮЩЕГО (ЗНП)
+
+   Вид выбирают до заполнения формы: от него зависит набор полей,
+   поэтому это два равноправных входа, а не выпадающий список.
+   Кнопки, а не карточки с radio: выбор не «галочка в форме», а
+   переход, и подсказка прямо в кнопке снимает вопрос, чем виды
+   различаются, до клика.
+   ============================================================ */
+
+.kind-buttons {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    justify-content: flex-end;
+}
+
+/*
+ * Та же группа в заголовке карточки выпуска: здесь пять кнопок стоят
+ * рядом с подписью блока, поэтому они уже, чем в шапке списка, — иначе
+ * card-head растягивался бы на всю ширину страницы и уводил заголовок
+ * таблицы вниз.
+ */
+.kind-button-group {
+    display: flex;
+    flex: 0 1 auto;
+    flex-wrap: wrap;
+    gap: 8px;
+    justify-content: flex-end;
+
+    max-width: 640px;
+}
+
+.kind-button-group .kind-button {
+    min-width: 190px;
+    padding: 8px 12px;
+}
+
+/*
+ * Собственный фон и рамка обязательны: .btn в технологии задаёт только
+ * border: 0 и скругление, а цвет даёт модификатор .primary/.secondary.
+ * Кнопкам видов модификатор не проставлен (в списке они вторичны по
+ * отношению к кнопке выпуска), поэтому без этих правил ссылка выглядела
+ * как обычный текст — без рамки и отличия от окружения.
+ */
+.kind-button {
+    display: flex;
+    flex-direction: column;
+
+    min-width: 240px;
+    padding: 10px 14px;
+
+    text-align: left;
+    text-decoration: none;
+
+    color: var(--navy, #073e75);
+    background: #fff;
+    border: 1px solid var(--line, #dce4eb);
+    border-radius: 10px;
+    box-shadow: 0 1px 2px rgba(16, 47, 75, .06);
+}
+
+.kind-button:hover {
+    text-decoration: none;
+
+    background: #f3f8fd;
+    border-color: #2c6da7;
+}
+
+.kind-button:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 3px rgba(44, 109, 167, .18);
+}
+
+.kind-button__title {
+    font-weight: 700;
+}
+
+.kind-button__hint {
+    margin-top: 2px;
+
+    font-size: 12px;
+    line-height: 1.35;
+
+    opacity: .85;
+}
+
+
+/* ============================================================
    АДАПТИВНОСТЬ
    ============================================================ */
 

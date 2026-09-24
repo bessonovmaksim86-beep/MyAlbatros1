@@ -141,6 +141,35 @@
                 </span>
             </a>
 
+            <!--
+                Групповые ЗНП — самостоятельные заказы (V37/V38): заявлены
+                изделием и количеством, ни в чей выпуск не вписываются.
+                В «Заказах на производство» они больше не показываются,
+                поэтому раздел стоит рядом, а не вложенным пунктом:
+                у двух списков один и тот же уровень значимости.
+            -->
+            <a class="dispatcher-navigation__item"
+               th:classappend="${activePage == 'groupZnp'} ? ' is-active' : ''"
+               th:href="@{/dispatcher/group-znp}"
+               title="Групповые ЗНП">
+
+                <span class="dispatcher-navigation__icon">
+                    <svg viewBox="0 0 24 24" aria-hidden="true">
+                        <path d="M3 5h8v6H3V5Zm0 8h8v6H3v-6Zm10-8h8v6h-8V5Zm0 8h8v6h-8v-6ZM5 7v2h4V7H5Zm0 8v2h4v-2H5Zm10-8v2h4V7h-4Zm0 8v2h4v-2h-4Z"/>
+                    </svg>
+                </span>
+
+                <span class="dispatcher-navigation__text">
+                    Групповые ЗНП
+                </span>
+
+                <span class="dispatcher-navigation__counter"
+                      th:if="${groupZnpCount != null and groupZnpCount > 0}"
+                      th:text="${groupZnpCount}">
+                    3
+                </span>
+            </a>
+
         </nav>
 
         <div class="dispatcher-sidebar__footer">

@@ -208,12 +208,8 @@ public interface InputControlDefectGroupRepository
               and card.status =
                   ru.company.production.entity.InputControlStatus.COMPLETED
               and (:kind is null
-                   or (:kind =
-                           ru.company.production.entity.QuarantineCellKind.CELL
-                       and batch.acceptedAt is not null)
-                   or (:kind =
-                           ru.company.production.entity.QuarantineCellKind.SUBASSEMBLY
-                       and batch.acceptedAt is null))
+                   or (:kind = 'CELL' and batch.acceptedAt is not null)
+                   or (:kind = 'SUBASSEMBLY' and batch.acceptedAt is null))
               and (:classifierId is null
                    or batch.cellClassifier.id = :classifierId)
               and (
@@ -232,7 +228,7 @@ public interface InputControlDefectGroupRepository
                      grp.sortOrder asc, grp.id asc
             """)
     List<InputControlDefectGroup> findQuarantineGroupsFiltered(
-            @Param("kind") QuarantineCellKind kind,
+            @Param("kind") String kind,
             @Param("classifierId") Long classifierId,
             @Param("reasonId") Long reasonId
     );

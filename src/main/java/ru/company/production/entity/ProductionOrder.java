@@ -24,6 +24,7 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 import org.hibernate.annotations.CreationTimestamp;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
@@ -104,6 +105,44 @@ public class ProductionOrder {
     )
     private ProductionOrder parentProductionOrder;
 
+    /*
+     * Вид заказа-комплектующего (миграция V37): комплектование,
+     * групповой на ячейки, групповой на приборы, ремонт ячеек или
+     * ремонт подсборок.
+     *
+     * Колонка NOT NULL с значением по умолчанию, поэтому у заказа
+     * верхнего уровня она тоже заполнена — комплектованием. Это
+     * сознательно: отдельного «пустого» вида для ЗП не заводили, а
+     * уровень и так читается из parent_production_order_id, так что
+     * противоречия нет (см. isKindMeaningful()).
+     */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "znp_kind", nullable = false, length = 30)
+    private ZnpKind znpKind = ZnpKind.KITTING;
+
+    /*
+     * Изделие, заказанное группой или в ремонт (миграция V37).
+     *
+     * Заполняется только для видов, состав которых задаётся «изделием
+     * и количеством»: у комплектования состава такого нет — там
+     * перечень серийных номеров родительского выпуска.
+     */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(
+            name = "product_classifier_id",
+            foreignKey = @ForeignKey(
+                    name = "fk_production_order_classifier"
+            )
+    )
+    private ProductClassifier productClassifier;
+
+    /*
+     * Количество заказанных изделий — тот же DECIMAL(15,3), что у
+     * позиции заказа покупателя (V12): количество в учёте дробное.
+     */
+    @Column(name = "quantity", precision = 15, scale = 3)
+    private BigDecimal quantity;
+
     /* Конкретная комплектовочная операция из справочника. */
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(
@@ -113,6 +152,28 @@ public class ProductionOrder {
             )
     )
     private Operation productionOperation;
+
+    /*
+     * Техпроцесс, по которому выполняют групповой заказ (миграция V40).
+     *
+     * Заполняется только видам, которому маршрут нужен (см.
+     * ZnpKind#requiresTechProcess): у группового заказа работ по выпуску
+     * нет, и ведут его по маршруту заказанного изделия. Заказу на
+     * комплектование маршрут не назначается — его операции живут у
+     * выпуска, внутрь которого заказ входит.
+     *
+     * Ссылка на справочник, а не копия маршрута: правки техпроцесса
+     * диспетчер видит в заказе сразу, а история выполненных работ
+     * держится отдельно (ProductSerialOperation).
+     */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(
+            name = "tech_process_id",
+            foreignKey = @ForeignKey(
+                    name = "fk_production_order_tech_process"
+            )
+    )
+    private TechProcess techProcess;
 
     @Column(name = "order_date", nullable = false)
     private LocalDate orderDate;
@@ -214,30 +275,53 @@ public class ProductionOrder {
     }
 
     /*
-     * Заказ верхнего уровня (ЗП): родителя нет.
-     * Только у таких заказов действует ограничение «один заказ
-     * покупателя — один выпуск».
+     * Заказ верхнего уровня (ЗП) — выпуск.
+     *
+     * Признак «родителя нет» для этого больше не достаточен: с V37
+     * групповые и ремонтные ЗНП существуют самостоятельно, без
+     * родительского выпуска, и выпуск из них не получается. Выпуск —
+     * заказ без родителя, состав которого задан позициями заказа
+     * покупателя, то есть серийный вид (V38).
+     *
+     * Только у выпусков действует ограничение «один заказ покупателя
+     * — один выпуск» и только они выдают серийные номера.
      */
     @Transient
     public boolean isRoot() {
-        return parentProductionOrder == null;
+        return parentProductionOrder == null
+                && (znpKind == null || znpKind.isSerialBased());
     }
 
     /*
-     * Заказ-комплектующий (ЗНП): вложен в заказ на производство и
-     * входит внутрь конкретного изделия.
+     * Заказ-комплектующий (ЗНП): либо вложен в выпуск и входит внутрь
+     * конкретного изделия, либо заявлен самостоятельно — группой или
+     * на ремонт (см. ZnpKind).
      */
     @Transient
     public boolean isComponent() {
-        return parentProductionOrder != null;
+        return !isRoot();
     }
 
-    /* Уровень дерева для колонок списка и карточки заказа. */
+    /*
+     * Уровень дерева для колонок списка и карточки заказа: «ЗП» либо
+     * «ЗНП <вид>». Вид показан именно здесь, а не отдельной колонкой:
+     * он есть только у комплектующего, и отдельная колонка у половины
+     * строк списка была бы пустой.
+     */
     @Transient
     public String getLevelDisplayName() {
-        return isRoot()
-                ? "Заказ на производство"
-                : "Заказ на производство (комплектующий)";
+        if (isRoot()) {
+            return "Заказ на производство";
+        }
+
+        /*
+         * Префикс «ЗНП ·» к наименованию не добавляется: оно уже
+         * содержит нужное слово («ЗНП на комплектование», «Групповой
+         * ЗНП на приборы»), и приставка дала бы «ЗНП · ЗНП на …».
+         */
+        return znpKind == null
+                ? "Заказ на производство (комплектующий)"
+                : znpKind.getDisplayName();
     }
 
     /* Номер родительского заказа — текст, связь lazy (см. getCustomerOrderNumber). */
@@ -260,6 +344,103 @@ public class ProductionOrder {
                 : parentProductionOrder.getId();
     }
 
+    /*
+     * Вид ЗНП нужен только заказу-комплектующему: заказ верхнего
+     * уровня вида не выбирает, и показывать ему «комплектование» —
+     * значит выдумывать смысл, которого в заказе нет.
+     */
+    @Transient
+    public boolean isKindApplicable() {
+        return isComponent() && znpKind != null;
+    }
+
+    @Transient
+    public String getZnpKindDisplayName() {
+        return znpKind == null ? "—" : znpKind.getDisplayName();
+    }
+
+    /*
+     * Составлен ли заказ перечнем серийных номеров.
+     *
+     * Карточке это нужно, чтобы решить, показывать ли блок датчиков:
+     * у группового и ремонтного заказа их нет, и пустая таблица «заказ
+     * ещё не внесён ни в один датчик» выглядела бы как ошибка данных.
+     */
+    @Transient
+    public boolean isSerialBasedKind() {
+        return znpKind == null || znpKind.isSerialBased();
+    }
+
+    /*
+     * Заказ относится к разделу «Групповые ЗНП».
+     *
+     * Нужен карточке и форме заказа, чтобы подсветить в меню тот раздел,
+     * откуда заказ заведён, и вернуть в него после сохранения. Уровень
+     * для этого не годится: групповой заказ самостоятелен, родителя нет,
+     * и по «родителя нет» он оказался бы в списке выпусков.
+     *
+     * Признак берётся у вида (см. ZnpKind#isGroupKind), а не переписывается
+     * перечнем: новый вид попадает в раздел сам.
+     */
+    @Transient
+    public boolean isGroupZnp() {
+        return znpKind != null && znpKind.isGroupKind();
+    }
+
+    /*
+     * Страница, с которой заказ заведён и на которую надо возвращать:
+     * комплектование и выпуски живут в «Заказах на производство»,
+     * групповые виды — в одноимённом разделе меню (V37).
+     *
+     * Возврат отдаётся методом, а не тернарным выражением в шаблоне:
+     * ссылку подставляют и карточка, и форма, и повторить признак
+     * в двух разметках значило бы разъезд с разделами при первом же
+     * новом виде.
+     */
+    @Transient
+    public String getSectionListUrl() {
+        return isGroupZnp()
+                ? "/dispatcher/group-znp"
+                : "/dispatcher/production-order";
+    }
+
+    /*
+     * Изделие группового или ремонтного заказа: «код — наименование»,
+     * как в прочих формах. Связь lazy, поэтому текст отдаётся этим
+     * методом, а не обращением шаблона к productClassifier.code.
+     */
+    @Transient
+    public String getClassifierLabel() {
+        if (productClassifier == null) {
+            return "—";
+        }
+
+        return productClassifier.getCode()
+                + " — "
+                + productClassifier.getDisplayName();
+    }
+
+    @Transient
+    public Long getClassifierId() {
+        return productClassifier == null
+                ? null
+                : productClassifier.getId();
+    }
+
+    /*
+     * Количество без хвостовых нулей: «24», а не «24.000» — заказ
+     * группой считают в штуках, и дробный хвост в карточке только
+     * мешает.
+     */
+    @Transient
+    public String getFormattedQuantity() {
+        if (quantity == null) {
+            return "—";
+        }
+
+        return quantity.stripTrailingZeros().toPlainString();
+    }
+
     /* Наименование комплектовочной операции — то же соображение. */
     @Transient
     public String getOperationName() {
@@ -269,6 +450,20 @@ public class ProductionOrder {
         }
 
         return productionOperation.getOperationName().getName();
+    }
+
+    /*
+     * Код техпроцесса — для карточки и списка группового заказа.
+     *
+     * Пустая строка, а не «—»: поле показывают только групповым видам,
+     * и пустое значение означает, что маршрут ещё не выбран (колонка
+     * появилась в V40, старые заказы её не заполняли).
+     */
+    @Transient
+    public String getTechProcessCode() {
+        return techProcess == null
+                ? ""
+                : techProcess.getCode();
     }
 
     /* Фамилия и инициалы автора выпуска для страницы просмотра. */

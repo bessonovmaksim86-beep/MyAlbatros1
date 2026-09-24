@@ -116,15 +116,30 @@
 
                 <div class="card-body">
 
-                    <div class="warehouse-print-note">
+                    <div class="warehouse-print-note"
+                         th:if="${printReady}">
 
-                        <strong>Печать этикеток — внешней программой</strong>
+                        <strong>Печать этикеток — через BarTender</strong>
 
-                        Программа рассылки штрихкодов ещё подключена не
-                        была: кнопка ниже работает как заглушка и ничего
-                        не печатает. Номера партии можно скопировать и
-                        передать в неё вручную, а когда интеграция будет
-                        настроена — шаг станет автоматическим.
+                        Кнопка «Печать QR» передаёт номера партии в
+                        BarTender и ставит задание на принтер этикеток.
+                        Шаблон, принтер и число копий заданы в настройках
+                        рабочего места; партия станет напечатанной только
+                        после того, как задание уйдёт на принтер.
+
+                    </div>
+
+                    <div class="warehouse-print-note"
+                         th:unless="${printReady}">
+
+                        <strong>Печать этикеток не настроена на этом рабочем месте</strong>
+
+                        <span th:text="${printProblem}">
+                            Печать через BarTender не включена.
+                        </span>
+                        Номера партии можно скопировать и передать в
+                        программу этикеток вручную, а затем закрыть шаг
+                        кнопкой «Этикетки напечатаны, продолжить».
 
                     </div>
 
@@ -157,11 +172,20 @@
                                 Скопировать номера
                             </button>
 
-                            <button type="button"
-                                    class="btn secondary"
-                                    id="printQrStub">
-                                Печать QR
-                            </button>
+                            <form method="post"
+                                  th:action="@{/warehouse/receiving/{id}/qr/print(id=${batch.id})}">
+
+                                <input th:if="${_csrf != null}"
+                                       type="hidden"
+                                       th:name="${_csrf.parameterName}"
+                                       th:value="${_csrf.token}">
+
+                                <button type="submit"
+                                        class="btn secondary"
+                                        th:disabled="${not printReady}">
+                                    Печать QR
+                                </button>
+                            </form>
 
                             <span class="warehouse-scan-empty"
                                   id="copyStatus"

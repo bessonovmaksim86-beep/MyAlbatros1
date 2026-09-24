@@ -7,6 +7,7 @@ import org.springframework.stereotype.Repository;
 import ru.company.production.entity.ProductionItemStatus;
 import ru.company.production.entity.ProductionOrder;
 import ru.company.production.entity.ProductionOrderStatus;
+import ru.company.production.entity.ZnpKind;
 
 import java.util.List;
 import java.util.Optional;
@@ -16,10 +17,20 @@ public interface ProductionOrderRepository
         extends JpaRepository<ProductionOrder, Long> {
 
     /**
-     * Список заказов на производство: один заказ = одна строка.
+     * Список заказов выбранного набора видов: один заказ = одна строка.
+     *
+     * Набор передаётся списком, а не жёстко зашит в запрос: страницы
+     * «Заказы на производство» и «Групповые ЗНП» читают одну и ту же
+     * проекцию, различаясь только множеством видов (см.
+     * ZnpKind.productionOrderKinds() и ZnpKind.groupKinds()).
      *
      * Число выпускаемых изделий и число собранных считаются скалярными
      * подзапросами — join на позиции размножал бы строки заказа.
+     *
+     * Изделие и количество группового заказа выводятся через сам
+     * классификатор (code / product_name): у групповых видов состав
+     * задан именно ими, а для комплектования эти поля пусты и строке
+     * списка не нужны.
      *
      * Важно: внутри @Query комментарии недопустимы, их не принимает
      * парсер JPQL Spring Data.
@@ -32,7 +43,12 @@ public interface ProductionOrderRepository
                 ord.dueDate as dueDate,
                 customerOrder.number as customerOrderNumber,
                 parent.number as parentOrderNumber,
+                ord.znpKind as znpKind,
+                classifier.code as classifierCode,
+                classifier.name as classifierName,
+                ord.quantity as quantity,
                 operationName.name as operationName,
+                techProcess.code as techProcessCode,
                 (
                     select count(item.id)
                     from ProductionOrderItem item
@@ -48,13 +64,17 @@ public interface ProductionOrderRepository
             from ProductionOrder ord
             left join ord.customerOrder customerOrder
             left join ord.parentProductionOrder parent
+            left join ord.productClassifier classifier
             left join ord.productionOperation operation
             left join operation.operationName operationName
+            left join ord.techProcess techProcess
             where ord.active = true
+              and ord.znpKind in :kinds
             order by ord.orderDate desc, ord.number desc
             """)
-    List<ProductionOrderListItemView> findAllListItems(
-            @Param("doneStatus") ProductionItemStatus doneStatus
+    List<ProductionOrderListItemView> findListItemsByKinds(
+            @Param("doneStatus") ProductionItemStatus doneStatus,
+            @Param("kinds") List<ZnpKind> kinds
     );
 
     /**
@@ -72,9 +92,11 @@ public interface ProductionOrderRepository
             left join fetch ord.customerOrder customerOrder
             left join fetch customerOrder.customer
             left join fetch ord.parentProductionOrder
+            left join fetch ord.productClassifier
             left join fetch ord.productionOperation operation
             left join fetch operation.operationName
             left join fetch operation.operationType
+            left join fetch ord.techProcess
             left join fetch ord.createdBy
             where ord.id = :id
             """)
@@ -116,12 +138,19 @@ public interface ProductionOrderRepository
      * uk_production_order_customer_root (служебная колонка
      * root_customer_order_id); запрос даёт понятное сообщение до
      * обращения к базе.
+     *
+     * Вид в условии обязателен с V38: групповой и ремонтный ЗНП
+     * заводятся без родителя и выпуском не являются, поэтому второй
+     * групповой заказ того же покупателя повторным выпуском считаться
+     * не должен.
      */
     @Query("""
             select count(ord) > 0
             from ProductionOrder ord
             where ord.customerOrder.id = :customerOrderId
               and ord.parentProductionOrder is null
+              and ord.znpKind
+                    = ru.company.production.entity.ZnpKind.KITTING
             """)
     boolean existsRootByCustomerOrderId(
             @Param("customerOrderId") Long customerOrderId
@@ -188,6 +217,11 @@ public interface ProductionOrderRepository
      * может быть только выпуск, и форма ЗНП не должна предлагать
      * заведомо недопустимый вариант.
      *
+     * Условие по виду нужно с V38: групповые и ремонтные ЗНП тоже не
+     * имеют родителя, но выпуском не являются — предлагать их как
+     * «заказ верхнего уровня» нельзя, внутрь них комплектующий не
+     * входит.
+     *
      * Заказчик дочитывается fetch-join'ом: шаблону нужен номер заказа
      * покупателя через @Transient-геттер, а при open-in-view: false
      * ленивая связь вне сессии дала бы LazyInitializationException.
@@ -198,6 +232,8 @@ public interface ProductionOrderRepository
             left join fetch ord.customerOrder
             where ord.active = true
               and ord.parentProductionOrder is null
+              and ord.znpKind
+                    = ru.company.production.entity.ZnpKind.KITTING
             order by ord.orderDate desc, ord.number desc
             """)
     List<ProductionOrder> findActiveRoots();
@@ -216,6 +252,24 @@ public interface ProductionOrderRepository
     long countByActiveTrue();
 
     /**
+     * Счётчик активных заказов заданного набора видов — счётчик пункта
+     * меню и карточка «Всего».
+     *
+     * Считать по всем заказам (countByActiveTrue) нельзя: после
+     * разделения страниц он показал бы в меню «Заказы на производство»
+     * и групповые заказы, которых там уже нет.
+     */
+    @Query("""
+            select count(ord)
+            from ProductionOrder ord
+            where ord.active = true
+              and ord.znpKind in :kinds
+            """)
+    long countActiveByKinds(
+            @Param("kinds") List<ZnpKind> kinds
+    );
+
+    /**
      * Счётчик активных заказов в заданном статусе — карточки сводки.
      */
     @Query("""
@@ -226,6 +280,22 @@ public interface ProductionOrderRepository
             """)
     long countActiveByStatus(
             @Param("status") ProductionOrderStatus status
+    );
+
+    /**
+     * Тот же счётчик по статусу, но в границах вида — карточки сводки
+     * страницы «Групповые ЗНП» и страницы комплектования.
+     */
+    @Query("""
+            select count(ord)
+            from ProductionOrder ord
+            where ord.active = true
+              and ord.status = :status
+              and ord.znpKind in :kinds
+            """)
+    long countActiveByStatusAndKinds(
+            @Param("status") ProductionOrderStatus status,
+            @Param("kinds") List<ZnpKind> kinds
     );
 
     /**

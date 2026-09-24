@@ -34,6 +34,8 @@ import ru.company.production.entity.ProductionItemStatus;
 import ru.company.production.entity.ProductionOrder;
 import ru.company.production.entity.ProductionOrderStatus;
 import ru.company.production.entity.TechProcessType;
+import ru.company.production.entity.ZnpKind;
+import ru.company.production.repository.ClassifierRouteOptionView;
 import ru.company.production.repository.CustomerOrderItemRepository;
 import ru.company.production.repository.CustomerOrderRepository;
 import ru.company.production.repository.ProductTypeQuantityProjection;
@@ -117,12 +119,12 @@ public class DispatcherController {
         /*
          * Заказы на производство считаются по своей таблице (V16):
          * карточка обзора показывает количество действующих выпусков.
+         *
+         * Значение берёт из модели DispatcherViewAdvice: там счётчик
+         * считается по видам раздела (ZnpKind.productionOrderKinds()),
+         * а не по всей таблице, и общий countByActiveTrue показал бы
+         * вместе с выпусками ещё и групповые заказы.
          */
-        model.addAttribute(
-                "productionOrderCount",
-                productionOrderRepository.countByActiveTrue()
-        );
-
         BigDecimal plannedQuantity =
                 customerOrderItemRepository.sumActivePlannedQuantity();
 
@@ -543,38 +545,128 @@ public class DispatcherController {
 
         model.addAttribute(
                 "productionOrders",
-                productionOrderRepository.findAllListItems(
-                        ProductionItemStatus.DONE
+                productionOrderRepository.findListItemsByKinds(
+                        ProductionItemStatus.DONE,
+                        ZnpKind.productionOrderKinds()
                 )
         );
 
-        model.addAttribute(
-                "productionOrderCount",
-                productionOrderRepository.countByActiveTrue()
-        );
-
+        /*
+         * Счётчик «Всего заказов» и счётчик пункта меню берёт из модели
+         * DispatcherViewAdvice: там он считается по видам этого раздела
+         * (ZnpKind.productionOrderKinds()), а общий countByActiveTrue
+         * показал бы вместе с выпусками ещё и групповые заказы.
+         */
         model.addAttribute(
                 "productionOrderNewCount",
-                productionOrderRepository.countActiveByStatus(
-                        ProductionOrderStatus.NEW
+                productionOrderRepository.countActiveByStatusAndKinds(
+                        ProductionOrderStatus.NEW,
+                        ZnpKind.productionOrderKinds()
                 )
         );
 
         model.addAttribute(
                 "productionOrderInWorkCount",
-                productionOrderRepository.countActiveByStatus(
-                        ProductionOrderStatus.IN_WORK
+                productionOrderRepository.countActiveByStatusAndKinds(
+                        ProductionOrderStatus.IN_WORK,
+                        ZnpKind.productionOrderKinds()
                 )
         );
 
         model.addAttribute(
                 "productionOrderDoneCount",
-                productionOrderRepository.countActiveByStatus(
-                        ProductionOrderStatus.DONE
+                productionOrderRepository.countActiveByStatusAndKinds(
+                        ProductionOrderStatus.DONE,
+                        ZnpKind.productionOrderKinds()
                 )
         );
 
+        /*
+         * Виды ЗНП нужны меню кнопки создания: пункт меню и есть выбор
+         * вида, поэтому список отдаётся на страницу списка, а не в
+         * форму заказа (селектор вида из формы убран).
+         *
+         * В этом разделе остаётся только комплектование: групповые и
+         * ремонтные виды перенесены в отдельный пункт меню
+         * «Групповые ЗНП» (см. groupZnp()), поэтому кнопкам создания
+         * здесь отдаётся ZnpKind.productionOrderKinds(), а не все виды —
+         * иначе в шапке висела бы кнопка заказа, который тут больше не
+         * появляется.
+         */
+        model.addAttribute(
+                "znpKinds",
+                ZnpKind.productionOrderKinds()
+        );
+
         return "dispatcher/order/production";
+    }
+
+    /**
+     * Групповые ЗНП — самостоятельные заказы (миграции V37, V38).
+     *
+     * Раздел существует потому, что у этих заказов иной смысл, чем у
+     * выпуска: они заявлены изделием и количеством, ни в чей выпуск не
+     * вписываются и родителя не имеют. Держать их в одном списке с
+     * выпусками значило бы показывать в нём строки без заказа покупателя,
+     * без состава и без серийников — цех читал бы их как незаполненные
+     * заказы.
+     *
+     * Отбор идёт по набору видов (ZnpKind.groupKinds()), а не по признаку
+     * «родителя нет»: последний отличал бы групповой заказ от выпуска
+     * только случайно, а новый вид в перечне пришлось бы дописывать
+     * вручную.
+     */
+    @GetMapping("/group-znp")
+    public String groupZnp(Model model) {
+
+        model.addAttribute("activePage", "groupZnp");
+
+        model.addAttribute(
+                "groupOrders",
+                productionOrderRepository.findListItemsByKinds(
+                        ProductionItemStatus.DONE,
+                        ZnpKind.groupKinds()
+                )
+        );
+
+        /*
+         * Счётчик пункта меню кладёт DispatcherViewAdvice
+         * (groupZnpCount); здесь считаются только карточки сводки —
+         * по статусам в границах видов этого раздела.
+         */
+        model.addAttribute(
+                "groupZnpNewCount",
+                productionOrderRepository.countActiveByStatusAndKinds(
+                        ProductionOrderStatus.NEW,
+                        ZnpKind.groupKinds()
+                )
+        );
+
+        model.addAttribute(
+                "groupZnpInWorkCount",
+                productionOrderRepository.countActiveByStatusAndKinds(
+                        ProductionOrderStatus.IN_WORK,
+                        ZnpKind.groupKinds()
+                )
+        );
+
+        model.addAttribute(
+                "groupZnpDoneCount",
+                productionOrderRepository.countActiveByStatusAndKinds(
+                        ProductionOrderStatus.DONE,
+                        ZnpKind.groupKinds()
+                )
+        );
+
+        /*
+         * Кнопки создания — по кнопке на каждый вид раздела. Список
+         * берётся из того же признака, что и отбор строк, поэтому
+         * добавленный в ZnpKind вид появится и в списке, и среди кнопок
+         * одной правкой в enum.
+         */
+        model.addAttribute("znpKinds", ZnpKind.groupKinds());
+
+        return "dispatcher/order/group-znp";
     }
 
     /**
@@ -583,15 +675,96 @@ public class DispatcherController {
      * Состав выпуска в форме не редактируется: он выведется из позиций
      * выбранного заказа покупателя при сохранении, и каждая позиция
      * получит серийный номер.
+     *
+     * Вид ЗНП приходит параметром {@code kind} — его задаёт пункт меню
+     * кнопки создания, а не выбор в самой форме: набор полей зависит от
+     * вида, и показывать диспетчеру поля чужого вида незачем.
      */
     @GetMapping("/production-order/create")
-    public String createProductionPage(Model model) {
+    public String createProductionPage(
+            @RequestParam(required = false) Long parentId,
+            @RequestParam(required = false, defaultValue = "false")
+            boolean release,
+            @RequestParam(required = false) String kind,
+            Model model
+    ) {
+
+        /*
+         * Что за заказ заводит диспетчер, определяет кнопка, по которой
+         * открыта форма, а не выбор в самой странице: выпуск (ЗП) создают
+         * из заказа покупателя, заказ-комплектующий (ЗНП) — из этого
+         * окна. Переключатель «ЗП / ЗНП» из интерфейса убран: он лишь
+         * добавлял клик перед работой.
+         */
+        model.addAttribute("releaseOrder", release);
+
+        /*
+         * Вид ЗНП разбирается тем же способом, что и в сервисе:
+         * неизвестное или пустое значение читается как комплектование,
+         * поэтому ссылка со старым адресом (без вида) продолжает
+         * открывать прежнюю форму.
+         */
+        ZnpKind znpKind = ZnpKind.ofNullable(kind);
+
+        model.addAttribute("znpKind", znpKind);
 
         if (!model.containsAttribute("productionOrderForm")) {
-            model.addAttribute(
-                    "productionOrderForm",
-                    newProductionOrderForm()
+            ProductionOrderForm form = newProductionOrderForm();
+
+            /*
+             * Родитель подставляется, когда форму открыли из карточки
+             * выпуска кнопкой «Добавить комплектующий».
+             *
+             * Чужой или снятый из работы заказ в расчёт не берётся —
+             * сервис отклонил бы такую привязку, а форма с заведомо
+             * неверным родителем только запутала бы.
+             */
+            if (parentId != null) {
+                productionOrderRepository
+                        .findDetailedById(parentId)
+                        .filter(ProductionOrder::isActive)
+                        .filter(ProductionOrder::isRoot)
+                        .ifPresent(parent -> {
+                            form.setParentProductionOrderId(
+                                    parent.getId()
+                            );
+
+                            /*
+                             * Автоподобранный номер убирается: он
+                             * относится к выпуску, а комплектующему
+                             * нужен собственный — из внешнего учёта.
+                             * Оставленный номер диспетчер принял бы за
+                             * штатный и сохранил, не заметив подмены.
+                             */
+                            form.setNumber(null);
+                        });
+            }
+
+            form.setOrderLevel(
+                    release
+                            ? ProductionOrderForm.LEVEL_ROOT
+                            : ProductionOrderForm.LEVEL_COMPONENT
             );
+
+            /*
+             * Вид записывается разобранным именем, а не строкой из
+             * запроса: в форму и дальше попадает каноническое значение,
+             * и селектор (при правке — скрытое поле) открыт на том же
+             * виде, который реально сохранится.
+             */
+            form.setZnpKind(znpKind.name());
+
+            /*
+             * Автономер ПЗ-ГГГГ-NNN относится к выпуску. Комплектующему
+             * номер нужен собственный — из внешнего учёта, поэтому в
+             * форме ЗНП поле остаётся пустым, а не заполненным
+             * неподходящим номером.
+             */
+            if (!release) {
+                form.setNumber(null);
+            }
+
+            model.addAttribute("productionOrderForm", form);
         }
 
         fillProductionFormModel(model);
@@ -604,6 +777,8 @@ public class DispatcherController {
      */
     @PostMapping("/production-order/create")
     public String createProduction(
+            @RequestParam(required = false, defaultValue = "false")
+            boolean release,
             @Valid
             @ModelAttribute("productionOrderForm")
             ProductionOrderForm form,
@@ -614,13 +789,60 @@ public class DispatcherController {
     ) {
 
         /*
+         * Тип заказа возвращается в модель: при ошибке валидации форма
+         * отрисовывается заново, и без признака она показалась бы
+         * выпуском, хотя диспетчер заводил комплектующий (и наоборот).
+         */
+        model.addAttribute("releaseOrder", release);
+
+        /*
+         * Тип заказа, выбранный переключателем, сверяется с родителем
+         * до обращения к сервису.
+         *
+         * Уровень в базе определяется родителем, переключатель лишь
+         * показывает нужные поля — поэтому расхождение двух признаков
+         * привело бы к заказу не того уровня: «ЗНП» без родителя
+         * создал бы выпуск, а «ЗП» со значением родителя, оставшимся в
+         * скрытом поле (например, после возврата из карточки выпуска),
+         * создал бы комплектующего.
+         */
+        if (form.isComponentLevel()
+                && form.getResolvedKind().isSerialBased()
+                && form.getParentProductionOrderId() == null) {
+
+            errors.rejectValue(
+                    "parentProductionOrderId",
+                    "productionorder.parent.required",
+                    "Выберите заказ верхнего уровня, внутрь которого "
+                            + "входит заказ на комплектование"
+            );
+        }
+
+        /*
+         * Самостоятельному заказу (выпуск, групповой или ремонтный ЗНП)
+         * родитель не полагается: значение могло остаться в скрытом
+         * поле после возврата из карточки выпуска.
+         */
+        /*
+         * Заказ покупателя при этом остаётся как введён: у самостоятельного
+         * заказа (выпуск, групповой или ремонтный ЗНП) его наследовать не
+         * от чего, и он выбирается в форме. Обнуление поля отняло бы
+         * заказчика у корректной заявки.
+         */
+        if (!form.isComponentLevel()
+                || !form.getResolvedKind().isSerialBased()) {
+
+            form.setParentProductionOrderId(null);
+        }
+
+        /*
          * Автоподбор номера работает только для заказа верхнего уровня.
          * Заказу-комплектующему номер обязателен ручной ввод: он
          * приходит из внешнего учёта, и подставленный по шаблону номер
          * не соответствовал бы документу, а сервис уже не смог бы
          * отличить пропуск поля от намеренного значения.
          */
-        if (form.getParentProductionOrderId() == null
+        if (!form.isComponentLevel()
                 && (form.getNumber() == null
                 || form.getNumber().isBlank())) {
             form.setNumber(productionOrderService.nextNumber());
@@ -641,7 +863,13 @@ public class DispatcherController {
                 ? ""
                 : form.getNumber().trim();
 
-        boolean component = form.getParentProductionOrderId() != null;
+        /*
+         * Сообщение различается по режиму формы, а не по родителю:
+         * серийники выдаёт только выпуск, а групповой и ремонтный ЗНП
+         * (V37) существуют без родителя — по признаку «родителя нет»
+         * они получили бы текст о выпущенных серийных номерах.
+         */
+        boolean component = form.isComponentLevel();
 
         if (!errors.hasErrors()) {
             try {
@@ -678,7 +906,20 @@ public class DispatcherController {
                         + "» создан, серийные номера выпущены"
         );
 
-        return "redirect:/dispatcher/production-order";
+        /*
+         * Возврат — в тот раздел, где заказ и живёт: групповой заказ,
+         * созданный из своего пункта меню, попал бы обратно в «Заказы на
+         * производство», где его не видно, и диспетчер счёл бы создание
+         * неудачным.
+         *
+         * Раздел берётся из разобранного вида формы, а не из признака
+         * «родителя нет»: групповой и ремонтный ЗНП тоже без родителя, но
+         * выпуск из них не получается (см. ZnpKind#isGroupKind).
+         */
+        return "redirect:/dispatcher"
+                + (form.getResolvedKind().isGroupKind()
+                ? "/group-znp"
+                : "/production-order");
     }
 
     /**
@@ -690,17 +931,31 @@ public class DispatcherController {
             @PathVariable Long id,
             Model model
     ) {
-        model.addAttribute("activePage", "productionOrder");
-
-        model.addAttribute(
-                "productionOrderCount",
-                productionOrderRepository.countByActiveTrue()
-        );
-
         ProductionOrder order = productionOrderRepository
                 .findDetailedById(id)
                 .orElse(null);
 
+        /*
+         * Раздел подсветки меню определяется самим заказом, а не адресом:
+         * карточка одна для обоих разделов, и групповой заказ, открытый
+         * по прямой ссылке, обязан подсветить «Групповые ЗНП», а не
+         * «Заказы на производство».
+         *
+         * Признак ставится до проверки на отсутствие заказа: страница
+         * с ошибкой тоже отрисовывает меню.
+         */
+        model.addAttribute(
+                "activePage",
+                order != null && order.isGroupZnp()
+                        ? "groupZnp"
+                        : "productionOrder"
+        );
+
+        /*
+         * Счётчик пункта меню кладёт DispatcherViewAdvice — здесь его
+         * переопределять нечем: значение по всей таблице показало бы в
+         * меню выпуски вместе с групповыми заказами.
+         */
         if (order == null) {
             model.addAttribute(
                     "errorMessage",
@@ -759,6 +1014,23 @@ public class DispatcherController {
                 order.isRoot()
                         ? List.of()
                         : serialKittingService.findKitting(id)
+        );
+
+        /*
+         * Виды ЗНП нужны кнопкам блока «Заказы-комплектующие»: каждая
+         * кнопка ведёт в форму сразу со своим видом (параметр kind) и с
+         * родителем этого выпуска. Без атрибута шаблон отрисовал бы
+         * пустой блок, и добавить комплектующего из карточки было бы
+         * нечем.
+         *
+         * Отдаётся набор раздела, а не все виды: кнопка в карточке
+         * выпуска создаёт заказ внутри выпуска (parentId), а групповые
+         * и ремонтные виды самостоятельны и родителя не принимают —
+         * такая кнопка открыла бы форму, которую сервис отклонил бы.
+         */
+        model.addAttribute(
+                "znpKinds",
+                ZnpKind.productionOrderKinds()
         );
 
         return "dispatcher/order/production-view";
@@ -926,6 +1198,16 @@ public class DispatcherController {
             @PathVariable Long id,
             RedirectAttributes redirectAttributes
     ) {
+        /*
+         * Раздел запоминается до удаления: после удаления заказ не
+         * найти, а вернуть диспетчера надо в тот список, где заказ и
+         * числился — групповые виды живут в «Групповых ЗНП».
+         */
+        String sectionListUrl = productionOrderRepository
+                .findById(id)
+                .map(ProductionOrder::getSectionListUrl)
+                .orElse("/dispatcher/production-order");
+
         try {
             productionOrderService.delete(id);
         } catch (
@@ -946,7 +1228,7 @@ public class DispatcherController {
                 "Заказ на производство удалён"
         );
 
-        return "redirect:/dispatcher/production-order";
+        return "redirect:" + sectionListUrl;
     }
 
     /**
@@ -1172,6 +1454,14 @@ public class DispatcherController {
         form.setNumber(productionOrderService.nextNumber());
         form.setOrderDate(LocalDate.now());
 
+        /*
+         * Вид задаётся явно, хотя сервис прочитал бы пустое значение как
+         * комплектование: селектор формы обязан открываться на том же
+         * значении, которое реально будет сохранено, иначе диспетчер
+         * увидел бы «выбрана первая строка», а сохранилось бы другое.
+         */
+        form.setZnpKind(ZnpKind.KITTING.name());
+
         return form;
     }
 
@@ -1202,6 +1492,43 @@ public class DispatcherController {
                         ? null
                         : order.getParentProductionOrder().getId()
         );
+        /*
+         * Уровень ставится по сущности, а не по признаку «родителя
+         * нет»: групповой и ремонтный ЗНП (V37) существуют
+         * самостоятельно, и для них родителя нет, но выпуском они не
+         * являются. Ориентация на родителя открыла бы такой заказ как
+         * выпуск, и сервис отклонил бы сохранение как смену уровня.
+         */
+        form.setOrderLevel(
+                order.isRoot()
+                        ? ProductionOrderForm.LEVEL_ROOT
+                        : ProductionOrderForm.LEVEL_COMPONENT
+        );
+        /*
+         * Вид и состав «изделием и количеством» переносятся обязательно:
+         * без вида форма правки отдала бы заказ на комплектование, и
+         * сервис отклонил бы сохранение как попытку сменить вид
+         * (см. assertKindUnchanged), а без изделия и количества
+         * групповой заказ потерял бы свой состав при первой же правке.
+         */
+        form.setZnpKind(
+                order.getZnpKind() == null
+                        ? null
+                        : order.getZnpKind().name()
+        );
+        form.setProductClassifierId(order.getClassifierId());
+        form.setQuantity(order.getQuantity());
+        /*
+         * Маршрут переносится наравне с изделием: он обязателен
+         * групповым видам (см. ZnpKind#requiresTechProcess), и без него
+         * правка откланялась бы «выберите техпроцесс», а сохранение при
+         * ошибке валидации обнулило бы выбор.
+         */
+        form.setTechProcessId(
+                order.getTechProcess() == null
+                        ? null
+                        : order.getTechProcess().getId()
+        );
         form.setProductionOperationId(
                 order.getProductionOperation() == null
                         ? null
@@ -1231,7 +1558,17 @@ public class DispatcherController {
      */
     private void fillProductionFormModel(Model model,
                                         ProductionOrder editingOrder) {
-        model.addAttribute("activePage", "productionOrder");
+        /*
+         * Подсветка меню определяется видом заказа, а не адресом:
+         * форма общая для обоих разделов, и групповой заказ, открытый
+         * кнопкой из «Групповых ЗНП», обязан подсвечивать именно их —
+         * в том числе при повторной отрисовке после ошибки валидации,
+         * когда адрес остаётся прежним, а вид уже выбран.
+         */
+        model.addAttribute(
+                "activePage",
+                formMenuSection(model, editingOrder)
+        );
 
         /*
          * Режим формы: создание или правка. SpEL не превращает null в
@@ -1311,6 +1648,55 @@ public class DispatcherController {
         );
 
         /*
+         * Вид ЗНП (миграция V37): комплектование, групповой на ячейки,
+         * групповой на приборы, ремонт ячеек, ремонт подсборок.
+         *
+         * Список отдаётся весь — выбор вида есть только у заказав
+         * комплектующего, и в шаблоне селектор закрыт при правке так же,
+         * как закрыт выбор родителя: вид неизменный, а состав заказа от
+         * него зависит.
+         */
+        model.addAttribute("znpKinds", ZnpKind.values());
+
+        /*
+         * Изделия для группового и ремонтного видов: справочник
+         * ограничивается типом, который требует вид (ячейка или
+         * прибор), поэтому в форме нет списка «всего подряд».
+         *
+         * Источник вида, как и для серийников, выбирается по ситуации:
+         * правка — вид редактируемого заказа, создание после ошибки
+         * валидации — вид из самой формы, иначе отмеченное изделие
+         * пропало бы вместе с ошибкой. Для комплектования справочник
+         * пуст: там состав — перечень серийников.
+         */
+        ZnpKind formKind = resolveFormKind(model, editingOrder);
+
+        model.addAttribute(
+                "kindClassifiers",
+                productionOrderService.findClassifierOptions(
+                        formKind.requiredProductType()
+                )
+        );
+
+        /*
+         * Маршруты для группового заказа: выбор ограничен изделием,
+         * поэтому список строится по выбранному изделию (см.
+         * ZnpKind#requiresTechProcess).
+         *
+         * Источник изделия тот же, что у справочника изделий: правка —
+         * изделие редактируемого заказа, создание после ошибки
+         * валидации — значение самой формы, иначе выбранный маршрут
+         * пропал бы вместе с ошибкой. Для комплектования список пуст:
+         * маршрут там не нужен, операции берёт выпуск.
+         */
+        model.addAttribute(
+                "techProcesses",
+                productionOrderService.findTechProcessOptions(
+                        formClassifierId(model, editingOrder)
+                )
+        );
+
+        /*
          * Заказы верхнего уровня (ЗП) — выбор родителя для заказа-
          * комплектующего. Список отдаётся всегда, в том числе при правке:
          * уровень заказа неизменный, и в шаблоне родитель отображается
@@ -1326,12 +1712,153 @@ public class DispatcherController {
                 productionOrderService.findKittingOperations()
         );
 
-        model.addAttribute(
-                "productionOrderCount",
-                productionOrderRepository.countByActiveTrue()
-        );
-
+        /*
+         * Счётчик меню здесь не ставится: его считает
+         * DispatcherViewAdvice по видам своего раздела. Прежняя строка
+         * с countByActiveTrue() перезаписывала значение всем страницам
+         * формы и показывала в пункте «Заказы на производство» число,
+         * включавшее групповые заказы.
+         */
         model.addAttribute("currentYear", LocalDate.now().getYear());
+    }
+
+    /**
+     * Вид заказа, которым сейчас оперирует форма.
+     *
+     * Единый источник для подсветки меню и для справочника изделий:
+     * раньше вид для справочника определялся отдельно и только при
+     * наличии родителя, из-за чего правка группового заказа (родителя
+     * у него нет, V38) брала комплектование и отдавала пустой список
+     * изделий.
+     *
+     * При правке вид берётся из заказа независимо от родителя — вид
+     * неизменный (см. assertKindUnchanged), поэтому заказ и есть
+     * достоверный источник. При создании — из формы: туда его положил
+     * обработчик открытия по параметру {@code kind}, и то же значение
+     * переживает перерисовку после ошибки валидации.
+     */
+    private ZnpKind resolveFormKind(Model model,
+                                    ProductionOrder editingOrder) {
+
+        if (editingOrder != null) {
+            return editingOrder.getZnpKind() == null
+                    ? ZnpKind.KITTING
+                    : editingOrder.getZnpKind();
+        }
+
+        Object boundForm = model.asMap().get("productionOrderForm");
+
+        return boundForm instanceof ProductionOrderForm form
+                ? form.getResolvedKind()
+                : ZnpKind.KITTING;
+    }
+
+    /**
+     * Изделие, выбранное в форме заказа.
+     *
+     * Нужно для списка маршрутов: техпроцесс выбирают по изделию, а
+     * источник значения зависит от режима формы так же, как у
+     * {@link #resolveFormKind} — при правке это изделие заказа, при
+     * создании (в том числе после ошибки валидации) значение самой
+     * формы.
+     */
+    private Long formClassifierId(Model model,
+                                  ProductionOrder editingOrder) {
+
+        if (editingOrder != null) {
+            return editingOrder.getClassifierId();
+        }
+
+        Object boundForm = model.asMap().get("productionOrderForm");
+
+        return boundForm instanceof ProductionOrderForm form
+                ? form.getProductClassifierId()
+                : null;
+    }
+
+    /**
+     * Пункт меню, подсвечиваемый формой заказа.
+     *
+     * Групповой или ремонтный вид — «Групповые ЗНП», выпуск и
+     * комплектование — «Заказы на производство»: те же наборы видов,
+     * по которым разделены списки (см. ZnpKind#isGroupKind), поэтому
+     * форма подсвечивает тот раздел, откуда заказ и виден.
+     */
+    private String formMenuSection(Model model,
+                                   ProductionOrder editingOrder) {
+
+        return resolveFormKind(model, editingOrder).isGroupKind()
+                ? "groupZnp"
+                : "productionOrder";
+    }
+
+    /**
+     * Изделия для выбранного вида заказа-комплектующего.
+     *
+     * Справочник ограничен типом, который требует вид: групповой заказ
+     * на ячейки обязан называть ячейку, заказ на приборы — прибор.
+     * Ответ отдаётся по выбору вида, потому что вид переключают уже
+     * после открытия формы, а держать в странице четыре списка сразу
+     * означало бы показывать диспетчеру чужие изделия.
+     */
+    @GetMapping("/production-order/kind-classifiers")
+    @ResponseBody
+    public List<Map<String, Object>> kindClassifiers(
+            @RequestParam(required = false) String kind
+    ) {
+        List<Map<String, Object>> rows = new ArrayList<>();
+
+        for (ProductClassifier classifier
+                : productionOrderService.findClassifierOptions(
+                        ZnpKind.ofNullable(kind).requiredProductType())) {
+
+            Map<String, Object> row = new LinkedHashMap<>();
+
+            row.put("id", classifier.getId());
+            row.put("code", classifier.getCode());
+            row.put("name", classifier.getDisplayName());
+
+            rows.add(row);
+        }
+
+        return rows;
+    }
+
+    /**
+     * Маршруты изделия, выбранного в форме заказа.
+     *
+     * Групповой заказ обязан называть техпроцесс (см.
+     * ZnpKind#requiresTechProcess), но список маршрутов зависит от
+     * изделия, а изделие меняют уже в странице — поэтому список
+     * отдаётся отдельно и только для выбранного классификатора.
+     *
+     * Пустой ответ при непустом изделии означает, что маршрутов у
+     * изделия нет: диспетчер увидит пустой выбор и поймёт, что
+     * маршрут ещё не настроен, — предлагать все маршруты подряд
+     * значило бы дать поставить чужой техпроцесс.
+     */
+    @GetMapping("/production-order/classifier-routes")
+    @ResponseBody
+    public List<Map<String, Object>> classifierRoutes(
+            @RequestParam(required = false) Long classifierId
+    ) {
+        List<Map<String, Object>> rows = new ArrayList<>();
+
+        for (ClassifierRouteOptionView route
+                : productionOrderService.findTechProcessOptions(
+                        classifierId)) {
+
+            Map<String, Object> row = new LinkedHashMap<>();
+
+            row.put("id", route.getId());
+            row.put("code", route.getCode());
+            row.put("basic", route.isBasic());
+            row.put("operationCount", route.getOperationCount());
+
+            rows.add(row);
+        }
+
+        return rows;
     }
 
     /**

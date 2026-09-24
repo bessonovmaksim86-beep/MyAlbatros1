@@ -34,20 +34,57 @@
                 :: topbar}">
         </header>
 
-        <div class="page-content dispatcher-page">
+        <div class="page-content dispatcher-page"
+             th:with="
+                 poModeRelease=${
+                     editing
+                         ? !productionOrderForm.componentLevel
+                         : releaseOrder
+                 }">
 
             <div class="page-head">
 
                 <div class="page-title">
 
+                    <!--
+                        Заголовок различает режимы: форма одна, но
+                        выпуск (ЗП) и заказ-комплектующий (ЗНП) —
+                        разные документы, и общий заголовок заставлял бы
+                        диспетчера вчитываться в поля, чтобы понять, что
+                        он сейчас заводит.
+                    -->
+                    <!--
+                        В ЗНП-режиме вид поднимается прямо в заголовок:
+                        выбор вида уже сделан кнопкой на странице списка,
+                        и повторять его отдельным подписанным полем ниже
+                        — значит заставлять диспетчера сверять одно и то
+                        же дважды. Вид берётся из resolvedKind, а не из
+                        model-атрибута, чтобы заголовок не терялся после
+                        ошибки валидации.
+                    -->
                     <h1 th:text="${
-                        editing ? 'Изменение заказа на производство'
-                               : 'Создание заказа на производство'
+                        editing
+                            ? 'Изменение заказа на производство'
+                            : (poModeRelease
+                                   ? 'Создание заказа на производство'
+                                   : 'Создание · '
+                                         + productionOrderForm
+                                           .resolvedKind.displayName)
                     }">
                         Создание заказа на производство
                     </h1>
 
-                    <p>
+                    <p th:text="${
+                        poModeRelease
+                            ? 'Состав выпуска формируется из позиций
+                               выбранного заказа покупателя: каждое
+                               изделие получает серийный номер вида
+                               «код классификатора — серия»'
+                            : 'Вид заказа-комплектующего определяет состав:
+                               комплектование отмечает датчики выпуска,
+                               групповые и ремонтные виды задаются
+                               изделием и количеством'
+                    }">
                         Состав выпуска формируется из позиций выбранного
                         заказа покупателя: каждое изделие получает
                         серийный номер вида «код классификатора — серия»
@@ -57,8 +94,17 @@
 
                 <div class="page-head-actions">
 
+                    <!--
+                        Возврат — в тот раздел, откуда открыли форму:
+                        групповой заказ живёт в «Групповых ЗНП», и
+                        ссылка на общий список уводила бы от только
+                        что созданной строки. Раздел тот же, что
+                        подсвечен в меню (activePage).
+                    -->
                     <a class="btn secondary"
-                       th:href="@{/dispatcher/production-order}">
+                       th:href="${activePage == 'groupZnp'}
+                           ? @{/dispatcher/group-znp}
+                           : @{/dispatcher/production-order}">
                         К списку заказов
                     </a>
 
@@ -70,6 +116,15 @@
                       ? @{/dispatcher/production-order/{id}/edit(id=${productionOrderForm.id})}
                       : @{/dispatcher/production-order/create}"
                   th:object="${productionOrderForm}"
+                  th:with="
+                      poRelease=${
+                          editing
+                              ? !productionOrderForm.componentLevel
+                              : releaseOrder
+                      },
+                      poSerial=${
+                          productionOrderForm.resolvedKind.serialBased
+                      }"
                   class="co-form">
 
                 <input th:if="${_csrf != null}"
@@ -118,72 +173,41 @@
 
                         <div class="form-grid">
 
-                            <div class="field span-2">
+                            <!--
+                                Уровень заказа задаётся не формой, а
+                                тем, из какой кнопки форма открыта:
+                                выпуск (ЗП) создаётся из заказа
+                                покупателя, заказ-комплектующий (ЗНП) —
+                                из этого окна. Переключателя в интерфейсе
+                                нет: диспетчер здесь заводит только ЗНП,
+                                и выбор «ЗП / ЗНП» лишь множил бы клики.
 
-                                <label for="parentProductionOrderId">
-                                    Заказ верхнего уровня (ЗП)
-                                </label>
+                                Значение передаётся скрытым полем, потому
+                                что сервис определяет уровень по форме:
+                                без него комплектующий создался бы
+                                выпуском.
+                            -->
+                            <input type="hidden"
+                                   name="orderLevel"
+                                   th:value="${
+                                       editing
+                                           ? (productionOrderForm
+                                                 .componentLevel
+                                                 ? 'COMPONENT' : 'ROOT')
+                                           : (releaseOrder ? 'ROOT'
+                                                           : 'COMPONENT')
+                                   }">
 
-                                <!--
-                                    Порядок заполнения для комплектующего:
-                                    сначала ЗП, затем номер, затем изделие.
-                                    Выбор родителя меняет смысл заказа:
-                                    серийники не выдаются, а заказчик
-                                    наследуется от выбранного выпуска —
-                                    поле заказчика при этом блокируется.
-                                    Без родителя заказ остаётся выпуском
-                                    верхнего уровня.
-
-                                    Уровень заказа неизменный, поэтому при
-                                    правке выбор закрыт. Здесь скрытое поле,
-                                    а не disabled-Select: disabled в форму
-                                    не попадает, и после ошибки валидации
-                                    заказ-комплектующий отрисовался бы как
-                                    заказ верхнего уровня.
-                                -->
-                                <th:block th:if="${editing}">
-
-                                    <input type="hidden"
-                                           id="parentProductionOrderId"
-                                           th:field="*{parentProductionOrderId}">
-
-                                    <input type="text"
-                                           th:value="${
-                                               productionOrderForm
-                                                   .parentProductionOrderId != null
-                                                   ? 'Заказ-комплектующий (уровень неизменный)'
-                                                   : 'Заказ верхнего уровня (уровень неизменный)'
-                                           }"
-                                           readonly>
-
-                                </th:block>
-
-                                <select th:unless="${editing}"
-                                        id="parentProductionOrderId"
-                                        th:field="*{parentProductionOrderId}">
-
-                                    <option value="">
-                                        — без родителя (заказ верхнего уровня) —
-                                    </option>
-
-                                    <option th:each="rootOption : ${rootOrders}"
-                                            th:value="${rootOption.id}"
-                                            th:text="${
-                                                rootOption.number
-                                                + ' — '
-                                                + rootOption.customerOrderNumber
-                                            }">
-                                        Заказ верхнего уровня
-                                    </option>
-
-                                </select>
-
-                                <span class="field-error"
-                                      th:if="${#fields.hasErrors('parentProductionOrderId')}"
-                                      th:errors="*{parentProductionOrderId}">
-                                </span>
-
-                            </div>
+                            <!--
+                                Режим возвращается и в POST: параметр
+                                нужен обработчику, чтобы при ошибке
+                                валидации форма отрисовалась тем же
+                                заказом, который заводили, а не
+                                переключилась на другой набор полей.
+                            -->
+                            <input type="hidden"
+                                   name="release"
+                                   th:value="${poModeRelease}">
 
                             <div class="field">
 
@@ -209,6 +233,100 @@
                             </div>
 
                             <!--
+                                Вид заказа-комплектующего (миграция V37)
+                                в форме НЕ показывается: его выбирает
+                                кнопка на странице списка или в карточке
+                                выпуска, и повторять выбор полем внутри
+                                формы значило бы дать диспетчеру сменить
+                                вид, который сервис всё равно не примет
+                                (см. assertKindUnchanged).
+
+                                Скрытое поле обязательно: уровень и вид
+                                сервис читает из формы, а без значения
+                                заказ любого вида создался бы
+                                комплектованием (ZnpKind.ofNullable).
+                                При ошибке валидации поле возвращает
+                                тот же вид, под который открывали форму.
+                            -->
+                            <input type="hidden"
+                                   id="znpKind"
+                                   th:field="*{znpKind}">
+
+                            <!--
+                                Заказ верхнего уровня — только для
+                                комплектования: такой заказ вписывается
+                                внутрь выпуска и отмечает его датчики,
+                                поэтому выпуск обязателен и выбирается
+                                сразу под списком видов.
+
+                                Групповым и ремонтным заказам выпуск не
+                                нужен: они самостоятельны, их состав —
+                                изделие и количество (см. ZnpKind).
+
+                                При правке выбор закрыт: уровень заказа
+                                неизменный. Здесь скрытое поле, а не
+                                disabled-Select — disabled в форму не
+                                попадает, и после ошибки валидации
+                                заказ отрисовался бы без родителя.
+                            -->
+                            <div class="field span-2"
+                                 id="parentField"
+                                 th:if="${poSerial and !poRelease}">
+
+                                <label for="parentProductionOrderId">
+                                    Заказ верхнего уровня (ЗП)
+                                </label>
+
+                                <th:block th:if="${editing}">
+
+                                    <input type="hidden"
+                                           id="parentProductionOrderId"
+                                           th:field="*{parentProductionOrderId}">
+
+                                    <input type="text"
+                                           th:value="${
+                                               productionOrderForm
+                                                   .parentProductionOrderId != null
+                                                   ? 'Заказ-комплектующий (уровень неизменный)'
+                                                   : 'Заказ верхнего уровня (уровень неизменный)'
+                                           }"
+                                           readonly>
+
+                                </th:block>
+
+                                <select th:unless="${editing}"
+                                        id="parentProductionOrderId"
+                                        th:field="*{parentProductionOrderId}">
+
+                                    <option value="">
+                                        — выберите заказ верхнего уровня —
+                                    </option>
+
+                                    <option th:each="rootOption : ${rootOrders}"
+                                            th:value="${rootOption.id}"
+                                            th:text="${
+                                                rootOption.number
+                                                + ' — '
+                                                + rootOption.customerOrderNumber
+                                            }">
+                                        Заказ верхнего уровня
+                                    </option>
+
+                                </select>
+
+                                <small>
+                                    Датчики и заказ покупателя берутся из
+                                    выбранного выпуска
+                                </small>
+
+                                <span class="field-error"
+                                      th:if="${#fields.hasErrors('parentProductionOrderId')}"
+                                      th:errors="*{parentProductionOrderId}">
+                                </span>
+
+                            </div>
+
+                            <!--
                                 Номера датчиков, в которые входит заказ-
                                 комплектующий.
 
@@ -227,7 +345,9 @@
                                 подгружаются по выбранному родителю —
                                 до выбора ЗП список пуст сознательно.
                             -->
-                            <div class="field span-2" id="serialPickerField">
+                            <div class="field span-2"
+                                 id="serialPickerField"
+                                 th:if="${poSerial and !poRelease}">
 
                                 <label>
                                     Номера датчиков этого заказа
@@ -289,7 +409,183 @@
 
                             </div>
 
-                            <div class="field">
+                            <!--
+                                Состав «изделием и количеством» — для
+                                групповых и ремонтных видов (миграция V37).
+
+                                Диспетчер пишет «ячейка 1212 — 24 шт.», а
+                                не перебирает номера: номера таких заказов
+                                появятся позже, по ходу выпуска, и
+                                привязывать заявку к конкретным серийникам
+                                на этапе её заведения не к чему.
+
+                                Справочник изделий ограничен типом,
+                                который требует вид (см. вид в модели), а
+                                при смене вида подгружается заново — иначе
+                                в заказе на приборы осталось бы выбранное
+                                изделие ячейки. При правке варианты
+                                приходят с сервера; скрытое поле держит
+                                уже выбранное изделие, чтобы оно пережило
+                                ошибку валидации (disabled в форму не
+                                попадает).
+                            -->
+                            <div class="field"
+                                 id="kindClassifierField"
+                                 th:if="${!poSerial and !poRelease}">
+
+                                <label for="productClassifierId"
+                                       th:text="${
+                                           productionOrderForm
+                                               .resolvedKind
+                                               .classifierListLabel
+                                       }">
+                                    Список ячеек
+                                </label>
+
+                                <select id="productClassifierId"
+                                        th:field="*{productClassifierId}">
+
+                                    <option value="">
+                                        — выберите изделие —
+                                    </option>
+
+                                    <option th:each="classifierOption : ${kindClassifiers}"
+                                            th:value="${classifierOption.id}"
+                                            th:text="${
+                                                classifierOption.code
+                                                + ' — '
+                                                + classifierOption.displayName
+                                            }">
+                                        1212 — Ячейка ЯПР56
+                                    </option>
+
+                                </select>
+
+                                <small id="kindClassifierHint">
+                                    Справочник ограничен типом изделия,
+                                    которое подходит выбранному виду
+                                </small>
+
+                                <span class="field-error"
+                                      th:if="${#fields.hasErrors('productClassifierId')}"
+                                      th:errors="*{productClassifierId}">
+                                </span>
+
+                            </div>
+
+                            <div class="field"
+                                 id="kindQuantityField"
+                                 th:if="${!poSerial and !poRelease}">
+
+                                <label for="quantity">
+                                    Количество
+                                </label>
+
+                                <input id="quantity"
+                                       type="number"
+                                       step="0.001"
+                                       min="0.001"
+                                       placeholder="Сколько изделий заказывают"
+                                       th:field="*{quantity}">
+
+                                <small>
+                                    Количество дробное, как в позиции
+                                    заказа покупателя: единицы измерения
+                                    различаются
+                                </small>
+
+                                <span class="field-error"
+                                      th:if="${#fields.hasErrors('quantity')}"
+                                      th:errors="*{quantity}">
+                                </span>
+
+                            </div>
+
+                            <!--
+                                Техпроцесс группового заказа (миграция V40):
+                                работы идут по маршруту заказанного
+                                изделия, поэтому выбор обязателен этим
+                                видам (см. ZnpKind#requiresTechProcess) и
+                                держится на стороне сервиса.
+
+                                Список ограничен маршрутами выбранного
+                                изделия: при правке их кладёт в модель
+                                контроллер, при создании и при смене
+                                изделия подгружает скрипт — иначе
+                                диспетчер мог бы поставить маршруту чужое
+                                изделие. Базовый маршрут идёт первым и
+                                подписан, чтобы выбор по умолчанию был
+                                тем маршрутом, который настроен основным.
+
+                                Выбор остаётся открытым и при правке:
+                                маршрут, в отличие от вида и уровня
+                                заказа, меняют — изделие могли перевести
+                                на другой техпроцесс.
+                            -->
+                            <div class="field"
+                                 id="kindTechProcessField"
+                                 th:if="${!poSerial and !poRelease}">
+
+                                <label for="techProcessId">
+                                    Техпроцесс
+                                </label>
+
+                                <select id="techProcessId"
+                                        th:field="*{techProcessId}">
+
+                                    <option value="">
+                                        — выберите техпроцесс —
+                                    </option>
+
+                                    <option th:each="routeOption : ${techProcesses}"
+                                            th:value="${routeOption.id}"
+                                            th:text="${
+                                                routeOption.code
+                                                + (routeOption.basic
+                                                        ? ' — базовый'
+                                                        : '')
+                                                + ' ('
+                                                + routeOption.operationCount
+                                                + ' оп.)'
+                                            }">
+                                        ТП-001 — базовый (7 оп.)
+                                    </option>
+
+                                </select>
+
+                                <small id="kindTechProcessHint">
+                                    Маршруты выбранного изделия; сначала
+                                    укажите изделие
+                                </small>
+
+                                <span class="field-error"
+                                      th:if="${#fields.hasErrors('techProcessId')}"
+                                      th:errors="*{techProcessId}">
+                                </span>
+
+                            </div>
+
+                            <!--
+                                Заказ покупателя и операция выпуска нужны
+                                только заказу, привязанному к выпуску
+                                (см. ZnpKind#isReleaseBound): выпуск
+                                делают по заявке и операцией выпуска, а
+                                комплектующий наследует и то и другое от
+                                родителя. Групповому заказу (V38) заявка
+                                не назначается — он самостоятелен, а
+                                работы ему задаёт техпроцесс (см. блок
+                                «Техпроцесс» выше).
+
+                                Поля скрыты сервером, а не скриптом: вид
+                                заказа выбирается кнопкой до открытия
+                                формы и внутри формы не меняется (см.
+                                assertKindUnchanged), переключать их на
+                                стороне нечем. Обязательность держит
+                                сервис.
+                            -->
+                            <div class="field"
+                                 id="customerOrderField"
+                                 th:if="${poSerial or poRelease}">
 
                                 <label for="customerOrderId">
                                     Заказ покупателя
@@ -329,7 +625,8 @@
 
                             </div>
 
-                            <div class="field">
+                            <div class="field"
+                                 th:if="${poSerial or poRelease}">
 
                                 <label for="productionOperationId">
                                     Операция выпуска
@@ -413,7 +710,18 @@
 
                 </section>
 
-                <section class="card">
+                <!--
+                    Состав выпуска — позиции заказа покупателя, из них
+                    выдаются серийники. У заказа-комплектующего такого
+                    состава нет: он сам входит внутрь изделия, а его
+                    «состав» — отмеченные датчики либо изделие с
+                    количеством. Секция относится только к выпуску,
+                    поэтому для комплектующего она скрыта: таблица с
+                    пустой строкой выглядела бы как ошибка загрузки.
+                -->
+                <section class="card"
+                         id="releasePreviewSection"
+                         th:hidden="${!poRelease}">
 
                     <div class="card-head">
 
@@ -508,6 +816,12 @@
                         тернарного выражения намеренно: link-выражения
                         @{...} нельзя вкладывать внутрь ${...} — SpEL
                         их не понимает (EL1059E).
+
+                        При создании список берётся по разделу заказа
+                        (activePage): групповой заказ заводят из
+                        «Групповых ЗНП», и возврат в общий список
+                        показал бы пустую страницу вместо только что
+                        заведённой строки.
                     -->
                     <a class="btn secondary"
                        th:if="${editing and productionOrderForm.id != null}"
@@ -516,7 +830,15 @@
                     </a>
 
                     <a class="btn secondary"
-                       th:unless="${editing and productionOrderForm.id != null}"
+                       th:if="${!(editing and productionOrderForm.id != null)
+                                and activePage == 'groupZnp'}"
+                       th:href="@{/dispatcher/group-znp}">
+                        Отмена
+                    </a>
+
+                    <a class="btn secondary"
+                       th:if="${!(editing and productionOrderForm.id != null)
+                                and activePage != 'groupZnp'}"
                        th:href="@{/dispatcher/production-order}">
                         Отмена
                     </a>
@@ -526,7 +848,9 @@
                             th:text="${
                                 editing
                                     ? 'Сохранить изменения'
-                                    : 'Создать заказ на производство'
+                                    : (poModeRelease
+                                           ? 'Создать заказ на производство'
+                                           : 'Создать заказ-комплектующий')
                             }">
                         Создать заказ на производство
                     </button>
@@ -545,7 +869,9 @@
 
 <script th:src="@{/dispatcher/js/production-order.js}"
         th:attr="data-preview-url=@{/dispatcher/production-order/customer-order-items},
-                 data-serials-url=@{/dispatcher/production-order/parent-serials}"></script>
+                 data-serials-url=@{/dispatcher/production-order/parent-serials},
+                 data-kind-classifiers-url=@{/dispatcher/production-order/kind-classifiers},
+                 data-routes-url=@{/dispatcher/production-order/classifier-routes}"></script>
 
 </body>
 </html>

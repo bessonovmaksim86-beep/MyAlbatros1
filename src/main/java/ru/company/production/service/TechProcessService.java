@@ -10,11 +10,15 @@ import ru.company.production.dto.TechProcessGraphView;
 import ru.company.production.entity.Operation;
 import ru.company.production.entity.ProductClassifier;
 import ru.company.production.entity.TechProcess;
+import ru.company.production.entity.TechProcessClassifier;
 import ru.company.production.entity.TechProcessOperation;
 import ru.company.production.entity.WorkPlace;
+import ru.company.production.repository.AppliedClassifierView;
 import ru.company.production.repository.ClassifierOptionProjection;
+import ru.company.production.repository.ClassifierRouteOptionView;
 import ru.company.production.repository.OperationRepository;
 import ru.company.production.repository.ProductClassifierRepository;
+import ru.company.production.repository.TechProcessClassifierRepository;
 import ru.company.production.repository.TechProcessRepository;
 import ru.company.production.repository.TechProcessListItemView;
 import ru.company.production.repository.WorkPlaceRepository;
@@ -43,6 +47,7 @@ public class TechProcessService {
     private static final int WORKDAY_HOURS = 8;
 
     private final TechProcessRepository techProcessRepository;
+    private final TechProcessClassifierRepository linkRepository;
     private final ProductClassifierRepository classifierRepository;
     private final OperationRepository operationRepository;
     private final WorkPlaceRepository workPlaceRepository;
@@ -219,7 +224,8 @@ public class TechProcessService {
     @Transactional
     public TechProcess applyToClassifier(
             Long processId,
-            Long targetClassifierId
+            Long targetClassifierId,
+            boolean asBasic
     ) {
         TechProcess process = techProcessRepository
                 .findWithAppliedClassifiers(processId)
@@ -235,9 +241,12 @@ public class TechProcessService {
                         "Изделие классификатора не найдено"
                 ));
 
-        boolean alreadyApplied = process.getAppliedClassifiers()
+        boolean alreadyApplied = process.getClassifierLinks()
                 .stream()
-                .anyMatch(item -> item.getId().equals(target.getId()));
+                .anyMatch(
+                        link -> link.getClassifier().getId()
+                                .equals(target.getId())
+                );
 
         if (alreadyApplied) {
             throw new IllegalArgumentException(
@@ -245,7 +254,19 @@ public class TechProcessService {
             );
         }
 
-        process.getAppliedClassifiers().add(target);
+        /*
+         * Базовый маршрут у изделия один, поэтому прежнюю отметку
+         * снимают до добавления новой. Иначе изделие получило бы два
+         * «основных» маршрута, и порядок в списке выбора стал бы
+         * зависеть от порядка строк в базе.
+         */
+        if (asBasic) {
+            linkRepository.clearBasicForClassifier(target.getId());
+        }
+
+        process.getClassifierLinks().add(
+                new TechProcessClassifier(process, target, asBasic)
+        );
 
         try {
             return techProcessRepository.saveAndFlush(process);
@@ -258,27 +279,71 @@ public class TechProcessService {
     }
 
     /**
+     * Делает техпроцесс базовым для изделия.
+     *
+     * Отметку переносят: у изделия остаётся один основной маршрут.
+     * Сам маршрут при этом не меняют — изделие просто начинает
+     * выпускаться по выбранному маршруту по умолчанию.
+     */
+    @Transactional
+    public TechProcess makeBasicForClassifier(
+            Long processId,
+            Long classifierId
+    ) {
+        TechProcessClassifier link = linkRepository
+                .findByTechProcess_IdAndClassifier_Id(
+                        processId,
+                        classifierId
+                )
+                .orElseThrow(() -> new IllegalArgumentException(
+                        "Техпроцесс не применён к выбранному изделию"
+                ));
+
+        if (link.isBasic()) {
+            return link.getTechProcess();
+        }
+
+        linkRepository.clearBasicForClassifier(classifierId);
+
+        link.setBasic(true);
+        linkRepository.saveAndFlush(link);
+
+        return link.getTechProcess();
+    }
+
+    /**
+     * Техпроцессы изделия для выбора маршрута: базовый первым,
+     * остальные — по коду.
+     */
+    @Transactional(readOnly = true)
+    public List<ClassifierRouteOptionView> findRoutesForClassifier(
+            Long classifierId
+    ) {
+        if (classifierId == null) {
+            return List.of();
+        }
+
+        return techProcessRepository
+                .findRoutesForClassifier(classifierId);
+    }
+
+    /**
      * Возвращает изделия, к которым применён техпроцесс
      * (для отображения в списке и на странице применения).
      */
     @Transactional(readOnly = true)
-    public List<ClassifierOptionProjection> findAppliedOptions(Long id) {
-        TechProcess process = techProcessRepository
+    public List<AppliedClassifierView> findAppliedOptions(Long id) {
+        boolean exists = techProcessRepository
                 .findWithAppliedClassifiers(id)
-                .orElseThrow(() -> new EntityNotFoundException(
-                        "Техпроцесс с идентификатором "
-                                + id
-                                + " не найден"
-                ));
+                .isPresent();
 
-        Set<Long> appliedIds = new HashSet<>();
+        if (!exists) {
+            throw new EntityNotFoundException(
+                    "Техпроцесс с идентификатором " + id + " не найден"
+            );
+        }
 
-        process.getAppliedClassifiers()
-                .forEach(item -> appliedIds.add(item.getId()));
-
-        return classifierRepository.findAllOptions().stream()
-                .filter(option -> appliedIds.contains(option.getId()))
-                .toList();
+        return linkRepository.findAppliedClassifiers(id);
     }
 
     /**
@@ -717,12 +782,27 @@ public class TechProcessService {
          * Сравнение по идентификатору, так как в коллекции может
          * лежать ленивая прокладка того же изделия.
          */
-        boolean mainApplied = process.getAppliedClassifiers()
+        boolean mainApplied = process.getClassifierLinks()
                 .stream()
-                .anyMatch(item -> item.getId().equals(classifier.getId()));
+                .anyMatch(link -> link.getClassifier().getId()
+                        .equals(classifier.getId()));
 
         if (!mainApplied) {
-            process.getAppliedClassifiers().add(classifier);
+            /*
+             * Новый маршрут становится базовым для изделия только
+             * когда базового у изделия ещё нет: если изделие уже
+             * выпускают по другому маршруту, автоматически «перетягивать»
+             * базовость на себя нельзя — выпуск в заказах сменился бы
+             * молча. Базовым новый маршрут делает технолог отдельной
+             * кнопкой в списке.
+             */
+            boolean hasBasic = linkRepository
+                    .findBasicForClassifier(classifier.getId())
+                    .isPresent();
+
+            process.getClassifierLinks().add(
+                    new TechProcessClassifier(process, classifier, !hasBasic)
+            );
         }
 
         List<TechProcessForm.TechProcessOperationForm> rows =

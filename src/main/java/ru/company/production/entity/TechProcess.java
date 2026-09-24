@@ -53,24 +53,18 @@ public class TechProcess {
      * Все изделия, к которым применён этот маршрут.
      * «Копирование» техпроцесса добавляет сюда новое изделие,
      * не создавая отдельного техпроцесса.
+     *
+     * Связка хранится сущностью, а не чистой ManyToMany: у изделия
+     * должно быть помечено, какой из маршрутов для него базовый
+     * (basic), а какой — обычный (применённый).
      */
-    @ManyToMany(fetch = FetchType.LAZY)
-    @JoinTable(
-            name = "tech_process_classifiers",
-            joinColumns = @JoinColumn(
-                    name = "tech_process_id",
-                    foreignKey = @ForeignKey(
-                            name = "fk_tech_process_classifier_process"
-                    )
-            ),
-            inverseJoinColumns = @JoinColumn(
-                    name = "product_classifier_id",
-                    foreignKey = @ForeignKey(
-                            name = "fk_tech_process_classifier_classifier"
-                    )
-            )
+    @OneToMany(
+            mappedBy = "techProcess",
+            cascade = CascadeType.ALL,
+            orphanRemoval = true,
+            fetch = FetchType.LAZY
     )
-    private Set<ProductClassifier> appliedClassifiers =
+    private Set<TechProcessClassifier> classifierLinks =
             new LinkedHashSet<>();
 
     @Column(length = 2000)

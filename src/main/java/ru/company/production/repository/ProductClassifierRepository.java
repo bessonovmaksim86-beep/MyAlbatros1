@@ -56,6 +56,28 @@ public interface ProductClassifierRepository extends JpaRepository<ProductClassi
             """)
     List<ProductClassifier> findDeviceOptions(@Param("excludedId") Long excludedId);
 
+    /**
+     * Изделия указанного типа для выбора в групповом или ремонтном
+     * заказе-комплектующем (миграция V37).
+     *
+     * Выбор ограничен типом сознательно: групповой заказ на ячейки
+     * обязан называть ячейку, а заказ на приборы — прибор, иначе
+     * количество повиснет на изделии другого назначения. Тип передаётся
+     * параметром, а не отдельными запросами, потому что справочников
+     * видов в форме несколько, и заводить запрос на каждый — значит
+     * дублировать один и тот же текст.
+     */
+    @Query("""
+            select distinct classifier
+            from ProductClassifier classifier
+            left join fetch classifier.sensorCatalog
+            where classifier.productType = :productType
+            order by classifier.code
+            """)
+    List<ProductClassifier> findByProductTypeOptions(
+            @Param("productType") ru.company.production.entity.ProductType productType
+    );
+
     @Query("""
             select classifier.productType as productType,
                    count(classifier.id) as total

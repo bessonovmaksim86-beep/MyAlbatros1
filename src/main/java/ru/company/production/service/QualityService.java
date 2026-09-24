@@ -18,16 +18,22 @@ import ru.company.production.entity.RepairOrder;
 import ru.company.production.entity.RepairOrderItem;
 import ru.company.production.entity.RepairOrderStatus;
 import ru.company.production.entity.RepairOrderType;
+import ru.company.production.entity.TechProcess;
 import ru.company.production.entity.WarehouseSupplier;
 import ru.company.production.repository.InputControlDefectGroupRepository;
 import ru.company.production.repository.RepairOrderItemRepository;
 import ru.company.production.repository.RepairOrderRepository;
+import ru.company.production.repository.RepairRouteOptionView;
+import ru.company.production.repository.TechProcessRepository;
 import ru.company.production.repository.WarehouseSupplierRepository;
 
 import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -65,11 +71,32 @@ public class QualityService {
     /** Разделитель пары «id группы | полный номер» в форме. */
     private static final String CELL_SEPARATOR = "\\|";
 
+    /** Разделитель ступеней цепочки причин («Тип → вид»). */
+    private static final String REASON_SEPARATOR = "→";
+
+    /** Строк в перечне сводки: обзор читают с одного экрана. */
+    private static final int REASON_ROWS = 5;
+
+    private static final int SUPPLIER_ROWS = 5;
+
+    /** Ячеек в перечне «последние» на обзоре. */
+    private static final int RECENT_ROWS = 8;
+
+    /**
+     * Исполнитель заказа, который остаётся на предприятии.
+     *
+     * Колонка supplier_name обязательна (заказ печатают по тексту), а
+     * поставщика у такого заказа нет — в неё пишут наименование
+     * исполнителя, чтобы печатная форма не оставалась с пустой строкой.
+     */
+    private static final String SDP_EXECUTOR_LABEL = "Силами СДП";
+
     private final InputControlService inputControlService;
     private final InputControlDefectGroupRepository groupRepository;
     private final RepairOrderRepository repairOrderRepository;
     private final RepairOrderItemRepository repairItemRepository;
     private final WarehouseSupplierRepository supplierRepository;
+    private final TechProcessRepository techProcessRepository;
 
     /* ============================================================
        ПЕРЕЧЕНЬ ИЗОЛЯТОРА ДЛЯ РАЗБОРА
@@ -171,7 +198,58 @@ public class QualityService {
             );
         }
 
+        requireHomogeneous(picked);
+
         return picked;
+    }
+
+    /**
+     * Состав заказа обязан быть однородным: одна разновидность и одно
+     * наименование изделия.
+     *
+     * Проверяют здесь, а не только при записи, — смешанный состав
+     * выявляется по отмеченным ячейкам и виден сразу: пользователю
+     * незачем проходить всю форму, чтобы узнать в конце, что заказ не
+     * оформят.
+     *
+     * Разновидности и наименования запрещают смешивать по разным
+     * причинам. Ячейку и подсборку ремонтируют разные участки и закрывают
+     * разными актами, поэтому такой ЗНП распался бы на два документа.
+     * Разные наименования в одном заказе оставляют исполнителя без
+     * ответа, к какому изделию относиться составу: ЗНП печатают с одной
+     * строкой изделия.
+     */
+    private static void requireHomogeneous(List<QuarantineCellRow> rows) {
+        Set<QuarantineCellKind> kinds = new LinkedHashSet<>();
+        Map<Long, String> classifiers = new LinkedHashMap<>();
+
+        for (QuarantineCellRow row : rows) {
+            kinds.add(row.kind());
+
+            Long classifierId = row.getClassifierId();
+
+            if (classifierId != null) {
+                classifiers.putIfAbsent(classifierId, row.getCellLabel());
+            }
+        }
+
+        if (kinds.size() > 1) {
+            throw new IllegalStateException(
+                    "В одном заказе нельзя смешивать ячейки и подсборки:"
+                            + " оформите два заказа — на ремонт ячеек и"
+                            + " на ремонт подсборок"
+            );
+        }
+
+        if (classifiers.size() > 1) {
+            throw new IllegalStateException(
+                    "В одном заказе нельзя смешивать разные наименования"
+                            + " ячеек и подсборок. Отмечено изделий: "
+                            + String.join(", ", classifiers.values())
+                            + ". Оформите заказ на каждое наименование"
+                            + " отдельно"
+            );
+        }
     }
 
     /**
@@ -200,6 +278,100 @@ public class QualityService {
     @Transactional(readOnly = true)
     public List<InputControlDefectReason> findReasonOptions() {
         return inputControlService.findQuarantineReasonOptions();
+    }
+
+    /**
+     * Типы брака с их видами: опции фильтра, готовые к отрисовке.
+     *
+     * Группу строят здесь, а не в шаблоне: перечень причин отдают
+     * плоским списком (дерево открытое по глубине, и целиком оно читается
+     * одним запросом), а сопоставить вид его типу средствами шаблона
+     * надёжно нельзя — выражение вида {@code parent != null and
+     * parent.id == ...} в SpEL вычисляет обе части всегда, поэтому для
+     * типа без ступени выше обращению к {@code parent.id} приходит
+     * пустота и рендеринг обрывается на середине страницы.
+     *
+     * Уточнение, чей тип из справочника исчез (стал неактивным), в
+     * группу не попадает — такие отдают отдельно, иначе вид брака
+     * просто пропал бы из фильтра.
+     */
+    @Transactional(readOnly = true)
+    public List<ReasonOptionGroup> findReasonGroups() {
+        return groupReasons(findReasonOptions());
+    }
+
+    /** Плоский список причин → типы с видами (+ уточнения без типа). */
+    private static List<ReasonOptionGroup> groupReasons(
+            List<InputControlDefectReason> reasons) {
+
+        if (reasons == null || reasons.isEmpty()) {
+            return List.of();
+        }
+
+        Set<Long> known = new LinkedHashSet<>();
+
+        for (InputControlDefectReason reason : reasons) {
+            known.add(reason.getId());
+        }
+
+        Map<Long, List<InputControlDefectReason>> children =
+                new LinkedHashMap<>();
+        List<ReasonOptionGroup> groups = new ArrayList<>();
+        List<InputControlDefectReason> orphans = new ArrayList<>();
+
+        for (InputControlDefectReason reason : reasons) {
+            if (reason.getParent() != null) {
+                continue;
+            }
+
+            groups.add(new ReasonOptionGroup(reason, new ArrayList<>()));
+        }
+
+        for (InputControlDefectReason reason : reasons) {
+            InputControlDefectReason parent = reason.getParent();
+
+            if (parent == null) {
+                continue;
+            }
+
+            /*
+             * Тип неактивен или удалён: вид всё равно должен
+             * отобраться, поэтому его держат отдельной группой.
+             */
+            if (!known.contains(parent.getId())) {
+                orphans.add(reason);
+                continue;
+            }
+
+            children
+                    .computeIfAbsent(parent.getId(), key -> new ArrayList<>())
+                    .add(reason);
+        }
+
+        List<ReasonOptionGroup> filled = new ArrayList<>();
+
+        for (ReasonOptionGroup group : groups) {
+            filled.add(
+                    new ReasonOptionGroup(
+                            group.reason(),
+                            children.getOrDefault(
+                                    group.reason().getId(),
+                                    List.of()
+                            )
+                    )
+            );
+        }
+
+        /*
+         * Группу сирот кладут в тот же список под служебным признаком:
+         * шаблон тогда рисует её одним плоским перечнем и не ищет
+         * несуществующий тип.
+         */
+        if (!orphans.isEmpty()) {
+            filled.add(new ReasonOptionGroup(null, orphans));
+        }
+
+        return filled;
     }
 
     /**
@@ -308,16 +480,28 @@ public class QualityService {
     /**
      * Создаёт заказ на ремонт из отмеченных ячеек изолятора.
      *
-     * Каждая ячейка обязана ссылаться на конкретную группу брака — тот
-     * же номер мог быть забракован в разных группах с разными
-     * причинами. Дубликаты номеров убирают до вставки: на заказ номер
-     * приходится один раз (ограничение {@code uk_repair_order_item_number}),
-     * и повторный номер в форме — это повторная отметка, а не состав.
+     * Состав заказа держат однородным, и правила эти берут из бумаги,
+     * а не из удобства формы:
+     *
+     * - в одном ЗНП не смешивают ячейки и подсборки — их ремонтируют
+     *   разные участки и закрывают разными актами;
+     * - в одном ЗНП не смешивают разные наименования изделий: заказ
+     *   оформляют на партию одинаковых ячеек, иначе исполнитель не
+     *   поймёт, к какому изделию относиться к составу;
+     * - вид заказа ставят по составу, а не по выбору пользователя:
+     *   раз состав однородный, вид выводится из него однозначно, и
+     *   ручная выборка только расходилась бы с перечнем.
+     *
+     * Номер берёт тот, что ввёл руководитель по журналу подразделения;
+     * пустое поле означает «подобрать ближайший свободный ряда года».
+     *
+     * Исполнитель — один из двух: поставщик (заказ уходит наружу) или
+     * собственные силы, СДП (заказ остаётся на предприятии и получает
+     * маршрут ремонта). Оба способа взаимоисключающи, поэтому при СДП
+     * поставщика не требуют и не пишут.
      */
     @Transactional
     public RepairOrder create(RepairOrderForm form, AppUser author) {
-        RepairOrderType orderType = parseOrderType(form.getOrderType());
-
         List<PickedCell> picked = parseCells(form.getCells());
 
         if (picked.isEmpty()) {
@@ -326,16 +510,40 @@ public class QualityService {
             );
         }
 
-        WarehouseSupplier supplier = resolveSupplier(form);
-        String supplierName = resolveSupplierName(form, supplier);
+        RepairOrderType orderType = resolveOrderType(picked);
+
+        TechProcess route = null;
+        WarehouseSupplier supplier = null;
+        String supplierName;
+
+        if (form.isBySdp()) {
+            route = resolveTechProcess(form);
+            supplierName = SDP_EXECUTOR_LABEL;
+        } else {
+            supplier = resolveSupplier(form);
+            supplierName = resolveSupplierName(form, supplier);
+        }
+
+        boolean kitsIssue = form.isKitsIssue();
+        String kitsList = trimToNull(form.getKitsList());
+
+        if (kitsIssue && kitsList == null) {
+            throw new IllegalArgumentException(
+                    "Укажите перечень компонентов для выдачи"
+            );
+        }
 
         RepairOrder order = new RepairOrder();
-        order.setNumber(nextNumber());
+        order.setNumber(resolveNumber(form.getNumber()));
         order.setOrderType(orderType);
         order.setStatus(RepairOrderStatus.NEW);
         order.setOrderDate(LocalDate.now());
         order.setSupplier(supplier);
         order.setSupplierName(supplierName);
+        order.setBySdp(form.isBySdp());
+        order.setTechProcess(route);
+        order.setKitsIssue(kitsIssue);
+        order.setKitsList(kitsIssue ? kitsList : null);
         order.setNote(trimToNull(form.getNote()));
         order.setCreatedBy(author);
 
@@ -352,6 +560,101 @@ public class QualityService {
         }
 
         return repairOrderRepository.save(order);
+    }
+
+    /**
+     * Вид заказа по составу отмеченных ячеек.
+     *
+     * Здесь же держат запрет на смешение разновидностей: однородность
+     * состава — то же самое свойство, что и однозначный вид. Если в
+     * заказе и ячейки, и подсборки, вид подсказать нечем, и заказ
+     * пришлось бы печатать с двумя разными основаниями в одной строке.
+     */
+    private RepairOrderType resolveOrderType(List<PickedCell> picked) {
+        Set<QuarantineCellKind> kinds = new LinkedHashSet<>();
+
+        for (PickedCell cell : picked) {
+            kinds.add(kindOf(cell.group()));
+        }
+
+        if (kinds.size() > 1) {
+            throw new IllegalArgumentException(
+                    "В одном заказе нельзя смешивать ячейки и подсборки:"
+                            + " оформите два заказа — на ремонт ячеек и"
+                            + " на ремонт подсборок"
+            );
+        }
+
+        RepairOrderType suggested = RepairOrderType.suggestFrom(kinds);
+
+        if (suggested == null) {
+            throw new IllegalArgumentException(
+                    "Не удалось определить вид заказа по отмеченным ячейкам"
+            );
+        }
+
+        return suggested;
+    }
+
+    /**
+     * Номер заказа: вписанный руководителем либо подобранный сервисом.
+     *
+     * Вписанный сверяют с занятыми без учёта регистра: журнал ведения
+     * ЗНП не различает «знр-2026-007» и «ЗНР-2026-007», а два бумажных
+     * документа с одним номером читают как один.
+     */
+    private String resolveNumber(String typed) {
+        String number = trimToNull(typed);
+
+        if (number == null) {
+            return nextNumber();
+        }
+
+        if (repairOrderRepository.existsByNumberIgnoreCase(number)) {
+            throw new IllegalArgumentException(
+                    "ЗНП с номером «" + number + "» уже оформлен"
+            );
+        }
+
+        return number;
+    }
+
+    /**
+     * Маршрут ремонта для заказа силами СДП.
+     *
+     * Для собственного ремонта маршрут обязателен: без него исполнитель
+     * не знает, по каким операциям выполняют работу, и заказ остаётся
+     * перечнем номеров.
+     */
+    private TechProcess resolveTechProcess(RepairOrderForm form) {
+        Long id = form.getTechProcessId();
+
+        if (id == null) {
+            throw new IllegalArgumentException(
+                    "Для ремонта силами СДП выберите техпроцесс на ремонт"
+            );
+        }
+
+        return techProcessRepository.findById(id)
+                .orElseThrow(() -> new IllegalArgumentException(
+                        "Техпроцесс на ремонт не найден в справочнике"
+                ));
+    }
+
+    /**
+     * Маршруты для выбора в форме: активные техпроцессы справочника.
+     *
+     * Отдают проектными строками — форме нужны код маршрута и изделие,
+     * а операции маршрута тянули бы ленивые коллекции.
+     *
+     * Точка замены на отдельный справочник: сейчас список берут из
+     * общего реестра техпроцессов, потому что справочника «техпроцессы
+     * на ремонт» в системе нет. Когда его заведут, достаточно заменить
+     * источник этого запроса — форма и заказ останутся прежними.
+     */
+    @Transactional(readOnly = true)
+    public List<RepairRouteOptionView> findRouteOptions() {
+        return techProcessRepository.findRepairRouteOptions();
     }
 
     /** Берёт заказ в работу. */
@@ -510,22 +813,6 @@ public class QualityService {
         );
     }
 
-    private RepairOrderType parseOrderType(String value) {
-        if (value == null || value.isBlank()) {
-            throw new IllegalArgumentException(
-                    "Выберите вид заказа на ремонт"
-            );
-        }
-
-        try {
-            return RepairOrderType.valueOf(value.trim());
-        } catch (IllegalArgumentException exception) {
-            throw new IllegalArgumentException(
-                    "Неизвестный вид заказа"
-            );
-        }
-    }
-
     /**
      * Поставщик заказа из справочника склада.
      *
@@ -540,7 +827,8 @@ public class QualityService {
 
         if (form.getSupplierId() == null) {
             throw new IllegalArgumentException(
-                    "Выберите поставщика или отметьте «другой»"
+                    "Выберите поставщика из справочника или укажите "
+                            + "«другой поставщик» с наименованием"
             );
         }
 
@@ -617,8 +905,256 @@ public class QualityService {
             return batch == null ? "—" : batch.getIncomingOrderNumber();
         }
 
+        /** Наименование изделия без обращения к ленивой связи. */
         public String getCellLabel() {
             return batch == null ? fullNumber : batch.getCellLabel();
+        }
+
+        /**
+         * Идентификатор наименования ячейки: по нему сверяют однородность
+         * состава заказа.
+         *
+         * Классификатор берут из партии — связь открыта fetch'ем запроса
+         * изолятора (см. getCellLabel), поэтому сравнение работает и при
+         * выключенном open-in-view. Пустой идентификатор означает, что у
+         * партии изделие не заполнено; такие строки однородность не
+         * нарушают, иначе перечень отказывал бы на неполных данных.
+         */
+        public Long getClassifierId() {
+            if (batch == null || batch.getCellClassifier() == null) {
+                return null;
+            }
+
+            return batch.getCellClassifier().getId();
+        }
+
+        /*
+         * Двойники вида getX() держат рядом с аксессорами record
+         * намеренно: Thymeleaf читает свойства через JavaBeans-соглашение
+         * (get<Имя>() / is<Имя>()), а record компилируется с аксессором
+         * <имя>() без префикса. Без этих методов строка перечня
+         * отрисовалась бы пустой или страница упала бы на
+         * PropertyOrFieldNotAvailableException.
+         */
+        public Long getGroupId() {
+            return groupId;
+        }
+
+        public String getFullNumber() {
+            return fullNumber;
+        }
+
+        public QuarantineCellKind getKind() {
+            return kind;
+        }
+
+        public CellReceivingBatch getBatch() {
+            return batch;
+        }
+
+        public String getReasonChain() {
+            return reasonChain;
+        }
+
+        public String getCheckerName() {
+            return checkerName;
+        }
+
+        public String getCompletedLabel() {
+            return completedLabel;
+        }
+
+        public boolean isAlreadyOrdered() {
+            return alreadyOrdered;
+        }
+    }
+
+    /**
+     * Сводка службы качества: из чего сейчас состоит изолятор брака.
+     *
+     * Обзор строят по тем же строкам перечня, что видит руководитель в
+     * разборе, а не отдельными запросами: иначе цифра на обзоре и цифра
+     * в перечне разошлись бы при первой же правке отбора. Счётчики
+     * считают здесь, внутри транзакции, — {@code open-in-view} выключен,
+     * и сводить строки по поставщикам и причинам в шаблоне означало бы
+     * обращаться к ленивым связкам уже при отрисовке.
+     *
+     * Тип брака берут первым звеном цепочки: в изоляторе ячейку ведут к
+     * виду («Скол корпуса»), а обзор отвечает на вопрос, каким типом
+     * брака живёт изолятор сегодня.
+     */
+    @Transactional(readOnly = true)
+    public Overview overview() {
+        List<QuarantineCellRow> cells = findCells(QuarantineFilter.empty());
+
+        int subassemblies = 0;
+        int ordered = 0;
+
+        Map<String, Integer> reasonCounts = new LinkedHashMap<>();
+        Map<String, Integer> supplierCounts = new LinkedHashMap<>();
+        Set<String> classifiers = new LinkedHashSet<>();
+
+        for (QuarantineCellRow cell : cells) {
+            if (cell.kind() == QuarantineCellKind.SUBASSEMBLY) {
+                subassemblies++;
+            }
+
+            if (cell.alreadyOrdered()) {
+                ordered++;
+            }
+
+            String classifier = cell.getCellLabel();
+
+            if (classifier != null && !classifier.isBlank()) {
+                classifiers.add(classifier);
+            }
+
+            count(reasonCounts, topLevelReason(cell.reasonChain()));
+            count(supplierCounts, cell.getSupplierName());
+        }
+
+        return new Overview(
+                cells.size(),
+                subassemblies,
+                cells.size() - subassemblies,
+                ordered,
+                cells.size() - ordered,
+                classifiers.size(),
+                topEntries(reasonCounts, REASON_ROWS),
+                topEntries(supplierCounts, SUPPLIER_ROWS),
+                cells.size() > RECENT_ROWS
+                        ? List.copyOf(cells.subList(0, RECENT_ROWS))
+                        : cells
+        );
+    }
+
+    /** Метка верхнего уровня цепочки причин («Тип → вид» → «Тип»). */
+    private static String topLevelReason(String chain) {
+        if (chain == null || chain.isBlank()) {
+            return "Причина не указана";
+        }
+
+        int arrow = chain.indexOf(REASON_SEPARATOR);
+
+        String top = (arrow > 0 ? chain.substring(0, arrow) : chain).trim();
+
+        return top.isEmpty() ? "Причина не указана" : top;
+    }
+
+    private static void count(Map<String, Integer> counter, String key) {
+        counter.merge(key == null ? "—" : key, 1, Integer::sum);
+    }
+
+    /**
+     * Первые {@code limit} написаний по числу ячеек.
+     *
+     * Порядок — по убыванию счётчика, затем по написанию: перечень
+     * должен читаться как «что чаще всего лежит в изоляторе», а не как
+     * случайная выборка из хеш-контейнера.
+     */
+    private static List<CountEntry> topEntries(
+            Map<String, Integer> counter,
+            int limit) {
+
+        return counter.entrySet()
+                .stream()
+                .sorted(
+                        Comparator
+                                .comparing(
+                                        (Map.Entry<String, Integer> entry) ->
+                                                entry.getValue())
+                                .reversed()
+                                .thenComparing(Map.Entry::getKey)
+                )
+                .limit(limit)
+                .map(entry -> new CountEntry(entry.getKey(), entry.getValue()))
+                .toList();
+    }
+
+    /** Строка сводки: написание и число ячеек. */
+    public record CountEntry(String label, int count) {
+
+        public String getLabel() {
+            return label;
+        }
+
+        public int getCount() {
+            return count;
+        }
+    }
+
+    /**
+     * Сводка изолятора брака для обзора службы.
+     *
+     * Все значения уже пересчитаны в числа и строки: шаблон только
+     * выводит их и не сводит перечень повторно.
+     */
+    public record Overview(
+            int cellCount,
+            int subassemblyCount,
+            int cellKindCount,
+            int orderedCount,
+            int freeCount,
+            int classifierCount,
+            List<CountEntry> reasons,
+            List<CountEntry> suppliers,
+            List<QuarantineCellRow> recentCells
+    ) {
+
+        public int getCellCount() {
+            return cellCount;
+        }
+
+        public int getSubassemblyCount() {
+            return subassemblyCount;
+        }
+
+        public int getCellKindCount() {
+            return cellKindCount;
+        }
+
+        public int getOrderedCount() {
+            return orderedCount;
+        }
+
+        public int getFreeCount() {
+            return freeCount;
+        }
+
+        public int getClassifierCount() {
+            return classifierCount;
+        }
+
+        public List<CountEntry> getReasons() {
+            return reasons;
+        }
+
+        public List<CountEntry> getSuppliers() {
+            return suppliers;
+        }
+
+        public List<QuarantineCellRow> getRecentCells() {
+            return recentCells;
+        }
+    }
+
+    /**
+     * Тип брака вместе с его видами: строка выпадающего списка фильтра.
+     *
+     * {@code reason == null} — служебная группа уточнений, у которых тип
+     * из справочника исчез; шаблон рисует её плоским перечнем.
+     */
+    public record ReasonOptionGroup(
+            InputControlDefectReason reason,
+            List<InputControlDefectReason> children
+    ) {
+
+        public InputControlDefectReason getReason() {
+            return reason;
+        }
+
+        public List<InputControlDefectReason> getChildren() {
+            return children;
         }
     }
 }

@@ -6,7 +6,9 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 import org.springframework.format.annotation.DateTimeFormat;
+import ru.company.production.entity.ZnpKind;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
@@ -59,7 +61,74 @@ public class ProductionOrderForm {
      */
     private Long parentProductionOrderId;
 
-    @NotNull(message = "Выберите комплектовочную операцию")
+    /*
+     * Тип заказа, выбранный диспетчером: выпуск (ЗП) или
+     * заказ-комплектующий (ЗНП).
+     *
+     * Уровень заказа в базе определяется родителем
+     * (parent_production_order_id), но в форме выбор сделан явным
+     * переключателем: вид ЗНП нужен сразу при создании комплектующего,
+     * а не после того, как в списке родителей найден и выбран выпуск.
+     * Переключатель лишь показывает нужные поля, сервис уровень по нему
+     * не определяет — только по родителю.
+     *
+     * Имена значений совпадают с константами скрипта формы и читаются
+     * шаблоном через isComponentLevel().
+     */
+    private String orderLevel = ProductionOrderForm.LEVEL_ROOT;
+
+    public static final String LEVEL_ROOT = "ROOT";
+    public static final String LEVEL_COMPONENT = "COMPONENT";
+
+    /*
+     * Вид заказа-комплектующего (миграция V37).
+     *
+     * Приходит ИМЕНЕМ, а не перечислением: селектор формы отдаёт строку,
+     * а конвертация в enum при неверном значении отклонила бы всю форму
+     * до обращения к сервису — сервис в этом случае дал бы понятное
+     * сообщение, и трактует пустое значение как комплектование
+     * (см. ZnpKind.ofNullable).
+     *
+     * Для заказа верхнего уровня значение не имеет смысла и игнорируется.
+     */
+    private String znpKind;
+
+    /*
+     * Изделие группового или ремонтного заказа.
+     *
+     * Обязательность проверяет сервис: поле нужно не всем видам, а
+     * аннотация @NotNull отклонила бы корректную форму комплектования,
+     * где состава «изделием и количеством» нет.
+     */
+    private Long productClassifierId;
+
+    /*
+     * Количество заказанных изделий — тоже только для групповых и
+     * ремонтных видов (см. productClassifierId). Дробное, как в позиции
+     * заказа покупателя: единицы измерения различаются.
+     */
+    private BigDecimal quantity;
+
+    /*
+     * Техпроцесс, по которому выполняют групповой заказ (миграция V40).
+     *
+     * Как и изделие с количеством, обязательность проверяет сервис:
+     * поле нужно только групповым видам (см. ZnpKind#requiresTechProcess),
+     * а аннотация @NotNull отклонила бы корректную форму комплектования,
+     * где маршрута нет — его операции живут у выпуска.
+     */
+    private Long techProcessId;
+
+    /*
+     * Комплектовочная операция выпуска.
+     *
+     * Аннотация @NotNull снята: операцию выбирает только заказ,
+     * привязанный к выпуску (см. ZnpKind#isReleaseBound). Групповому
+     * заказу наследовать операцию не от чего — вместо неё он ведёт
+     * техпроцесс (techProcessId), и обязательность поля держит сервис
+     * (ProductionOrderService#requireKittingOperation), как это уже
+     * сделано для изделия, количества и маршрута.
+     */
     private Long productionOperationId;
 
     /*
@@ -95,6 +164,42 @@ public class ProductionOrderForm {
      */
     public String getFormattedOrderDate() {
         return formatDate(orderDate);
+    }
+
+    /*
+     * Вид ЗНП, разобранный из строки селектора.
+     *
+     * Шаблону он нужен, чтобы решить, какие поля показывать: перечень
+     * серийников (комплектование) либо изделие с количеством
+     * (групповые и ремонтные виды). Разбор тот же, что в сервисе, —
+     * иначе форма и сервис разошлись бы уже на первом же неверном
+     * значении.
+     */
+    public ZnpKind getResolvedKind() {
+        return ZnpKind.ofNullable(znpKind);
+    }
+
+    /*
+     * Выбран ли в форме заказ-комплектующий.
+     *
+     * Шаблон и JS опрашивают именно этот признак, а не наличие
+     * родителя: до выбора конкретного выпуска диспетчер уже знает,
+     * какой заказ заводит, и поля комплектующего (вид, номер, состав)
+     * должны быть доступны сразу.
+     *
+     * При правке значение не важно — там уровень задаёт редактируемый
+     * заказ, и шаблон переключает поля по нему.
+     */
+    public boolean isComponentLevel() {
+        return LEVEL_COMPONENT.equalsIgnoreCase(
+                orderLevel == null ? "" : orderLevel.trim()
+        );
+    }
+
+    public String getFormattedQuantity() {
+        return quantity == null
+                ? ""
+                : quantity.stripTrailingZeros().toPlainString();
     }
 
     private static String formatDate(LocalDate date) {

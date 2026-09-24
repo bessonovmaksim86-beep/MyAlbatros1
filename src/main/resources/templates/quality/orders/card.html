@@ -1,0 +1,422 @@
+<!DOCTYPE html>
+<html lang="ru"
+      xmlns:th="http://www.thymeleaf.org">
+
+<head>
+    <meta charset="UTF-8">
+
+    <meta name="viewport"
+          content="width=device-width, initial-scale=1">
+
+    <title>Заказ на ремонт</title>
+
+    <link rel="stylesheet"
+          th:href="@{/technology/css/technology.css}">
+
+    <link rel="stylesheet"
+          th:href="@{/technology/css/common.css}">
+
+    <link rel="stylesheet"
+          th:href="@{/quality/css/quality.css}">
+</head>
+
+<body>
+
+<div class="app-shell">
+
+    <aside th:replace="~{quality/fragments/layout
+            :: sidebar('orders')}">
+    </aside>
+
+    <main class="main">
+
+        <header th:replace="~{quality/fragments/layout
+                :: topbar}">
+        </header>
+
+        <div class="sk-page">
+
+            <div class="page-head">
+
+                <div class="page-title">
+
+                    <h1 th:text="'Заказ ' + ${order.number}">
+                        Заказ ЗНР-2026-001
+                    </h1>
+
+                    <p>
+                        Состав — отмеченные ячейки изолятора брака;
+                        ремонт принимают по акту целиком, поэтому у
+                        заказа нет частичного выполнения
+                    </p>
+
+                </div>
+
+                <div class="page-head-actions">
+
+                    <a class="btn secondary"
+                       th:href="@{/quality/orders}">
+                        К реестру
+                    </a>
+
+                    <a class="btn primary"
+                       th:href="@{/quality/quarantine}">
+                        Разобрать изолятор
+                    </a>
+
+                </div>
+            </div>
+
+            <div class="alert success"
+                 th:if="${successMessage}"
+                 th:text="${successMessage}">
+            </div>
+
+            <div class="alert danger"
+                 th:if="${errorMessage}"
+                 th:text="${errorMessage}">
+            </div>
+
+            <ol class="sk-steps">
+
+                <li class="sk-steps__item is-done">
+                    Сформирован
+                </li>
+
+                <li class="sk-steps__item"
+                    th:if="${!order.isNew() and !order.isClosed()}"
+                    th:classappend="' is-current'">
+                    Ремонт в работе
+                </li>
+
+                <li class="sk-steps__item"
+                    th:if="${order.isNew()}"
+                    th:classappend="' is-current'">
+                    Ожидает взятия в работу
+                </li>
+
+                <li class="sk-steps__item"
+                    th:if="${order.status.name() == 'DONE'}"
+                    th:classappend="' is-done'">
+                    Закрыт по акту приёмки
+                </li>
+
+                <li class="sk-steps__item"
+                    th:if="${order.status.name() == 'CANCELLED'}"
+                    th:classappend="' is-current'">
+                    Отменён: ячейки вернулись в изолятор
+                </li>
+
+            </ol>
+
+            <section class="card">
+
+                <div class="card-head">
+
+                    <div>
+
+                        <h2>Реквизиты заказа</h2>
+
+                        <small>
+                            Номер задают автоматически в ряду текущего
+                            года; состав после формирования не правят —
+                            для других ячеек оформляют отдельный ЗНП
+                        </small>
+
+                    </div>
+
+                    <span class="status"
+                          th:classappend="' ' + ${order.statusBadgeClass}"
+                          th:text="${order.statusDisplayName}">
+                        Сформирован
+                    </span>
+                </div>
+
+                <div class="card-body">
+
+                    <dl class="sk-order-meta">
+
+                        <div class="sk-order-meta__item">
+
+                            <dt>Номер заказа</dt>
+
+                            <dd class="mono" th:text="${order.number}">
+                                ЗНР-2026-001
+                            </dd>
+                        </div>
+
+                        <div class="sk-order-meta__item">
+
+                            <dt>Вид заказа</dt>
+
+                            <dd th:text="${order.orderTypeLabel}">
+                                ЗНП на ремонт ячеек
+                            </dd>
+                        </div>
+
+                        <div class="sk-order-meta__item">
+
+                            <dt>Разновидность изделий</dt>
+
+                            <dd th:text="${order.kindLabel}">
+                                Ячейка
+                            </dd>
+                        </div>
+
+                        <div class="sk-order-meta__item">
+
+                            <dt>Дата заказа</dt>
+
+                            <dd th:text="${order.formattedOrderDate}">
+                                21.09.2026
+                            </dd>
+                        </div>
+
+                        <div class="sk-order-meta__item sk-order-meta__item--wide">
+
+                            <dt>Поставщик</dt>
+
+                            <dd>
+
+                                <span th:text="${order.supplierName}">
+                                    ООО «Компонент»
+                                </span>
+
+                                <!--
+                                    Ссылка на справочник нужна сводке, а
+                                    не печати: заказ оформляют и по
+                                    поставщику, которого в справочник
+                                    склада ещё не заводили.
+                                -->
+                                <small class="sk-filter__hint"
+                                       th:if="${order.supplier != null}">
+                                    Из справочника склада
+                                </small>
+
+                                <small class="sk-filter__hint"
+                                       th:unless="${order.supplier != null}">
+                                    Вписано наименованием при оформлении
+                                </small>
+                            </dd>
+                        </div>
+
+                        <div class="sk-order-meta__item">
+
+                            <dt>Оформил</dt>
+
+                            <dd th:text="${order.createdByName}">
+                                Иванов И.И.
+                            </dd>
+                        </div>
+
+                        <div class="sk-order-meta__item">
+
+                            <dt>Создан</dt>
+
+                            <dd th:text="${order.formattedCreatedAt}">
+                                21.09.2026
+                            </dd>
+                        </div>
+
+                        <div class="sk-order-meta__item sk-order-meta__item--wide"
+                             th:if="${order.note != null and !#strings.isEmpty(order.note)}">
+
+                            <dt>Примечание</dt>
+
+                            <dd th:text="${order.note}">
+                                Вернуть по акту приёмки до конца месяца
+                            </dd>
+                        </div>
+
+                    </dl>
+
+                </div>
+            </section>
+
+            <section class="card">
+
+                <div class="card-head">
+
+                    <div>
+
+                        <h2>Состав заказа</h2>
+
+                        <small>
+                            Полный номер — единственный идентификатор,
+                            который есть у ячейки на обеих стадиях: в
+                            изоляторе лежат и номера, зарезервированные
+                            партией и ещё не внесённые в реестр
+                        </small>
+
+                    </div>
+
+                    <span class="sk-counter">
+
+                        Ячеек:
+
+                        <strong th:text="${items == null ? 0 : #lists.size(items)}">
+                            2
+                        </strong>
+                    </span>
+                </div>
+
+                <div class="card-body">
+
+                    <div class="alert danger"
+                         th:if="${items == null or #lists.isEmpty(items)}">
+
+                        <p>
+                            Состав заказа пуст: такое возможно, если заказ
+                            сформирован до записи строк — оформите новый
+                            ЗНП по отмеченным ячейкам
+                        </p>
+
+                    </div>
+
+                    <div class="table-wrap"
+                         th:unless="${items == null or #lists.isEmpty(items)}">
+
+                        <table class="data-table sk-cell-table">
+
+                            <thead>
+
+                            <tr>
+                                <th>№</th>
+                                <th>Тип</th>
+                                <th>Номер и наименование</th>
+                            </tr>
+
+                            </thead>
+
+                            <tbody>
+
+                            <tr th:each="item : ${items}">
+
+                                <td th:text="${item.position}">
+                                    1
+                                </td>
+
+                                <td th:text="${item.cellKindLabel}">
+                                    Ячейка
+                                </td>
+
+                                <td>
+                                    <div class="sk-cell-stack">
+
+                                        <span class="sk-number-cell"
+                                              th:text="${item.fullNumber}">
+                                            121200023
+                                        </span>
+
+                                        <small class="sk-filter__hint"
+                                               th:text="${item.cellLabel}">
+                                            121200023 — 1212 Подсборка ЯПР56
+                                        </small>
+                                    </div>
+                                </td>
+
+                            </tr>
+
+                            </tbody>
+                        </table>
+
+                    </div>
+
+                </div>
+            </section>
+
+            <!--
+                Переходы по статусу. Заказ закрыт (выполнен или отменён) —
+                кнопок нет: закрытый заказ меняют новым ЗНП, иначе
+                история ремонта перестала бы сходиться с актами.
+
+                Каждый переход — отдельная отправка с CSRF-токеном;
+                отказ сервиса (например, отмена выполненного заказа)
+                возвращается сообщением на этой же карточке.
+            -->
+            <section class="card"
+                     th:unless="${order.isClosed()}">
+
+                <div class="card-head">
+
+                    <div>
+
+                        <h2>Переходы по статусу</h2>
+
+                        <small>
+                            В работу берут заказ, переданный поставщику;
+                            выполняют — по акту приёмки ремонта
+                        </small>
+
+                    </div>
+
+                </div>
+
+                <div class="card-body">
+
+                    <div class="sk-form-actions">
+
+                        <span class="sk-filter__hint">
+                            Заказ подписывают руководителем службы
+                            качества; состав после формирования неизменен
+                        </span>
+
+                        <div class="sk-form-actions__group">
+
+                            <form method="post"
+                                  th:action="@{/quality/orders/{id}/start(id=${order.id})}"
+                                  th:if="${order.isNew()}">
+
+                                <input th:if="${_csrf != null}"
+                                       type="hidden"
+                                       th:name="${_csrf.parameterName}"
+                                       th:value="${_csrf.token}">
+
+                                <button type="submit" class="btn primary">
+                                    Взять в работу
+                                </button>
+                            </form>
+
+                            <form method="post"
+                                  th:action="@{/quality/orders/{id}/complete(id=${order.id})}">
+
+                                <input th:if="${_csrf != null}"
+                                       type="hidden"
+                                       th:name="${_csrf.parameterName}"
+                                       th:value="${_csrf.token}">
+
+                                <button type="submit" class="btn primary">
+                                    Заказ выполнен
+                                </button>
+                            </form>
+
+                            <form method="post"
+                                  th:action="@{/quality/orders/{id}/cancel(id=${order.id})}"
+                                  data-sk-confirm="Отменить заказ? Отмеченные ячейки вернутся в изолятор брака.">
+
+                                <input th:if="${_csrf != null}"
+                                       type="hidden"
+                                       th:name="${_csrf.parameterName}"
+                                       th:value="${_csrf.token}">
+
+                                <button type="submit" class="btn danger">
+                                    Отменить заказ
+                                </button>
+                            </form>
+
+                        </div>
+                    </div>
+
+                </div>
+            </section>
+
+        </div>
+    </main>
+</div>
+
+<th:block th:replace="~{quality/fragments/layout
+        :: commonScripts}">
+</th:block>
+
+</body>
+</html>

@@ -963,6 +963,22 @@ body {
     text-decoration: none;
 }
 
+/*
+ * «Печать QR» отправляется формой, а не кнопкой-ссылкой: форма внутри
+ * flex-группы иначе добавляет собственную базовую линию и кнопки
+ * разъезжаются по высоте.
+ */
+.warehouse-actions__group > form {
+    display: flex;
+}
+
+.warehouse-actions .btn:disabled {
+    color: #8b98a5;
+    background: #eef1f4;
+    border: 1px solid var(--line, #dce4eb);
+    cursor: not-allowed;
+}
+
 .warehouse-confirm-note {
     margin: 0 0 18px;
     padding: 15px 17px;

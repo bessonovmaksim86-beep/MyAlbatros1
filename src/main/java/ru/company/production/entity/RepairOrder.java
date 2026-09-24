@@ -33,9 +33,20 @@ import java.util.List;
 /**
  * Заказ на ремонт ячеек и подсборок из изолятора брака (ЗНП).
  *
- * Заказ заводит руководитель службы качества: он отбирает ячейки в
- * перечне изолятора и оформляет на них отдельный заказ — на ремонт
- * ячеек, на ремонт подсборок или на выдачу комплектации.
+ * Документ проходит через двух исполнителей, и порядок этот важнее
+ * набора полей:
+ *
+ * - диспетчер заводит заявку — пишет номер, выбирает тип изделий и
+ *   классификатор; состав в этот момент пуст, и заявка описывает намерение
+ *   («ремонтировать ячейки вот этого изделия»), а не перечень;
+ * - служба качества берёт заявку в работу и набирает состав из изолятора
+ *   брака, не выходя за рамки указанного типа и классификатора;
+ * - набранная заявка возвращается диспетчеру, который выбирает техпроцесс
+ *   и ставит ЗНП в график.
+ *
+ * Поэтому {@link #cellKind} и {@link #productClassifier} держат именно
+ * здесь, а не выводят из строк состава: их назначают до появления
+ * состава, и без них заявка не говорила бы службе качества, что набирать.
  *
  * Заказ не является {@link ProductionOrder} и не включается в его
  * дерево: ЗП/ЗНП диспетчера описывают выпуск продукции под заказ
@@ -79,6 +90,33 @@ public class RepairOrder {
     @Column(name = "order_type", nullable = false, length = 30)
     private RepairOrderType orderType;
 
+    /**
+     * Тип изделий, на которые заведена заявка.
+     *
+     * Выбирает диспетчер при оформлении, до того как в заявке появится
+     * хоть одна ячейка. Служба качества набирает состав не выходя за
+     * рамки этого типа: смешать ячейки и подсборки в одном ЗНП нельзя
+     * уже потому, что в заявке им места не осталось.
+     */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "cell_kind", length = 20)
+    private QuarantineCellKind cellKind;
+
+    /**
+     * Изделие (классификатор), к которому относится заявка.
+     *
+     * Как и тип, назначает диспетчер. Одно изделие на заявку — то же
+     * правило, по которому ЗНП печатают с одной строкой изделия.
+     */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(
+            name = "product_classifier_id",
+            foreignKey = @ForeignKey(
+                    name = "fk_repair_order_classifier"
+            )
+    )
+    private ProductClassifier productClassifier;
+
     @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false, length = 20)
     private RepairOrderStatus status = RepairOrderStatus.NEW;
@@ -100,6 +138,39 @@ public class RepairOrder {
             )
     )
     private WarehouseSupplier supplier;
+
+    /**
+     * Ремонт выдан с выдачей комплектации.
+     *
+     * Отметка, а не отдельный вид заказа: комплектацию выдают вместе с
+     * ремонтом ячейки или подсборки, поэтому состав компонентов держат в
+     * заголовке заказа ({@link #kitsList}).
+     */
+    @Column(name = "kits_issue", nullable = false)
+    private boolean kitsIssue;
+
+    /** Перечень компонентов для выдачи — свободный текст заказчика. */
+    @Column(name = "kits_list", length = 2000)
+    private String kitsList;
+
+    /**
+     * Ремонт выполняют собственными силами (СДП), а не поставщик.
+     *
+     * Такой заказ не ссылается на справочник поставщиков — вместо
+     * ссылки у него маршрут, по которому ремонт делают
+     * ({@link #techProcess}).
+     */
+    @Column(name = "by_sdp", nullable = false)
+    private boolean bySdp;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(
+            name = "tech_process_id",
+            foreignKey = @ForeignKey(
+                    name = "fk_repair_order_tech_process"
+            )
+    )
+    private TechProcess techProcess;
 
     @Column(name = "order_date", nullable = false)
     private LocalDate orderDate;
@@ -155,10 +226,30 @@ public class RepairOrder {
         items.clear();
     }
 
-    /** Заказ ещё не брали в работу. */
+    /** Заявка создана и ещё не взята службой качества в набор. */
     @Transient
     public boolean isNew() {
         return status == RepairOrderStatus.NEW;
+    }
+
+    /** Состав набран, заявка ждёт техпроцесса и графика у диспетчера. */
+    @Transient
+    public boolean isReturned() {
+        return status == RepairOrderStatus.RETURNED;
+    }
+
+    /**
+     * Набор состава открыт.
+     *
+     * Ячейки добавляют, пока заявка не вернулась диспетчеру: после
+     * возврата состав становится частью переданного документа, и
+     * добавленная «втихую» ячейка означала бы, что служба качества
+     * отчиталась одним составом, а по факту ремонтируют другой.
+     */
+    @Transient
+    public boolean isFillingOpen() {
+        return status == RepairOrderStatus.NEW
+                || status == RepairOrderStatus.IN_WORK;
     }
 
     /** Заказ закрыт: ни ячеек добавить, ни статус менять нельзя. */
@@ -209,14 +300,53 @@ public class RepairOrder {
     }
 
     /**
+     * Маршрут ремонта силами СДП: «ТП-14 — ЯПР56» для карточки.
+     *
+     * Связь ленивая, поэтому читают только из запроса с {@code fetch}
+     * (см. RepairOrderRepository): при выключенном open-in-view
+     * обращение к коду маршрута из шаблона прервало бы рендеринг.
+     */
+    @Transient
+    public String getTechProcessLabel() {
+        if (techProcess == null) {
+            return "—";
+        }
+
+        String code = techProcess.getCode();
+
+        if (code == null || code.isBlank()) {
+            return "Маршрут без кода";
+        }
+
+        return techProcess.getProductClassifier() == null
+                ? code
+                : code + " — " + techProcess.getProductClassifier().getCode();
+    }
+
+    /** Исполнитель заказа одним взглядом: СДП или поставщик. */
+    @Transient
+    public String getExecutorLabel() {
+        return bySdp ? "Силами СДП" : supplierName;
+    }
+
+    /**
      * Разновидность изделий заказа одним словом.
      *
-     * Состав однороден по смыслу (ремонт ячеек — ячейки, ремонт
-     * подсборок — подсборки), поэтому подпись считают по виду заказа,
-     * а не перебирают строки.
+     * Берут из поля заявки, а не из вида заказа: тип назначает
+     * диспетчер, и он же ограничивает набор состава. Вид заказа о
+     * разновидности только сообщает, но держать одно другим — значит
+     * потерять различие, если однажды ремонт ячеек начнут оформлять
+     * разными видами работ.
+     *
+     * Для заказов, заведённых до переноса типа в заголовок, остаточный
+     * вывод по виду заказа сохраняют — иначе их строки вышли бы пустыми.
      */
     @Transient
     public String getKindLabel() {
+        if (cellKind != null) {
+            return cellKind.getDisplayName();
+        }
+
         return switch (orderType == null
                 ? RepairOrderType.CELL_REPAIR : orderType) {
             case CELL_REPAIR -> QuarantineCellKind.CELL.getDisplayName();
@@ -224,5 +354,31 @@ public class RepairOrder {
                     QuarantineCellKind.SUBASSEMBLY.getDisplayName();
             case KITS_ISSUE -> "Комплектация";
         };
+    }
+
+    /**
+     * Изделие заявки: «1212 — Подсборка ЯПР56».
+     *
+     * Связь ленивая — читают только из запроса с fetch
+     * (см. RepairOrderRepository).
+     */
+    @Transient
+    public String getClassifierLabel() {
+        if (productClassifier == null) {
+            return "—";
+        }
+
+        return productClassifier.getDisplayName();
+    }
+
+    /**
+     * Заявка ждёт диспетчера: состав набран, техпроцесса ещё нет.
+     *
+     * Признак нужен карточке, чтобы показать, чей сейчас ход: у
+     * вернувшейся заявки служба качества уже ничего не меняет.
+     */
+    @Transient
+    public boolean isAwaitingDispatcher() {
+        return isReturned() && techProcess == null;
     }
 }

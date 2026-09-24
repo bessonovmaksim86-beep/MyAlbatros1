@@ -13,7 +13,6 @@
 
     function initializeQrStep() {
         const copyButton = document.getElementById('copyNumbers');
-        const printButton = document.getElementById('printQrStub');
         const status = document.getElementById('copyStatus');
         const numbers = Array.from(
             document.querySelectorAll('#expectedNumbers [data-number], .warehouse-numbers [data-number]'),
@@ -57,19 +56,12 @@
             });
         }
 
-        if (printButton) {
-            printButton.addEventListener('click', () => {
-                /*
-                 * Заглушка: программа рассылки этикеток ещё не
-                 * подключена, поэтому шаг только показывает, сколько
-                 * номеров подготовлено, и не меняет состояние партии.
-                 */
-                showStatus(
-                    `Печать QR подключается отдельно: подготовлено ${numbers.length} номеров`
-                );
-            });
-        }
-
+        /*
+         * Кнопка «Печать QR» — обычная POST-форма: задание уходит на
+         * сервер, и только там видно, настроен ли BarTender на этом
+         * рабочем месте. Обработка клика здесь означала бы, что печать
+         * возможна только при включённом JavaScript.
+         */
         function showStatus(text) {
             if (status) {
                 status.textContent = text;

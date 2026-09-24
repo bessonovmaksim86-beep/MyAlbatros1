@@ -1,0 +1,513 @@
+<!DOCTYPE html>
+<html lang="ru"
+      xmlns:th="http://www.thymeleaf.org">
+
+<head>
+    <meta charset="UTF-8">
+
+    <meta name="viewport"
+          content="width=device-width, initial-scale=1">
+
+    <title>Изолятор брака — разбор и отметка ячеек</title>
+
+    <link rel="stylesheet"
+          th:href="@{/technology/css/technology.css}">
+
+    <link rel="stylesheet"
+          th:href="@{/technology/css/common.css}">
+
+    <link rel="stylesheet"
+          th:href="@{/quality/css/quality.css}">
+</head>
+
+<body>
+
+<div class="app-shell">
+
+    <aside th:replace="~{quality/fragments/layout
+            :: sidebar('quarantine')}">
+    </aside>
+
+    <main class="main">
+
+        <header th:replace="~{quality/fragments/layout
+                :: topbar}">
+        </header>
+
+        <div class="sk-page">
+
+            <div class="page-head">
+
+                <div class="page-title">
+
+                    <h1>Изолятор брака</h1>
+
+                    <p>
+                        Разбор поштучно: отбор по разновидности, классу
+                        ячейки и типу брака, затем отметка нужных номеров
+                        и формирование ЗНП на ремонт
+                    </p>
+
+                </div>
+
+                <div class="page-head-actions">
+
+                    <a class="btn secondary"
+                       th:href="@{/quality/orders}">
+                        Заказы на ремонт
+                    </a>
+
+                </div>
+            </div>
+
+            <div class="alert success"
+                 th:if="${successMessage}"
+                 th:text="${successMessage}">
+            </div>
+
+            <div class="alert danger"
+                 th:if="${errorMessage}"
+                 th:text="${errorMessage}">
+            </div>
+
+            <!--
+                ============================================================
+                ОТБОР ПЕРЕЧНЯ
+
+                Отбор уходит GET'ом: ссылку на выбранный срез передают
+                коллеге, и она обязана открыть тот же перечень. Значения
+                возвращают в модель (filterKind, filterClassifierId,
+                filterReasonId), поэтому после применения форма не
+                «забывает» отбор.
+
+                Тип брака дают деревом: выбор типа верхнего уровня
+                захватывает и его уточнения, поэтому в группе типа первым
+                стоит сам тип, а ниже — его виды.
+                ============================================================
+            -->
+            <form class="sk-filter"
+                  method="get"
+                  th:action="@{/quality/quarantine}">
+
+                <div class="sk-filter__field">
+
+                    <label for="skKind">
+                        Тип ячеек
+                    </label>
+
+                    <select id="skKind" name="kind">
+
+                        <option value=""
+                                th:selected="${filterKind == null}">
+                            Подсборки и ячейки
+                        </option>
+
+                        <option th:each="k : ${kinds}"
+                                th:value="${k.name()}"
+                                th:text="${k.displayName}"
+                                th:selected="${filterKind != null and filterKind == k}">
+                            Ячейка
+                        </option>
+
+                    </select>
+
+                    <span class="sk-filter__hint">
+                        Подсборка — позиция прихода, ещё не принятая
+                        складом полуфабрикатов
+                    </span>
+                </div>
+
+                <div class="sk-filter__field">
+
+                    <label for="skClassifier">
+                        Класс / наименование ячейки
+                    </label>
+
+                    <select id="skClassifier" name="classifierId">
+
+                        <option value=""
+                                th:selected="${filterClassifierId == null}">
+                            Все классы
+                        </option>
+
+                        <option th:each="opt : ${classifierOptions}"
+                                th:value="${opt.id}"
+                                th:text="${
+                                    (opt.code == null ? '' : opt.code + ' — ')
+                                    + (opt.name != null and !#strings.isEmpty(opt.name)
+                                        ? opt.name
+                                        : (opt.sensorName != null and !#strings.isEmpty(opt.sensorName)
+                                            ? opt.sensorName
+                                            : 'Без наименования'))
+                                }"
+                                th:selected="${filterClassifierId != null and filterClassifierId == opt.id}">
+                            1212 — Подсборка ЯПР56
+                        </option>
+
+                    </select>
+
+                    <span class="sk-filter__hint">
+                        В списке только те изделия, по которым в изоляторе
+                        есть брак
+                    </span>
+                </div>
+
+                <div class="sk-filter__field">
+
+                    <label for="skReason">
+                        Тип и вид брака
+                    </label>
+
+                    <select id="skReason" name="reasonId">
+
+                        <option value=""
+                                th:selected="${filterReasonId == null}">
+                            Все типы брака
+                        </option>
+
+                        <!--
+                            Тип и его виды приходят готовыми группами из
+                            сервиса. Сопоставить вид типу здесь было
+                            нельзя: перечень причин отдают плоским
+                            списком, а выражение вида
+                            «parent != null and parent.id == ...» в SpEL
+                            вычисляет обе части всегда — для типа без
+                            ступени выше обращение к parent.id
+                            заканчивалось бы ошибкой посреди отрисовки
+                            страницы.
+                        -->
+                        <optgroup th:each="grp : ${reasonGroups}"
+                                  th:if="${grp.reason != null}"
+                                  th:label="${grp.reason.name}">
+
+                            <option th:value="${grp.reason.id}"
+                                    th:text="'Весь тип: ' + ${grp.reason.name}"
+                                    th:selected="${filterReasonId != null and filterReasonId == grp.reason.id}">
+                                Весь тип: Механическое повреждение
+                            </option>
+
+                            <option th:each="child : ${grp.children}"
+                                    th:value="${child.id}"
+                                    th:text="'— ' + ${child.name}"
+                                    th:selected="${filterReasonId != null and filterReasonId == child.id}">
+                                — Скол корпуса
+                            </option>
+
+                        </optgroup>
+
+                        <!--
+                            Уточнение при исчезнувшем типе-родителе: его
+                            тоже нужно уметь отобрать, иначе вид брака
+                            пропал бы из фильтра. Подпись даёт и тип, и
+                            вид, поэтому строка читается без группы.
+                        -->
+                        <optgroup th:each="grp : ${reasonGroups}"
+                                  th:if="${grp.reason == null}"
+                                  label="Уточнения без типа">
+
+                            <option th:each="child : ${grp.children}"
+                                    th:value="${child.id}"
+                                    th:text="${child.parent.name} + ' → ' + ${child.name}"
+                                    th:selected="${filterReasonId != null and filterReasonId == child.id}">
+                                Скол корпуса
+                            </option>
+
+                        </optgroup>
+
+                    </select>
+
+                    <span class="sk-filter__hint">
+                        Уточнение видно только после своего типа: его
+                        заводили вместе с причиной проверки
+                    </span>
+                </div>
+
+                <div class="sk-filter__actions">
+
+                    <button type="submit" class="btn primary">
+                        Применить отбор
+                    </button>
+
+                    <a class="btn secondary"
+                       th:href="@{/quality/quarantine}">
+                        Сбросить
+                    </a>
+
+                </div>
+            </form>
+
+            <!--
+                ============================================================
+                ПЕРЕЧЕНЬ ЯЧЕЕК И ФОРМИРОВАНИЕ ЗАКАЗА
+
+                Одна POST-форма держит и кнопку вверху, и чекбоксы:
+                состав передают на второй шаг целиком, а строкой запроса
+                его не отдают — в партии с отметкой «вся партия» номеров
+                сотни, и адрес упёрся бы в предел длины.
+
+                Номер, по которому уже есть незакрытый заказ, не
+                отмечают: иначе руководитель повторно оформил бы ремонт
+                на ту же ячейку.
+                ============================================================
+            -->
+            <form method="post"
+                  th:action="@{/quality/orders/new}"
+                  id="skPickedForm">
+
+                <input th:if="${_csrf != null}"
+                       type="hidden"
+                       th:name="${_csrf.parameterName}"
+                       th:value="${_csrf.token}">
+
+                <div class="sk-picked-bar sk-picked-bar--top">
+
+                    <div class="sk-picked-bar__summary">
+
+                        <strong class="sk-picked-bar__count"
+                                id="skPickedCount">
+                            Отмечено ячеек: 0
+                        </strong>
+
+                        <span class="sk-picked-bar__hint">
+                            Отметьте ячейки в перечне — кнопка откроет
+                            выбор вида заказа и типа поставщика
+                        </span>
+                    </div>
+
+                    <div class="sk-picked-bar__actions">
+
+                        <button type="button"
+                                class="btn secondary"
+                                id="skClearPicked">
+                            Снять отметки
+                        </button>
+
+                        <button type="submit"
+                                class="btn primary"
+                                id="skCreateOrderBtn"
+                                disabled>
+                            Сформировать ЗНП на ремонт
+                        </button>
+
+                    </div>
+                </div>
+
+                <section class="card">
+
+                    <div class="card-head">
+
+                        <div>
+
+                            <h2>Ячейки в изоляторе</h2>
+
+                            <small>
+                                Группы брака закрытых проверок развёрнуты
+                                поштучно: у группы с отметкой «вся партия»
+                                показан весь диапазон партии, поэтому
+                                отмечать можно отдельный номер
+                            </small>
+
+                        </div>
+
+                        <span class="sk-counter"
+                              th:if="${cells != null and !#lists.isEmpty(cells)}">
+
+                            Ячеек в перечне:
+
+                            <strong th:text="${#lists.size(cells)}">
+                                4
+                            </strong>
+                        </span>
+                    </div>
+
+                    <div class="card-body">
+
+                        <div class="alert danger"
+                             th:if="${cells == null or #lists.isEmpty(cells)}">
+
+                            <p>
+                                По выбранному отбору ячеек в изоляторе нет:
+                                перечень заполняется, когда контролёр
+                                закрывает проверку с решением «Перемещение
+                                в изолятор брака»
+                            </p>
+
+                        </div>
+
+                        <div class="table-wrap"
+                             th:unless="${cells == null or #lists.isEmpty(cells)}">
+
+                            <table class="data-table sk-cell-table">
+
+                                <thead>
+
+                                <tr>
+
+                                    <th>
+                                        <label class="sk-check">
+
+                                            <input type="checkbox"
+                                                   id="skCheckAll">
+
+                                            <span>Все</span>
+                                        </label>
+                                    </th>
+
+                                    <th>Тип</th>
+                                    <th>Класс / наименование</th>
+                                    <th>Номер ячейки</th>
+                                    <th>Причина брака</th>
+                                    <th>Поставщик</th>
+                                    <th>Проверка</th>
+                                    <th>Состояние</th>
+                                </tr>
+
+                                </thead>
+
+                                <tbody>
+
+                                <tr th:each="cell : ${cells}"
+                                    th:classappend="${cell.alreadyOrdered}
+                                        ? ' is-ordered'
+                                        : ''">
+
+                                    <td class="sk-pick-cell">
+
+                                        <!--
+                                            Значение чекбокса — пара
+                                            «группа | номер»: один и тот же
+                                            номер могли забраковать в двух
+                                            группах с разными причинами, и
+                                            заказ обязан ссылаться на
+                                            конкретную группу.
+                                        -->
+                                        <label class="sk-check">
+
+                                            <input type="checkbox"
+                                                   class="sk-check__input"
+                                                   name="cells"
+                                                   th:value="${cell.cellKey}"
+                                                   th:disabled="${cell.alreadyOrdered}">
+
+                                            <span class="visually-hidden">
+                                                Отметить ячейку
+                                            </span>
+                                        </label>
+                                    </td>
+
+                                    <td th:text="${cell.kindLabel}">
+                                        Ячейка
+                                    </td>
+
+                                    <td>
+                                        <div class="sk-cell-stack">
+
+                                            <span th:text="${cell.cellLabel}">
+                                                1212 — Подсборка ЯПР56
+                                            </span>
+
+                                            <small class="sk-filter__hint"
+                                                   th:if="${cell.incomingOrderNumber != null}"
+                                                   th:text="'Ордер: ' + ${cell.incomingOrderNumber}">
+                                                Ордер: ТОРГ-12/44
+                                            </small>
+                                        </div>
+                                    </td>
+
+                                    <td class="sk-number-cell"
+                                        th:text="${cell.fullNumber}">
+                                        121200023
+                                    </td>
+
+                                    <td th:text="${cell.reasonChain}">
+                                        Механическое повреждение → Скол корпуса
+                                    </td>
+
+                                    <td th:text="${cell.supplierName}">
+                                        ООО «Компонент»
+                                    </td>
+
+                                    <td>
+                                        <div class="sk-cell-stack">
+
+                                            <span th:text="${cell.completedLabel}">
+                                                21.09.2026 11:20
+                                            </span>
+
+                                            <small class="sk-filter__hint"
+                                                   th:text="${cell.checkerName}">
+                                                Иванов И.И.
+                                            </small>
+                                        </div>
+                                    </td>
+
+                                    <td>
+
+                                        <span class="sk-state sk-state--danger"
+                                              th:if="${cell.alreadyOrdered}">
+                                            Уже в заказе
+                                        </span>
+
+                                        <span class="sk-state sk-state--free"
+                                              th:unless="${cell.alreadyOrdered}">
+                                            Свободна
+                                        </span>
+                                    </td>
+
+                                </tr>
+
+                                </tbody>
+                            </table>
+
+                        </div>
+
+                    </div>
+                </section>
+
+                <!--
+                    Итог отметки держат внизу клеймящей панелью: состав
+                    размечают по длинному перечню, и считать отмеченное
+                    вручную незачем.
+                -->
+                <div class="sk-picked-bar"
+                     th:unless="${cells == null or #lists.isEmpty(cells)}">
+
+                    <div class="sk-picked-bar__summary">
+
+                        <strong class="sk-picked-bar__count"
+                                id="skPickedCountBottom">
+                            Отмечено ячеек: 0
+                        </strong>
+
+                        <span class="sk-picked-bar__hint">
+                            Заказ оформляют на отмеченные номера; вид
+                            заказа подскажет состав, если он однородный
+                        </span>
+                    </div>
+
+                    <div class="sk-picked-bar__actions">
+
+                        <button type="submit"
+                                class="btn primary"
+                                id="skCreateOrderBtnBottom"
+                                disabled>
+                            Сформировать ЗНП на ремонт
+                        </button>
+
+                    </div>
+                </div>
+
+            </form>
+
+        </div>
+    </main>
+</div>
+
+<th:block th:replace="~{quality/fragments/layout
+        :: commonScripts}">
+</th:block>
+
+<script th:src="@{/quality/js/quarantine.js}"></script>
+
+</body>
+</html>

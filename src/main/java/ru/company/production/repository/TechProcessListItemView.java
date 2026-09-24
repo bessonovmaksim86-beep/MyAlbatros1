@@ -23,5 +23,11 @@ public interface TechProcessListItemView {
 
     String getSensorClassName();
 
+    /**
+     * Пометка «базовый»: из нескольких маршрутов одного изделия
+     * базовый показывают первым и с меткой.
+     */
+    boolean isBasic();
+
     long getOperationCount();
 }

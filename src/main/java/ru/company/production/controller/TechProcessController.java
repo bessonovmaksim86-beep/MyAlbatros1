@@ -473,6 +473,11 @@ public class TechProcessController {
 
     /**
      * Применение маршрута к выбранному изделию.
+     *
+     * Флаг «базовый» здесь не запрашивается: применённый маршрут
+     * становится базовым только отдельным действием техника-технолога
+     * (TechProcessService#makeBasicForClassifier), иначе выпуск
+     * изделия молча переключался бы на последний применённый маршрут.
      */
     @PostMapping("/{id}/copy")
     public String apply(
@@ -483,7 +488,8 @@ public class TechProcessController {
         try {
             techProcessService.applyToClassifier(
                     id,
-                    targetClassifierId
+                    targetClassifierId,
+                    false
             );
 
             redirectAttributes.addFlashAttribute(
