@@ -21,8 +21,15 @@
 
 <div class="app-shell">
 
+    <!--
+        Подсветка меню берётся из activePage, а не зашита: карточка одна
+        для обоих разделов, и групповой заказ, открытый по прямой ссылке
+        или после сохранения, обязан подсвечивать «Групповые ЗНП».
+        Признак ставит DispatcherController#productionOrderView по виду
+        заказа — тот же разбор, что и у кнопки «К списку» ниже.
+    -->
     <aside th:replace="~{dispatcher/fragments/layout
-            :: sidebar('productionOrder')}">
+            :: sidebar(${activePage})}">
     </aside>
 
     <main class="main">
