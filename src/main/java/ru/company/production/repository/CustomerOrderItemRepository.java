@@ -8,11 +8,40 @@ import ru.company.production.entity.CustomerOrderItem;
 import ru.company.production.entity.CustomerOrderItemStatus;
 
 import java.math.BigDecimal;
+import java.util.Collection;
 import java.util.List;
 
 @Repository
 public interface CustomerOrderItemRepository
         extends JpaRepository<CustomerOrderItem, Long> {
+
+    /*
+     * Наименования изделий позиций набора заказов — одним пакетным
+     * запросом.
+     *
+     * Разделу распределения нужна подпись строки «какое изделие», а
+     * выпуск с серийным номером мог ещё не существовать: тогда
+     * наименование остаётся единственной подсказкой, над чем работа.
+     * Пакетность обязательна — иначе таблица порождала бы запрос на
+     * каждую строку (ср. findSerialsByCustomerOrderIds).
+     */
+    @Query("""
+            select
+                ord.id as customerOrderId,
+                item.position as itemPosition,
+                item.fullName as fullName,
+                sensor.name as sensorName,
+                classifier.name as classifierName
+            from CustomerOrderItem item
+            join item.productClassifier classifier
+            join item.customerOrder ord
+            left join classifier.sensorCatalog sensor
+            where ord.id in :customerOrderIds
+            order by ord.id, item.position
+            """)
+    List<OrderItemNameView> findItemNamesByOrderIds(
+            @Param("customerOrderIds") Collection<Long> customerOrderIds
+    );
 
     @Query("""
             select
@@ -22,6 +51,7 @@ public interface CustomerOrderItemRepository
                 classifier.code as classifierCode,
                 classifier.name as classifierName,
                 sensor.name as sensorClassName,
+                item.fullName as fullName,
                 item.quantity as quantity,
                 item.doneQuantity as doneQuantity,
                 item.unit as unit,

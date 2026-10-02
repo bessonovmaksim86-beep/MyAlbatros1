@@ -15,6 +15,94 @@
 
     <link rel="stylesheet"
           th:href="@{/dispatcher/css/dispatcher.css}">
+
+    <style>
+        /*
+         * Кнопки столбца «Действия» (миграция V46): «Открыть»,
+         * «Приостановить»/«Возобновить», «Удалить» делаются одинаковыми
+         * по размеру — одна ширина, высота и размер шрифта, иначе ряд
+         * кнопок разной длины выглядит разболтанным. Различаются они
+         * только цветом, поэтому смысл действия читается мгновенно:
+         * синий — открыть, янтарный — приостановить, зелёный —
+         * возобновить, красный — удалить.
+         *
+         * Оформление локальное: общие таблицы стилей минифицированы и
+         * переиспользуются всеми разделами, а этот набор нужен ровно
+         * одной таблице заказов покупателя.
+         */
+        .co-actions .btn {
+            box-sizing: border-box;
+
+            width: 118px;
+            height: 34px;
+            margin: 0;
+            padding: 0 8px;
+
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+
+            font-size: 12px;
+            font-weight: 700;
+            line-height: 1;
+            white-space: nowrap;
+
+            border: 1px solid transparent;
+            border-radius: 9px;
+        }
+
+        .co-actions form {
+            margin: 0;
+        }
+
+        .co-actions .btn.is-open {
+            color: #0b5798;
+            background: #e6f0f9;
+            border-color: #c9dded;
+        }
+
+        .co-actions .btn.is-open:hover {
+            color: #ffffff;
+            background: #0b5798;
+            border-color: #0b5798;
+        }
+
+        .co-actions .btn.is-suspend {
+            color: #8a5200;
+            background: #ffe4c2;
+            border-color: #f2cf9e;
+        }
+
+        .co-actions .btn.is-suspend:hover {
+            color: #ffffff;
+            background: #d9821f;
+            border-color: #d9821f;
+        }
+
+        .co-actions .btn.is-resume {
+            color: #16663f;
+            background: #e2f3e8;
+            border-color: #bfe0cd;
+        }
+
+        .co-actions .btn.is-resume:hover {
+            color: #ffffff;
+            background: #198754;
+            border-color: #198754;
+        }
+
+        .co-actions .btn.is-delete {
+            color: #a12d35;
+            background: #fdecee;
+            border-color: #f2ccd0;
+        }
+
+        .co-actions .btn.is-delete:hover {
+            color: #ffffff;
+            background: #c73a43;
+            border-color: #c73a43;
+        }
+    </style>
 </head>
 
 <body>
@@ -259,12 +347,105 @@
 
                                 <td>
 
-                                    <div class="table-actions">
+                                    <div class="table-actions co-actions">
 
-                                        <a class="btn secondary compact"
+                                        <a class="btn compact is-open"
                                            th:href="@{/dispatcher/customer-order/{id}(id=${order.id})}">
                                             Открыть
                                         </a>
+
+                                        <!--
+                                            Приостановка из списка (миграция V46):
+                                            пока заказ в незакрытом статусе, его
+                                            можно поставить на паузу — до
+                                            возобновления операции по заказу
+                                            проводить нельзя. Причина в списке не
+                                            запрашивается (для этого есть карточка),
+                                            заказ после приостановки остаётся в
+                                            таблице со статусом «Приостановлен».
+                                        -->
+                                        <form method="post"
+                                              th:if="${order.canSuspend}"
+                                              th:action="@{/dispatcher/customer-order/{id}/suspend(id=${order.id})}"
+                                              onsubmit="return confirm(
+                                                  'Приостановить этот заказ покупателя? '
+                                                  + 'До возобновления операции по нему проводить нельзя.'
+                                              );">
+
+                                            <input th:if="${_csrf != null}"
+                                                   type="hidden"
+                                                   th:name="${_csrf.parameterName}"
+                                                   th:value="${_csrf.token}">
+
+                                            <button class="btn compact is-suspend"
+                                                    type="submit">
+                                                Приостановить
+                                            </button>
+
+                                        </form>
+
+                                        <!--
+                                            Возобновление: заказ возвращается в
+                                            статус, в котором стоял до остановки.
+                                        -->
+                                        <form method="post"
+                                              th:if="${order.suspended}"
+                                              th:action="@{/dispatcher/customer-order/{id}/resume(id=${order.id})}">
+
+                                            <input th:if="${_csrf != null}"
+                                                   type="hidden"
+                                                   th:name="${_csrf.parameterName}"
+                                                   th:value="${_csrf.token}">
+
+                                            <button class="btn compact is-resume"
+                                                    type="submit">
+                                                Возобновить
+                                            </button>
+
+                                        </form>
+
+                                        <!--
+                                            Удаление прямо из списка: заказ
+                                            снимают с работы обычно сразу,
+                                            как нашли его строкой, — идти за
+                                            этим в карточку значило бы два
+                                            лишних клика ради одной кнопки.
+
+                                            Номер удаляемого заказа в тексте
+                                            подтверждения не повторяется: он
+                                            стоит в первой колонке той же
+                                            строки, а номер в onsubmit
+                                            потребовал бы SpEL-склейки —
+                                            обработчик же держат статическим
+                                            (как в карточке выпуска), чтобы
+                                            Thymeleaf не вырезал атрибут за
+                                            непригодностью.
+
+                                            Заказ с проведёнными операциями
+                                            сервис не удаляет: причина отказа
+                                            приходит сюда же, в сообщение над
+                                            таблицей, а строка заказа
+                                            в списке остаётся.
+                                        -->
+                                        <form method="post"
+                                              th:action="@{/dispatcher/customer-order/{id}/delete(id=${order.id})}"
+                                              onsubmit="return confirm(
+                                                  'Удалить этот заказ покупателя? '
+                                                  + 'Он будет снят с работы и исчезнет из списков; '
+                                                  + 'заказ с проведёнными операциями не удалится.'
+                                              );">
+
+                                            <input th:if="${_csrf != null}"
+                                                   type="hidden"
+                                                   th:name="${_csrf.parameterName}"
+                                                   th:value="${_csrf.token}">
+
+                                            <button class="btn compact is-delete"
+                                                    type="submit">
+                                                Удалить
+                                            </button>
+
+                                        </form>
 
                                     </div>
 

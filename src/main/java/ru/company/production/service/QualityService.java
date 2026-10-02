@@ -5,6 +5,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import ru.company.production.dto.QuarantineFilter;
+import ru.company.production.dto.QuarantineReasonGroup;
 import ru.company.production.dto.RepairOrderForm;
 import ru.company.production.entity.AppUser;
 import ru.company.production.entity.CellReceivingBatch;
@@ -283,95 +284,14 @@ public class QualityService {
     /**
      * Типы брака с их видами: опции фильтра, готовые к отрисовке.
      *
-     * Группу строят здесь, а не в шаблоне: перечень причин отдают
-     * плоским списком (дерево открытое по глубине, и целиком оно читается
-     * одним запросом), а сопоставить вид его типу средствами шаблона
-     * надёжно нельзя — выражение вида {@code parent != null and
-     * parent.id == ...} в SpEL вычисляет обе части всегда, поэтому для
-     * типа без ступени выше обращению к {@code parent.id} приходит
-     * пустота и рендеринг обрывается на середине страницы.
-     *
-     * Уточнение, чей тип из справочника исчез (стал неактивным), в
-     * группу не попадает — такие отдают отдельно, иначе вид брака
-     * просто пропал бы из фильтра.
+     * Группу собирает {@link QuarantineReasonGroup}: перечень изолятора
+     * фильтруют и бюро входного контроля, и служба качества, а дерево
+     * причин одно на обоих — два набора подписей одного справочника
+     * читались бы как два разных отбора.
      */
     @Transactional(readOnly = true)
-    public List<ReasonOptionGroup> findReasonGroups() {
-        return groupReasons(findReasonOptions());
-    }
-
-    /** Плоский список причин → типы с видами (+ уточнения без типа). */
-    private static List<ReasonOptionGroup> groupReasons(
-            List<InputControlDefectReason> reasons) {
-
-        if (reasons == null || reasons.isEmpty()) {
-            return List.of();
-        }
-
-        Set<Long> known = new LinkedHashSet<>();
-
-        for (InputControlDefectReason reason : reasons) {
-            known.add(reason.getId());
-        }
-
-        Map<Long, List<InputControlDefectReason>> children =
-                new LinkedHashMap<>();
-        List<ReasonOptionGroup> groups = new ArrayList<>();
-        List<InputControlDefectReason> orphans = new ArrayList<>();
-
-        for (InputControlDefectReason reason : reasons) {
-            if (reason.getParent() != null) {
-                continue;
-            }
-
-            groups.add(new ReasonOptionGroup(reason, new ArrayList<>()));
-        }
-
-        for (InputControlDefectReason reason : reasons) {
-            InputControlDefectReason parent = reason.getParent();
-
-            if (parent == null) {
-                continue;
-            }
-
-            /*
-             * Тип неактивен или удалён: вид всё равно должен
-             * отобраться, поэтому его держат отдельной группой.
-             */
-            if (!known.contains(parent.getId())) {
-                orphans.add(reason);
-                continue;
-            }
-
-            children
-                    .computeIfAbsent(parent.getId(), key -> new ArrayList<>())
-                    .add(reason);
-        }
-
-        List<ReasonOptionGroup> filled = new ArrayList<>();
-
-        for (ReasonOptionGroup group : groups) {
-            filled.add(
-                    new ReasonOptionGroup(
-                            group.reason(),
-                            children.getOrDefault(
-                                    group.reason().getId(),
-                                    List.of()
-                            )
-                    )
-            );
-        }
-
-        /*
-         * Группу сирот кладут в тот же список под служебным признаком:
-         * шаблон тогда рисует её одним плоским перечнем и не ищет
-         * несуществующий тип.
-         */
-        if (!orphans.isEmpty()) {
-            filled.add(new ReasonOptionGroup(null, orphans));
-        }
-
-        return filled;
+    public List<QuarantineReasonGroup> findReasonGroups() {
+        return QuarantineReasonGroup.of(findReasonOptions());
     }
 
     /**
@@ -1138,23 +1058,4 @@ public class QualityService {
         }
     }
 
-    /**
-     * Тип брака вместе с его видами: строка выпадающего списка фильтра.
-     *
-     * {@code reason == null} — служебная группа уточнений, у которых тип
-     * из справочника исчез; шаблон рисует её плоским перечнем.
-     */
-    public record ReasonOptionGroup(
-            InputControlDefectReason reason,
-            List<InputControlDefectReason> children
-    ) {
-
-        public InputControlDefectReason getReason() {
-            return reason;
-        }
-
-        public List<InputControlDefectReason> getChildren() {
-            return children;
-        }
-    }
 }

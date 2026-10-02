@@ -467,6 +467,59 @@ body {
 }
 
 
+/*
+ * ШАПКА СТРАНИЦЫ.
+ *
+ * Базовый каркас описывает .page-head, но не описывает ряд кнопок:
+ * .page-head-actions разведён только в стилях цеха, диспетчерской и
+ * админ-консоли, которые в модуль не подключены. Без display:flex
+ * ссылки-кнопки остаются inline-элементами — у inline вертикальный
+ * padding не участвует в высоте строки, поэтому «Изолятор брака»
+ * вставал по базовой линии, наезжал на подзаголовок и на соседнюю
+ * кнопку, а шаг между ними задавался переносом пробелом.
+ *
+ * Ряд делают flex'ом, а кнопку — inline-flex (тот же приём, что у
+ * .table-actions .btn): высота считается по содержимому, и кнопки
+ * стоят на одной линии независимо от длины подписи.
+ */
+.bvk-page .page-head {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 16px 28px;
+    flex-wrap: wrap;
+
+    margin-bottom: 22px;
+}
+
+/* Длинный подзаголовок обязан сжиматься, а не выталкивать кнопки. */
+.bvk-page .page-title {
+    flex: 1 1 320px;
+    min-width: 0;
+}
+
+.bvk-page .page-head-actions {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 10px;
+    flex-wrap: wrap;
+
+    flex: none;
+}
+
+.bvk-page .page-head-actions .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+
+    font-size: 13px;
+    line-height: 1.2;
+    white-space: nowrap;
+    text-decoration: none;
+}
+
+
 /* ============================================================
    СПИСОК ПАРТИЙ
    ============================================================ */

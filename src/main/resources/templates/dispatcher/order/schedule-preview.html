@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="ru"
+      xmlns:th="http://www.thymeleaf.org">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+
+    <title>Календарный план заказа</title>
+
+    <link rel="stylesheet"
+          th:href="@{/technology/css/technology.css}">
+
+    <link rel="stylesheet"
+          th:href="@{/dispatcher/css/dispatcher.css}">
+</head>
+
+<body>
+
+<div class="app-shell">
+
+    <aside th:replace="~{dispatcher/fragments/layout
+            :: sidebar('customerOrder')}">
+    </aside>
+
+    <main class="main">
+
+        <header th:replace="~{dispatcher/fragments/layout
+                :: topbar}">
+        </header>
+
+        <div class="page-content dispatcher-page">
+
+            <div class="page-head">
+
+                <div class="page-title">
+
+                    <h1 th:text="${
+                            schedule != null
+                                ? 'Календарный план ' + schedule.orderNumber()
+                                : 'Календарный план'
+                    }">
+                        Календарный план
+                    </h1>
+
+                    <p>
+                        Предварительный расчёт — изменения ещё не сохранены
+                    </p>
+
+                </div>
+
+                <div class="page-head-actions">
+
+                    <a class="btn secondary"
+                       th:href="@{/dispatcher/customer-order}">
+                        К списку заказов
+                    </a>
+
+                    <a class="btn secondary"
+                       th:if="${orderId != null}"
+                       th:href="@{/dispatcher/customer-order/{id}(id=${orderId})}">
+                        Назад к заказу
+                    </a>
+
+                </div>
+            </div>
+
+            <div class="alert danger"
+                 th:if="${errorMessage}"
+                 th:text="${errorMessage}">
+            </div>
+
+            <th:block th:if="${schedule != null}">
+
+                <section class="card gap">
+
+                    <div class="card-head">
+                        <h2>Параметры расчёта</h2>
+                    </div>
+
+                    <div class="card-body">
+
+                        <div class="form-grid">
+
+                            <div class="field">
+                                <label>Заказ</label>
+                                <input type="text"
+                                       th:value="${schedule.orderNumber()}"
+                                       readonly>
+                            </div>
+
+                            <div class="field">
+                                <label>Приоритет</label>
+                                <input type="text"
+                                       th:value="${schedule.priorityName()}"
+                                       readonly>
+                            </div>
+
+                            <div class="field">
+                                <label>Дата запуска</label>
+                                <input type="text"
+                                       th:value="${schedule.getFormattedStartDate()}"
+                                       readonly>
+                            </div>
+
+                            <div class="field">
+                                <label>Срок поставки</label>
+                                <input type="text"
+                                       th:value="${schedule.getFormattedDueDate()}"
+                                       readonly>
+                            </div>
+
+                            <div class="field">
+                                <label>Крайний день изготовления</label>
+                                <input type="text"
+                                       th:value="${schedule.getFormattedDeadline()}"
+                                       readonly>
+                            </div>
+
+                            <div class="field">
+                                <label>План завершается</label>
+                                <input type="text"
+                                       th:value="${schedule.getFormattedLastDate()}"
+                                       readonly>
+                            </div>
+
+                        </div>
+
+                    </div>
+                </section>
+
+                <div class="alert danger"
+                     th:if="${!schedule.feasible() and schedule.message() != null}"
+                     th:text="${schedule.message()}">
+                </div>
+
+                <div class="alert danger"
+                     th:each="warning : ${schedule.warnings()}"
+                     th:text="${warning}">
+                </div>
+
+                <section class="card gap">
+
+                    <div class="card-head">
+                        <h2>График операций</h2>
+                    </div>
+
+                    <div class="card-body">
+
+                        <div class="table-wrap"
+                             th:if="${!schedule.rows().isEmpty()}">
+
+                            <table class="data-table">
+
+                                <thead>
+                                <tr>
+                                    <th>Позиция</th>
+                                    <th>Экз.</th>
+                                    <th>Изделие</th>
+                                    <th>ТП</th>
+                                    <th>№</th>
+                                    <th>Операция</th>
+                                    <th>Подразделение</th>
+                                    <th>Трудоёмкость</th>
+                                    <th>Дата</th>
+                                    <th>Загрузка</th>
+                                    <th>Примечание</th>
+                                </tr>
+                                </thead>
+
+                                <tbody>
+                                <tr th:each="row : ${schedule.rows()}">
+                                    <td th:text="${row.itemPosition()}"></td>
+                                    <td th:text="${row.instanceLabel()}"></td>
+                                    <td th:text="${row.itemName()}"></td>
+                                    <td th:text="${row.techProcessCode()}"></td>
+                                    <td th:text="${row.seq()}"></td>
+                                    <td th:text="${row.operationName()}"></td>
+                                    <td th:text="${row.unitName()}"></td>
+                                    <td th:text="${row.formattedHours()}"></td>
+                                    <td th:text="${row.formattedDate()}"></td>
+                                    <td th:text="${row.formattedLoad()}"></td>
+                                    <td th:text="${
+                                                row.note() != null
+                                                    ? row.note()
+                                                    : '—'
+                                        }"></td>
+                                </tr>
+                                </tbody>
+
+                            </table>
+
+                        </div>
+
+                        <p th:if="${schedule.rows().isEmpty()}">
+                            Маршрут не построен: у позиций нет техпроцесса.
+                        </p>
+
+                    </div>
+                </section>
+
+                <section class="card gap">
+
+                    <div class="card-body">
+
+                        <form method="post"
+                              th:action="@{/dispatcher/customer-order/{id}/schedule-confirm(id=${orderId})}"
+                              class="inline-action">
+
+                            <input th:if="${_csrf != null}"
+                                   type="hidden"
+                                   th:name="${_csrf.parameterName}"
+                                   th:value="${_csrf.token}">
+
+                            <button class="btn primary"
+                                    type="submit"
+                                    th:disabled="${schedule.rows().isEmpty()}">
+                                Внести план в заказ
+                            </button>
+
+                        </form>
+
+                    </div>
+                </section>
+
+            </th:block>
+
+        </div>
+    </main>
+</div>
+
+</body>
+</html>

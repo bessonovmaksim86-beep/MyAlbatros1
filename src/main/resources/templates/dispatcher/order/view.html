@@ -15,6 +15,87 @@
 
     <link rel="stylesheet"
           th:href="@{/dispatcher/css/dispatcher.css}">
+
+    <style>
+        /*
+         * Баннер приостановки и поле причины — локальные стили карточки
+         * заказа (миграция V46). Держатся здесь, а не в общих
+         * минифицированных таблицах, чтобы оформление приостановки
+         * жило рядом с её разметкой.
+         */
+        .alert.suspended-banner {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            justify-content: space-between;
+            gap: 14px;
+
+            margin-bottom: 20px;
+            padding: 15px 18px;
+
+            color: #4a5568;
+            background: #eef1f5;
+            border: 1px solid #d4dbe3;
+            border-left: 4px solid #6b7684;
+            border-radius: 11px;
+        }
+
+        .suspended-banner__text {
+            display: flex;
+            flex: 1 1 320px;
+            flex-wrap: wrap;
+            gap: 4px 8px;
+
+            min-width: 0;
+
+            font-size: 13px;
+            line-height: 1.5;
+        }
+
+        .suspended-banner__text b {
+            color: #2f3947;
+        }
+
+        .suspended-banner .inline-action {
+            flex: 0 0 auto;
+            margin: 0;
+        }
+
+        /* Поле причины в одной строке с кнопкой «Приостановить заказ». */
+        .co-suspend-form {
+            display: inline-flex;
+            align-items: stretch;
+            gap: 6px;
+            margin: 0;
+        }
+
+        .co-suspend-reason {
+            box-sizing: border-box;
+
+            width: 220px;
+            min-width: 0;
+            padding: 0 12px;
+
+            color: var(--text, #27394d);
+            font: inherit;
+            font-size: 12px;
+
+            background: #fff;
+            border: 1px solid var(--line, #dce4eb);
+            border-radius: 9px;
+            outline: none;
+        }
+
+        .co-suspend-reason:focus {
+            border-color: #2c6da7;
+            box-shadow: 0 0 0 3px rgba(44, 109, 167, 0.12);
+        }
+
+        .co-suspend-form .btn {
+            flex: 0 0 auto;
+            white-space: nowrap;
+        }
+    </style>
 </head>
 
 <body>
@@ -63,7 +144,11 @@
                        th:href="@{/dispatcher/customer-order/{id}/edit(id=${order.id})}">
                         Изменить заказ
                     </a>
-
+                    <a class="btn secondary"
+                       th:if="${order != null}"
+                       th:href="@{/dispatcher/customer-order/{id}/schedule-preview(id=${order.id})}">
+                        Предпросмотр плана
+                    </a>
                     <form method="post"
                           th:if="${order != null}"
                           th:action="@{/dispatcher/customer-order/{id}/plan(id=${order.id})}"
@@ -81,12 +166,141 @@
 
                     </form>
 
+                    <!--
+                        Приостановка заказа (миграция V46). Пока заказ
+                        в незакрытом статусе, диспетчер вправе остановить
+                        работу по нему: до возобновления цех не сможет
+                        ни назначать, ни проводить его операции.
+
+                        Причина необязательна, но сохраняется и потом
+                        видна в баннере ниже — через месяц она объяснит,
+                        почему заказ стоял. Заказ НЕ снимается с работы:
+                        он остаётся во всех списках, просто «замораживается».
+                    -->
+                    <form method="post"
+                          th:if="${order != null and order.canSuspend}"
+                          th:action="@{/dispatcher/customer-order/{id}/suspend(id=${order.id})}"
+                          class="inline-action co-suspend-form"
+                          onsubmit="return confirm(
+                              'Приостановить заказ покупателя? '
+                              + 'До возобновления операции по нему проводить нельзя.'
+                          );">
+
+                        <input th:if="${_csrf != null}"
+                               type="hidden"
+                               th:name="${_csrf.parameterName}"
+                               th:value="${_csrf.token}">
+
+                        <input class="co-suspend-reason"
+                               type="text"
+                               name="reason"
+                               maxlength="500"
+                               placeholder="Причина (необязательно)">
+
+                        <button class="btn secondary"
+                                type="submit">
+                            Приостановить заказ
+                        </button>
+
+                    </form>
+
+                    <!--
+                        Удаление снимает заказ с работы (active = false,
+                        статус «Удалён»), а не стирает его: на заказ
+                        ссылаются выпуск, график цеха и реестр
+                        серийников.
+
+                        Подтверждение обязательно — действие снимает
+                        заказ со всех списков, и найти его потом можно
+                        только по прямой ссылке. Само удаление сервис
+                        отклоняет, если по заказу уже есть проведённые
+                        операции; причина отказа возвращается в это же
+                        окно карточки сообщением об ошибке, поэтому
+                        текст подтверждения не перечисляет правила, а
+                        только предупреждает о необратимости.
+
+                        Кнопка есть и у удалённого заказа: сервис
+                        отвечает «уже удалён», и повторный клик ничего
+                        не ломает — зато диспетчер не ищет, чем же
+                        заказ отличается от остальных.
+                    -->
+                    <form method="post"
+                          th:if="${order != null}"
+                          th:action="@{/dispatcher/customer-order/{id}/delete(id=${order.id})}"
+                          class="inline-action"
+                          onsubmit="return confirm(
+                              'Удалить заказ покупателя? '
+                              + 'Он будет снят с работы и исчезнет из списков; '
+                              + 'заказ с проведёнными операциями не удалится.'
+                          );">
+
+                        <input th:if="${_csrf != null}"
+                               type="hidden"
+                               th:name="${_csrf.parameterName}"
+                               th:value="${_csrf.token}">
+
+                        <button class="btn danger"
+                                type="submit">
+                            Удалить заказ
+                        </button>
+
+                    </form>
+
                 </div>
             </div>
-
+            <div class="alert success"
+                 th:if="${successMessage}"
+                 th:text="${successMessage}">
+            </div>
             <div class="alert danger"
                  th:if="${errorMessage}"
                  th:text="${errorMessage}">
+            </div>
+
+            <!--
+                Баннер приостановки: виден, только пока заказ стоит на
+                паузе. Называет причину и время остановки и даёт кнопку
+                «Возобновить» — именно отсюда заказ возвращается в тот
+                статус, в котором стоял до остановки.
+            -->
+            <div class="alert suspended-banner"
+                 th:if="${order != null and order.suspended}">
+
+                <div class="suspended-banner__text">
+
+                    <strong>Заказ приостановлен.</strong>
+
+                    <span>
+                        Операции по заказу недоступны до возобновления.
+                    </span>
+
+                    <span th:if="${order.suspendedReason != null}">
+                        Причина: <b th:text="${order.suspendedReason}">—</b>.
+                    </span>
+
+                    <span>
+                        Приостановлен
+                        <b th:text="${order.formattedSuspendedAt}">—</b>.
+                    </span>
+
+                </div>
+
+                <form method="post"
+                      th:action="@{/dispatcher/customer-order/{id}/resume(id=${order.id})}"
+                      class="inline-action">
+
+                    <input th:if="${_csrf != null}"
+                           type="hidden"
+                           th:name="${_csrf.parameterName}"
+                           th:value="${_csrf.token}">
+
+                    <button class="btn primary"
+                            type="submit">
+                        Возобновить заказ
+                    </button>
+
+                </form>
+
             </div>
 
             <th:block th:if="${order != null}">
@@ -258,12 +472,11 @@
                                 <thead>
                                 <tr>
                                     <th>№</th>
-                                    <th>Код изделия</th>
                                     <th>Наименование изделия</th>
+                                    <th>Серийные номера</th>
                                     <th>Количество</th>
                                     <th>Готово</th>
                                     <th>Осталось</th>
-                                    <th>Ед. изм.</th>
                                     <th>Срок</th>
                                     <th>Статус</th>
                                 </tr>
@@ -276,7 +489,7 @@
                                         or #lists.isEmpty(items)
                                      }">
 
-                                    <td colspan="9"
+                                    <td colspan="8"
                                         class="empty-table">
                                         В заказ ещё не добавлено ни одного изделия
                                     </td>
@@ -289,16 +502,17 @@
                                         1
                                     </td>
 
-                                    <td th:text="${item.classifierCode}">
-                                        1234
+                                    <td th:text="${item.displayName}">
+                                        Изделие
                                     </td>
 
-                                    <td th:text="${
-                                            item.classifierName != null
-                                            ? item.classifierName
-                                            : item.sensorClassName
-                                        }">
-                                        Изделие
+                                    <td class="serial-list"
+                                        th:text="${
+                                            serialsByItem != null
+                                            ? serialsByItem.get(item.position)
+                                            : null
+                                        } ?: '—'">
+                                        —
                                     </td>
 
                                     <td th:text="${item.formattedQuantity}">
@@ -311,10 +525,6 @@
 
                                     <td th:text="${item.formattedRemainingQuantity}">
                                         10
-                                    </td>
-
-                                    <td th:text="${item.unitName}">
-                                        шт.
                                     </td>
 
                                     <td th:text="${item.formattedDueDate}">

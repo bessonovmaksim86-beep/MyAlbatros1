@@ -71,6 +71,32 @@ public interface CustomerOrderListItemView {
                 : status.getBadgeClass();
     }
 
+    /*
+     * Признаки приостановки для строк списка (миграция V46): по ним
+     * таблица решает, какую кнопку показать — «Приостановить» или
+     * «Возобновить». Правило то же, что у CustomerOrder.isCanSuspend():
+     * остановке подлежит только действующий незакрытый заказ. Держится
+     * default-методом проекции, чтобы список не тянул лишнюю колонку и
+     * не дублировал сравнение enum в шаблоне.
+     */
+    default boolean isSuspended() {
+        return getStatus()
+                == ru.company.production.entity.CustomerOrderStatus.SUSPENDED;
+    }
+
+    default boolean isCanSuspend() {
+        ru.company.production.entity.CustomerOrderStatus status = getStatus();
+
+        boolean isActive = getActive() == null || getActive();
+
+        return isActive
+                && status != null
+                && status != ru.company.production.entity.CustomerOrderStatus.SUSPENDED
+                && status != ru.company.production.entity.CustomerOrderStatus.DONE
+                && status != ru.company.production.entity.CustomerOrderStatus.CANCELLED
+                && status != ru.company.production.entity.CustomerOrderStatus.DELETED;
+    }
+
     default String getPriorityDisplayName() {
         String name = getPriorityName();
 

@@ -4,6 +4,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
+import ru.company.production.entity.OrderPriority;
 import ru.company.production.entity.ProductionItemStatus;
 import ru.company.production.entity.ProductionOrder;
 import ru.company.production.entity.ProductionOrderStatus;
@@ -85,6 +86,10 @@ public interface ProductionOrderRepository
      * open-in-view: false ленивая связь вне сессии дала бы
      * LazyInitializationException — в том числе на getId() в
      * контроллере.
+     *
+     * Приоритет (V41) дочитывается здесь же: карточка группового заказа
+     * показывает его значком, и без fetch шаблон споткнулся бы о ту же
+     * ленивую связь.
      */
     @Query("""
             select distinct ord
@@ -97,6 +102,7 @@ public interface ProductionOrderRepository
             left join fetch operation.operationName
             left join fetch operation.operationType
             left join fetch ord.techProcess
+            left join fetch ord.priority
             left join fetch ord.createdBy
             where ord.id = :id
             """)
@@ -307,4 +313,73 @@ public interface ProductionOrderRepository
             from ProductionOrder ord
             """)
     List<String> findAllNumbers();
+
+    /*
+     * Комплектование ремонтных ячеек/подсборок из изолятора брака
+     * (страница бюро входного контроля).
+     *
+     * Отбор: ремонтные виды ЗНП (ZnpKind.repairKinds()), статус
+     * «В работе», выбранный техпроцесс, и в этом техпроцессе есть
+     * комплектовочная операция подразделения «Бюро входного контроля»
+     * (коды справочников — V15 и V30; передаются параметрами).
+     * EXISTS, а не join: маршрут с несколькими комплектовочными
+     * операциями БВК не должен размножать строки списка.
+     *
+     * Справочники дочитаны fetch-join'ом: open-in-view выключен, и
+     * изделие, техпроцесс, приоритет и автор в шаблоне читались бы
+     * через ленивую связь вне сессии.
+     */
+    @Query("""
+            select distinct ord
+            from ProductionOrder ord
+            left join fetch ord.productClassifier
+            left join fetch ord.techProcess
+            left join fetch ord.priority
+            left join fetch ord.createdBy
+            where ord.active = true
+              and ord.status = :status
+              and ord.znpKind in :kinds
+              and ord.techProcess is not null
+              and exists (
+                  select 1
+                  from TechProcessOperation tpo
+                  where tpo.techProcess = ord.techProcess
+                    and tpo.operation.operationType.code = :kittingCode
+                    and tpo.operation.organizationUnit.code = :bvkUnitCode
+              )
+            order by ord.orderDate desc, ord.number desc
+            """)
+    List<ProductionOrder> findRepairKittingOrders(
+            @Param("status") ProductionOrderStatus status,
+            @Param("kinds") List<ZnpKind> kinds,
+            @Param("kittingCode") String kittingCode,
+            @Param("bvkUnitCode") String bvkUnitCode
+    );
+
+    /**
+     * Тот же отбор количеством: счётчик кнопки «Обзор бюро» и пункта
+     * меню. Отдельный запрос, а не size() списка — страница
+     * существует без загрузки заказа целиком.
+     */
+    @Query("""
+            select count(ord)
+            from ProductionOrder ord
+            where ord.active = true
+              and ord.status = :status
+              and ord.znpKind in :kinds
+              and ord.techProcess is not null
+              and exists (
+                  select 1
+                  from TechProcessOperation tpo
+                  where tpo.techProcess = ord.techProcess
+                    and tpo.operation.operationType.code = :kittingCode
+                    and tpo.operation.organizationUnit.code = :bvkUnitCode
+              )
+            """)
+    long countRepairKittingOrders(
+            @Param("status") ProductionOrderStatus status,
+            @Param("kinds") List<ZnpKind> kinds,
+            @Param("kittingCode") String kittingCode,
+            @Param("bvkUnitCode") String bvkUnitCode
+    );
 }

@@ -54,4 +54,33 @@ public interface WorkshopStaffBindingRepository
     boolean existsByEmployeeIdAndOperationId(Long employeeId, Long operationId);
 
     boolean existsByEmployeeIdAndWorkPlaceId(Long employeeId, Long workPlaceId);
+
+    /**
+     * Исполнители, способные выполнить операцию — мощность этапа
+     * планирования.
+     *
+     * Сотрудник способен, если он закреплен за самой операцией
+     * (привязка OPERATION) либо за одним из рабочих мест, на которых
+     * операция допускается (привязка WORK_PLACE). Именно это множество
+     * даёт знаменатель загрузки: люди × 8 часов.
+     *
+     * Список workPlaceIds передаётся из маршрутной операции
+     * (TechProcessOperation.workPlaces); если он пуст — учитываются
+     * только прямые привязки к операции.
+     */
+    @Query("""
+            select distinct binding.employee.id
+            from WorkshopStaffBinding binding
+            where binding.employee.active = true
+              and (
+                    binding.operation.id = :operationId
+                 or (:hasPlaces = true
+                     and binding.workPlace.id in :workPlaceIds)
+              )
+            """)
+    List<Long> findCapableEmployeeIds(
+            @Param("operationId") Long operationId,
+            @Param("workPlaceIds") List<Long> workPlaceIds,
+            @Param("hasPlaces") boolean hasPlaces
+    );
 }

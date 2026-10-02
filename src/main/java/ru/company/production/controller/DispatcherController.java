@@ -38,6 +38,7 @@ import ru.company.production.entity.ZnpKind;
 import ru.company.production.repository.ClassifierRouteOptionView;
 import ru.company.production.repository.CustomerOrderItemRepository;
 import ru.company.production.repository.CustomerOrderRepository;
+import ru.company.production.repository.ProductSerialRepository;
 import ru.company.production.repository.ProductTypeQuantityProjection;
 import ru.company.production.repository.ProductionOrderItemRepository;
 import ru.company.production.repository.ProductionOrderRepository;
@@ -47,19 +48,17 @@ import ru.company.production.service.CustomerOrderService;
 import ru.company.production.service.CustomerService;
 import ru.company.production.service.ProductionOrderService;
 import ru.company.production.service.SerialKittingService;
+import ru.company.production.service.OrderSchedulingService;
+import org.springframework.web.multipart.MultipartFile;
+import jakarta.servlet.http.HttpSession;
+import ru.company.production.service.checklist.ChecklistParser;
 
 import java.beans.PropertyEditorSupport;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.Comparator;
-import java.util.EnumMap;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
 /**
  * Диспетчерский отдел.
@@ -79,13 +78,17 @@ public class DispatcherController {
 
     private final CustomerOrderRepository customerOrderRepository;
     private final CustomerOrderItemRepository customerOrderItemRepository;
+    private final ProductSerialRepository productSerialRepository;
     private final CustomerOrderService customerOrderService;
     private final CustomerService customerService;
     private final UserRepository userRepository;
     private final ProductionOrderRepository productionOrderRepository;
     private final ProductionOrderItemRepository productionOrderItemRepository;
     private final ProductionOrderService productionOrderService;
+    private final OrderSchedulingService orderSchedulingService;
+    private final ChecklistParser checklistParser;
 
+    private static final String WORKSHOP_SCHEDULE_MODEL = "dispatcher/workshop-schedule";
     /*
      * Комплектование: список датчиков для заказа-комплектующего.
      * Номера выпускает заказ верхнего уровня, здесь они только
@@ -245,18 +248,50 @@ public class DispatcherController {
      * дата заказа — текущая, срок — конец текущего года.
      */
     @GetMapping("/customer-order/create")
-    public String createPage(Model model) {
+    public String createPage(Model model, HttpSession session) {
 
         if (!model.containsAttribute("customerOrderForm")) {
-            model.addAttribute(
-                    "customerOrderForm",
-                    newOrderForm()
-            );
+            Object preview = session.getAttribute("checklistPreview");
+            if (preview instanceof ChecklistParser.ParsedChecklist parsed) {
+                model.addAttribute("customerOrderForm", importOrderForm(parsed));
+                model.addAttribute("importedFrom", parsed.fileName());
+                session.removeAttribute("checklistPreview");
+            } else {
+                model.addAttribute("customerOrderForm", newOrderForm());
+            }
         }
 
         fillFormModel(model);
 
         return "dispatcher/order/create";
+    }
+
+    /**
+     * Загрузка чек-листа Б24: файл разбирается в предпросмотр и
+     * кладётся в сессию, далее открывается форма создания с уже
+     * заполненными позициями. Сохранение по-прежнему идёт через
+     * обычный POST create — вся проверка изделия/техпроцесса в сервисе.
+     */
+    @PostMapping("/customer-order/import")
+    public String importChecklist(
+            @RequestParam("file") MultipartFile file,
+            HttpSession session,
+            RedirectAttributes redirectAttributes
+    ) {
+        if (file == null || file.isEmpty()) {
+            redirectAttributes.addFlashAttribute(
+                    "errorMessage", "Выберите файл чек-листа (.xls или .xlsx)");
+            return "redirect:/dispatcher/customer-order/create";
+        }
+
+        try {
+            session.setAttribute("checklistPreview", checklistParser.parse(file));
+        } catch (IllegalArgumentException e) {
+            redirectAttributes.addFlashAttribute("errorMessage", e.getMessage());
+            return "redirect:/dispatcher/customer-order/create";
+        }
+
+        return "redirect:/dispatcher/customer-order/create";
     }
 
     /**
@@ -344,6 +379,16 @@ public class DispatcherController {
                 customerOrderItemRepository.findItemsByOrderId(id)
         );
 
+        /*
+         * Серийники под каждой позицией состава: плоский перечень
+         * резерва выше по странице не отвечает, какой номер к какой
+         * строке заказа относится.
+         */
+        model.addAttribute(
+                "serialsByItem",
+                serialsByItemPosition(id)
+        );
+
         return "dispatcher/order/view";
     }
 
@@ -421,6 +466,75 @@ public class DispatcherController {
                 "successMessage",
                 "Заказ покупателя «" + form.getNumber().trim()
                         + "» успешно изменён"
+        );
+
+        return "redirect:/dispatcher/customer-order/" + id;
+    }
+    /**
+     * Предпросмотр календарного плана заказа покупателя.
+     *
+     * Расчёт без записи в базу: диспетчер видит даты и подразделения
+     * операций и только потом решает, вносить ли план. Ошибка расчёта
+     * (нет техпроцесса, не задан приоритет) возвращает на карточку.
+     */
+    @GetMapping("/customer-order/{id}/schedule-preview")
+    public String schedulePreview(
+            @PathVariable Long id,
+            Model model,
+            RedirectAttributes redirectAttributes
+    ) {
+        model.addAttribute("activePage", "customerOrder");
+
+        try {
+            model.addAttribute(
+                    "schedule",
+                    orderSchedulingService.preview(id)
+            );
+        } catch (
+                EntityNotFoundException
+                | IllegalArgumentException
+                | IllegalStateException exception
+        ) {
+            redirectAttributes.addFlashAttribute(
+                    "errorMessage",
+                    exception.getMessage()
+            );
+
+            return "redirect:/dispatcher/customer-order/" + id;
+        }
+
+        model.addAttribute("orderId", id);
+
+        return "dispatcher/order/schedule-preview";
+    }
+
+    /**
+     * Подтверждение плана: свежий расчёт записывается в план заказа,
+     * прежние строки заменяются целиком (см. OrderSchedulingService).
+     */
+    @PostMapping("/customer-order/{id}/schedule-confirm")
+    public String scheduleConfirm(
+            @PathVariable Long id,
+            RedirectAttributes redirectAttributes
+    ) {
+        try {
+            orderSchedulingService.confirm(id);
+        } catch (
+                EntityNotFoundException
+                | IllegalArgumentException
+                | IllegalStateException exception
+        ) {
+            redirectAttributes.addFlashAttribute(
+                    "errorMessage",
+                    exception.getMessage()
+            );
+
+            return "redirect:/dispatcher/customer-order/" + id;
+        }
+
+        redirectAttributes.addFlashAttribute(
+                "successMessage",
+                "Календарный план внесён в заказ"
         );
 
         return "redirect:/dispatcher/customer-order/" + id;
@@ -1230,7 +1344,52 @@ public class DispatcherController {
 
         return "redirect:" + sectionListUrl;
     }
+    /**
+     * Форма создания из предпросмотра чек-листа: каждая строка листа
+     * становится позицией. Тип — датчик (основной сценарий), полное
+     * наименование подберёт классификатор при сохранении; если строка
+     * не датчик, диспетчер поправит тип/изделие прямо в форме.
+     */
+    private CustomerOrderForm importOrderForm(
+            ChecklistParser.ParsedChecklist parsed
+    ) {
+        CustomerOrderForm form = newOrderForm();
+        form.getItems().clear();
 
+        for (ChecklistParser.ParsedRow row : parsed.rows()) {
+            CustomerOrderForm.CustomerOrderItemForm item =
+                    new CustomerOrderForm.CustomerOrderItemForm();
+
+            item.setProductType(ProductType.SENSOR);
+            item.setFullName(row.name());
+            item.setQuantity(row.qty());
+            item.setUnit(toUnitName(row.unit()));
+            item.setTechProcessType(TechProcessType.BASIC);
+            item.setNote(row.note().isBlank() ? null : row.note());
+
+            form.getItems().add(item);
+        }
+
+        return form;
+    }
+
+    /**
+     * Единица измерения из листа в имя enum; при неизвестном значении —
+     * «шт.» (значения селектора формы сверяются с MeasurementUnit.name()).
+     */
+    private String toUnitName(String raw) {
+        if (raw == null) {
+            return "PCS";
+        }
+        String v = raw.trim().toLowerCase(Locale.ROOT);
+        if (v.startsWith("кг") || v.equals("kg")) return "KG";
+        if (v.startsWith("г"))  return "G";
+        if (v.startsWith("м") && !v.startsWith("мм") && !v.startsWith("мл")) return "M";
+        if (v.startsWith("мм")) return "MM";
+        if (v.startsWith("мл")) return "ML";
+        if (v.startsWith("л"))  return "L";
+        return "PCS";
+    }
     /**
      * Переход после действия над заказом: ошибка возвращается
      * на страницу заказа, успех — тоже на неё, чтобы был виден
@@ -1989,6 +2148,45 @@ public class DispatcherController {
     /**
      * Карточки количества заказанной продукции по типам изделий.
      */
+    /*
+     * Серийные номера карточки заказа: позиция состава → перечень
+     * полных номеров через запятую.
+     *
+     * Один запрос на всю карточку (open-in-view выключен): номера
+     * приходят отсортированными по позиции и серии, поэтому
+     * группировка тривиальна. Позиции без номеров в карту не
+     * попадают — шаблон печатает по ним прочерк.
+     *
+     * Перечень не сокращается: карточка заказа — то место, где
+     * диспетчеру нужен полный список зарезервированных серий,
+     * а не подпись для узкой колонки очереди.
+     */
+    private Map<Integer, String> serialsByItemPosition(Long orderId) {
+
+        Map<Integer, List<String>> numbers = new LinkedHashMap<>();
+
+        for (ProductSerial serial :
+                productSerialRepository.findDetailsByCustomerOrderId(orderId)) {
+
+            CustomerOrderItem item = serial.getCustomerOrderItem();
+
+            if (item == null || item.getPosition() == null) {
+                continue;
+            }
+
+            numbers
+                    .computeIfAbsent(item.getPosition(), key -> new ArrayList<>())
+                    .add(serial.getFullNumber());
+        }
+
+        Map<Integer, String> labels = new LinkedHashMap<>();
+
+        numbers.forEach((position, list) ->
+                labels.put(position, String.join(", ", list)));
+
+        return labels;
+    }
+
     private List<TypeCardView> buildTypeCards() {
 
         Map<ProductType, BigDecimal> totals = new EnumMap<>(
@@ -2088,4 +2286,5 @@ public class DispatcherController {
             }
         }
     }
+
 }

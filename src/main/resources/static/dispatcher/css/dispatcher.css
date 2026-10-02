@@ -1418,6 +1418,16 @@ body {
     }
 }
 
+/* Форма загрузки чек-листа: обёртка не ломает ряд кнопок в шапке */
+.co-import-form {
+    display: inline-flex;
+    margin: 0;
+}
+
+.co-import-form input[type="file"] {
+    display: none;
+}
+
 @media (max-width: 560px) {
     .dispatcher-clock {
         min-width: auto;

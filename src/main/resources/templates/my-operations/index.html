@@ -1,0 +1,437 @@
+<!DOCTYPE html>
+<html lang="ru"
+      xmlns:th="http://www.thymeleaf.org">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport"
+          content="width=device-width, initial-scale=1">
+
+    <title>Мои операции</title>
+
+    <link rel="stylesheet"
+          th:href="@{/technology/css/technology.css}">
+    <link rel="stylesheet"
+          th:href="@{/technology/css/common.css}">
+    <link rel="stylesheet"
+          th:href="@{/workshop/css/workshop.css}">
+    <link rel="stylesheet"
+          th:href="@{/workshop/css/distribution.css}">
+    <link rel="stylesheet"
+          th:href="@{/workshop/css/distribution-groups.css}">
+</head>
+
+<body>
+
+<div class="app-shell">
+
+    <aside th:replace="~{workshop/fragments/layout
+            :: sidebar('my-operations')}">
+    </aside>
+
+    <main class="main">
+
+        <header th:replace="~{workshop/fragments/layout
+                :: topbar}">
+        </header>
+
+        <div class="page-content workshop-page">
+
+            <div class="page-head">
+
+                <div class="page-title">
+
+                    <h1>Мои операции</h1>
+
+                    <p th:text="${
+                        supervisor and workshopName != null
+                            ? workshopName + ': работы, закреплённые за вами'
+                            : 'Работы, закреплённые за вами планировщиком '
+                              + 'и руководителем подразделения'
+                    }">
+                        Работы, закреплённые за вами
+                    </p>
+
+                </div>
+
+            </div>
+
+            <div class="alert success"
+                 th:if="${successMessage}"
+                 th:text="${successMessage}">
+            </div>
+
+            <div class="alert danger"
+                 th:if="${errorMessage}"
+                 th:text="${errorMessage}">
+            </div>
+
+            <!--
+                Руководителю список собирают из двух источников: работы,
+                назначенные ему как исполнителю, и получение комплектации
+                своего подразделения. Различает их поле source — оно же
+                подписывает блок.
+            -->
+            <div class="alert attention"
+                 th:if="${supervisor}">
+
+                <p>
+                    Руководителю подразделения здесь показываются и
+                    личные операции получения комплектации — их
+                    планировщик закрепляет за подразделением, а не за
+                    человеком, и распределить их нельзя.
+                </p>
+
+            </div>
+
+            <!--
+                Таблица собрана теми же классами и колонками, что и
+                очередь распределения: исполнитель и мастер смотрят на
+                одну и ту же работу с двух сторон, и различаться должен
+                только смысл последней колонки — там, где у мастера
+                «Исполнитель», у исполнителя природа его собственной
+                работы. Раскрытие панели и серийные номера — те же.
+            -->
+            <section class="card"
+                     th:if="${!#lists.isEmpty(operations)}">
+
+                <div class="card-head">
+
+                    <div>
+
+                        <h2>Закреплённые работы</h2>
+
+                        <small>
+                            Горизонт — две недели от сегодня. Строка —
+                            операция на одну дату плана; позиция на
+                            десять изделий даёт десять экземпляров
+                            одной строки. Нажмите на операцию —
+                            раскроются изделия и кнопка «Провести
+                            операцию». Проводится каждое изделие
+                            отдельно. Работу, у которой не закрыта
+                            предшествующая по маршруту, провести
+                            нельзя — она помечена и кнопка закрыта.
+                        </small>
+
+                    </div>
+
+                    <span class="badge"
+                          th:text="${
+                              (operations == null ? 0 : #lists.size(operations))
+                              + ' групп'
+                          }">
+                        0 групп
+                    </span>
+
+                </div>
+
+                <div class="card-body">
+
+                    <div class="table-wrap">
+
+                        <table class="data-table distribution-group-table distribution-group-table--mine">
+
+                            <colgroup>
+                                <col class="col-op">
+                                <col class="col-serial">
+                                <col class="col-date">
+                                <col class="col-order">
+                                <col class="col-hours">
+                                <col class="col-toggle">
+                            </colgroup>
+
+                            <thead>
+                            <tr>
+                                <th>Операция</th>
+                                <th>Серийный номер</th>
+                                <th>Дата плана</th>
+                                <th>Заказы покупателя</th>
+                                <th>Трудоёмкость</th>
+                                <th>Природа работы</th>
+                            </tr>
+                            </thead>
+
+                            <tbody>
+
+                            <th:block th:each="op, stat : ${operations}">
+
+                                <tr class="distribution-group-row"
+                                    th:classappend="${op.hasBlocked()}
+                                        ? ' is-blocked' : ''"
+                                    th:onclick="|toggleGroup(${stat.index})|">
+
+                                    <td class="cell-op">
+
+                                        <strong th:text="${op.title()}">
+                                            Сборка узла
+                                        </strong>
+
+                                    </td>
+
+                                    <!--
+                                        Серийные номера группы — отдельная
+                                        колонка, как в распределении:
+                                        исполнитель сверяет изделие, не
+                                        раскрывая панель.
+                                    -->
+                                    <td class="cell-serial">
+
+                                        <span class="cell-serial__value"
+                                              th:if="${op.serialsLabel() != null}"
+                                              th:text="${op.serialsLabel()}">
+                                            121200022
+                                        </span>
+
+                                        <span class="cell-serial__empty"
+                                              th:unless="${op.serialsLabel() != null}">
+                                            —
+                                        </span>
+
+                                    </td>
+
+                                    <td th:text="${op.formattedDate()}">
+                                        01.10.2026
+                                    </td>
+
+                                    <td th:text="${op.ordersLabel()}">
+                                        ЗП-12, ЗП-18
+                                    </td>
+
+                                    <td th:text="${op.hoursLabel() + ' ч.'}">
+                                        16 ч.
+                                    </td>
+
+                                    <td class="cell-toggle">
+
+                                        <span class="badge badge--attention"
+                                              th:if="${op.hasBlocked()}">
+                                            часть ждёт
+                                        </span>
+
+                                        <span class="badge badge--attention"
+                                              th:unless="${op.hasBlocked()}"
+                                              th:if="${op.kitReceipt()}"
+                                              th:text="${
+                                                  op.source != null
+                                                      ? op.source
+                                                      : 'Получение комплектации'
+                                              }">
+                                            Получение комплектации
+                                        </span>
+
+                                        <span class="badge"
+                                              th:unless="${
+                                                  op.hasBlocked() or op.kitReceipt()
+                                              }"
+                                              th:text="${
+                                                  op.source != null
+                                                      ? op.source
+                                                      : 'Назначено руководителем'
+                                              }">
+                                            Назначено руководителем
+                                        </span>
+
+                                        <small class="instance-toggle__caret"
+                                               th:id="'group-caret-' + ${stat.index}">
+                                            ▼
+                                        </small>
+
+                                    </td>
+
+                                </tr>
+
+                                <!--
+                                    Панель: изделия группы. Колонки
+                                    «Изделие», «Заказ» и «Труд» убраны:
+                                    изделие уже опознано серийным номером
+                                    и наименованием, а заказ и трудоёмкость
+                                    видны в строке группы. Оставлены две
+                                    свои колонки — статус и проведение:
+                                    именно закрывать работу здесь, а не
+                                    выбирать исполнителя.
+                                -->
+                                <tr class="distribution-group-panel"
+                                    th:id="'group-panel-' + ${stat.index}">
+
+                                    <td colspan="6">
+
+                                        <div class="group-panel">
+
+                                            <div class="group-panel__instances"
+                                                 th:if="${
+                                                     op.instances != null
+                                                     and !#lists.isEmpty(op.instances)
+                                                 }">
+
+                                                <strong>Экземпляры операции</strong>
+
+                                                <div class="table-wrap">
+
+                                                    <table class="data-table instance-table">
+
+                                                        <thead>
+                                                        <tr>
+                                                            <th>Серийный номер</th>
+                                                            <th>Наименование</th>
+                                                            <th>Статус</th>
+                                                            <th></th>
+                                                        </tr>
+                                                        </thead>
+
+                                                        <tbody>
+
+                                                        <tr th:each="inst : ${op.instances}"
+                                                            th:classappend="${inst.blocked()}
+                                                                ? ' is-blocked' : ''">
+
+                                                            <td class="instance-table__serial"
+                                                                th:text="${inst.serialLabel()}">
+                                                                121200022
+                                                            </td>
+
+                                                            <td th:text="${inst.nameLabel()}">
+                                                                ДУУ2М.1.1.00.00 датчик
+                                                            </td>
+
+                                                            <td>
+
+                                                                <span class="badge badge--success"
+                                                                      th:if="${inst.completed()}"
+                                                                      th:text="'Проведён ' + ${inst.completedLabel()}">
+                                                                    Проведён 01.10.2026 10:30
+                                                                </span>
+
+                                                                <span class="badge badge--attention"
+                                                                      th:if="${!inst.completed() and inst.blocked()}"
+                                                                      th:text="${inst.blockedLabel()}">
+                                                                    ждёт: Сборка узла
+                                                                </span>
+
+                                                                <span class="badge"
+                                                                      th:if="${!inst.completed() and !inst.blocked()}">
+                                                                    В работе
+                                                                </span>
+
+                                                            </td>
+
+                                                            <td>
+
+                                                                <form th:if="${inst.canComplete()}"
+                                                                      th:action="@{/my-operations/complete}"
+                                                                      method="post"
+                                                                      class="inline-form">
+
+                                                                    <input th:if="${_csrf != null}"
+                                                                           type="hidden"
+                                                                           th:name="${_csrf.parameterName}"
+                                                                           th:value="${_csrf.token}">
+
+                                                                    <input type="hidden"
+                                                                           name="rowId"
+                                                                           th:value="${inst.rowId}">
+
+                                                                    <button type="submit"
+                                                                            class="btn primary compact">
+                                                                        Провести операцию
+                                                                    </button>
+                                                                </form>
+
+                                                                <small class="field-hint"
+                                                                       th:if="${!inst.canComplete() and inst.blocked() and !inst.completed()}">
+                                                                     провести нельзя, пока
+                                                                     не закрыта предшествующая
+                                                                </small>
+
+                                                            </td>
+
+                                                        </tr>
+
+                                                        </tbody>
+
+                                        
+
+                                                    </table>
+
+                                                </div>
+
+                                            </div>
+
+                                        </div>
+
+                                    </td>
+
+                                </tr>
+
+                            </th:block>
+
+                            </tbody>
+
+                        </table>
+
+                    </div>
+
+                </div>
+
+            </section>
+
+            <!-- Пусто -->
+            <div class="alert success"
+                 th:if="${#lists.isEmpty(operations)}">
+
+                <p>
+                    Закреплённых операций на ближайшие две недели нет:
+                    как только руководитель подразделения назначит
+                    работу, она появится в этом списке.
+                </p>
+
+            </div>
+
+        </div>
+
+    </main>
+
+</div>
+
+<th:block th:replace="~{workshop/fragments/layout
+        :: commonScripts}">
+</th:block>
+
+<script>
+/*
+ * Раскрытие панели группы — тот же приём, что в распределении:
+ * ключ — индекс строки списка, а не id операции, потому что одна
+ * операция встречается в списке на несколько дат.
+ */
+function toggleGroup(index) {
+    const panel = document.getElementById('group-panel-' + index);
+    const caret = document.getElementById('group-caret-' + index);
+
+    if (!panel) {
+        return;
+    }
+
+    const hidden = panel.style.display === 'none';
+
+    panel.style.display = hidden ? '' : 'none';
+    if (caret) {
+        caret.textContent = hidden ? '▲' : '▼';
+    }
+}
+
+/*
+ * Панели свёрнуты по умолчанию — как в очереди распределения.
+ * Проведение не прячется: кнопка живёт в раскрытой панели, а сама
+ * строка группы сразу показывает серийные номера, проведённые и
+ * ожидающие изделия, поэтому выбирать работу можно и не раскрывая.
+ */
+(function collapseGroups() {
+    document
+        .querySelectorAll('.distribution-group-panel')
+        .forEach(panel => {
+            panel.style.display = 'none';
+        });
+})();
+</script>
+
+</body>
+</html>

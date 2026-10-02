@@ -38,6 +38,9 @@ public class CustomerOrder {
     private static final DateTimeFormatter DATE_FORMATTER =
             DateTimeFormatter.ofPattern("dd.MM.yyyy");
 
+    private static final DateTimeFormatter DATE_TIME_FORMATTER =
+            DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm");
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
@@ -81,6 +84,35 @@ public class CustomerOrder {
     )
     private CustomerOrderStatus status =
             CustomerOrderStatus.NEW;
+
+    /**
+     * Статус заказа ДО приостановки (миграция V46).
+     *
+     * Только он определяет, куда заказ вернётся при возобновлении:
+     * остановленный «в работе» обязан вернуться «в работу», а не
+     * «новый». Пока заказ не приостановлен — null.
+     */
+    @Enumerated(EnumType.STRING)
+    @Column(
+            name = "suspended_from_status",
+            length = 20
+    )
+    private CustomerOrderStatus suspendedFromStatus;
+
+    /**
+     * Причина приостановки: претензия заказчика, отсутствие
+     * комплектации, стоп по договору и т. п. Видна в карточке, чтобы
+     * через месяц понимать, почему заказ стоял (миграция V46).
+     */
+    @Column(
+            name = "suspended_reason",
+            length = 500
+    )
+    private String suspendedReason;
+
+    /** Момент приостановки — для порядка и контроля простоя. */
+    @Column(name = "suspended_at")
+    private LocalDateTime suspendedAt;
 
     /**
      * Вид заказа: производство, ремонт (гарантийный/платный)
@@ -218,6 +250,43 @@ public class CustomerOrder {
     @Transient
     public String getStatusBadgeClass() {
         return status == null ? "draft" : status.getBadgeClass();
+    }
+
+    /*
+     * Признаки приостановки для шаблонов: карточка и список по ним
+     * выбирают, какую кнопку показать — «Приостановить» или
+     * «Возобновить». Держатся здесь, чтобы шаблон не сравнивал enum и
+     * не повторял правило «что можно остановить».
+     */
+    @Transient
+    public boolean isSuspended() {
+        return status == CustomerOrderStatus.SUSPENDED;
+    }
+
+    /*
+     * Можно ли приостановить: действующий заказ в незакрытом статусе.
+     * Исполнен, отменён, удалён и уже приостановленный остановке не
+     * подлежат — возобновление вернуло бы заказ в цикл, из которого он
+     * вышел (или остановил бы стоящий на паузе повторно).
+     */
+    @Transient
+    public boolean isCanSuspend() {
+        if (!active || status == null) {
+            return false;
+        }
+
+        return status != CustomerOrderStatus.SUSPENDED
+                && status != CustomerOrderStatus.DONE
+                && status != CustomerOrderStatus.CANCELLED
+                && status != CustomerOrderStatus.DELETED;
+    }
+
+    /* Момент приостановки «дд.мм.гггг чч:мм» — для карточки заказа. */
+    @Transient
+    public String getFormattedSuspendedAt() {
+        return suspendedAt == null
+                ? "—"
+                : suspendedAt.format(DATE_TIME_FORMATTER);
     }
 
     /*

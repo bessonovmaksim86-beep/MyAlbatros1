@@ -28,37 +28,159 @@ public final class ModuleRoutes {
     public static final Destination WORKPLACE =
             new Destination("Рабочий стол", "/home");
 
-    private static final Map<Role, Destination> ROLE_DESTINATIONS = Map.of(
+    private static final Map<Role, Destination> ROLE_DESTINATIONS =
+            Map.ofEntries(
 
-            Role.SDP_SERVICE_HEAD_TECHNOLOGY,
-            new Destination("Технологический отдел", "/technology/general"),
+            Map.entry(
+                    Role.SDP_SERVICE_HEAD_TECHNOLOGY,
+                    new Destination(
+                            "Технологический отдел",
+                            "/technology/general"
+                    )
+            ),
 
-            Role.SDP_SERVICE_HEAD_DISPATCHER,
-            new Destination("Диспетчерский отдел", "/dispatcher/general"),
+            Map.entry(
+                    Role.SDP_SERVICE_HEAD_DISPATCHER,
+                    new Destination(
+                            "Диспетчерский отдел",
+                            "/dispatcher/general"
+                    )
+            ),
 
-            Role.DISPATCHER,
-            new Destination("Диспетчерский отдел", "/dispatcher/general"),
+            Map.entry(
+                    Role.DISPATCHER,
+                    new Destination(
+                            "Диспетчерский отдел",
+                            "/dispatcher/general"
+                    )
+            ),
 
-            Role.SDP_SPP_MASTER,
-            new Destination("Руководитель цеха", "/workshop/staff"),
+            /*
+             * Руководители цехов, складов и бюро входного контроля
+             * открывают один и тот же модуль (/workshop): его границы
+             * определяются подразделением учётной записи, а не ролью.
+             * Название направления при этом остаётся «своим» — по нему
+             * администратор в разделе «Роли и вход» группирует роли,
+             * и руководитель склада оказывается в одной группе с
+             * исполнителем этого склада.
+             */
+            Map.entry(
+                    Role.SDP_SPP_MASTER,
+                    new Destination(
+                            "Руководитель цеха",
+                            "/workshop/staff"
+                    )
+            ),
 
-            Role.SDP_SA_MASTER,
-            new Destination("Руководитель цеха", "/workshop/staff"),
+            Map.entry(
+                    Role.SDP_SA_MASTER,
+                    new Destination(
+                            "Руководитель цеха",
+                            "/workshop/staff"
+                    )
+            ),
 
-            Role.SDP_SC_MASTER,
-            new Destination("Руководитель цеха", "/workshop/staff"),
+            Map.entry(
+                    Role.SDP_SC_MASTER,
+                    new Destination(
+                            "Руководитель цеха",
+                            "/workshop/staff"
+                    )
+            ),
 
-            Role.SDP_ST_MASTER,
-            new Destination("Руководитель цеха", "/workshop/staff"),
+            Map.entry(
+                    Role.SDP_ST_MASTER,
+                    new Destination(
+                            "Руководитель цеха",
+                            "/workshop/staff"
+                    )
+            ),
 
-            Role.OMTSIK_EXECUTOR,
-            new Destination("Склад полуфабрикатов", "/warehouse/general"),
+            Map.entry(
+                    Role.OMTSIK_MASTER,
+                    new Destination(
+                            "Склад полуфабрикатов",
+                            "/workshop/staff"
+                    )
+            ),
 
-            Role.BVK_EXECUTOR,
-            new Destination("Бюро входного контроля", "/input-control/general"),
+            Map.entry(
+                    Role.OMTSIK_С_MASTER,
+                    new Destination(
+                            "Склад комплектации",
+                            "/workshop/staff"
+                    )
+            ),
 
-            Role.SK_GENERAL,
-            new Destination("Служба качества", "/quality/general")
+            Map.entry(
+                    Role.BVK_MASTER,
+                    new Destination(
+                            "Бюро входного контроля",
+                            "/workshop/staff"
+                    )
+            ),
+
+            Map.entry(
+                    Role.OMTSIK_EXECUTOR,
+                    new Destination(
+                            "Склад полуфабрикатов",
+                            "/warehouse/general"
+                    )
+            ),
+
+            Map.entry(
+                    Role.BVK_EXECUTOR,
+                    new Destination(
+                            "Бюро входного контроля",
+                            "/input-control/general"
+                    )
+            ),
+
+            Map.entry(
+                    Role.SK_GENERAL,
+                    new Destination(
+                            "Служба качества",
+                            "/quality/general"
+                    )
+            ),
+
+            /*
+             * Исполнители цехов — единый интерфейс «Мои операции».
+             * У них нет полного цехового модуля (он закрыт в
+             * SecurityConfig), поэтому адрес ведёт на страницу
+             * с минимальным боковым меню и единственным пунктом.
+             */
+            Map.entry(
+                    Role.SDP_SPP_EXECUTOR,
+                    new Destination(
+                            "Цех подготовки производства",
+                            "/workshop-executor"
+                    )
+            ),
+
+            Map.entry(
+                    Role.SDP_SA_EXECUTOR,
+                    new Destination(
+                            "Цех сборки",
+                            "/workshop-executor"
+                    )
+            ),
+
+            Map.entry(
+                    Role.SDP_SC_EXECUTOR,
+                    new Destination(
+                            "Цех настройки",
+                            "/workshop-executor"
+                    )
+            ),
+
+            Map.entry(
+                    Role.SDP_ST_EXECUTOR,
+                    new Destination(
+                            "Цех испытаний",
+                            "/workshop-executor"
+                    )
+            )
     );
 
     private ModuleRoutes() {

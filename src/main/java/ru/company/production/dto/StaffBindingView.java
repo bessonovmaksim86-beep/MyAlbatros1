@@ -9,6 +9,9 @@ package ru.company.production.dto;
  * @param name         наименования в одну строку
  * @param type         тип операции / тип рабочего места
  * @param executorRole роль исполнителя из справочника
+ * @param kitReceipt   операция получения комплектации: её закрепляют по
+ *                     тому же подразделению, но роль «Исполнитель» она
+ *                     не носит, поэтому в списке подписана отдельно
  */
 public record StaffBindingView(
         Long id,
@@ -16,6 +19,7 @@ public record StaffBindingView(
         String code,
         String name,
         String type,
-        String executorRole
+        String executorRole,
+        boolean kitReceipt
 ) {
 }

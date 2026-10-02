@@ -15,19 +15,26 @@ import ru.company.production.entity.MeasurementUnit;
 import ru.company.production.entity.OrderPriority;
 import ru.company.production.entity.ProductClassifier;
 import ru.company.production.entity.ProductType;
+import ru.company.production.entity.ProductSerial;
+import ru.company.production.entity.ScheduleRowStatus;
 import ru.company.production.entity.TechProcessType;
 import ru.company.production.repository.ClassifierOptionProjection;
 import ru.company.production.repository.CustomerOrderRepository;
 import ru.company.production.repository.CustomerRepository;
 import ru.company.production.repository.OrderPriorityRepository;
+import ru.company.production.repository.OrderScheduleRowRepository;
 import ru.company.production.repository.ProductClassifierRepository;
+import ru.company.production.repository.ProductSerialOperationRepository;
 import ru.company.production.repository.SystemComponentProjection;
 import ru.company.production.repository.TechProcessRepository;
+import ru.company.production.repository.ProductSerialRepository;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.Arrays;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.Locale;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -46,6 +53,32 @@ public class CustomerOrderService {
     private final SensorClassifierMatcher sensorClassifierMatcher;
     private final OrderPriorityRepository orderPriorityRepository;
     private final OrderPriorityService orderPriorityService;
+    private final SerialIssueService serialIssueService;
+
+    /*
+     * Снятие графика при удалении (см. delete). Проверка зависимостей
+     * заказу не нужна — она целиком живёт в CustomerOrderRepository, где
+     * вопрос один: «можно ли снять заказ с работы». Здесь остаётся
+     * только чистка собственных планов заказа, которые больше никогда не
+     * будут подтверждены или выполнены.
+     */
+    private final OrderScheduleRowRepository orderScheduleRowRepository;
+
+    /*
+     * Снятие запланированных цеховых операций по изделиям заказа при
+     * его удалении. Отдельный репозиторий, а не каскад от серийника:
+     * операции снятого с работы заказа висели бы в матрице изделия и в
+     * загрузке исполнителя, хотя основания у них больше нет.
+     */
+    private final ProductSerialOperationRepository
+            productSerialOperationRepository;
+
+    /*
+     * Очистка резерва серийников, выданных позициям заказа (V45), —
+     * те же два вызова, что при правке состава: пересоздание позиций
+     * и снятие заказа с работы оставляют после себя висячие резервы.
+     */
+    private final ProductSerialRepository productSerialRepository;
 
     private static final String NUMBER_PREFIX = "ЗП-";
 
@@ -289,7 +322,13 @@ public class CustomerOrderService {
             order.addItem(item);
         }
 
-        return customerOrderRepository.save(order);
+        CustomerOrder saved = customerOrderRepository.save(order);
+
+        if (saved.getOrderType() == CustomerOrderType.PRODUCTION) {
+            reserveSerials(saved);
+        }
+
+        return saved;
     }
 
     /**
@@ -304,6 +343,25 @@ public class CustomerOrderService {
     public CustomerOrder update(Long id, CustomerOrderForm form) {
 
         CustomerOrder order = customerOrderRepository
+                .findFullById(id)
+                .orElseThrow(() ->
+                        new EntityNotFoundException(
+                                "Заказ покупателя не найден"
+                        )
+                );
+
+        /*
+         * Снятие резервов — безусловно: заказ мог сменить вид с
+         * производства на ремонт, а старые резервы обязаны уйти до
+         * пересборки состава, иначе внешний ключ
+         * product_serials.customer_order_item_id не отдаст удаляемые
+         * позиции. clearAutomatically в этих запросах чистит контекст,
+         * поэтому заказ перезагружается до изменения реквизитов.
+         */
+        productSerialRepository.unlinkReleasedByCustomerOrderId(id);
+        productSerialRepository.deleteFreeByCustomerOrderId(id);
+
+        order = customerOrderRepository
                 .findFullById(id)
                 .orElseThrow(() ->
                         new EntityNotFoundException(
@@ -409,7 +467,13 @@ public class CustomerOrderService {
             order.addItem(item);
         }
 
-        return customerOrderRepository.save(order);
+        CustomerOrder saved = customerOrderRepository.save(order);
+
+        if (saved.getOrderType() == CustomerOrderType.PRODUCTION) {
+            reserveSerials(saved);
+        }
+
+        return saved;
     }
 
     /**
@@ -457,6 +521,182 @@ public class CustomerOrderService {
         order.setStatus(CustomerOrderStatus.IN_WORK);
 
         return customerOrderRepository.save(order);
+    }
+
+    /**
+     * Помечает заказ покупателя удалённым.
+     *
+     * Заказ не стирается из базы, а снимается с работы (active = false)
+     * и получает статус «Удалён»: на него ссылаются выпуск, график цеха
+     * и реестр серийников, поэтому физическое удаление разорвало бы
+     * прослеживаемость — ровно ради этого статуса DELETED и введён (V13).
+     * Снятие с работы выводит заказ из всех списков и счётчиков: они
+     * отобраны по active = true.
+     *
+     * УДАЛЯТЬ МОЖНО ТОЛЬКО ЗАКАЗ БЕЗ ПРОВЕДЁННЫХ ОПЕРАЦИЙ. Проведённой
+     * считается любая работа, зафиксированная по изделиям заказа:
+     *
+     *   1) позиция, по которой отмечено готовое количество — изделия
+     *      уже принимали;
+     *   2) строка графика, закрытая исполнителем
+     *      (order_schedule_rows.completed_at, V44);
+     *   3) действующий заказ на производство — заказ уже породил
+     *      выпуск, и удалять его основание нельзя;
+     *   4) факт цеховой операции по изделиям заказа
+     *      (product_serial_operations.actual_date, V19) — заказ мог
+     *      работать и без графика.
+     *
+     * ВСЁ ЗАПЛАНИРОВАННОЕ ПО ЗАКАЗУ СНИМАЕТСЯ ВМЕСТЕ С НИМ. План — это
+     * намерение, а не событие, и после снятия заказа он обязан
+     * исчезнуть, иначе цех видел бы работу без основания:
+     *
+     *   * строки графика обеих стадий (DRAFT и CONFIRMED) — те же два
+     *     вызова, что при перепланировании в OrderSchedulingService.
+     *     Внесённые в план строки уходят наравне с черновиком: их
+     *     человеко-часы учитываются в загрузке этапов (V43), и
+     *     оставленный план ложно занимал бы людей и отклонял расчёт
+     *     следующего заказа. Проведённых строк здесь быть не может —
+     *     заказ с ними отсекается проверкой выше;
+     *   * запланированные цеховые операции изделий заказа
+     *     (product_serial_operations с пустым actual_date) — иначе они
+     *     висели бы в матрице изделия и в загрузке исполнителя;
+     *   * резерв номеров, выданных самому заказу (V45).
+     *
+     * Факты (проведённые строки, закрытые операции, реестр серийников)
+     * не трогаются: они переживают заказ.
+     */
+    @Transactional
+    public CustomerOrder delete(Long id) {
+
+        CustomerOrder order = customerOrderRepository
+                .findHeaderById(id)
+                .orElseThrow(() ->
+                        new EntityNotFoundException(
+                                "Заказ покупателя не найден"
+                        )
+                );
+
+        if (!order.isActive()) {
+            throw new IllegalStateException(
+                    "Заказ «" + order.getNumber() + "» уже удалён"
+            );
+        }
+
+        assertNoPerformedOperations(order);
+
+        /*
+         * График заказа снимается целиком — и черновик, и внесённые в
+         * план строки. Порядок вызовов (сначала DRAFT, потом CONFIRMED)
+         * повторяет OrderSchedulingService#confirm, где той же парой
+         * запросов пересобирают план перед новым расчётом.
+         */
+        orderScheduleRowRepository.deleteByOrderIdAndStatus(
+                id,
+                ScheduleRowStatus.DRAFT
+        );
+
+        orderScheduleRowRepository.deleteByOrderIdAndStatus(
+                id,
+                ScheduleRowStatus.CONFIRMED
+        );
+
+        /*
+         * Запланированные цеховые операции изделий снимаются ДО работы
+         * с резервом: unlinkReleasedByCustomerOrderId обнуляет
+         * customer_order_item_id, и после него вторая ветвь запроса
+         * (изделие зарезервировано позицией заказа) уже ничего бы не
+         * нашла.
+         */
+        productSerialOperationRepository
+                .deletePlannedByCustomerOrderId(id);
+
+        /*
+         * Резерв номеров, выданных заказу заранее, освобождается;
+         * номера, уже подхваченные выпуском, только отвязываются от
+         * позиций — реестр серийников неизменяем (те же вызовы, что
+         * при пересоздании состава заказа).
+         */
+        productSerialRepository.deleteFreeByCustomerOrderId(id);
+        productSerialRepository.unlinkReleasedByCustomerOrderId(id);
+
+        /*
+         * Заказ перечитывается: все запросы выше идут с
+         * clearAutomatically и очищают контекст, поэтому прочитанный
+         * внизу объект был бы detached (тот же приём, что при
+         * пересборке состава в update).
+         */
+        order = customerOrderRepository
+                .findHeaderById(id)
+                .orElseThrow(() ->
+                        new EntityNotFoundException(
+                                "Заказ покупателя не найден"
+                        )
+                );
+
+        order.setStatus(CustomerOrderStatus.DELETED);
+        order.setActive(false);
+
+        return customerOrderRepository.save(order);
+    }
+
+    /**
+     * Проверка «заказ с проведёнными операциями удалить нельзя».
+     *
+     * Порядок идёт от признака, который диспетчер видит прямо в заказе,
+     * к тому, что живёт в других модулях: отказ обязан назвать причину
+     * (готовая позиция, график, выпуск, операции цеха), а не
+     * ограничиваться безличным «нельзя» — иначе непонятно, что именно
+     * разбирать перед удалением.
+     */
+    private void assertNoPerformedOperations(CustomerOrder order) {
+
+        Long id = order.getId();
+
+        String number = order.getNumber();
+
+        /*
+         * 1) Позиция, по которой уже приняли изделия.
+         */
+        if (customerOrderRepository.existsItemWithDoneQuantity(id)) {
+            throw new IllegalStateException(
+                    "Заказ «" + number + "» удалить нельзя: по его "
+                            + "позициям уже отмечено готовое количество"
+            );
+        }
+
+        /*
+         * 2) Строка графика, проведённая исполнителем.
+         */
+        if (customerOrderRepository.existsCompletedScheduleRow(id)) {
+            throw new IllegalStateException(
+                    "Заказ «" + number + "» удалить нельзя: по его "
+                            + "графику уже проведены операции — "
+                            + "сначала снимите проведения"
+            );
+        }
+
+        /*
+         * 3) Действующий заказ на производство этого заказа.
+         */
+        if (customerOrderRepository.existsActiveProductionOrder(id)) {
+            throw new IllegalStateException(
+                    "Заказ «" + number + "» удалить нельзя: по нему "
+                            + "создан заказ на производство — сначала "
+                            + "отмените или удалите его"
+            );
+        }
+
+        /*
+         * 4) Факт цеховой операции по изделиям заказа: как выпущенным
+         * заказом на производство, так и зарезервированным самим
+         * заказом покупателя.
+         */
+        if (customerOrderRepository.existsPerformedSerialOperation(id)) {
+            throw new IllegalStateException(
+                    "Заказ «" + number + "» удалить нельзя: по его "
+                            + "изделиям уже проведены цеховые операции"
+            );
+        }
     }
 
     /**
@@ -583,5 +823,44 @@ public class CustomerOrderService {
 
     private String blankToNull(String value) {
         return value == null || value.isBlank() ? null : value.trim();
+    }
+
+    /**
+     * Резервирует серийники под позиции производственного заказа:
+     * по одному на экземпляр. Количество экземпляров и строки выпуска
+     * считаются одним правилом (SerialNumbering.instancesOf), чтобы
+     * номер не появился без строки выпуска.
+     */
+    private void reserveSerials(CustomerOrder order) {
+
+        for (CustomerOrderItem item : order.getItems()) {
+
+            /*
+             * taken — отдельный набор на позицию: у разных позиций
+             * разные области нумерации, общий набор ложно «занимал» бы
+             * одинаковые серии разных изделий.
+             */
+            Set<Integer> taken = new HashSet<>();
+
+            int instances =
+                    SerialNumbering.instancesOf(item.getQuantity());
+
+            for (int index = 0; index < instances; index++) {
+                serialIssueService.reserveForItem(
+                        item.getProductClassifier(), item, taken
+                );
+            }
+        }
+    }
+
+    /**
+     * Незакрытые выпуском резервы заказа — строка «зарезервировано N»
+     * в карточке. Запрос детальный (open-in-view выключен), строка
+     * списка печатает полный номер.
+     */
+    public List<ProductSerial> getReservedSerials(Long orderId) {
+
+        return productSerialRepository
+                .findFreeDetailsByCustomerOrderId(orderId);
     }
 }

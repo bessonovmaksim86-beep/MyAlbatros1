@@ -16,12 +16,15 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 import ru.company.production.dto.InputControlForm;
 import ru.company.production.dto.InputControlResult;
+import ru.company.production.dto.QuarantineFilter;
 import ru.company.production.entity.AppUser;
 import ru.company.production.entity.InputControlCard;
 import ru.company.production.entity.InputControlDecision;
 import ru.company.production.entity.InputControlType;
+import ru.company.production.entity.QuarantineCellKind;
 import ru.company.production.repository.UserRepository;
 import ru.company.production.service.InputControlService;
+import ru.company.production.service.RepairKittingService;
 
 /**
  * Бюро входного контроля: проверка оприходованных партий.
@@ -42,7 +45,14 @@ import ru.company.production.service.InputControlService;
 @RequiredArgsConstructor
 public class InputControlController {
 
+    /** Режим изолятора «по ячейкам»: перечень развёрнут поштучно. */
+    private static final String QUARANTINE_VIEW_CELLS = "cells";
+
+    /** Режим изолятора «по поступлениям»: строкой остаётся группа брака. */
+    private static final String QUARANTINE_VIEW_BATCHES = "batches";
+
     private final InputControlService inputControlService;
+    private final RepairKittingService repairKittingService;
     private final UserRepository userRepository;
 
     /** Главная страница модуля: сводка и переход к списку партий. */
@@ -101,21 +111,139 @@ public class InputControlController {
     }
 
     /**
-     * Реестр изолятора брака.
+     * Реестр изолятора брака: два режима одного перечня.
      *
-     * Список строят по группам брака с решением «изолятор»: в отличие
-     * от возврата он отвечает не на вопрос «кому вернуть», а на вопрос
-     * «какие ячейки остались на предприятии и в производство не
-     * пойдут». Поэтому строкой остаётся группа, а не партия: у одной
-     * партии дефекты разные, и в изоляторе их разбирают по отдельности.
+     * Режим по умолчанию — «по поступлениям»: строкой остаётся группа
+     * брака закрытой проверки, потому что возврат и изолятор оформляют
+     * частями партии и на одну партию приходится несколько дефектов.
+     *
+     * Второй режим — «по ячейкам»: ту же выборку разворачивают
+     * поштучно, и строкой становится номер ячейки. Руководителю бюро
+     * нужен именно он, когда приходится искать конкретную ячейку, а не
+     * разбирать партию; перечень отдаёт номер вместо приходного ордера
+     * и допускает отбор по наименованию, разновидности (подсборка или
+     * ячейка) и виду брака.
+     *
+     * Оба режима читают одну и ту же выборку, поэтому переключение
+     * ничего не ломает — меняется только способ развёртки групп.
+     *
+     * Параметры отбора приходят строкой и разбираются вручную: пустой
+     * {@code <option value="">} в запросе — это пустая строка, а не
+     * отсутствующий параметр, и прямое связывание с {@code Long} или
+     * перечислением прерывало бы обработку запроса.
+     *
+     * Отбор задают не постоянной формой на странице, а кнопкой
+     * «поиск по ячейкам/полуфабрикатам»: форма живёт в модальном окне
+     * и по кнопке «найти» открывает поштучный перечень. Справочники
+     * опций (разновидность, классификатор, дерево причин) отдают
+     * поэтому обоим режимам — форму открывают и из группового реестра.
      */
     @GetMapping({"/quarantine", "/quarantine/"})
-    public String quarantine(Model model) {
+    public String quarantine(
+            @RequestParam(name = "view", required = false) String viewValue,
+            @RequestParam(name = "kind", required = false) String kindValue,
+            @RequestParam(name = "classifierId", required = false) String classifierValue,
+            @RequestParam(name = "reasonId", required = false) String reasonValue,
+            Model model
+    ) {
+        boolean byCells = QUARANTINE_VIEW_CELLS.equalsIgnoreCase(
+                viewValue == null ? "" : viewValue.trim()
+        );
 
         model.addAttribute("activePage", "quarantine");
-        model.addAttribute("quarantine", inputControlService.findQuarantine());
+        model.addAttribute(
+                "quarantineView",
+                byCells ? QUARANTINE_VIEW_CELLS : QUARANTINE_VIEW_BATCHES
+        );
+
+        /*
+         * Фильтр собирают до развилки режимов: форма поиска открыта и
+         * в групповом реестре, поэтому её опции и возвращённые значения
+         * нужны странице в любом режиме. Пустой фильтр — «искали без
+         * условий», перечень отдают целиком.
+         */
+        QuarantineFilter filter = new QuarantineFilter(
+                parseKind(kindValue),
+                parseId(classifierValue),
+                parseId(reasonValue)
+        );
+
+        model.addAttribute("kinds", QuarantineCellKind.values());
+        model.addAttribute(
+                "classifierOptions",
+                inputControlService.findQuarantineClassifierOptions()
+        );
+        /*
+         * Дерево причин отдаёт сервис: тип и его виды сопоставляют там,
+         * где перечень ещё читается как данные. В шаблоне это сделать
+         * нельзя — выражение «parent != null and parent.id == ...» в
+         * SpEL вычисляет обе части всегда, и для причины без ступени
+         * выше рендеринг обрывался на середине страницы.
+         */
+        model.addAttribute(
+                "reasonGroups",
+                inputControlService.findQuarantineReasonGroups()
+        );
+
+        model.addAttribute("filterKind", filter.kind());
+        model.addAttribute("filterClassifierId", filter.classifierId());
+        model.addAttribute("filterReasonId", filter.reasonId());
+        /*
+         * Признак «отбор задавали» нужен подписи результата: пустой
+         * поштучный перечень — это и «искали без условий», и «ничего не
+         * нашли», а пользователю важно различать эти случаи.
+         */
+        model.addAttribute("searchApplied", filter.isFiltered());
+
+        /*
+         * Готовые строки запроса нужны ссылкам переключателя: переход
+         * между режимами обязан сохранять выбранный срез, иначе
+         * «по поступлениям / по ячейкам» сбрасывал бы отбор. Строку
+         * собирают здесь, а не в шаблоне: странице не приходится
+         * разбирать условия внутри ссылки.
+         */
+        String conditions = filterQuery(filter);
+
+        model.addAttribute(
+                "cellsQuery",
+                "view=" + QUARANTINE_VIEW_CELLS + conditions
+        );
+        model.addAttribute(
+                "batchesQuery",
+                "view=" + QUARANTINE_VIEW_BATCHES + conditions
+        );
+
+        if (!byCells) {
+            model.addAttribute("quarantine", inputControlService.findQuarantine());
+
+            return "input-control/quarantine/index";
+        }
+
+        model.addAttribute("cells", inputControlService.findQuarantineCells(filter));
 
         return "input-control/quarantine/index";
+    }
+
+    /**
+     * Перечень ЗНП на ремонт ячеек и подсборок, готовых к
+     * комплектованию силами бюро.
+     *
+     * Заказы сюда попадают диспетчерские, поэтому страница только
+     * показывает: менять состав или статус ремонтного ЗНП из бюро
+     * входного контроля нельзя. Кнопку «открыть» оставляют без
+     * перехода — поведение при открытии заказа ещё не определено, и
+     * ссылка вела бы в непонятное место.
+     */
+    @GetMapping({"/repair-kitting", "/repair-kitting/"})
+    public String repairKitting(Model model) {
+
+        model.addAttribute("activePage", "repair-kitting");
+        model.addAttribute(
+                "orders",
+                repairKittingService.findRepairKittingOrders()
+        );
+
+        return "input-control/repair-kitting/index";
     }
 
     /**
@@ -389,6 +517,69 @@ public class InputControlController {
          */
         model.addAttribute("serialMarks", view.serialsByNumber());
         model.addAttribute("inputControlForm", form);
+    }
+
+    /**
+     * Разновидность изделия из строки запроса.
+     *
+     * Неизвестное значение трактуют как «не выбрано»: ссылку фильтра
+     * могли передать вручную или от устаревшей версии перечня, и
+     * падать из-за этого страница не обязана.
+     */
+    private static QuarantineCellKind parseKind(String value) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+
+        try {
+            return QuarantineCellKind.valueOf(value.trim());
+        } catch (IllegalArgumentException exception) {
+            return null;
+        }
+    }
+
+    /**
+     * Идентификатор из строки запроса: пусто или не число — «не выбрано».
+     *
+     * Значение читают строкой именно поэтому: выпадающий список отдаёт
+     * пустую строку, когда условие не задано.
+     */
+    private static Long parseId(String value) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+
+        try {
+            return Long.valueOf(value.trim());
+        } catch (NumberFormatException exception) {
+            return null;
+        }
+    }
+
+    /**
+     * Строка отбора для ссылок переключателя: {@code &kind=...&reasonId=...}.
+     *
+     * В строку попадают только заданные условия — пустые параметры
+     * меняли бы длину адреса без смысла и выглядели бы как отбор,
+     * которого нет.
+     */
+    private static String filterQuery(QuarantineFilter filter) {
+
+        StringBuilder query = new StringBuilder();
+
+        if (filter.kind() != null) {
+            query.append("&kind=").append(filter.kind().name());
+        }
+
+        if (filter.classifierId() != null) {
+            query.append("&classifierId=").append(filter.classifierId());
+        }
+
+        if (filter.reasonId() != null) {
+            query.append("&reasonId=").append(filter.reasonId());
+        }
+
+        return query.toString();
     }
 
     /**

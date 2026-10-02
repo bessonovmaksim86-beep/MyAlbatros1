@@ -1,6 +1,7 @@
 package ru.company.production.repository;
 
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
@@ -49,7 +50,7 @@ public interface ProductSerialOperationRepository
      * КОТОРОГО операция выполнена (колонка production_order_id, V20), а
      * не по serial.issuedProductionOrder. Разница принципиальна:
      * issuedProductionOrder — заказ, выдавший серийник (ЗП), тогда как
-     * матрицу строят по заказу-комплектующему (ЗНП), который входит в
+     * матрицу строят по заказ-комплектующему (ЗНП), который входит в
      * изделие. Один ЗНП комплектует группу датчиков разных выпусков, а
      * один датчик укомплектован несколькими ЗНП, поэтому по заказу
      * выдачи номера матрица заказала бы чужие операции и потеряла свои.
@@ -216,5 +217,74 @@ public interface ProductSerialOperationRepository
             """)
     List<ProductSerialOperation> findUnclosedByProductionOrderId(
             @Param("productionOrderId") Long productionOrderId
+    );
+
+    /*
+     * ============================================================
+     * Снятие плана цеховых операций при удалении заказа покупателя
+     * ============================================================
+     */
+
+    /**
+     * Удаляет ЗАПЛАНИРОВАННЫЕ операции изделий заказа покупателя.
+     *
+     * Заказ, снятый с работы, не должен оставлять в цехе работу, которой
+     * не бывать: строка без факта — намерение, а не событие, и висеть
+     * после удаления заказа она не вправе (исполнитель видел бы работу,
+     * у которой нет основания).
+     *
+     * УДАЛЯЕТСЯ ТОЛЬКО ПЛАН (actual_date is null). Проведённая строка —
+     * факт работы, он переживает заказ ровно так же, как строит отказ
+     * весь заказ при попытке удаления (см.
+     * CustomerOrderRepository#existsPerformedSerialOperation); условие
+     * стоит и здесь, чтобы запрос нельзя было применить к заказу с
+     * фактами в обход сервиса.
+     *
+     * Заказ относится к операции двумя путями, и проверяются оба — те
+     * же две ветви, что у проверки перед удалением:
+     *
+     *   * операция поставлена в рамках заказа на производство, у
+     *     которого это заказ покупателя основание (production_order_id,
+     *     V20 — «в рамках какого заказа выполнена операция», а НЕ
+     *     serial.issuedProductionOrder: один ЗНП комплектует датчики
+     *     разных выпусков);
+     *   * изделие зарезервировано позицией самого заказа покупателя
+     *     (product_serials.customer_order_item_id, V45) — такие номера
+     *     живут до всякого выпуска.
+     *
+     * Подзапросы ведут на ProductionOrder и ProductSerial, а не на свою
+     * таблицу: MySQL отклоняет DELETE с подзапросом на удаляемую таблицу
+     * (ERROR 1093), а по чужой таблице запрос проходит. Навигация идёт
+     * по колонкам foreign key (op.productionOrder.id, op.serial.id), без
+     * join — INNER join внутри OR отбросил бы строки, у которых
+     * заполнена только одна из ветвей.
+     *
+     * Вызывать ДО освобождения резерва номеров: unlinkReleased...
+     * обнуляет customer_order_item_id, и вторая ветвь перестала бы
+     * что-либо находить.
+     */
+    @Modifying(
+            flushAutomatically = true,
+            clearAutomatically = true
+    )
+    @Query("""
+            delete from ProductSerialOperation op
+            where op.actualDate is null
+              and (
+                    op.productionOrder.id in (
+                        select ord.id
+                        from ProductionOrder ord
+                        where ord.customerOrder.id = :customerOrderId
+                    )
+                 or op.serial.id in (
+                        select serial.id
+                        from ProductSerial serial
+                        where serial.customerOrderItem
+                                  .customerOrder.id = :customerOrderId
+                    )
+              )
+            """)
+    int deletePlannedByCustomerOrderId(
+            @Param("customerOrderId") Long customerOrderId
     );
 }

@@ -175,6 +175,26 @@ public class ProductionOrder {
     )
     private TechProcess techProcess;
 
+    /*
+     * Приоритет планирования заказа (миграция V41).
+     *
+     * Нужен групповым и ремонтным видам: выпуска приоритет приходит
+     * вместе с заказом покупателя, а у самостоятельного заказа
+     * заказчика нет — наследовать очерёдность не от чего.
+     *
+     * Колонка NULL-разрешающая: комплектованию и выпуску приоритет не
+     * назначают, а обязательность для групповых видов держит сервис
+     * (ProductionOrderService#requirePriority).
+     */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(
+            name = "priority_id",
+            foreignKey = @ForeignKey(
+                    name = "fk_production_order_priority"
+            )
+    )
+    private OrderPriority priority;
+
     @Column(name = "order_date", nullable = false)
     private LocalDate orderDate;
 
@@ -464,6 +484,34 @@ public class ProductionOrder {
         return techProcess == null
                 ? ""
                 : techProcess.getCode();
+    }
+
+    /*
+     * Приоритет (миграция V41) отдаётся текстом и именем CSS-модификатора:
+     * связь lazy, а шаблон не должен держать соответствие «приоритет →
+     * цвет» — те же соображения, что у CustomerOrder.
+     *
+     * «Обычный» вместо прочерка: заказ без приоритета и так стоит в
+     * общей очереди, поэтому карточка не должна выглядеть сломанной.
+     */
+    @Transient
+    public String getPriorityDisplayName() {
+        return priority == null || priority.getName() == null
+                ? "Обычный"
+                : priority.getName();
+    }
+
+    @Transient
+    public String getPriorityBadgeClass() {
+        return priority == null || priority.getBadgeClass() == null
+                ? "priority-ordinary"
+                : priority.getBadgeClass();
+    }
+
+    /* Идентификатор приоритета: связь lazy, в шаблон к нему не обращаются. */
+    @Transient
+    public Long getPriorityId() {
+        return priority == null ? null : priority.getId();
     }
 
     /* Фамилия и инициалы автора выпуска для страницы просмотра. */

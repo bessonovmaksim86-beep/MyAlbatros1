@@ -147,11 +147,34 @@ public enum ZnpKind {
     }
 
     /**
+     * Ремонтный ли заказ — то есть заявлен ли он на ячейки или
+     * подсборки из изолятора брака.
+     *
+     * Признак нужен бюро входного контроля: комплектование ремонтных
+     * ячеек/подсборок отбирает ЗНП именно по ремонтным видам, а не по
+     * перечню констант в запросе — новый ремонтный вид попадёт в
+     * отбор одной правкой enum.
+     */
+    public boolean isRepairKind() {
+        return this == CELL_REPAIR || this == SUBASSEMBLY_REPAIR;
+    }
+
+    /**
      * Виды, образующие раздел «Групповые ЗНП».
      */
     public static List<ZnpKind> groupKinds() {
         return Arrays.stream(values())
                 .filter(ZnpKind::isGroupKind)
+                .toList();
+    }
+
+    /**
+     * Ремонтные виды — набор для отбора ЗНП на комплектование
+     * (см. {@link #isRepairKind()}).
+     */
+    public static List<ZnpKind> repairKinds() {
+        return Arrays.stream(values())
+                .filter(ZnpKind::isRepairKind)
                 .toList();
     }
 

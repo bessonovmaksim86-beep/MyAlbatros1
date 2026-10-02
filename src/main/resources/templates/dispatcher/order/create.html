@@ -58,6 +58,33 @@
 
                 <div class="page-head-actions">
 
+                    <form th:unless="${editing}"
+                          method="post"
+                          enctype="multipart/form-data"
+                          th:action="@{/dispatcher/customer-order/import}"
+                          class="co-import-form"
+                          id="coImportForm">
+
+                        <input th:if="${_csrf != null}"
+                               type="hidden"
+                               th:name="${_csrf.parameterName}"
+                               th:value="${_csrf.token}">
+
+                        <input type="file"
+                               id="coImportFile"
+                               name="file"
+                               accept=".xls,.xlsx"
+                               hidden>
+
+                        <button type="button"
+                                class="btn secondary"
+                                id="coImportBtn"
+                                title="Загрузить чек-лист из файла Excel (.xls или .xlsx)">
+                            Загрузить из файла
+                        </button>
+
+                    </form>
+
                     <a class="btn secondary"
                        th:href="@{/dispatcher/customer-order}">
                         К списку заказов

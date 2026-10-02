@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="ru"
+      xmlns:th="http://www.thymeleaf.org">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport"
+          content="width=device-width, initial-scale=1">
+
+    <title>Мои операции</title>
+
+    <link rel="stylesheet"
+          th:href="@{/technology/css/technology.css}">
+    <link rel="stylesheet"
+          th:href="@{/technology/css/common.css}">
+    <link rel="stylesheet"
+          th:href="@{/workshop/css/workshop.css}">
+    <link rel="stylesheet"
+          th:href="@{/workshop/css/distribution.css}">
+</head>
+
+<body>
+
+<!--
+    Интерфейс исполнителя цеха. Полного цехового модуля у исполнителя
+    нет (он закрыт в SecurityConfig перед ролью), поэтому здесь то же
+    боковое меню подразделения, но с единственным активным пунктом
+    «Мои операции»: сотрудники, операции подразделения, календарь и
+    распределение перед этой ролью закрыты, и fullModule / canDistribute
+    прячут их. Таблица самих работ живёт на /my-operations — страница
+    лишь точка входа.
+-->
+<div class="app-shell">
+
+    <aside th:replace="~{workshop/fragments/layout
+            :: sidebar('my-operations')}">
+    </aside>
+
+    <main class="main">
+
+        <header th:replace="~{workshop/fragments/layout
+                :: topbar}">
+        </header>
+
+        <div class="page-content workshop-page">
+
+            <div class="page-head">
+
+                <div class="page-title">
+
+                    <h1 th:text="${workshopName}">
+                        Цех сборки
+                    </h1>
+
+                    <p>
+                        Работы, закреплённые за вами руководителем
+                        подразделения и планировщиком
+                    </p>
+
+                </div>
+
+            </div>
+
+            <section class="card">
+
+                <div class="card-head">
+
+                    <div>
+
+                        <h2 th:text="${userDisplayName}">
+                            Иванов И.
+                        </h2>
+
+                        <small th:text="${userPosition}">
+                            Слесарь-сборщик
+                        </small>
+
+                    </div>
+
+                    <span class="badge"
+                          th:if="${myOperationsCount != null
+                                  and myOperationsCount > 0}"
+                          th:text="${myOperationsCount}">
+                        2
+                    </span>
+
+                </div>
+
+                <div class="card-body">
+
+                    <p>
+                        Здесь собраны операции вашего подразделения на
+                        ближайшие две недели. Чтобы посмотреть список и
+                        провести экземпляр операции, откройте раздел
+                        «Мои операции».
+                    </p>
+
+                    <a class="btn primary"
+                       th:href="@{/my-operations}"
+                       title="Работы, закреплённые за мной">
+                        Перейти к моим операциям
+                    </a>
+
+                </div>
+
+            </section>
+
+        </div>
+
+    </main>
+
+</div>
+
+<th:block th:replace="~{workshop/fragments/layout
+        :: commonScripts}">
+</th:block>
+
+</body>
+</html>

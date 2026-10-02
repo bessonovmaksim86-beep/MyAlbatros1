@@ -183,4 +183,30 @@ public interface TechProcessRepository
             order by process.code
             """)
     List<RepairRouteOptionView> findRepairRouteOptions();
+
+    /*
+     * Рабочие места, на которых маршрут допускает операцию.
+     *
+     * Нужны распределению работ: список способных сотрудников
+     * строится по паре «прямая привязка к операции + привязка к
+     * одному из этих мест» — ровно так же, как его считает
+     * планировщик (OrderSchedulingService#placeOperation). Иначе
+     * мастер предлагал бы людей, которых расчёт в мощность этапа не
+     * закладывал.
+     *
+     * Маршрутов у одной операции группы может быть несколько
+     * (разные позиции заказа), поэтому техпроцессы передаются
+     * списком, а выборка сразу даёт объединение.
+     */
+    @Query("""
+            select distinct place.id
+            from TechProcessOperation node
+            join node.workPlaces place
+            where node.operation.id = :operationId
+              and node.techProcess.id in :processIds
+            """)
+    List<Long> findRouteWorkPlaceIds(
+            @Param("operationId") Long operationId,
+            @Param("processIds") java.util.Collection<Long> processIds
+    );
 }

@@ -119,6 +119,24 @@ public class ProductSerial {
     private ProductionOrder issuedProductionOrder;
 
     /*
+     * Позиция заказа покупателя, для которой выдан номер.
+     *
+     * Номер можно завести заранее — на этапе заказа покупателя, не
+     * дожидаясь выпуска. Тогда выпуск переиспользует уже выданный
+     * номер вместо нового: ряд датчика остаётся сквозным, а диспетчер
+     * видит серийники сразу в заказе. У номеров, рождённых выпуском
+     * или приходом, колонка null.
+     */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(
+            name = "customer_order_item_id",
+            foreignKey = @ForeignKey(
+                    name = "fk_product_serial_customer_order_item"
+            )
+    )
+    private CustomerOrderItem customerOrderItem;
+
+    /*
      * Партия оприходования склада, если номер выпущен приходом, а не
      * заказом на производство. У номеров выпуска она null.
      */

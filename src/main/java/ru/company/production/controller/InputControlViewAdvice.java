@@ -9,6 +9,7 @@ import org.springframework.web.bind.annotation.ModelAttribute;
 import ru.company.production.entity.AppUser;
 import ru.company.production.repository.UserRepository;
 import ru.company.production.service.InputControlService;
+import ru.company.production.service.RepairKittingService;
 
 import java.util.Locale;
 
@@ -26,6 +27,7 @@ public class InputControlViewAdvice {
 
     private final UserRepository userRepository;
     private final InputControlService inputControlService;
+    private final RepairKittingService repairKittingService;
 
     @ModelAttribute
     public void addInputControlContext(
@@ -53,6 +55,16 @@ public class InputControlViewAdvice {
         model.addAttribute(
                 "quarantineCount",
                 inputControlService.countQuarantine()
+        );
+
+        /*
+         * Счётчик комплектования — заказы, а не ячейки: он отвечает на
+         * вопрос «сколько ЗНП на ремонт ждут комплектования из
+         * изолятора», а не «сколько ячеек для них нужно».
+         */
+        model.addAttribute(
+                "repairKittingCount",
+                repairKittingService.countRepairKittingOrders()
         );
 
         if (authentication == null

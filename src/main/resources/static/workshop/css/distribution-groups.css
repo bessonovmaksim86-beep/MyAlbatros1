@@ -1,0 +1,589 @@
+/* ============================================================
+   РАСПРЕДЕЛЕНИЕ РАБОТ — ГРУППОВОЙ ЭКРАН
+
+   Строка таблицы — операция на дату плана, а не экземпляр:
+   позиция на десять изделий даёт десять строк графика одной
+   операции, и раскладывать их по людям мастер решает одним
+   действием. Клик по строке раскрывает панель со списком
+   способных сотрудников и кнопкой «Назначить» — второго окна
+   или отдельной страницы для назначения нет.
+
+   Каркас (карточки, таблицы, кнопки, бейджи) приходит из
+   technology.css и common.css; здесь — только собственные
+   компоненты: доли колонок групповых таблиц и панель
+   раскрытия. Плоская раскладка (distribution.css) осталась
+   ради общих правил формы назначения и адаптивных отступов.
+
+   ВАЖНО про проценты: при table-layout: fixed набор долей каждой
+   таблицы обязан давать ровно 100 %, иначе браузер раздаёт
+   остаток по своему усмотрению, и колонки «прыгают» между
+   таблицами и медиазапросами. Каждый набор задаётся целиком,
+   сумма указана в комментарии.
+   ============================================================ */
+
+.distribution-group-table {
+    width: 100%;
+    table-layout: fixed;
+    border-collapse: collapse;
+    font-size: 13px;
+}
+
+.table-wrap .distribution-group-table {
+    min-width: 0;
+    max-width: 100%;
+}
+
+/* ------------------------------------------------------------
+   Доли колонок по умолчанию
+   ------------------------------------------------------------ */
+
+/* Очередь распределения, 4 колонки: изделие — хозяйка строки, поэтому
+   серийник и наименование занимают большую часть ширины, а сведения об
+   операции (дата, трудоёмкость) ушли в панель раскрытия.
+   Сумма: 16 + 44 + 20 + 20 = 100 % */
+.distribution-group-table col.col-serial { width: 16%; }
+.distribution-group-table col.col-name   { width: 44%; }
+.distribution-group-table col.col-order  { width: 20%; }
+.distribution-group-table col.col-toggle { width: 20%; }
+
+/* Уже распределённые, те же 4 колонки: строка читается как строка
+   очереди, различается только четвёртая колонка — закреплённый
+   исполнитель вместо приглашения распределить.
+   Сумма: 16 + 42 + 18 + 24 = 100 % */
+.distribution-group-table--assigned col.col-serial { width: 16%; }
+.distribution-group-table--assigned col.col-name   { width: 42%; }
+.distribution-group-table--assigned col.col-order  { width: 18%; }
+.distribution-group-table--assigned col.col-toggle { width: 24%; }
+
+.distribution-group-table th,
+.distribution-group-table td {
+    padding: 10px 12px;
+    text-align: left;
+    vertical-align: middle;
+    border-bottom: 1px solid rgba(18, 58, 46, 0.1);
+    white-space: normal;
+    overflow-wrap: break-word;
+}
+
+.distribution-group-table th {
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: #5b6f66;
+    background: #f3f7f5;
+    white-space: normal;
+    line-height: 1.3;
+}
+
+/*
+ * «Мои операции», 7 колонок: op, serial, date, order, count, hours,
+ * toggle. Набор задан полностью — table-layout: fixed требует ровно
+ * 100 %. Сумма: 20 + 12 + 11 + 12 + 10 + 10 + 25 = 100 %.
+ */
+.distribution-group-table--mine col.col-op     { width: 20%; }
+.distribution-group-table--mine col.col-serial { width: 12%; }
+.distribution-group-table--mine col.col-date   { width: 11%; }
+.distribution-group-table--mine col.col-order  { width: 12%; }
+.distribution-group-table--mine col.col-count  { width: 10%; }
+.distribution-group-table--mine col.col-hours  { width: 10%; }
+.distribution-group-table--mine col.col-toggle { width: 25%; }
+
+/* ------------------------------------------------------------
+   Строка операции: она же кнопка раскрытия
+   ------------------------------------------------------------ */
+
+.distribution-group-row {
+    cursor: pointer;
+}
+
+.distribution-group-row:hover {
+    background: #f7faf8;
+}
+
+/*
+ * Дату плана держим в одну строку только там, где она стоит колонкой:
+ * в «Мои операции» это третья колонка (op, serial, date, …). В двух
+ * таблицах распределения колонки «Дата плана» больше нет — дата ушла
+ * в панель раскрытия, и третье место там занимает заказ покупателя,
+ * который обязан переноситься.
+ */
+.distribution-group-table--mine td:nth-child(3) {
+    white-space: nowrap;
+}
+
+.distribution-group-table .cell-op {
+    line-height: 1.35;
+}
+
+.distribution-group-table .cell-op strong {
+    display: block;
+    overflow-wrap: anywhere;
+}
+
+/*
+ * Наименование изделия — самая длинная подпись строки: полное
+ * обозначение «как в КД» занимает десятки символов и обязано
+ * переноситься по слогам, а не обрезаться. Пустое значение
+ * подписывается словами, а не тире: мастер обязан отличить
+ * незаполненную позицию заказа от незагружившейся строки.
+ */
+.distribution-group-table .cell-name {
+    line-height: 1.35;
+}
+
+.distribution-group-table .cell-name strong {
+    display: block;
+    overflow-wrap: anywhere;
+}
+
+.distribution-group-table .cell-name__empty {
+    color: #93a49c;
+}
+
+.distribution-group-table .cell-order {
+    overflow-wrap: anywhere;
+}
+
+.distribution-group-table .cell-executor {
+    line-height: 1.35;
+}
+
+.distribution-group-table .cell-toggle {
+    text-align: right;
+    white-space: nowrap;
+}
+
+/*
+ * Кнопка «Снять» уехала из последней колонки в панель раскрытия, и
+ * теперь там стоит бейдж исполнителя со стрелкой — как в очереди.
+ * Центрировать его незачем, а прежнее правило перебивало бы
+ * выравнивание cell-toggle вправо.
+ */
+
+/* ------------------------------------------------------------
+   Панель раскрытия: сотрудники и кнопка «Назначить»
+   ------------------------------------------------------------ */
+
+.distribution-group-panel > td {
+    padding: 0;
+    background: #f6faf8;
+}
+
+.group-panel {
+    padding: 14px 16px 16px;
+    border-top: 1px solid rgba(18, 58, 46, 0.12);
+}
+
+/*
+ * Сводка операции в раскрытой панели.
+ *
+ * Дата плана, трудоёмкость и исполнитель убраны из главной строки,
+ * потому что строка рассказывает про изделие, а не про работу. Но
+ * мастер обязан увидеть эти сведения ДО назначения, иначе он
+ * закрепляет операцию, не зная ни срока, ни объёма. Поэтому они
+ * возвращаются первой строкой панели — сеткой, которая на узком
+ * экране складывается в столбец.
+ */
+.group-panel__summary {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 10px 16px;
+    padding: 10px 12px;
+    margin-bottom: 14px;
+    background: #fff;
+    border: 1px solid rgba(18, 58, 46, 0.12);
+    border-radius: 8px;
+}
+
+.summary-item {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+}
+
+.summary-item__caption {
+    font-size: 11px;
+    color: #6b7d74;
+}
+
+.summary-item__value {
+    font-size: 13px;
+    line-height: 1.35;
+    overflow-wrap: anywhere;
+}
+
+.summary-item__value--date {
+    white-space: nowrap;
+}
+
+.summary-item__value--empty {
+    color: #93a49c;
+    font-weight: 500;
+}
+
+/*
+ * На узком экране четыре колонки сводки сжимаются до нечитаемых:
+ * наименование операции не переносится, дата ломается. Складываем
+ * сетку в две колонки, а на совсем узком — в одну.
+ */
+@media (max-width: 720px) {
+    .group-panel__summary {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
+@media (max-width: 460px) {
+    .group-panel__summary {
+        grid-template-columns: minmax(0, 1fr);
+    }
+}
+
+.group-panel__head {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    margin-bottom: 10px;
+}
+
+.group-panel__head strong {
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: #35514a;
+}
+
+/*
+ * Список сотрудников — сетка, а не таблица: карточка человека
+ * состоит из фамилии, должности и загрузки, и в таблице эти
+ * подписи пришлось бы раскладывать по колонкам, которые снова
+ * пришлось бы делить в процентах.
+ */
+.executor-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 8px;
+}
+
+.executor-option {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 9px 11px;
+    border: 1px solid rgba(18, 58, 46, 0.18);
+    border-radius: 8px;
+    background: #ffffff;
+    cursor: pointer;
+    min-width: 0;
+}
+
+.executor-option:hover {
+    border-color: #ef7d00;
+}
+
+.executor-option input[type="radio"] {
+    flex: 0 0 auto;
+    margin: 0;
+}
+
+/* Выбор виден без лупы по радиокнопке: карточка подсвечивается. */
+.executor-option:has(input[type="radio"]:checked) {
+    border-color: #ef7d00;
+    box-shadow: 0 0 0 2px rgba(239, 125, 0, 0.22);
+    background: #fffaf3;
+}
+
+.executor-option__name {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    min-width: 0;
+    flex: 1 1 auto;
+}
+
+.executor-option__name strong {
+    font-size: 13px;
+    overflow-wrap: anywhere;
+    line-height: 1.3;
+}
+
+.executor-option__load {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 2px;
+    flex: 0 0 auto;
+    font-size: 11px;
+    color: #5b6f66;
+    white-space: nowrap;
+}
+
+/*
+ * Отсутствующий сотрудник остаётся в списке, но не выбирается:
+ * мастер обязан видеть, что человек в этот день в отсутствии,
+ * а не удивляться пустому списку.
+ */
+.executor-option.is-absent {
+    opacity: 0.6;
+    cursor: not-allowed;
+    background: #f2f4f3;
+}
+
+.executor-option.is-overloaded {
+    border-color: rgba(178, 106, 0, 0.45);
+}
+
+.group-panel__actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin-top: 12px;
+}
+
+.group-panel__instances {
+    margin-top: 14px;
+    padding-top: 12px;
+    border-top: 1px dashed rgba(18, 58, 46, 0.18);
+}
+
+.group-panel__instances > strong {
+    display: block;
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: #35514a;
+    margin-bottom: 8px;
+}
+
+/* ------------------------------------------------------------
+   Адаптив. Каждый набор задаётся полностью и даёт ровно 100 %.
+   ------------------------------------------------------------ */
+
+@media (max-width: 1100px) {
+    .distribution-group-table {
+        font-size: 12px;
+    }
+
+    .distribution-group-table th,
+    .distribution-group-table td {
+        padding: 8px 8px;
+    }
+
+    /* Очередь, 6 колонок (op, serial, date, order, hours, toggle).
+       Сумма: 30 + 11 + 11 + 13 + 10 + 25 = 100 % */
+    .distribution-group-table col.col-op     { width: 30%; }
+    .distribution-group-table col.col-serial { width: 11%; }
+    .distribution-group-table col.col-date   { width: 11%; }
+    .distribution-group-table col.col-order  { width: 13%; }
+    .distribution-group-table col.col-hours  { width: 10%; }
+    .distribution-group-table col.col-toggle { width: 25%; }
+
+    /* Распределённые, 7 колонок (op, serial, date, order, hours,
+       executor, action). Сумма: 24 + 11 + 10 + 12 + 10 + 20 + 13 = 100 % */
+    .distribution-group-table--assigned col.col-op       { width: 24%; }
+    .distribution-group-table--assigned col.col-serial   { width: 11%; }
+    .distribution-group-table--assigned col.col-date     { width: 10%; }
+    .distribution-group-table--assigned col.col-order    { width: 12%; }
+    .distribution-group-table--assigned col.col-hours    { width: 10%; }
+    .distribution-group-table--assigned col.col-executor { width: 20%; }
+    .distribution-group-table--assigned col.col-action   { width: 13%; }
+
+    /* Мои операции, 7 колонок (op, serial, date, order, count, hours,
+       toggle). Сумма: 24 + 11 + 10 + 11 + 9 + 9 + 26 = 100 % */
+    .distribution-group-table--mine col.col-op     { width: 24%; }
+    .distribution-group-table--mine col.col-serial { width: 11%; }
+    .distribution-group-table--mine col.col-date   { width: 10%; }
+    .distribution-group-table--mine col.col-order  { width: 11%; }
+    .distribution-group-table--mine col.col-count  { width: 9%; }
+    .distribution-group-table--mine col.col-hours  { width: 9%; }
+    .distribution-group-table--mine col.col-toggle { width: 26%; }
+}
+
+@media (max-width: 820px) {
+    .distribution-group-table {
+        font-size: 11px;
+    }
+
+    .distribution-group-table th {
+        font-size: 10px;
+        letter-spacing: 0.02em;
+    }
+
+    .distribution-group-table th,
+    .distribution-group-table td {
+        padding: 7px 6px;
+    }
+
+    /* Мобильный: заказ и часы «съедаемы», ширину отдаём операции.
+       Очередь, 6 колонок. Сумма: 35 + 11 + 11 + 11 + 10 + 22 = 100 % */
+    .distribution-group-table col.col-op     { width: 35%; }
+    .distribution-group-table col.col-serial { width: 11%; }
+    .distribution-group-table col.col-date   { width: 11%; }
+    .distribution-group-table col.col-order  { width: 11%; }
+    .distribution-group-table col.col-hours  { width: 10%; }
+    .distribution-group-table col.col-toggle { width: 22%; }
+
+    /* Распределённые, 7 колонок. Сумма: 24 + 11 + 10 + 11 + 10 + 20 + 14 = 100 % */
+    .distribution-group-table--assigned col.col-op       { width: 24%; }
+    .distribution-group-table--assigned col.col-serial   { width: 11%; }
+    .distribution-group-table--assigned col.col-date     { width: 10%; }
+    .distribution-group-table--assigned col.col-order    { width: 11%; }
+    .distribution-group-table--assigned col.col-hours    { width: 10%; }
+    .distribution-group-table--assigned col.col-executor { width: 20%; }
+    .distribution-group-table--assigned col.col-action   { width: 14%; }
+
+    /* Мои операции, 7 колонок. Сумма: 26 + 11 + 10 + 10 + 8 + 9 + 26 = 100 % */
+    .distribution-group-table--mine col.col-op     { width: 26%; }
+    .distribution-group-table--mine col.col-serial { width: 11%; }
+    .distribution-group-table--mine col.col-date   { width: 10%; }
+    .distribution-group-table--mine col.col-order  { width: 10%; }
+    .distribution-group-table--mine col.col-count  { width: 8%; }
+    .distribution-group-table--mine col.col-hours  { width: 9%; }
+    .distribution-group-table--mine col.col-toggle { width: 26%; }
+
+    /* Узкий экран: карточки сотрудников в одну колонку, иначе
+       minmax(280px) вынес бы вторую за границу панели. */
+    .executor-list {
+        grid-template-columns: 1fr;
+    }
+
+    .group-panel {
+        padding: 12px 10px 14px;
+    }
+}
+
+/* ------------------------------------------------------------
+   ПАНЕЛЬ СРОКА РАБОТ И ПОДПИСИ СЕРИЙНИКОВ
+
+   Срок — единственный фильтр страницы, поэтому панель живёт над
+   карточками, а не внутри них: она относится к обеим таблицам сразу.
+   ------------------------------------------------------------ */
+
+.filter-bar {
+    display: flex;
+    align-items: flex-end;
+    flex-wrap: wrap;
+    gap: 12px;
+    margin: 0 0 16px;
+    padding: 12px 14px;
+    border: 1px solid rgba(18, 58, 46, 0.14);
+    border-radius: 10px;
+    background: #f6faf8;
+}
+
+.filter-bar__field {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.filter-bar__caption {
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: #5b6f66;
+}
+
+.filter-bar__select {
+    min-width: 150px;
+    padding: 7px 10px;
+    font: inherit;
+    font-size: 13px;
+    color: #17322a;
+    border: 1px solid rgba(18, 58, 46, 0.28);
+    border-radius: 8px;
+    background: #ffffff;
+}
+
+.filter-bar__select:focus-visible {
+    outline: 2px solid #ef7d00;
+    outline-offset: 1px;
+}
+
+.filter-bar__period {
+    font-size: 12px;
+    color: #5b6f66;
+    padding-bottom: 7px;
+}
+
+/* Серийники в строке операции: цифры не должны «плыть» по ширине. */
+.cell-op__serials {
+    display: block;
+    color: #35514a;
+    font-variant-numeric: tabular-nums;
+    overflow-wrap: anywhere;
+}
+
+/*
+ * Колонка «Серийный номер»: номера перечисляются через запятую и
+ * держатся табличными цифрами, чтобы список изделий у разных строк
+ * выравнивался по разрядам. Пустое значение (у группы нет серии) —
+ * нейтральное тире, а не пустая клетка: мастер обязан отличить
+ * «серии нет» от «не загрузилось».
+ */
+.distribution-group-table .cell-serial {
+    color: #35514a;
+    font-variant-numeric: tabular-nums;
+    overflow-wrap: anywhere;
+}
+
+.distribution-group-table .cell-serial__empty {
+    color: #93a49c;
+}
+
+.instance-table__serial {
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+
+@media (max-width: 820px) {
+    .filter-bar {
+        align-items: stretch;
+        flex-direction: column;
+        gap: 8px;
+    }
+
+    .filter-bar__select {
+        width: 100%;
+    }
+
+    .filter-bar__period {
+        padding-bottom: 0;
+    }
+}
+
+/*
+ * ============================================================
+ * Работа, ждущая предшественника по маршруту
+ * ============================================================
+ *
+ * Проводить операцию раньше предшествующей нельзя, и об этом
+ * исполнитель должен узнать до нажатия: строка группы и строка
+ * изделия помечаются, а кнопка проведения отсутствует. Цвет —
+ * тот же янтарный, что у предупреждений интерфейса, чтобы не
+ * вводить новую краску для одного состояния.
+ */
+.distribution-group-row.is-blocked {
+    background: #fffaf3;
+    box-shadow: inset 3px 0 0 #d98324;
+}
+
+.distribution-group-row.is-blocked:hover {
+    background: #fdf3e6;
+}
+
+.distribution-group-table .is-blocked-note {
+    color: #a8631a;
+    font-weight: 600;
+}
+
+.instance-table tbody tr.is-blocked {
+    background: #fffaf3;
+}
+
+.instance-table tbody tr.is-blocked td:first-child {
+    box-shadow: inset 3px 0 0 #d98324;
+}

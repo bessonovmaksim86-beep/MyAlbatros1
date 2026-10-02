@@ -18,6 +18,10 @@
 
     <link rel="stylesheet"
           th:href="@{/input-control/css/input-control.css}">
+
+    <!-- Переключатель режимов и отбор поштучного перечня -->
+    <link rel="stylesheet"
+          th:href="@{/input-control/css/quarantine.css}">
 </head>
 
 <body>
@@ -52,6 +56,28 @@
 
                 <div class="page-head-actions">
 
+                    <!--
+                        Поиск по ячейкам/полуфабрикатам.
+
+                        Кнопка, а не ссылка: форма отбора открывается
+                        поверх страницы и ничего не меняет в данных, а
+                        постоянной формой на странице держать нельзя —
+                        перечень изолятор читают целиком, и висящий над
+                        ним отбор спорол бы вид реестра.
+
+                        type="button" обязателен: кнопку рисуют внутри
+                        заголовка страницы, и без него браузер искал бы
+                        ближайшую форму на странице.
+                    -->
+                    <button type="button"
+                            class="btn primary"
+                            id="bvkSearchOpen"
+                            aria-haspopup="dialog"
+                            aria-controls="bvkSearchDialog">
+
+                        Поиск по ячейкам/полуфабрикатам
+                    </button>
+
                     <a class="btn secondary"
                        th:href="@{/input-control/control}">
                         К списку партий
@@ -70,7 +96,73 @@
                  th:text="${errorMessage}">
             </div>
 
-            <section class="card">
+            <!--
+                ============================================================
+                ПЕРЕКЛЮЧАТЕЛЬ РЕЖИМОВ
+
+                Два GET-режима одного перечня: «по поступлениям» — строкой
+                остаётся группа брака партии (привычный вид реестра),
+                «по ячейкам» — та же выборка развёрнута поштучно, и
+                строкой становится номер ячейки.
+
+                Ссылки, а не кнопки: режим ничего не меняет в данных,
+                только способ развёртки, поэтому адрес отдаёт тот же
+                перечень целиком и его можно передать коллеге.
+
+                Выбранный срез передают в ссылке второго режима
+                параметрами: Thymeleaf опускает параметр, когда
+                значение null, поэтому при пустом отборе адрес
+                остаётся чистым (?view=cells), а с отбором — сохраняет
+                его. Иначе переключение сбрасывало бы фильтр.
+                ============================================================
+            -->
+            <div class="bvk-view-tabs">
+
+                <a class="bvk-view-tabs__tab"
+                   th:classappend="${quarantineView != 'cells'} ? ' is-active' : ''"
+                   th:href="@{/input-control/quarantine}">
+
+                    По поступлениям
+
+                    <span class="bvk-view-tabs__count"
+                          th:if="${quarantine != null}"
+                          th:text="${#lists.size(quarantine)}">
+                        1
+                    </span>
+                </a>
+
+                <a class="bvk-view-tabs__tab"
+                   th:classappend="${quarantineView == 'cells'} ? ' is-active' : ''"
+                   th:href="@{/input-control/quarantine(
+                           view  = 'cells',
+                           kind  = ${filterKind},
+                           classifierId = ${filterClassifierId},
+                           reasonId     = ${filterReasonId}
+                       )}">
+
+                    По ячейкам
+
+                    <span class="bvk-view-tabs__count"
+                          th:if="${cells != null}"
+                          th:text="${#lists.size(cells)}">
+                        4
+                    </span>
+                </a>
+
+            </div>
+
+            <!--
+                ============================================================
+                РЕЖИМ «ПО ПОСТУПЛЕНИЯМ» — групповой реестр
+
+                Оставлен без изменений: партию бракуют частями, поэтому
+                на одну партию приходится несколько строк — по каждой
+                изоляторной группе. Режим стоит по умолчанию, чтобы
+                привычный перечень не поменялся сам собой.
+                ============================================================
+            -->
+            <section class="card"
+                     th:if="${quarantineView != 'cells'}">
 
                 <div class="card-head">
 
@@ -203,6 +295,326 @@
 
                 </div>
             </section>
+
+            <!--
+                ============================================================
+                РЕЖИМ «ПО ЯЧЕЙКАМ»
+
+                Тот же перечень, развёрнутый поштучно: строка держит
+                номер ячейки, а не приходный ордер. Нужен, когда ищут
+                конкретную ячейку, а не разбирают партию.
+
+                Отбор уходит GET'ом: ссылку на выбранный срез передают
+                коллеге, и она обязана открыть тот же перечень. Значения
+                возвращают в модель (filterKind, filterClassifierId,
+                filterReasonId), поэтому после применения форма не
+                «забывает» отбор.
+
+                Скрытое поле view=cells держит режим: без него «применить
+                отбор» вернуло бы пользователя в групповой реестр.
+                ============================================================
+            -->
+            <th:block th:if="${quarantineView == 'cells'}">
+
+                <form class="bvk-filter"
+                      method="get"
+                      th:action="@{/input-control/quarantine}">
+
+                    <!-- Режим сохраняется при отправке формы отбора. -->
+                    <input type="hidden" name="view" value="cells">
+
+                    <div class="bvk-filter__field">
+
+                        <label for="bvkKind">
+                            Тип
+                        </label>
+
+                        <select id="bvkKind" name="kind">
+
+                            <option value=""
+                                    th:selected="${filterKind == null}">
+                                Подсборки и ячейки
+                            </option>
+
+                            <option th:each="k : ${kinds}"
+                                    th:value="${k.name()}"
+                                    th:text="${k.displayName}"
+                                    th:selected="${filterKind != null and filterKind == k}">
+                                Ячейка
+                            </option>
+
+                        </select>
+
+                        <span class="bvk-filter__hint">
+                            Подсборка — позиция прихода, ещё не принятая
+                            складом полуфабрикатов
+                        </span>
+                    </div>
+
+                    <div class="bvk-filter__field">
+
+                        <label for="bvkClassifier">
+                            Наименование изделия
+                        </label>
+
+                        <select id="bvkClassifier" name="classifierId">
+
+                            <option value=""
+                                    th:selected="${filterClassifierId == null}">
+                                Все изделия
+                            </option>
+
+                            <option th:each="opt : ${classifierOptions}"
+                                    th:value="${opt.id}"
+                                    th:text="${
+                                        (opt.code == null ? '' : opt.code + ' — ')
+                                        + (opt.name != null and !#strings.isEmpty(opt.name)
+                                            ? opt.name
+                                            : (opt.sensorName != null and !#strings.isEmpty(opt.sensorName)
+                                                ? opt.sensorName
+                                                : 'Без наименования'))
+                                    }"
+                                    th:selected="${filterClassifierId != null and filterClassifierId == opt.id}">
+                                1212 — Подсборка ЯПР56
+                            </option>
+
+                        </select>
+
+                        <span class="bvk-filter__hint">
+                            В списке только те изделия, по которым в
+                            изоляторе есть брак
+                        </span>
+                    </div>
+
+                    <div class="bvk-filter__field">
+
+                        <label for="bvkReason">
+                            Вид брака
+                        </label>
+
+                        <select id="bvkReason" name="reasonId">
+
+                            <option value=""
+                                    th:selected="${filterReasonId == null}">
+                                Все виды брака
+                            </option>
+
+                            <!--
+                                Тип и его виды приходят готовыми группами
+                                из сервиса. Сопоставить вид типу здесь
+                                нельзя: перечень причин отдают плоским
+                                списком, а выражение вида
+                                «parent != null and parent.id == ...» в
+                                SpEL вычисляет обе части всегда — для
+                                типа без ступени выше обращение к
+                                parent.id заканчивалось бы ошибкой
+                                посреди отрисовки страницы.
+                            -->
+                            <optgroup th:each="grp : ${reasonGroups}"
+                                      th:if="${grp.reason != null}"
+                                      th:label="${grp.reason.name}">
+
+                                <option th:value="${grp.reason.id}"
+                                        th:text="'Весь тип: ' + ${grp.reason.name}"
+                                        th:selected="${filterReasonId != null and filterReasonId == grp.reason.id}">
+                                    Весь тип: Механическое повреждение
+                                </option>
+
+                                <option th:each="child : ${grp.children}"
+                                        th:value="${child.id}"
+                                        th:text="'— ' + ${child.name}"
+                                        th:selected="${filterReasonId != null and filterReasonId == child.id}">
+                                    — Скол корпуса
+                                </option>
+
+                            </optgroup>
+
+                            <!--
+                                Уточнение при исчезнувшем типе-родителе:
+                                его тоже нужно уметь отобрать, иначе вид
+                                брака пропал бы из фильтра. Родителя у
+                                таких строк нет — имя типа не выводят,
+                                иначе рендеринг падал бы на null.
+                            -->
+                            <optgroup th:each="grp : ${reasonGroups}"
+                                      th:if="${grp.reason == null}"
+                                      label="Уточнения без типа">
+
+                                <option th:each="child : ${grp.children}"
+                                        th:value="${child.id}"
+                                        th:text="${child.name}"
+                                        th:selected="${filterReasonId != null and filterReasonId == child.id}">
+                                    Скол корпуса
+                                </option>
+
+                            </optgroup>
+
+                        </select>
+
+                        <span class="bvk-filter__hint">
+                            Выбор типа захватывает и его уточнения: вид
+                            брака заводили вместе с причиной проверки
+                        </span>
+                    </div>
+
+                    <div class="bvk-filter__actions">
+
+                        <button type="submit" class="btn primary">
+                            Применить отбор
+                        </button>
+
+                        <a class="btn secondary"
+                           th:href="@{/input-control/quarantine(view=cells)}">
+                            Сбросить
+                        </a>
+
+                    </div>
+                </form>
+
+                <section class="card">
+
+                    <div class="card-head">
+
+                        <div>
+
+                            <h2>Ячейки в изоляторе</h2>
+
+                            <small>
+                                Группы брака закрытых проверок развёрнуты
+                                поштучно: у группы с отметкой «вся
+                                партия» показан весь диапазон партии,
+                                поэтому строка отвечает на вопрос про
+                                отдельный номер
+                            </small>
+
+                        </div>
+
+                        <span class="bvk-counter"
+                              th:if="${cells != null and !#lists.isEmpty(cells)}">
+
+                            Ячеек в перечне:
+
+                            <strong th:text="${#lists.size(cells)}">
+                                4
+                            </strong>
+                        </span>
+                    </div>
+
+                    <div class="card-body">
+
+                        <div class="alert danger"
+                             th:if="${cells == null or #lists.isEmpty(cells)}">
+
+                            <p>
+                                По выбранному отбору ячеек в изоляторе
+                                нет: перечень заполняется, когда
+                                контролёр закрывает проверку с решением
+                                «Перемещение в изолятор брака»
+                            </p>
+
+                        </div>
+
+                        <div class="table-wrap"
+                             th:unless="${cells == null or #lists.isEmpty(cells)}">
+
+                            <table class="data-table bvk-batch-table bvk-cell-table">
+
+                                <thead>
+
+                                <tr>
+                                    <th>Тип</th>
+                                    <th>Изделие</th>
+                                    <th>Номер ячейки</th>
+                                    <th>Причина брака</th>
+                                    <th>Поставщик</th>
+                                    <th>Проверка</th>
+                                    <th>Контролёр</th>
+                                    <th></th>
+                                </tr>
+
+                                </thead>
+
+                                <tbody>
+
+                                <tr th:each="cell : ${cells}">
+
+                                    <td th:text="${cell.kindLabel}">
+                                        Ячейка
+                                    </td>
+
+                                    <td>
+                                        <div class="bvk-cell-table__stack">
+
+                                            <span th:text="${cell.cellLabel}">
+                                                1212 — Подсборка ЯПР56
+                                            </span>
+
+                                            <small th:text="'Ордер: ' + ${cell.incomingOrderNumber}">
+                                                Ордер: ТОРГ-12/44
+                                            </small>
+                                        </div>
+                                    </td>
+
+                                    <td class="bvk-cell-table__number"
+                                        th:text="${cell.fullNumber}">
+                                        121200023
+                                    </td>
+
+                                    <td th:text="${cell.reasonChain}">
+                                        Механическое повреждение → Скол корпуса
+                                    </td>
+
+                                    <td th:text="${cell.supplierName}">
+                                        ООО «Компонент»
+                                    </td>
+
+                                    <td>
+                                        <div class="bvk-cell-table__stack">
+
+                                            <span class="status"
+                                                  th:classappend="' ' + ${cell.decisionBadgeClass}"
+                                                  th:text="${cell.decisionLabel}">
+                                                Перемещение в изолятор брака
+                                            </span>
+
+                                            <small th:text="${cell.completedLabel}">
+                                                21.09.2026 11:20
+                                            </small>
+                                        </div>
+                                    </td>
+
+                                    <td th:text="${cell.checkerName}">
+                                        Иванов И.И.
+                                    </td>
+
+                                    <td class="table-actions">
+
+                                        <!--
+                                            Причина и состав группы живут
+                                            в карточке проверки: в
+                                            поштучном перечне их не
+                                            правят, поэтому строку ведут
+                                            туда же, куда и в групповом
+                                            режиме.
+                                        -->
+                                        <a class="btn secondary compact"
+                                           th:href="@{/input-control/control/{id}(id=${cell.cardId})}">
+                                            Карточка проверки
+                                        </a>
+
+                                    </td>
+
+                                </tr>
+
+                                </tbody>
+                            </table>
+
+                        </div>
+
+                    </div>
+                </section>
+
+            </th:block>
 
         </div>
     </main>

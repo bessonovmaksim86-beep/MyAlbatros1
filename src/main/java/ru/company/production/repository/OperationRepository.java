@@ -85,6 +85,70 @@ public interface OperationRepository
             @Param("executorRoleCode") String executorRoleCode
     );
 
+    /*
+     * Операции подразделения, которыми получают
+     * комплектацию (тип KIT_RECEIPT).
+     *
+     * Они отнесены к цеху или отделу напрямую:
+     * в отличие от цеховых работ они не привязаны к
+     * роли «Исполнитель», поэтому запрос выше их не
+     * возвращает, и закрепить такую операцию за
+     * сотрудником было нельзя. Тип задаётся кодом
+     * (миграция V2), чтобы не зависеть от идентификаторов.
+     */
+    @EntityGraph(attributePaths = {
+            "operationName",
+            "operationType",
+            "service",
+            "organizationUnit",
+            "executorRole"
+    })
+    @Query("""
+            select operation
+            from Operation operation
+            where operation.organizationUnit.id = :organizationUnitId
+              and operation.operationType.code = :typeCode
+            order by operation.operationName.name asc
+            """)
+    List<Operation> findUnitKitReceiptOperations(
+            @Param("organizationUnitId") Long organizationUnitId,
+            @Param("typeCode") String typeCode
+    );
+
+    /*
+     * Все операции подразделения — список раздела руководителя
+     * подразделения.
+     *
+     * От цеховой выборки отличается тем, что не фильтрует по роли
+     * исполнителя: руководитель склада или бюро работает со своими
+     * операциями приёма, выдачи и перемещения, которые роль
+     * «Исполнитель» не носят, и в цеховой выборке их не видно.
+     */
+    @EntityGraph(attributePaths = {
+            "operationName",
+            "operationType",
+            "service",
+            "organizationUnit",
+            "executorRole"
+    })
+    @Query("""
+            select operation
+            from Operation operation
+            where operation.organizationUnit.id = :organizationUnitId
+            order by operation.operationName.name asc
+            """)
+    List<Operation> findAllByOrganizationUnitId(
+            @Param("organizationUnitId") Long organizationUnitId
+    );
+
+    /**
+     * Количество операций подразделения — счётчик бокового меню.
+     * Отдельный запрос нужен потому, что для счётчика в списке строк
+     * нет смысла, а выбирать их целиком на каждую страницу модуля
+     * означало бы читать справочник без надобности.
+     */
+    long countByOrganizationUnitId(Long organizationUnitId);
+
     @Query("""
             select count(operation)
             from Operation operation

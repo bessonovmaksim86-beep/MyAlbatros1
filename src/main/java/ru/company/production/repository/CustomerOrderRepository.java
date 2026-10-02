@@ -107,4 +107,124 @@ public interface CustomerOrderRepository
     long countActiveByStatus(
             @Param("status") CustomerOrderStatus status
     );
+
+    /* ============================================================
+     * Проверка зависимостей перед удалением заказа покупателя
+     *
+     * Все четыре запроса живут здесь, а не в репозиториях чужих
+     * модулей: вопрос у них один — «можно ли снять этот заказ с
+     * работы», и отвечать на него должен репозиторий того заказа,
+     * иначе контроллер обвешался бы пятью репозиториями ради одной
+     * кнопки.
+     *
+     * Каждый запрос — скалярный count(...) > 0: удаляющему нужен
+     * признак, а не содержимое чужих таблиц, и тянуть строки выпуска
+     * или графика ради ответа «да/нет» не за чем.
+     * ============================================================
+     */
+
+    /**
+     * Есть ли позиция заказа, по которой отмечено готовое количество.
+     *
+     * Признак виден прямо в заказе (customer_order_items.done_quantity)
+     * и означает, что изделия по позиции уже принимали — удалять такой
+     * заказ нельзя, иначе исчезнет основание принятых изделий.
+     */
+    @Query("""
+            select count(item) > 0
+            from CustomerOrderItem item
+            where item.customerOrder.id = :customerOrderId
+              and item.doneQuantity > 0
+            """)
+    boolean existsItemWithDoneQuantity(
+            @Param("customerOrderId") Long customerOrderId
+    );
+
+    /**
+     * Проведена ли хоть одна строка графика этого заказа.
+     *
+     * Проведение — отметка исполнителя order_schedule_rows.completed_at
+     * (V44). Пока строка не проведена, она остаётся планом, который
+     * диспетчер вправе снять вместе с заказом; проведённая строка —
+     * уже факт работы цеха и переживает заказ.
+     */
+    @Query("""
+            select count(row) > 0
+            from OrderScheduleRow row
+            where row.customerOrder.id = :customerOrderId
+              and row.completedAt is not null
+            """)
+    boolean existsCompletedScheduleRow(
+            @Param("customerOrderId") Long customerOrderId
+    );
+
+    /**
+     * Есть ли у заказа покупателя действующий заказ на производство.
+     *
+     * Проверка предшествует разбору проведённых операций: выпуск —
+     * это основание, порождённое заказом, и удалять его при живом
+     * выпуске нельзя даже если сам выпуск ещё не взят в работу —
+     * иначе выпуск повис бы с ссылкой на снятый с работы заказ
+     * (тот же смысл, что у existsActiveChildren перед удалением
+     * выпуска).
+     *
+     * Считаются заказы ЛЮБОГО вида и уровня: заказ-комплектующий тоже
+     * ссылается на заказ покупателя (наследует его заказчика), и
+     * удаление основания оставило бы сиротой всё дерево выпуска.
+     */
+    @Query("""
+            select count(ord) > 0
+            from ProductionOrder ord
+            where ord.customerOrder.id = :customerOrderId
+              and ord.active = true
+            """)
+    boolean existsActiveProductionOrder(
+            @Param("customerOrderId") Long customerOrderId
+    );
+
+    /**
+     * Проведена ли цеховая операция по изделиям этого заказа.
+     *
+     * Факт операции — product_serial_operations.actual_date (V19).
+     * Заказ относится к операции двумя путями, и проверяются оба:
+     *
+     *   * операция выполнена В РАМКАХ заказа на производство, у
+     *     которого это основание: берётся op.productionOrder
+     *     (production_order_id, V20), а НЕ serial.issuedProductionOrder.
+     *     Разница принципиальна и зафиксирована в
+     *     ProductSerialOperationRepository#findCurrentByProductionOrderId:
+     *     issuedProductionOrder — заказ, ВЫДАВШИЙ серийник (ЗП), тогда
+     *     как работу ведут заказом-комплектующим (ЗНП), входящим в
+     *     изделие; один ЗНП комплектует датчики разных выпусков, а
+     *     один датчик укомплектован несколькими ЗНП, поэтому по заказу
+     *     выдачи номера проверка увидела бы чужие операции и потеряла
+     *     свои. Достаточно шага op.productionOrder.customerOrder:
+     *     заказ-комплектующий наследует основание выпуска, поэтому
+     *     ветвь ловит и ЗП, и ЗНП;
+     *   * изделие зарезервировано позицией самого заказа покупателя
+     *     (product_serials.customer_order_item_id, V45) — такие номера
+     *     работают до всякого выпуска.
+     *
+     * productionOrder и customerOrderItem — nullable-ссылки (операция
+     * по резервированию бывает без выпуска), поэтому связи развёрнуты
+     * явными left join: неявный join в HQL строится как inner и внутри
+     * OR отбросил бы строку, у которой заполнена только одна ветвь, —
+     * операция «потерялась» бы для проверки.
+     */
+    @Query("""
+            select count(op) > 0
+            from ProductSerialOperation op
+            left join op.productionOrder opOrder
+            left join opOrder.customerOrder opCustomerOrder
+            left join op.serial serial
+            left join serial.customerOrderItem item
+            where op.actualDate is not null
+              and (
+                    opCustomerOrder.id = :customerOrderId
+                 or item.customerOrder.id = :customerOrderId
+              )
+            """)
+    boolean existsPerformedSerialOperation(
+            @Param("customerOrderId") Long customerOrderId
+    );
 }

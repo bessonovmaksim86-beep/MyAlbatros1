@@ -413,9 +413,43 @@
         refresh();
     }
 
+    /*
+     * Кнопка «Загрузить из файла» открывает системный диалог выбора
+     * Excel-файла. Как только файл выбран, форма импорта сразу
+     * отправляется: сервер разбирает чек-лист Б24 в предпросмотр и
+     * возвращает на эту же форму с уже заполненными позициями.
+     * Отправка идёт отдельной формой (enctype=multipart), минуя
+     * основную форму заказа, поэтому валидность остальных полей
+     * на загрузку чек-листа не влияет.
+     */
+    function initializeImportForm() {
+        const form = document.getElementById('coImportForm');
+        const button = document.getElementById('coImportBtn');
+        const fileInput = document.getElementById('coImportFile');
+
+        if (!form || !button || !fileInput) {
+            return;
+        }
+
+        button.addEventListener('click', () => {
+            fileInput.click();
+        });
+
+        fileInput.addEventListener('change', () => {
+            if (!fileInput.value) {
+                return;
+            }
+
+            button.disabled = true;
+            button.textContent = 'Загрузка…';
+            form.submit();
+        });
+    }
+
     function start() {
         initializeItems(scriptData());
         initializeChecklistLink();
+        initializeImportForm();
     }
 
     if (document.readyState === 'loading') {

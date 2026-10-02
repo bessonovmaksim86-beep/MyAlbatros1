@@ -3,6 +3,9 @@ package ru.company.production.service;
 import ru.company.production.entity.ProductClassifier;
 import ru.company.production.entity.ProductType;
 
+import java.math.BigDecimal;
+import java.math.RoundingMode;
+
 /**
  * Область нумерации серийных номеров.
  *
@@ -25,6 +28,9 @@ public final class SerialNumbering {
 
     /** Префикс области «род датчика». */
     private static final String SENSOR_KIND_PREFIX = "S";
+
+    /** Верхняя граница пятизначной серии (chk_product_serial_range). */
+    public static final int MAX_SERIAL = 99999;
 
     private SerialNumbering() {
     }
@@ -49,5 +55,25 @@ public final class SerialNumbering {
         }
 
         return CLASSIFIER_PREFIX + classifier.getId();
+    }
+
+    /**
+     * Сколько экземпляров изделия даёт заявленное количество.
+     *
+     * Количество в заказе покупателя дробное (единицы измерения
+     * различаются), а экземпляр — он же серийный номер — всегда целый:
+     * дробное значение округляется вверх, минимум один экземпляр.
+     *
+     * Расчёт живёт здесь, а не в сервисе заказов, потому что число
+     * строк выпуска и число заранее выданных серийников обязаны
+     * считаться одинаково: иначе у позиции появится номер без строки
+     * выпуска либо строка без номера.
+     */
+    public static int instancesOf(BigDecimal quantity) {
+        if (quantity == null || quantity.signum() <= 0) {
+            return 1;
+        }
+
+        return quantity.setScale(0, RoundingMode.CEILING).intValueExact();
     }
 }

@@ -76,4 +76,32 @@ public interface EmployeeAbsenceRepository
             @Param("employeeId") Long employeeId,
             @Param("date") LocalDate date
     );
+
+    /**
+     * Кто из перечисленных сотрудников отсутствует в указанный день.
+     *
+     * Планирование вычитает этих людей из мощности этапа: в день
+     * отпуска или больничного сотрудник не даёт 8 часов загрузки.
+     */
+    @Query("""
+            select distinct absence.employee.id
+            from EmployeeAbsence absence
+            where absence.absenceDate = :date
+              and absence.employee.id in :employeeIds
+            """)
+    List<Long> findAbsentEmployeeIds(
+            @Param("date") LocalDate date,
+            @Param("employeeIds") List<Long> employeeIds
+    );
+
+    /*
+     * Все отсутствия за горизонт планирования одним запросом.
+     * Расчёт подбирает дату каждой операции перебором дней, и запрос
+     * «кто отсутствует на дате» внутри такого цикла дал бы сотни
+     * обращений к базе; пакетная выборка за период снимает проблему.
+     */
+    List<EmployeeAbsence> findByAbsenceDateBetween(
+            LocalDate from,
+            LocalDate to
+    );
 }

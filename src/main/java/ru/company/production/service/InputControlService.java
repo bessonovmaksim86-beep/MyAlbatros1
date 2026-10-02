@@ -7,6 +7,7 @@ import org.springframework.transaction.annotation.Transactional;
 import ru.company.production.dto.InputControlForm;
 import ru.company.production.dto.InputControlResult;
 import ru.company.production.dto.QuarantineFilter;
+import ru.company.production.dto.QuarantineReasonGroup;
 import ru.company.production.entity.AppUser;
 import ru.company.production.entity.CellReceivingBatch;
 import ru.company.production.entity.InputControlCard;
@@ -256,6 +257,61 @@ public class InputControlService {
     @Transactional(readOnly = true)
     public List<InputControlDefectReason> findQuarantineReasonOptions() {
         return defectReasonRepository.findAllActiveWithParent();
+    }
+
+    /**
+     * Типы брака вместе с их видами: опции фильтра изолятора.
+     *
+     * Группу собирает {@link QuarantineReasonGroup}: изолятор читают и
+     * бюро входного контроля, и служба качества, а дерево причин одно на
+     * обоих — два набора подписей одного справочника читались бы как два
+     * разных отбора.
+     */
+    @Transactional(readOnly = true)
+    public List<QuarantineReasonGroup> findQuarantineReasonGroups() {
+        return QuarantineReasonGroup.of(findQuarantineReasonOptions());
+    }
+
+    /**
+     * Изолятор брака поштучно: одна строка — один номер ячейки.
+     *
+     * Реестр групп для разбора брака неудобен: руководителю бюро нужен
+     * перечень конкретных ячеек, чтобы найти среди них свою. Поэтому
+     * группу разворачивают в номера — у группы с отметкой «вся партия»
+     * состав равен диапазону партии, у остальных внесёнными номерами.
+     *
+     * Развёртку делают в сервисе, а не в шаблоне: {@code open-in-view}
+     * выключен, и обращение к номерам или причинам группы при отрисовке
+     * упёрлось бы в ленивую связь.
+     */
+    @Transactional(readOnly = true)
+    public List<QuarantineCellView> findQuarantineCells(QuarantineFilter filter) {
+        List<QuarantineCellView> rows = new ArrayList<>();
+
+        for (DefectRecordView record : findQuarantine(filter)) {
+            for (String number : cellNumbers(record)) {
+                rows.add(new QuarantineCellView(record, number));
+            }
+        }
+
+        return rows;
+    }
+
+    /**
+     * Полный перечень номеров группы.
+     *
+     * Группа «вся партия» не хранит номера поштучно — её состав равен
+     * диапазону партии, и перечень обязан показать все ячейки, иначе
+     * отыскивать в изоляторе было бы нечего.
+     */
+    private static List<String> cellNumbers(DefectRecordView record) {
+        if (record.group().isDefectAll()) {
+            CellReceivingBatch batch = record.batch();
+
+            return batch == null ? List.of() : batch.fullNumbers();
+        }
+
+        return record.numbers();
     }
 
     /**

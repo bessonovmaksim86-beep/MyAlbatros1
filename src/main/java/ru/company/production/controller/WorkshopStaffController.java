@@ -59,9 +59,17 @@ public class WorkshopStaffController {
                 "bindingTotal",
                 staff.stream().mapToInt(StaffMemberView::bindingCount).sum()
         );
+        var operationGroups = staffService.findBindingOperationGroups(
+                unitId,
+                staffService.unitKind(supervisor).getGenitive()
+        );
+
+        model.addAttribute("operationGroups", operationGroups);
         model.addAttribute(
-                "operations",
-                staffService.findWorkshopOperations(unitId)
+                "operationTotal",
+                operationGroups.stream()
+                        .mapToInt(group -> group.operations().size())
+                        .sum()
         );
         model.addAttribute(
                 "workPlaces",

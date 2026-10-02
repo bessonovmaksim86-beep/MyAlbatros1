@@ -142,6 +142,60 @@
                 </span>
             </a>
 
+            <!--
+                Комплектование ремонтных ячеек/подсборок — раздел,
+                которого раньше в меню не было: ЗНП на ремонт заводил
+                диспетчер, а забирать их из изолятора было негде.
+
+                Счётчик — заказы, а не ячейки: в меню нужно видеть,
+                скольким ЗНП ещё чего-то недокомплектуют, а не сколько
+                ячеек для них потребуется.
+            -->
+            <a class="bvk-navigation__item"
+               th:classappend="${activePage == 'repair-kitting'} ? ' is-active' : ''"
+               th:href="@{/input-control/repair-kitting}"
+               title="Комплектование заказов на ремонт из изолятора брака">
+
+                <span class="bvk-navigation__icon">
+                    <svg viewBox="0 0 24 24" aria-hidden="true">
+                        <path d="M20 7H4V5h16v2Zm0 4H4V9h16v2Zm0 4H4v-2h16v2Zm-2 4H6v-2h12v2Z"/>
+                    </svg>
+                </span>
+
+                <span class="bvk-navigation__text">
+                    Комплектование ремонтных ячеек/подсборок
+                </span>
+
+                <span class="bvk-navigation__counter"
+                      th:if="${repairKittingCount != null and repairKittingCount > 0}"
+                      th:text="${repairKittingCount}">
+                    2
+                </span>
+            </a>
+
+
+            <!--
+                Работы, закреплённые планировщиком и мастером бюро за
+                самим контролёром. Раздел вынесен за /input-control/**
+                (см. MyOperationsController), но вход логичен именно
+                здесь: исполнитель бюро — не мастер, и в модуль
+                руководителя ему идти не за чем.
+            -->
+            <a class="bvk-navigation__item"
+               th:classappend="${activePage == 'my-operations'} ? ' is-active' : ''"
+               th:href="@{/my-operations}"
+               title="Мои операции: работы, закреплённые за мной">
+
+                <span class="bvk-navigation__icon">
+                    <svg viewBox="0 0 24 24" aria-hidden="true">
+                        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 2c1.93 0 3.68.7 5.05 1.85L7.85 15.05A6.97 6.97 0 0 1 4 12c0-3.87 3.13-7 7-7zm0 2c-2.76 0-5 2.24-5 5s2.24 5 5 5 5-2.24 5-5-2.24-5-5-5zm0 2c1.66 0 3 1.34 3 3s-1.34 3-3 3-3-1.34-3-3 1.34-3 3-3z"/>
+                    </svg>
+                </span>
+
+                <span class="bvk-navigation__text">
+                    Мои операции
+                </span>
+            </a>
         </nav>
 
         <div class="bvk-sidebar__footer">

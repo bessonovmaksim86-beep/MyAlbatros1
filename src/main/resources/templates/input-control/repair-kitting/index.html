@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="ru"
+      xmlns:th="http://www.thymeleaf.org">
+
+<head>
+    <meta charset="UTF-8">
+
+    <meta name="viewport"
+          content="width=device-width, initial-scale=1">
+
+    <title>Комплектование ремонтных ячеек/подсборок</title>
+
+    <link rel="stylesheet"
+          th:href="@{/technology/css/technology.css}">
+
+    <link rel="stylesheet"
+          th:href="@{/technology/css/common.css}">
+
+    <link rel="stylesheet"
+          th:href="@{/input-control/css/input-control.css}">
+</head>
+
+<body>
+
+<div class="app-shell">
+
+    <aside th:replace="~{input-control/fragments/layout
+            :: sidebar('repair-kitting')}">
+    </aside>
+
+    <main class="main">
+
+        <header th:replace="~{input-control/fragments/layout
+                :: topbar}">
+        </header>
+
+        <div class="bvk-page">
+
+            <div class="page-head">
+
+                <div class="page-title">
+
+                    <h1>Комплектование ремонтных ячеек/подсборок</h1>
+
+                    <p>
+                        Заказы на ремонт ячеек и подсборок, заведённые
+                        диспетчером и взятые в работу по техпроцессу с
+                        комплектовочной операцией бюро входного
+                        контроля: из изолятора брака
+                    </p>
+
+                </div>
+
+                <div class="page-head-actions">
+
+                    <a class="btn secondary"
+                       th:href="@{/input-control/general}">
+                        Обзор бюро
+                    </a>
+
+                    <a class="btn secondary"
+                       th:href="@{/input-control/quarantine}">
+                        Изолятор брака
+                    </a>
+
+                </div>
+            </div>
+
+            <div class="alert success"
+                 th:if="${successMessage}"
+                 th:text="${successMessage}">
+            </div>
+
+            <div class="alert danger"
+                 th:if="${errorMessage}"
+                 th:text="${errorMessage}">
+            </div>
+
+            <section class="card">
+
+                <div class="card-head">
+
+                    <div>
+
+                        <h2>ЗНП на ремонт в работе</h2>
+
+                        <small>
+                            В перечень попадают только заказы со
+                            статусом «В работе» и выбранным техпроцессом,
+                            в маршруте которого есть комплектовочная
+                            операция бюро входного контроля; состав
+                            заказа и его статус меняет диспетчер,
+                            поэтому страница только показывает
+                        </small>
+
+                    </div>
+
+                    <span class="bvk-counter"
+                          th:if="${orders != null and !#lists.isEmpty(orders)}">
+
+                        Заказов:
+
+                        <strong th:text="${#lists.size(orders)}">
+                            1
+                        </strong>
+                    </span>
+                </div>
+
+                <div class="card-body">
+
+                    <div class="alert danger"
+                         th:if="${orders == null or #lists.isEmpty(orders)}">
+
+                        <p>
+                            Заказов на комплектование пока нет: перечень
+                            заполняется, когда диспетчер заведёт ЗНП на
+                            ремонт ячеек или подсборок, возьмёт его в
+                            работу и выберет техпроцесс с
+                            комплектовочной операцией бюро входного
+                            контроля
+                        </p>
+
+                    </div>
+
+                    <div class="table-wrap"
+                         th:unless="${orders == null or #lists.isEmpty(orders)}">
+
+                        <table class="data-table bvk-batch-table">
+
+                            <thead>
+
+                            <tr>
+                                <th>Номер</th>
+                                <th>Вид заказа</th>
+                                <th>Изделие</th>
+                                <th>Кол-во</th>
+                                <th>Техпроцесс</th>
+                                <th>Приоритет</th>
+                                <th>Открыт</th>
+                                <th>Срок</th>
+                                <th>Статус</th>
+                                <th></th>
+                            </tr>
+
+                            </thead>
+
+                            <tbody>
+
+                            <tr th:each="order : ${orders}">
+
+                                <td class="mono"
+                                    th:text="${order.number}">
+                                    ПЗ-2026-014
+                                </td>
+
+                                <td th:text="${order.znpKindDisplayName}">
+                                    Групповой ЗНП на ремонт ячеек
+                                </td>
+
+                                <td th:text="${order.classifierLabel}">
+                                    1212 — Подсборка ЯПР56
+                                </td>
+
+                                <td th:text="${order.formattedQuantity}">
+                                    4
+                                </td>
+
+                                <td class="mono"
+                                    th:text="${order.techProcessCode}">
+                                    ТП-1212-01
+                                </td>
+
+                                <td>
+                                    <span class="status"
+                                          th:classappend="' ' + ${order.priorityBadgeClass}"
+                                          th:text="${order.priorityDisplayName}">
+                                        Обычный
+                                    </span>
+                                </td>
+
+                                <td th:text="${order.formattedOrderDate}">
+                                    21.09.2026
+                                </td>
+
+                                <td th:text="${order.formattedDueDate}">
+                                    30.09.2026
+                                </td>
+
+                                <td>
+                                    <span class="status"
+                                          th:classappend="' ' + ${order.statusBadgeClass}"
+                                          th:text="${order.statusDisplayName}">
+                                        В работе
+                                    </span>
+                                </td>
+
+                                <td class="table-actions">
+
+                                    <!--
+                                        Заказ заводит и ведёт
+                                        диспетчерская: из бюро его
+                                        открывают по другому правилу,
+                                        которое ещё не определено,
+                                        поэтому кнопка стоит без
+                                        перехода.
+                                    -->
+                                    <button type="button"
+                                            class="btn secondary compact"
+                                            disabled
+                                            title="Действие по открытию заказа будет добавлено позже">
+                                        Открыть
+                                    </button>
+
+                                </td>
+
+                            </tr>
+
+                            </tbody>
+                        </table>
+
+                    </div>
+
+                </div>
+            </section>
+
+        </div>
+    </main>
+</div>
+
+<th:block th:replace="~{input-control/fragments/layout
+        :: commonScripts}">
+</th:block>
+
+</body>
+</html>

@@ -1,0 +1,151 @@
+/*
+ * Изолятор брака бюро входного контроля: переключатель режимов и форма
+ * отбора поштучного перечня.
+ *
+ * Отдельный файл, а не правка input-control.css: каркас модуля общий
+ * для всех страниц бюро, а эти два блока нужны только изолятору. В
+ * пространстве имён bvk-* они не конфликтуют с существующими
+ * классами, поэтому подключать их можно последним — поверх каркаса.
+ *
+ * Внешне блоки повторяют отбор службы качества (sk-filter): перечень
+ * читают оба кабинета, и один и тот же срез обязан выглядеть одинаково.
+ */
+
+/* ------------------------------------------------------------
+   ПЕРЕКЛЮЧАТЕЛЬ РЕЖИМОВ
+
+   Две GET-ссылки, а не кнопки: переход между «по поступлениям» и
+   «по ячейкам» ничего не меняет в данных, только способ развёртки,
+   поэтому ссылку можно передать коллеге и открыть тот же режим.
+   ------------------------------------------------------------ */
+.bvk-view-tabs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 18px;
+}
+
+.bvk-view-tabs__tab {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 9px 18px;
+    border: 1px solid #d3dae6;
+    border-radius: 999px;
+    background: #fff;
+    color: #2b3a55;
+    font-size: 14px;
+    font-weight: 600;
+    text-decoration: none;
+    transition: background .15s ease, border-color .15s ease, color .15s ease;
+}
+
+.bvk-view-tabs__tab:hover {
+    border-color: #8fa3c8;
+    background: #f2f6fc;
+}
+
+.bvk-view-tabs__tab.is-active {
+    border-color: #1f4f9c;
+    background: #1f4f9c;
+    color: #fff;
+}
+
+.bvk-view-tabs__count {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 22px;
+    padding: 0 6px;
+    border-radius: 999px;
+    background: rgba(31, 79, 156, .12);
+    color: #1f4f9c;
+    font-size: 12px;
+    font-weight: 700;
+}
+
+.bvk-view-tabs__tab.is-active .bvk-view-tabs__count {
+    background: rgba(255, 255, 255, .22);
+    color: #fff;
+}
+
+/* ------------------------------------------------------------
+   ФОРМА ОТБОРА ПОШТУЧНОГО ПЕРЕЧНЯ
+   ------------------------------------------------------------ */
+.bvk-filter {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 16px;
+    align-items: end;
+    padding: 18px;
+    margin-bottom: 20px;
+    border: 1px solid #e0e6f0;
+    border-radius: 12px;
+    background: #f7f9fd;
+}
+
+.bvk-filter__field {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.bvk-filter__field label {
+    font-size: 13px;
+    font-weight: 600;
+    color: #2b3a55;
+}
+
+.bvk-filter__field select {
+    width: 100%;
+    padding: 9px 12px;
+    border: 1px solid #cfd8e8;
+    border-radius: 8px;
+    background: #fff;
+    color: #1d2738;
+    font-size: 14px;
+}
+
+.bvk-filter__field select:focus {
+    outline: none;
+    border-color: #1f4f9c;
+    box-shadow: 0 0 0 3px rgba(31, 79, 156, .15);
+}
+
+.bvk-filter__hint {
+    font-size: 12px;
+    color: #6b7a93;
+    line-height: 1.35;
+}
+
+.bvk-filter__actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: center;
+}
+
+/* ------------------------------------------------------------
+   ПОШТУЧНАЯ ТАБЛИЦА
+
+   Переиспользует data-table/bvk-batch-table из каркаса; здесь только
+   столбец номера (моноширинный, чтобы номер ячейки читался целиком)
+   и стек «значение + подпись» в колонках проверки.
+   ------------------------------------------------------------ */
+.bvk-cell-table .bvk-cell-table__number {
+    font-family: "Consolas", "Menlo", monospace;
+    font-weight: 600;
+    color: #1d2738;
+    white-space: nowrap;
+}
+
+.bvk-cell-table .bvk-cell-table__stack {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+}
+
+.bvk-cell-table .bvk-cell-table__stack small {
+    color: #6b7a93;
+    font-size: 12px;
+}

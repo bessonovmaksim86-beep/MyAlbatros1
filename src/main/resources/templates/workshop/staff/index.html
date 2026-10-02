@@ -8,7 +8,7 @@
     <meta name="viewport"
           content="width=device-width, initial-scale=1">
 
-    <title>Сотрудники цеха</title>
+    <title>Сотрудники подразделения</title>
 
     <link rel="stylesheet"
           th:href="@{/technology/css/technology.css}">
@@ -45,8 +45,9 @@
                     <p th:text="${
                         workshopName != null
                             ? workshopName
-                              + ': список цеха, закреплённые операции и рабочие места'
-                            : 'Список цеха, закреплённые операции и рабочие места'
+                              + ': список ' + unitGenitive
+                              + ', закреплённые операции и рабочие места'
+                            : 'Список подразделения, закреплённые операции и рабочие места'
                     }">
                         Цех подготовки производства: сотрудники и привязки
                     </p>
@@ -68,7 +69,10 @@
             <div class="stats">
 
                 <div class="stat">
-                    <small>Сотрудников цеха</small>
+                    <small>
+                        Сотрудников
+                        <span th:text="${unitGenitive}">цеха</span>
+                    </small>
                     <strong th:text="${#lists.size(staff)}">0</strong>
                     <span>учётные записи с активным доступом</span>
                 </div>
@@ -80,13 +84,20 @@
                 </div>
 
                 <div class="stat">
-                    <small>Операций цеха</small>
-                    <strong th:text="${#lists.size(operations)}">0</strong>
-                    <span>роль исполнителя «Исполнитель»</span>
+                    <small>Операций для закрепления</small>
+                    <strong th:text="${operationTotal}">0</strong>
+                    <span>
+                        работы
+                        <span th:text="${unitGenitive}">цеха</span>
+                        и получение комплектации
+                    </span>
                 </div>
 
                 <div class="stat">
-                    <small>Рабочих мест цеха</small>
+                    <small>
+                        Рабочих мест
+                        <span th:text="${unitGenitive}">цеха</span>
+                    </small>
                     <strong th:text="${#lists.size(workPlaces)}">0</strong>
                     <span>действующие позиции справочника</span>
                 </div>
@@ -102,7 +113,8 @@
                         <h2>Закрепить операцию или рабочее место</h2>
 
                         <p>
-                            Сотруднику закрепляют либо операцию цеха,
+                            Сотруднику закрепляют либо операцию
+                            <span th:text="${unitGenitive}">цеха</span>,
                             либо рабочее место: вид привязки выбирается
                             переключателем
                         </p>
@@ -159,7 +171,10 @@
 
                             <div class="field">
 
-                                <label for="employeeId">Сотрудник цеха</label>
+                                <label for="employeeId">
+                                    Сотрудник
+                                    <span th:text="${unitGenitive}">цеха</span>
+                                </label>
 
                                 <select id="employeeId"
                                         th:field="*{employeeId}">
@@ -184,32 +199,50 @@
 
                             <div class="field" data-binding-target="OPERATION">
 
-                                <label for="operationId">Операция цеха</label>
+                                <label for="operationId">Операция</label>
 
                                 <select id="operationId"
                                         th:field="*{operationId}">
 
                                     <option value="">— выберите —</option>
 
-                                    <option th:each="operation : ${operations}"
-                                            th:value="${operation.id}"
-                                            th:text="${
-                                                (operation.operationName != null
-                                                 ? operation.operationName.code + ' — '
-                                                   + operation.operationName.name
-                                                 : 'Операция №' + operation.id)
-                                                + (operation.operationType != null
-                                                   ? ' (' + operation.operationType.name + ')'
-                                                   : '')
-                                            }">
-                                        OP-01 — Сборка (Сборочные)
-                                    </option>
+                                    <!--
+                                        Две группы, а не один перечень:
+                                        цеховые работы отбираются по роли
+                                        «Исполнитель», а получение
+                                        комплектации привязано к
+                                        подразделению напрямую. Пустую
+                                        группу сервис не отдаёт, поэтому
+                                        заголовка без строк здесь не
+                                        бывает.
+                                    -->
+                                    <optgroup th:each="group : ${operationGroups}"
+                                              th:label="${group.label}">
+
+                                        <option th:each="operation : ${group.operations}"
+                                                th:value="${operation.id}"
+                                                th:text="${
+                                                    (operation.operationName != null
+                                                     ? operation.operationName.code + ' — '
+                                                       + operation.operationName.name
+                                                     : 'Операция №' + operation.id)
+                                                    + (operation.operationType != null
+                                                       ? ' (' + operation.operationType.name + ')'
+                                                       : '')
+                                                }">
+                                            OP-01 — Сборка (Сборочные)
+                                        </option>
+
+                                    </optgroup>
 
                                 </select>
 
                                 <small class="field-hint">
-                                    Операции цеха с ролью исполнителя
-                                    «Исполнитель»
+                                    Операции
+                                    <span th:text="${unitGenitive}">цеха</span>
+                                    с ролью исполнителя «Исполнитель»
+                                    и операции получения комплектации
+                                    вашего подразделения
                                 </small>
 
                             </div>
@@ -218,7 +251,10 @@
                                  data-binding-target="WORK_PLACE"
                                  hidden>
 
-                                <label for="workPlaceId">Рабочее место цеха</label>
+                                <label for="workPlaceId">
+                                    Рабочее место
+                                    <span th:text="${unitGenitive}">цеха</span>
+                                </label>
 
                                 <select id="workPlaceId"
                                         th:field="*{workPlaceId}">
@@ -282,8 +318,10 @@
                          th:if="${#lists.isEmpty(staff)}">
 
                         <p>
-                            Список цеха пуст: сотруднику нужно назначить
-                            ваше подразделение в административном разделе
+                            Список
+                            <span th:text="${unitGenitive}">цеха</span>
+                            пуст: сотруднику нужно назначить ваше
+                            подразделение в административном разделе
                         </p>
 
                     </div>
@@ -334,9 +372,13 @@
 
                                         <span class="workshop-chip"
                                               th:each="binding : ${member.bindings}"
-                                              th:classappend="${binding.kind == 'Операция'}
-                                                  ? ' is-operation'
-                                                  : ' is-place'"
+                                              th:classappend="${
+                                                  binding.kitReceipt
+                                                      ? ' is-kit'
+                                                      : (binding.kind == 'Операция'
+                                                         ? ' is-operation'
+                                                         : ' is-place')
+                                              }"
                                               th:title="${binding.kind + ': '
                                                   + binding.code + ' — ' + binding.name
                                                   + (binding.type != null
@@ -345,7 +387,11 @@
                                                      ? ', роль: ' + binding.executorRole : '')}">
 
                                             <span class="workshop-chip__kind"
-                                                  th:text="${binding.kind}">
+                                                  th:text="${
+                                                      binding.kitReceipt
+                                                          ? 'Комплектация'
+                                                          : binding.kind
+                                                  }">
                                                 Операция
                                             </span>
 

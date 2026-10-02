@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>Календарный план — заявка <span th:text="${order != null ? order.id : ''}"></span></title>
+    <link rel="stylesheet" th:href="@{/css/workshop.css}">
+</head>
+<body>
+<div th:replace="~{fragments/layout :: header}"></div>
+<main class="wrap">
+
+    <div th:if="${alert}" th:class="'alert alert-' + ${alert.type}" th:text="${alert.message}"></div>
+
+    <div class="sec-head">
+        <h1>Календарный план сборки</h1>
+        <div class="sec-actions">
+            <a class="btn" th:href="@{/dispatcher/workshop/{id}/queue(id=${order.id})}">Очередь</a>
+            <a class="btn" th:href="@{/dispatcher/workshop/{id}/plan(id=${order.id})}">План</a>
+        </div>
+    </div>
+
+    <div class="card">
+        <table class="info">
+            <tr><th>Заявка</th><td th:text="${order.id}"></td></tr>
+            <tr><th>Заказчик</th><td th:text="${order.customer}"></td></tr>
+            <tr><th>Изделие</th><td th:text="${order.product != null ? order.product.name : '—'}"></td></tr>
+            <tr><th>Количество</th><td th:text="${order.quantity}"></td></tr>
+            <tr><th>Требуемый срок</th>
+                <td th:text="${order.requiredDate != null ? #temporals.format(order.requiredDate, 'dd.MM.yyyy') : '—'}"></td></tr>
+            <tr><th>Трудоёмкость</th>
+                <td th:text="${#numbers.formatDecimal(schedule.totalMinutes / 60.0, 1, 1)} + ' ч (' + ${schedule.totalMinutes} + ' мин)'"></td></tr>
+            <tr><th>Загрузка</th><td th:text="${schedule.workHours} + ' ч/нед'"></td></tr>
+            <tr><th>Оценка завершения</th>
+                <td><b th:text="${#temporals.format(schedule.completionDate, 'dd.MM.yyyy')}"></b></td></tr>
+            <tr>
+                <th>Риск</th>
+                <td>
+                    <span th:if="${schedule.deadline == null}" class="badge">срок не задан</span>
+                    <span th:unless="${schedule.deadline == null}"
+                          th:classappend="${schedule.completionDate.isAfter(schedule.deadline) ? 'badge danger' : 'badge ok'}"
+                          th:text="${schedule.completionDate.isAfter(schedule.deadline)
+                                    ? 'есть риск: позже требуемого срока'
+                                    : 'укладывается в срок'}"></span>
+                </td>
+            </tr>
+        </table>
+    </div>
+
+    <div class="card">
+        <h2>Маршрут операций</h2>
+        <table class="tbl">
+            <thead>
+            <tr>
+                <th>№</th>
+                <th>Операция</th>
+                <th>Цех</th>
+                <th>Станок</th>
+                <th>Норма</th>
+                <th>Начало</th>
+                <th>Окончание</th>
+            </tr>
+            </thead>
+            <tbody>
+            <tr th:each="item : ${schedule.items}">
+                <td th:text="${item.seq}"></td>
+                <td th:text="${item.operation != null ? item.operation.name : '—'}"></td>
+                <td th:text="${item.workCenter != null ? item.workCenter.name : '—'}"></td>
+                <td th:text="${item.equipment != null ? item.equipment.name : '—'}"></td>
+                <td th:text="${item.minutes} + ' мин'"></td>
+                <td th:text="${#temporals.format(item.start, 'dd.MM.yyyy')}"></td>
+                <td th:text="${#temporals.format(item.finish, 'dd.MM.yyyy')}"></td>
+            </tr>
+            <tr th:if="${#lists.isEmpty(schedule.items)}">
+                <td colspan="7">Маршрут не задан — план построить нельзя.</td>
+            </tr>
+            </tbody>
+        </table>
+    </div>
+
+</main>
+</body>
+</html>

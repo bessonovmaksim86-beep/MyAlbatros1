@@ -1,0 +1,729 @@
+<!DOCTYPE html>
+<html lang="ru"
+      xmlns:th="http://www.thymeleaf.org">
+
+<head>
+    <meta charset="UTF-8">
+
+    <meta name="viewport"
+          content="width=device-width, initial-scale=1">
+
+    <title>Операции и рабочие места</title>
+
+    <link rel="stylesheet"
+          th:href="@{/technology/css/technology.css}">
+
+    <link rel="stylesheet"
+          th:href="@{/technology/css/common.css}">
+
+    <link rel="stylesheet"
+          th:href="@{/workshop/css/workshop.css}">
+</head>
+
+<body>
+
+<div class="app-shell">
+
+    <aside th:replace="~{workshop/fragments/layout
+            :: sidebar('operations')}">
+    </aside>
+
+    <main class="main">
+
+        <header th:replace="~{workshop/fragments/layout
+                :: topbar}">
+        </header>
+
+        <div class="page-content workshop-page">
+
+            <div class="page-head">
+
+                <div class="page-title">
+
+                    <h1>Операции и рабочие места</h1>
+
+                    <p th:text="${
+                        workshopName != null
+                            ? workshopName + ': операции и рабочие места '
+                              + unitGenitive
+                            : 'Операции и рабочие места подразделения'
+                    }">
+                        Склад комплектации: операции и рабочие места склада
+                    </p>
+
+                </div>
+
+            </div>
+
+            <div class="alert success"
+                 th:if="${successMessage}"
+                 th:text="${successMessage}">
+            </div>
+
+            <div class="alert danger"
+                 th:if="${errorMessage}"
+                 th:text="${errorMessage}">
+            </div>
+
+            <div class="stats">
+
+                <div class="stat">
+                    <small>Операций
+                        <span th:text="${unitGenitive}">цеха</span>
+                    </small>
+                    <strong th:text="${operationCount}">0</strong>
+                    <span>позиций справочника подразделения</span>
+                </div>
+
+                <div class="stat">
+                    <small>Рабочих мест
+                        <span th:text="${unitGenitive}">цеха</span>
+                    </small>
+                    <strong th:text="${workPlaceCount}">0</strong>
+                    <span>действующих позиций</span>
+                </div>
+
+                <div class="stat">
+                    <small>Служба</small>
+                    <strong class="stat-text"
+                            th:text="${
+                                currentUser != null
+                                and currentUser.service != null
+                                    ? currentUser.service.name
+                                    : 'Не указана'
+                            }">
+                        Служба генерального директора
+                    </strong>
+                    <span>подразделение зафиксировано учётной записью</span>
+                </div>
+
+            </div>
+
+            <section class="card">
+
+                <div class="card-head">
+
+                    <div>
+
+                        <h2>Добавить операцию</h2>
+
+                        <p>
+                            Операция заводится сразу для
+                            <span th:text="${unitGenitive}">цеха</span>
+                            руководителя: службу и подразделение выбрать
+                            нельзя — они берутся из учётной записи, чтобы
+                            операции одного подразделения не попадали
+                            в другое
+                        </p>
+
+                    </div>
+
+                </div>
+
+                <div class="card-body">
+
+                    <form method="post"
+                          th:action="@{/workshop/operations/operation/create}"
+                          th:object="${operationForm}"
+                          class="workshop-binding-form">
+
+                        <input th:if="${_csrf != null}"
+                               type="hidden"
+                               th:name="${_csrf.parameterName}"
+                               th:value="${_csrf.token}">
+
+                        <!--
+                            Служба и подразделение едут скрытыми и всё
+                            равно перезаписываются на сервере: форма
+                            возвращается на страницу при ошибке, и без
+                            этих значений вторая попытка сохранения
+                            упала бы на «Выберите службу».
+                        -->
+                        <input type="hidden"
+                               th:field="*{serviceId}">
+
+                        <input type="hidden"
+                               th:field="*{organizationUnitId}">
+
+                        <div class="form-grid">
+
+                            <div class="field span-2">
+
+                                <label for="operationName">
+                                    Наименование операции
+                                </label>
+
+                                <input id="operationName"
+                                       type="text"
+                                       maxlength="255"
+                                       placeholder="Например: Приёмка комплектующих"
+                                       th:field="*{operationName}">
+
+                                <small class="field-error"
+                                       th:if="${#fields.hasErrors('operationName')}"
+                                       th:errors="*{operationName}">
+                                </small>
+
+                            </div>
+
+                            <div class="field">
+
+                                <label for="operationTypeId">
+                                    Тип операции
+                                </label>
+
+                                <select id="operationTypeId"
+                                        th:field="*{operationTypeId}">
+
+                                    <option value="">— выберите —</option>
+
+                                    <option th:each="type : ${operationTypes}"
+                                            th:value="${type.id}"
+                                            th:text="${type.name}">
+                                        Производственная
+                                    </option>
+
+                                </select>
+
+                                <small class="field-error"
+                                       th:if="${#fields.hasErrors('operationTypeId')}"
+                                       th:errors="*{operationTypeId}">
+                                </small>
+
+                            </div>
+
+                            <div class="field">
+
+                                <label for="operationExecutorRoleId">
+                                    Тип исполнителя
+                                </label>
+
+                                <select id="operationExecutorRoleId"
+                                        th:field="*{executorRoleId}">
+
+                                    <option value="">— выберите —</option>
+
+                                    <option th:each="role : ${executorRoles}"
+                                            th:value="${role.id}"
+                                            th:text="${role.displayName}">
+                                        Исполнитель
+                                    </option>
+
+                                </select>
+
+                                <small class="field-hint">
+                                    «Исполнитель» — работа, которую видно
+                                    в списке закрепления сотрудника
+                                </small>
+
+                                <small class="field-error"
+                                       th:if="${#fields.hasErrors('executorRoleId')}"
+                                       th:errors="*{executorRoleId}">
+                                </small>
+
+                            </div>
+
+                            <div class="field span-2">
+
+                                <label for="operationNote">
+                                    Примечание
+                                </label>
+
+                                <textarea id="operationNote"
+                                          rows="3"
+                                          maxlength="2000"
+                                          placeholder="Комментарий к операции"
+                                          th:field="*{note}">
+                                </textarea>
+
+                                <small class="field-error"
+                                       th:if="${#fields.hasErrors('note')}"
+                                       th:errors="*{note}">
+                                </small>
+
+                            </div>
+
+                        </div>
+
+                        <div class="form-actions">
+
+                            <button type="submit" class="btn primary">
+                                Добавить операцию
+                            </button>
+
+                        </div>
+
+                    </form>
+
+                </div>
+
+            </section>
+
+            <section class="card">
+
+                <div class="card-head">
+
+                    <div>
+
+                        <h2>Добавить рабочее место</h2>
+
+                        <p>
+                            Код задаётся вручную и должен быть уникален
+                            на всё предприятие: по нему рабочее место
+                            находится в справочнике и в закреплениях
+                        </p>
+
+                    </div>
+
+                </div>
+
+                <div class="card-body">
+
+                    <form method="post"
+                          th:action="@{/workshop/operations/work-place/create}"
+                          th:object="${workPlaceForm}"
+                          class="workshop-binding-form">
+
+                        <input th:if="${_csrf != null}"
+                               type="hidden"
+                               th:name="${_csrf.parameterName}"
+                               th:value="${_csrf.token}">
+
+                        <input type="hidden"
+                               th:field="*{serviceId}">
+
+                        <input type="hidden"
+                               th:field="*{organizationUnitId}">
+
+                        <div class="form-grid">
+
+                            <div class="field">
+
+                                <label for="workPlaceCode">Код</label>
+
+                                <input id="workPlaceCode"
+                                       type="text"
+                                       maxlength="50"
+                                       placeholder="Например: РМ-СК-01"
+                                       th:field="*{code}">
+
+                                <small class="field-error"
+                                       th:if="${#fields.hasErrors('code')}"
+                                       th:errors="*{code}">
+                                </small>
+
+                            </div>
+
+                            <div class="field">
+
+                                <label for="workPlaceName">
+                                    Наименование
+                                </label>
+
+                                <input id="workPlaceName"
+                                       type="text"
+                                       maxlength="255"
+                                       placeholder="Например: Зона приёмки"
+                                       th:field="*{name}">
+
+                                <small class="field-error"
+                                       th:if="${#fields.hasErrors('name')}"
+                                       th:errors="*{name}">
+                                </small>
+
+                            </div>
+
+                            <div class="field">
+
+                                <label for="workPlaceTypeId">
+                                    Тип рабочего места
+                                </label>
+
+                                <select id="workPlaceTypeId"
+                                        th:field="*{workPlaceTypeId}">
+
+                                    <option value="">— выберите —</option>
+
+                                    <option th:each="type : ${workPlaceTypes}"
+                                            th:value="${type.id}"
+                                            th:text="${type.name}">
+                                        Участок
+                                    </option>
+
+                                </select>
+
+                                <small class="field-error"
+                                       th:if="${#fields.hasErrors('workPlaceTypeId')}"
+                                       th:errors="*{workPlaceTypeId}">
+                                </small>
+
+                            </div>
+
+                            <div class="field">
+
+                                <label for="workPlaceExecutorRoleId">
+                                    Тип исполнителя
+                                </label>
+
+                                <select id="workPlaceExecutorRoleId"
+                                        th:field="*{executorRoleId}">
+
+                                    <option value="">— выберите —</option>
+
+                                    <option th:each="role : ${executorRoles}"
+                                            th:value="${role.id}"
+                                            th:text="${role.displayName}">
+                                        Исполнитель
+                                    </option>
+
+                                </select>
+
+                                <small class="field-error"
+                                       th:if="${#fields.hasErrors('executorRoleId')}"
+                                       th:errors="*{executorRoleId}">
+                                </small>
+
+                            </div>
+
+                            <div class="field span-2">
+
+                                <label for="workPlaceNote">
+                                    Примечание
+                                </label>
+
+                                <textarea id="workPlaceNote"
+                                          rows="3"
+                                          maxlength="2000"
+                                          placeholder="Комментарий к рабочему месту"
+                                          th:field="*{note}">
+                                </textarea>
+
+                                <small class="field-error"
+                                       th:if="${#fields.hasErrors('note')}"
+                                       th:errors="*{note}">
+                                </small>
+
+                            </div>
+
+                        </div>
+
+                        <div class="form-actions">
+
+                            <button type="submit" class="btn primary">
+                                Добавить рабочее место
+                            </button>
+
+                        </div>
+
+                    </form>
+
+                </div>
+
+            </section>
+
+            <section class="card">
+
+                <div class="card-head">
+
+                    <div>
+
+                        <h2>Операции
+                            <span th:text="${unitGenitive}">цеха</span>
+                        </h2>
+
+                        <p>
+                            Удалить можно только операцию, которую ещё
+                            нигде не используют: занятая в маршрутах или
+                            заказах останется на месте
+                        </p>
+
+                    </div>
+
+                    <span class="badge"
+                          th:text="${operationCount + ' шт.'}">
+                        0 шт.
+                    </span>
+
+                </div>
+
+                <div class="card-body">
+
+                    <div class="alert danger"
+                         th:if="${#lists.isEmpty(operations)}">
+
+                        <p>
+                            У
+                            <span th:text="${unitGenitive}">цеха</span>
+                            пока нет ни одной операции: добавьте её
+                            формой выше, после чего операцию можно
+                            закрепить за сотрудником в разделе
+                            «Сотрудники»
+                        </p>
+
+                    </div>
+
+                    <div class="table-wrap"
+                         th:unless="${#lists.isEmpty(operations)}">
+
+                        <table class="data-table workshop-staff-table">
+
+                            <thead>
+
+                            <tr>
+                                <th>Код</th>
+                                <th>Наименование</th>
+                                <th>Тип</th>
+                                <th>Исполнитель</th>
+                                <th></th>
+                            </tr>
+
+                            </thead>
+
+                            <tbody>
+
+                            <tr th:each="operation : ${operations}">
+
+                                <td>
+                                    <span class="workshop-chip__code"
+                                          th:text="${
+                                              operation.operationName != null
+                                              ? operation.operationName.code
+                                              : '—'
+                                          }">
+                                        OP-01
+                                    </span>
+                                </td>
+
+                                <td class="staff-cell">
+                                    <strong th:text="${
+                                        operation.operationName != null
+                                            ? operation.operationName.name
+                                            : 'Операция №' + operation.id
+                                    }">
+                                        Приёмка комплектующих
+                                    </strong>
+
+                                    <small class="field-hint"
+                                           th:if="${
+                                               operation.note != null
+                                               and !#strings.isEmpty(operation.note)
+                                           }"
+                                           th:text="${operation.note}">
+                                        Примечание
+                                    </small>
+                                </td>
+
+                                <td th:text="${
+                                    operation.operationType != null
+                                        ? operation.operationType.name
+                                        : '—'
+                                }">
+                                    Производственная
+                                </td>
+
+                                <td th:text="${
+                                    operation.executorRole != null
+                                        ? operation.executorRole.displayName
+                                        : '—'
+                                }">
+                                    Исполнитель
+                                </td>
+
+                                <td>
+
+                                    <form th:action="@{/workshop/operations/operation/delete}"
+                                          method="post"
+                                          class="workshop-chip__remove">
+
+                                        <input th:if="${_csrf != null}"
+                                               type="hidden"
+                                               th:name="${_csrf.parameterName}"
+                                               th:value="${_csrf.token}">
+
+                                        <input type="hidden"
+                                               name="operationId"
+                                               th:value="${operation.id}">
+
+                                        <button type="submit"
+                                                class="btn danger compact"
+                                                th:data-remove-title="${
+                                                    'Операцию «'
+                                                    + (operation.operationName != null
+                                                       ? operation.operationName.name
+                                                       : '№' + operation.id)
+                                                    + '»'
+                                                }"
+                                                data-remove-unit-item
+                                                title="Удалить операцию">
+                                            &times;
+                                        </button>
+
+                                    </form>
+
+                                </td>
+
+                            </tr>
+
+                            </tbody>
+
+                        </table>
+
+                    </div>
+
+                </div>
+
+            </section>
+
+            <section class="card">
+
+                <div class="card-head">
+
+                    <div>
+
+                        <h2>Рабочие места
+                            <span th:text="${unitGenitive}">цеха</span>
+                        </h2>
+
+                        <p>
+                            Удалённое рабочее место исчезает и из
+                            закрепления сотрудников: удаляйте его, только
+                            если за ним никто не работает
+                        </p>
+
+                    </div>
+
+                    <span class="badge"
+                          th:text="${workPlaceCount + ' шт.'}">
+                        0 шт.
+                    </span>
+
+                </div>
+
+                <div class="card-body">
+
+                    <div class="alert danger"
+                         th:if="${#lists.isEmpty(unitWorkPlaces)}">
+
+                        <p>
+                            Действующих рабочих мест у
+                            <span th:text="${unitGenitive}">цеха</span>
+                            нет: добавьте их формой выше, и они появятся
+                            в списке закрепления в разделе «Сотрудники»
+                        </p>
+
+                    </div>
+
+                    <div class="table-wrap"
+                         th:unless="${#lists.isEmpty(unitWorkPlaces)}">
+
+                        <table class="data-table workshop-staff-table">
+
+                            <thead>
+
+                            <tr>
+                                <th>Код</th>
+                                <th>Наименование</th>
+                                <th>Тип</th>
+                                <th>Исполнитель</th>
+                                <th></th>
+                            </tr>
+
+                            </thead>
+
+                            <tbody>
+
+                            <tr th:each="place : ${unitWorkPlaces}">
+
+                                <td>
+                                    <span class="workshop-chip__code"
+                                          th:text="${place.code}">
+                                        РМ-01
+                                    </span>
+                                </td>
+
+                                <td class="staff-cell">
+                                    <strong th:text="${place.name}">
+                                        Зона приёмки
+                                    </strong>
+
+                                    <small class="field-hint"
+                                           th:if="${
+                                               place.note != null
+                                               and !#strings.isEmpty(place.note)
+                                           }"
+                                           th:text="${place.note}">
+                                        Примечание
+                                    </small>
+                                </td>
+
+                                <td th:text="${
+                                    place.workPlaceType != null
+                                        ? place.workPlaceType.name
+                                        : '—'
+                                }">
+                                    Участок
+                                </td>
+
+                                <td th:text="${
+                                    place.executorRole != null
+                                        ? place.executorRole.displayName
+                                        : '—'
+                                }">
+                                    Исполнитель
+                                </td>
+
+                                <td>
+
+                                    <form th:action="@{/workshop/operations/work-place/delete}"
+                                          method="post"
+                                          class="workshop-chip__remove">
+
+                                        <input th:if="${_csrf != null}"
+                                               type="hidden"
+                                               th:name="${_csrf.parameterName}"
+                                               th:value="${_csrf.token}">
+
+                                        <input type="hidden"
+                                               name="workPlaceId"
+                                               th:value="${place.id}">
+
+                                        <button type="submit"
+                                                class="btn danger compact"
+                                                th:data-remove-title="${
+                                                    'Рабочее место «' + place.code + '»'
+                                                }"
+                                                data-remove-unit-item
+                                                title="Удалить рабочее место">
+                                            &times;
+                                        </button>
+
+                                    </form>
+
+                                </td>
+
+                            </tr>
+
+                            </tbody>
+
+                        </table>
+
+                    </div>
+
+                </div>
+
+            </section>
+
+        </div>
+
+    </main>
+
+</div>
+
+<th:block th:replace="~{workshop/fragments/layout
+        :: commonScripts}">
+</th:block>
+
+<script th:src="@{/workshop/js/operations.js}"></script>
+
+</body>
+</html>

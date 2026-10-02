@@ -63,6 +63,24 @@ public interface ProductionOrderItemView {
                 : code + String.format("%05d", serial);
     }
 
+    /*
+     * Полное наименование изделия без номера: «ДУУ2М-...». Для датчика
+     * имя берётся из справочника датчиков (sensorClassName) — тот же
+     * разбор, что в getProductLabel(), иначе одна позиция называлась бы
+     * по-разному в разных колонках. Выводится отдельной колонкой
+     * «Наименование» сразу после номера изделия.
+     */
+    default String getDisplayName() {
+        String name = getSensorClassName() != null
+                && !getSensorClassName().isBlank()
+                ? getSensorClassName()
+                : getClassifierName();
+
+        return name == null || name.isBlank()
+                ? "—"
+                : name;
+    }
+
     /* «121200022 — Название изделия»: для датчика имя из справочника. */
     default String getProductLabel() {
         String name = getSensorClassName() != null

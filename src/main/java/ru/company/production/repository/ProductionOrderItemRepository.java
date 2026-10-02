@@ -8,6 +8,7 @@ import org.springframework.stereotype.Repository;
 import ru.company.production.entity.ProductionItemStatus;
 import ru.company.production.entity.ProductionOrderItem;
 
+import java.util.Collection;
 import java.util.List;
 
 @Repository
@@ -44,6 +45,50 @@ public interface ProductionOrderItemRepository
             """)
     List<ProductionOrderItemView> findItemsByOrderId(
             @Param("productionOrderId") Long productionOrderId
+    );
+
+    /*
+     * Серийники выпуска для набора заказов покупателя.
+     *
+     * Нужен разделу распределения: строка графика планирует изделие до
+     * выпуска и своего серийного номера не хранит, а номер появляется
+     * именно здесь — в составе выпуска, привязанном к позиции заказа
+     * покупателя. Выборка пакетная (по всем заказам страницы одним
+     * запросом), иначе таблица распределения порождала бы запрос на
+     * каждую строку.
+     *
+     * Порядок задаётся полем position выпуска (он сквозной по заказу);
+     * номер экземпляра внутри позиции по нему восстанавливает сервис.
+     * Полное наименование берётся из fullName позиции заказа («как в
+     * КД»), а род датчика и имя классификатора подставляются, когда
+     * fullName не заполнен. Строки без серийного номера исключены:
+     * сопоставлять нечего.
+     *
+     * Aliases join'а (serialRow) и выбранного поля (serial) разведены
+     * намеренно: совпадающее имя алиаса связи и алиаса выборки
+     * Hibernate трактует неоднозначно при сборке метамодели запроса.
+     */
+    @Query("""
+            select
+                customerOrder.id as customerOrderId,
+                customerItem.position as itemPosition,
+                item.position as releasePosition,
+                classifier.code as classifierCode,
+                serialRow.serial as serial,
+                customerItem.fullName as fullName,
+                sensor.name as sensorName,
+                classifier.name as classifierName
+            from ProductionOrderItem item
+            join item.productClassifier classifier
+            join item.serial serialRow
+            join item.customerOrderItem customerItem
+            join customerItem.customerOrder customerOrder
+            left join classifier.sensorCatalog sensor
+            where customerOrder.id in :customerOrderIds
+            order by customerOrder.id, customerItem.position, item.position
+            """)
+    List<ProductionOrderSerialProjection> findSerialsByCustomerOrderIds(
+            @Param("customerOrderIds") Collection<Long> customerOrderIds
     );
 
     @Query("""

@@ -92,6 +92,128 @@ public interface ProductSerialRepository
             int serial
     );
 
+    /**
+     * Свободные серийники позиции заказа покупателя: заведённые
+     * заранее, но ещё не подхваченные выпуском
+     * (issued_production_order_id IS null).
+     *
+     * Нужны выпуску, чтобы переиспользовать заранее выданные номера
+     * вместо новых: ряд датчика остаётся сквозным, а диспетчер видит
+     * те же серийники и в заказе, и в заказе на производство.
+     * Классификатор подтягивается fetch-join'ом: выпуск читает полный
+     * номер (getFullNumber()), а open-in-view выключен.
+     */
+    @Query("""
+            select serial
+            from ProductSerial serial
+            left join fetch serial.productClassifier classifier
+            left join fetch classifier.sensorCatalog
+            where serial.customerOrderItem.id = :customerOrderItemId
+              and serial.issuedProductionOrder is null
+            order by serial.serial asc
+            """)
+    List<ProductSerial> findFreeDetailsByCustomerOrderItemId(
+            @Param("customerOrderItemId") Long customerOrderItemId
+    );
+
+    /**
+     * Свободные серийники всего заказа покупателя — по позициям.
+     *
+     * Нужен предпросмотру состава выпуска: форма создания заказа
+     * показывает диспетчеру, какие номера уже зарезервированы заказом и
+     * будут переиспользованы, а какие придётся выдать заново. Номера
+     * отдаются детальным запросом (open-in-view выключен, строка списка
+     * печатает полный номер).
+     */
+    @Query("""
+            select serial
+            from ProductSerial serial
+            left join fetch serial.productClassifier classifier
+            left join fetch classifier.sensorCatalog
+            where serial.customerOrderItem.customerOrder.id = :customerOrderId
+              and serial.issuedProductionOrder is null
+            order by serial.productClassifier.id asc, serial.serial asc
+            """)
+    List<ProductSerial> findFreeDetailsByCustomerOrderId(
+            @Param("customerOrderId") Long customerOrderId
+    );
+
+    /**
+     * Все серийники заказа покупателя — сгруппированы по позициям.
+     *
+     * Нужен карточке заказа: диспетчер видит, какие номера относятся
+     * к каждой позиции состава. Возвращаются и резервы (номер выдан
+     * заказом, выпуск ещё не создан), и подхваченные выпуском:
+     * claimForRelease сохраняет customer_order_item, поэтому привязка
+     * к позиции не теряется и один запрос закрывает обе стадии.
+     *
+     * Классификатор и позиция подтянуты fetch-join: строка карточки
+     * печатает полный номер (getFullNumber() берёт код классификатора),
+     * а контроллер группирует по позиции (open-in-view выключен).
+     */
+    @Query("""
+            select serial
+            from ProductSerial serial
+            left join fetch serial.productClassifier classifier
+            left join fetch serial.customerOrderItem customerItem
+            where customerItem.customerOrder.id = :customerOrderId
+            order by customerItem.position asc, serial.serial asc
+            """)
+    List<ProductSerial> findDetailsByCustomerOrderId(
+            @Param("customerOrderId") Long customerOrderId
+    );
+
+    /**
+     * Удаляет свободные серийники всех позиций заказа покупателя.
+     *
+     * Нужен правке заказа: состав пересоздаётся целиком, старые позиции
+     * удаляются, а переиспользовать их номера нельзя — резерв привязан
+     * к строке, которой больше нет. Поэтому свободные (не подхваченные
+     * выпуском) номера снимаются, а под новый состав выдаются новые.
+     *
+     * Ряд от этого не рвётся: следующий номер считается максимумом по
+     * области, а снятые резервы область отдаёт обратно.
+     *
+     * flushAutomatically обязателен: UPDATE/DELETE исполняются напрямую,
+     * и только что сохранённые позиции обязаны попасть в БД до запроса.
+     */
+    @Modifying(
+            flushAutomatically = true,
+            clearAutomatically = true
+    )
+    @Query("""
+            delete from ProductSerial serial
+            where serial.issuedProductionOrder is null
+              and serial.customerOrderItem.customerOrder.id = :customerOrderId
+            """)
+    int deleteFreeByCustomerOrderId(
+            @Param("customerOrderId") Long customerOrderId
+    );
+
+    /**
+     * Отвязывает от позиций заказа номера, уже подхваченные выпуском.
+     *
+     * Такой номер — уже не резерв диспетчера, а изделие: он стоит в
+     * составе выпуска, и удалять его нельзя. Но старую позицию заказа
+     * при пересоздании состава удалить нужно, а на неё ссылается
+     * внешний ключ product_serials.customer_order_item_id. Связь
+     * снимается: дальнейшую прослеживаемость держит строка выпуска
+     * (production_order_items.customer_order_item_id), а не резерв.
+     */
+    @Modifying(
+            flushAutomatically = true,
+            clearAutomatically = true
+    )
+    @Query("""
+            update ProductSerial serial
+            set serial.customerOrderItem = null
+            where serial.issuedProductionOrder is not null
+              and serial.customerOrderItem.customerOrder.id = :customerOrderId
+            """)
+    int unlinkReleasedByCustomerOrderId(
+            @Param("customerOrderId") Long customerOrderId
+    );
+
     /** Ячеек, оприходованных складом: номера, выпущенные приходом. */
     long countByReceivingBatchIsNotNull();
 

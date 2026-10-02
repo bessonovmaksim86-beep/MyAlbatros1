@@ -65,7 +65,7 @@ public class BvkAcceptanceService {
     private final InputControlCardCellRepository cardCellRepository;
     private final InputControlDefectGroupRepository groupRepository;
     private final ProductSerialRepository serialRepository;
-
+    private final SerialMovementJournalService journal;
     /**
      * Партии, вернувшиеся от БВК, с числом забракованных ячеек.
      *
@@ -236,9 +236,19 @@ public class BvkAcceptanceService {
          * Карточка и форма оперируют номерами, отметка стоит на строке
          * реестра: сверка идёт по полному номеру ячейки.
          */
-        List<Long> ids = serialRepository
+        List<ProductSerial> acceptedSerials = serialRepository
                 .findAcceptanceDetailsByReceivingBatchId(batchId).stream()
                 .filter(serial -> chosen.contains(serial.getFullNumber()))
+                .toList();
+
+        if (acceptedSerials.isEmpty()) {
+            return InputControlResult.rejected(
+                    "Ни одна из внесённых ячеек не найдена в реестре партии — "
+                            + "проверьте номера"
+            );
+        }
+
+        List<Long> ids = acceptedSerials.stream()
                 .map(ProductSerial::getId)
                 .toList();
 
@@ -255,7 +265,7 @@ public class BvkAcceptanceService {
         batch.setAcceptedBy(receiver);
         batch.setAcceptedQuantity(ids.size());
         batchRepository.save(batch);
-
+        journal.recordAccepted(acceptedSerials, receiver, moment);
         int defects = (int) batchNumbers.stream()
                 .filter(defectNumbers::contains)
                 .count();

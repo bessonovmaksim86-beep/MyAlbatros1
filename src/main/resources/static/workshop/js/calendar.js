@@ -226,9 +226,17 @@
                         return option ? option.textContent.trim() : id;
                     });
 
+                /*
+                 * Род подразделения подсказывает форма: без него подтверждение
+                 * у руководителя склада или бюро называло бы людей
+                 * «сотрудниками цеха».
+                 */
+                const unitGenitive =
+                    form.dataset.unitGenitive || 'цеха';
+
                 const label = names.length > 0
                     ? names.join(', ')
-                    : 'всем сотрудникам цеха';
+                    : 'всем сотрудникам ' + unitGenitive;
 
                 if (!window.confirm(
                     'Снять отметки за выбранные даты у ' + label + '?'

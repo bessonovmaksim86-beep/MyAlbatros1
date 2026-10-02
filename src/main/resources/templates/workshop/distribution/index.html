@@ -1,0 +1,794 @@
+<!DOCTYPE html>
+<html lang="ru"
+      xmlns:th="http://www.thymeleaf.org">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport"
+          content="width=device-width, initial-scale=1">
+
+    <title>Распределение работ</title>
+
+    <link rel="stylesheet"
+          th:href="@{/technology/css/technology.css}">
+    <link rel="stylesheet"
+          th:href="@{/technology/css/common.css}">
+    <link rel="stylesheet"
+          th:href="@{/workshop/css/workshop.css}">
+    <link rel="stylesheet"
+          th:href="@{/workshop/css/distribution.css}">
+    <link rel="stylesheet"
+          th:href="@{/workshop/css/distribution-groups.css}">
+    <link rel="stylesheet"
+          th:href="@{/workshop/css/distribution-ops.css}">
+</head>
+
+<body>
+
+<div class="app-shell">
+
+    <aside th:replace="~{workshop/fragments/layout
+            :: sidebar('distribution')}">
+    </aside>
+
+    <main class="main">
+
+        <header th:replace="~{workshop/fragments/layout
+                :: topbar}">
+        </header>
+
+        <div class="page-content workshop-page">
+
+            <div class="page-head">
+
+                <div class="page-title">
+
+                    <h1>Распределение работ</h1>
+
+                    <p th:text="${
+                        workshopName != null
+                            ? 'Подразделение: ' + workshopName
+                            : 'Распределение работ подразделения'
+                    }">
+                        Подразделение: Цех подготовки производства
+                    </p>
+
+                </div>
+
+            </div>
+
+            <!--
+                Срок показа работ. Значение живёт в адресной строке, а
+                не в сессии: ссылку на «шесть недель» можно передать
+                коллеге, и назначение не должно сбрасывать выбор.
+                Форма отправляется по onchange, кнопка остаётся для
+                noscript.
+            -->
+            <form class="filter-bar"
+                  method="get"
+                  th:if="${workshopUnitId != null}"
+                  th:action="@{/workshop/distribution}">
+
+                <label class="filter-bar__field">
+
+                    <span class="filter-bar__caption">Срок работ</span>
+
+                    <select name="weeks"
+                            class="filter-bar__select"
+                            onchange="this.form.submit()">
+
+                        <option th:each="opt : ${weekChoices}"
+                                th:value="${opt.key}"
+                                th:text="${opt.value}"
+                                th:selected="${opt.key == weeks}">
+                            2 недели
+                        </option>
+
+                    </select>
+
+                </label>
+
+                <noscript>
+                    <button type="submit" class="btn primary compact">
+                        Применить
+                    </button>
+                </noscript>
+
+                <span class="filter-bar__period"
+                      th:text="${periodLabel}">
+                    Период: 01.10.2026 — 15.10.2026
+                </span>
+
+            </form>
+
+            <div class="alert success"
+                 th:if="${successMessage}"
+                 th:text="${successMessage}">
+            </div>
+
+            <div class="alert danger"
+                 th:if="${errorMessage}"
+                 th:text="${errorMessage}">
+            </div>
+
+            <!--
+                Подразделение — граница раздела: оно берётся из учётной
+                записи руководителя. Если карточка пользователя не
+                привязана к подразделению, список обязан быть пустым, но
+                причина должна быть названа — иначе экран выглядит как
+                «работ нет», хотя их просто некому показать.
+            -->
+            <div class="alert attention"
+                 th:if="${workshopUnitId == null}">
+
+                <p>
+                    Ваша учётная запись не привязана к подразделению,
+                    поэтому работы подразделения не определены.
+                    Привязку создаёт администратор в разделе
+                    «Пользователи».
+                </p>
+
+            </div>
+
+            <!--
+                Очередь распределения: строка — изделие, раскрытие —
+                операции этого изделия. Счётчика экземпляров в шапке
+                больше нет: он считал сумму строк графика и всегда
+                расходился с числом строк таблицы, где изделие — одна
+                строка независимо от тиража.
+            -->
+            <section class="card"
+                     th:if="${!#lists.isEmpty(operations)}">
+
+                <div class="card-head">
+
+                    <div>
+
+                        <h2>Операции для распределения</h2>
+
+                        <small>
+                            Запланированные операции заказов покупателя,
+                            ещё не закреплённые за исполнителями.
+                            Строка — изделие: серийный номер, его
+                            наименование и заказ покупателя. Нажмите на
+                            строку — раскроются операции изделия.
+                            Каждая операция закрепляется отдельно:
+                            выберите исполнителя и нажмите «Назначить»
+                            в строке нужной операции. Операции получения
+                            комплектации здесь не распределются: это
+                            личные работы руководителя, они в разделе
+                            «Мои операции».
+                        </small>
+
+                    </div>
+
+                </div>
+
+                <div class="card-body">
+
+                    <div class="table-wrap">
+
+                        <table class="data-table distribution-group-table">
+
+                            <colgroup>
+                                <col class="col-serial">
+                                <col class="col-name">
+                                <col class="col-order">
+                                <col class="col-toggle">
+                            </colgroup>
+
+                            <thead>
+                            <tr>
+                                <th>Серийный номер</th>
+                                <th>Наименование изделия</th>
+                                <th>Заказ покупателя</th>
+                                <th>Операции</th>
+                            </tr>
+                            </thead>
+
+                            <tbody>
+
+                            <th:block th:each="op, stat : ${operations}">
+
+                                <tr class="distribution-group-row"
+                                    th:onclick="|toggleGroup('group-panel-${stat.index}', 'group-caret-${stat.index}')|">
+
+                                    <td class="cell-serial">
+
+                                        <span class="cell-serial__value"
+                                              th:if="${op.serialsLabel() != null}"
+                                              th:text="${op.serialsLabel()}">
+                                            121200022, 121200023
+                                        </span>
+
+                                        <span class="cell-serial__empty"
+                                              th:unless="${op.serialsLabel() != null}">
+                                            серийный номер не выпущен
+                                        </span>
+
+                                    </td>
+
+                                    <td class="cell-name">
+
+                                        <strong th:if="${op.itemNameLabel() != null}"
+                                                th:text="${op.itemNameLabel()}">
+                                            ДУУ2М.1.1.00.00 датчик указательный уровня
+                                        </strong>
+
+                                        <span class="cell-name__empty"
+                                              th:unless="${op.itemNameLabel() != null}">
+                                            наименование не заполнено
+                                        </span>
+
+                                    </td>
+
+                                    <td class="cell-order"
+                                          th:text="${op.orderNumber()}">
+                                        ЗП-12
+                                    </td>
+
+                                    <td class="cell-toggle">
+
+                                        <small class="instance-toggle__caret"
+                                               th:id="'group-caret-' + ${stat.index}">
+                                            ▼
+                                        </small>
+
+                                    </td>
+
+                                </tr>
+
+                                <!--
+                                    Панель изделия: операции идут
+                                    отдельными блоками, и каждый блок
+                                    закрывается своим решением мастера —
+                                    группового назначения на всё изделие
+                                    нет. Ключ панели — индекс списка
+                                    изделий, он уникален на странице.
+                                -->
+                                <tr class="distribution-group-panel"
+                                    th:id="'group-panel-' + ${stat.index}">
+
+                                    <td colspan="4">
+
+                                        <div class="group-panel">
+
+                                            <th:block th:each="card : ${op.operations()}">
+
+                                                <div class="group-panel__op">
+
+                                                    <div class="group-panel__summary
+                                                              group-panel__summary--three">
+
+                                                        <div class="summary-item">
+
+                                                            <span class="summary-item__caption">
+                                                                Операция
+                                                            </span>
+
+                                                            <strong class="summary-item__value"
+                                                                    th:text="${card.title()}">
+                                                                Гравировка
+                                                            </strong>
+
+                                                        </div>
+
+                                                        <div class="summary-item">
+
+                                                            <span class="summary-item__caption">
+                                                                Трудоёмкость
+                                                            </span>
+
+                                                            <strong class="summary-item__value"
+                                                                    th:text="${card.hoursLabel()} + ' ч.'">
+                                                                16 ч.
+                                                            </strong>
+
+                                                        </div>
+
+                                                        <div class="summary-item">
+
+                                                            <span class="summary-item__caption">
+                                                                Дата плана
+                                                            </span>
+
+                                                            <strong class="summary-item__value summary-item__value--date"
+                                                                    th:text="${card.formattedDate()}">
+                                                                02.10.2026
+                                                            </strong>
+
+                                                        </div>
+
+                                                    </div>
+
+                                                    <div class="alert success"
+                                                         th:if="${card.hasNoExecutor()}">
+
+                                                        <p>
+                                                            Ни один сотрудник
+                                                            подразделения не
+                                                            закреплён за этой
+                                                            операцией и за её
+                                                            рабочими местами.
+                                                            Привязку ведёт
+                                                            руководитель в
+                                                            разделе
+                                                            «Сотрудники».
+                                                        </p>
+
+                                                    </div>
+
+                                                    <form th:unless="${card.hasNoExecutor()}"
+                                                          th:action="@{/workshop/distribution/assign}"
+                                                          method="post"
+                                                          class="group-assign-form">
+
+                                                        <input th:if="${_csrf != null}"
+                                                               type="hidden"
+                                                               th:name="${_csrf.parameterName}"
+                                                               th:value="${_csrf.token}">
+
+                                                        <input type="hidden"
+                                                               name="operationId"
+                                                               th:value="${card.operationId()}">
+
+                                                        <input type="hidden"
+                                                               name="plannedDate"
+                                                               th:value="${card.plannedDate()}">
+
+                                                        <input type="hidden"
+                                                               name="orderId"
+                                                               th:value="${op.customerOrderId()}">
+
+                                                        <input type="hidden"
+                                                               name="itemPosition"
+                                                               th:value="${op.itemPosition()}">
+
+                                                        <input type="hidden"
+                                                               name="weeks"
+                                                               th:value="${weeks}">
+
+                                                        <div class="group-panel__head">
+
+                                                            <strong>
+                                                                Сотрудники,
+                                                                способные
+                                                                выполнить
+                                                                операцию
+                                                            </strong>
+
+                                                            <small class="field-hint">
+                                                                Загрузка — на
+                                                                дату плана этой
+                                                                операции;
+                                                                остаток считает
+                                                                планировщик по
+                                                                строкам, внесённым
+                                                                в план
+                                                            </small>
+
+                                                        </div>
+
+                                                        <div class="executor-list">
+
+                                                            <label class="executor-option"
+                                                                   th:each="e : ${card.executors()}"
+                                                                   th:classappend="${e.absent()}
+                                                                       ? ' is-absent'
+                                                                       : (${e.overloaded()}
+                                                                            ? ' is-overloaded'
+                                                                            : '')">
+
+                                                                <input type="radio"
+                                                                       name="executorId"
+                                                                       th:value="${e.id()}"
+                                                                       th:disabled="${e.absent()}">
+
+                                                                <span class="executor-option__name">
+
+                                                                    <strong th:text="${e.label()}">
+                                                                        Иванов Иван Иванович
+                                                                    </strong>
+
+                                                                    <small class="field-hint"
+                                                                           th:if="${
+                                                                               e.specialty() != null
+                                                                               and !#strings.isEmpty(e.specialty())
+                                                                           }"
+                                                                           th:text="${e.specialty()}">
+                                                                        Слесарь
+                                                                    </small>
+
+                                                                </span>
+
+                                                                <span class="executor-option__load">
+
+                                                                    <span th:text="'занято ' + ${e.busyLabel()} + ' ч.'">
+                                                                        занято 2 ч.
+                                                                    </span>
+
+                                                                    <span th:if="${e.overloaded()}"
+                                                                          class="badge badge--attention">
+                                                                        перегруз
+                                                                    </span>
+
+                                                                    <span th:unless="${e.overloaded()}"
+                                                                          th:text="'свободно ' + ${e.freeLabel()} + ' ч.'">
+                                                                        свободно 6 ч.
+                                                                    </span>
+
+                                                                </span>
+
+                                                                <span class="executor-option__absence"
+                                                                      th:if="${e.absent()}">
+
+                                                                    <span class="badge badge--attention">
+                                                                        отсутствует
+                                                                    </span>
+
+                                                                </span>
+
+                                                            </label>
+
+                                                        </div>
+
+                                                        <div class="group-panel__actions">
+
+                                                            <button type="submit"
+                                                                    class="btn primary compact">
+                                                                Назначить
+                                                            </button>
+
+                                                            <small class="field-hint">
+                                                                Операция закрепится
+                                                                за выбранным
+                                                                сотрудником
+                                                            </small>
+
+                                                        </div>
+
+                                                    </form>
+
+                                                </div>
+
+                                            </th:block>
+
+                                        </div>
+
+                                    </td>
+
+                                </tr>
+
+                            </th:block>
+
+                            </tbody>
+
+                        </table>
+
+                    </div>
+
+                </div>
+
+            </section>
+
+            <!--
+                Уже распределённые: та же структура, что в очереди, но
+                четвёртая колонка подписывает исполнителей изделия, а
+                снятие назначения идёт по одной операции.
+            -->
+            <section class="card"
+                     th:if="${!#lists.isEmpty(assignedOperations)}">
+
+                <div class="card-head">
+
+                    <div>
+
+                        <h2>Распределённые работы</h2>
+
+                        <small>
+                            Операции, уже закреплённые за исполнителями.
+                            Строка — то же изделие, что и в очереди:
+                            серийный номер, наименование и заказ
+                            покупателя. Раскрытие показывает операции
+                            изделия и их исполнителей. Снятие назначения
+                            касается одной операции и возвращает в
+                            очередь только её.
+                        </small>
+
+                    </div>
+
+                </div>
+
+                <div class="card-body">
+
+                    <div class="table-wrap">
+
+                        <table class="data-table distribution-group-table
+                                      distribution-group-table--assigned">
+
+                            <colgroup>
+                                <col class="col-serial">
+                                <col class="col-name">
+                                <col class="col-order">
+                                <col class="col-toggle">
+                            </colgroup>
+
+                            <thead>
+                            <tr>
+                                <th>Серийный номер</th>
+                                <th>Наименование изделия</th>
+                                <th>Заказ покупателя</th>
+                                <th>Исполнитель</th>
+                            </tr>
+                            </thead>
+
+                            <tbody>
+
+                            <th:block th:each="op, stat : ${assignedOperations}">
+
+                                <tr class="distribution-group-row"
+                                    th:onclick="|toggleGroup('assigned-panel-${stat.index}', 'assigned-caret-${stat.index}')|">
+
+                                    <td class="cell-serial">
+
+                                        <span class="cell-serial__value"
+                                              th:if="${op.serialsLabel() != null}"
+                                              th:text="${op.serialsLabel()}">
+                                            121200022, 121200023
+                                        </span>
+
+                                        <span class="cell-serial__empty"
+                                              th:unless="${op.serialsLabel() != null}">
+                                            серийный номер не выпущен
+                                        </span>
+
+                                    </td>
+
+                                    <td class="cell-name">
+
+                                        <strong th:if="${op.itemNameLabel() != null}"
+                                                th:text="${op.itemNameLabel()}">
+                                            ДУУ2М.1.1.00.00 датчик указательный уровня
+                                        </strong>
+
+                                        <span class="cell-name__empty"
+                                              th:unless="${op.itemNameLabel() != null}">
+                                            наименование не заполнено
+                                        </span>
+
+                                    </td>
+
+                                    <td class="cell-order"
+                                          th:text="${op.orderNumber()}">
+                                        ЗП-12
+                                    </td>
+
+                                    <td class="cell-toggle">
+
+                                        <span class="badge"
+                                              th:if="${op.executorsLabel() != null}"
+                                              th:text="${op.executorsLabel()}">
+                                            Иванов И.
+                                        </span>
+
+                                        <span class="badge"
+                                              th:unless="${op.executorsLabel() != null}">
+                                            не назначен
+                                        </span>
+
+                                        <small class="instance-toggle__caret"
+                                               th:id="'assigned-caret-' + ${stat.index}">
+                                            ▼
+                                        </small>
+
+                                    </td>
+
+                                </tr>
+
+                                <tr class="distribution-group-panel"
+                                    th:id="'assigned-panel-' + ${stat.index}">
+
+                                    <td colspan="4">
+
+                                        <div class="group-panel">
+
+                                            <th:block th:each="card : ${op.operations()}">
+
+                                                <div class="group-panel__op">
+
+                                                    <div class="group-panel__summary">
+
+                                                        <div class="summary-item">
+
+                                                            <span class="summary-item__caption">
+                                                                Операция
+                                                            </span>
+
+                                                            <strong class="summary-item__value"
+                                                                    th:text="${card.title()}">
+                                                                Гравировка
+                                                            </strong>
+
+                                                        </div>
+
+                                                        <div class="summary-item">
+
+                                                            <span class="summary-item__caption">
+                                                                Трудоёмкость
+                                                            </span>
+
+                                                            <strong class="summary-item__value"
+                                                                    th:text="${card.hoursLabel()} + ' ч.'">
+                                                                16 ч.
+                                                            </strong>
+
+                                                        </div>
+
+                                                        <div class="summary-item">
+
+                                                            <span class="summary-item__caption">
+                                                                Дата плана
+                                                            </span>
+
+                                                            <strong class="summary-item__value summary-item__value--date"
+                                                                    th:text="${card.formattedDate()}">
+                                                                02.10.2026
+                                                            </strong>
+
+                                                        </div>
+
+                                                        <div class="summary-item">
+
+                                                            <span class="summary-item__caption">
+                                                                Исполнитель
+                                                            </span>
+
+                                                            <strong class="summary-item__value"
+                                                                    th:if="${card.executorLabel() != null}"
+                                                                    th:text="${card.executorLabel()}">
+                                                                Иванов И. И.
+                                                            </strong>
+
+                                                            <strong class="summary-item__value summary-item__value--empty"
+                                                                    th:unless="${card.executorLabel() != null}">
+                                                                не назначен
+                                                            </strong>
+
+                                                        </div>
+
+                                                    </div>
+
+                                                    <div class="group-panel__actions">
+
+                                                        <form th:action="@{/workshop/distribution/unassign}"
+                                                              method="post"
+                                                              class="inline-form">
+
+                                                            <input th:if="${_csrf != null}"
+                                                                   type="hidden"
+                                                                   th:name="${_csrf.parameterName}"
+                                                                   th:value="${_csrf.token}">
+
+                                                            <input type="hidden"
+                                                                   name="operationId"
+                                                                   th:value="${card.operationId()}">
+
+                                                            <input type="hidden"
+                                                                   name="plannedDate"
+                                                                   th:value="${card.plannedDate()}">
+
+                                                            <input type="hidden"
+                                                                   name="orderId"
+                                                                   th:value="${op.customerOrderId()}">
+
+                                                            <input type="hidden"
+                                                                   name="itemPosition"
+                                                                   th:value="${op.itemPosition()}">
+
+                                                            <input type="hidden"
+                                                                   name="weeks"
+                                                                   th:value="${weeks}">
+
+                                                            <button type="submit"
+                                                                    class="btn danger compact">
+                                                                Снять назначение
+                                                            </button>
+
+                                                        </form>
+
+                                                        <small class="field-hint">
+                                                            Операция вернётся в
+                                                            очередь распределения
+                                                        </small>
+
+                                                    </div>
+
+                                                </div>
+
+                                            </th:block>
+
+                                        </div>
+
+                                    </td>
+
+                                </tr>
+
+                            </th:block>
+
+                            </tbody>
+
+                        </table>
+
+                    </div>
+
+                </div>
+
+            </section>
+
+            <!-- Пусто -->
+            <div class="alert success"
+                 th:if="${
+                     #lists.isEmpty(operations)
+                     and #lists.isEmpty(assignedOperations)
+                     and workshopUnitId != null
+                 }">
+
+                <p>
+                    Распределяемых и распределённых операций за
+                    выбранный срок нет: они появятся после того, как
+                    диспетчер внесёт заказы покупателя в план. Увеличьте
+                    срок работ в панели выше, чтобы увидеть более
+                    поздние даты плана.
+                </p>
+
+            </div>
+
+        </div>
+
+    </main>
+
+</div>
+
+<th:block th:replace="~{workshop/fragments/layout
+        :: commonScripts}">
+</th:block>
+
+<script>
+/*
+ * Раскрытие панели операции. Панель и её стрелка адресуются по
+ * идентификаторам, а не по номеру строки: на странице две групповые
+ * таблицы, и счёт внутри каждой из них начинается с нуля — один
+ * только индекс перепутал бы очередь с распределёнными работами.
+ */
+function toggleGroup(panelId, caretId) {
+    const panel = document.getElementById(panelId);
+    const caret = document.getElementById(caretId);
+
+    if (!panel) {
+        return;
+    }
+
+    const hidden = panel.style.display === 'none';
+
+    panel.style.display = hidden ? '' : 'none';
+    if (caret) {
+        caret.textContent = hidden ? '▲' : '▼';
+    }
+}
+
+/*
+ * Панели свёрнуты по умолчанию: очередь — это десятки изделий, и
+ * раскрывать их все означало бы прокручивать экран вместо выбора
+ * нужного.
+ */
+(function collapseGroups() {
+    document
+        .querySelectorAll('.distribution-group-panel')
+        .forEach(panel => {
+            panel.style.display = 'none';
+        });
+})();
+</script>
+
+</body>
+</html>

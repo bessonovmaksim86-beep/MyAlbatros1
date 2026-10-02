@@ -29,6 +29,13 @@ public interface CustomerOrderItemView {
 
     String getSensorClassName();
 
+    /*
+     * Полное обозначение позиции заказа (CustomerOrderItem.fullName):
+     * «как в КД», вводится диспетчером. Пусто — когда позиция
+     * описана только классификатором.
+     */
+    String getFullName();
+
     BigDecimal getQuantity();
 
     BigDecimal getDoneQuantity();
@@ -70,6 +77,34 @@ public interface CustomerOrderItemView {
         }
 
         return formatQuantity(planned.subtract(done));
+    }
+
+    /*
+     * Полное наименование изделия для строки состава.
+     *
+     * Приоритет — fullName позиции («как в КД»): у датчика
+     * классификатор даёт только род, а полное обозначение с
+     * параметрами живёт именно в fullName. Когда fullName пуст,
+     * подставляются род датчика или имя классификатора — как в
+     * ProductionOrderSerialProjection.getDisplayName().
+     */
+    default String getDisplayName() {
+        String full = pick(getFullName());
+        if (full != null) {
+            return full;
+        }
+
+        String sensor = pick(getSensorClassName());
+        if (sensor != null) {
+            return sensor;
+        }
+
+        String name = pick(getClassifierName());
+        return name == null ? "—" : name;
+    }
+
+    private static String pick(String value) {
+        return value == null || value.isBlank() ? null : value.trim();
     }
 
     default String getUnitName() {

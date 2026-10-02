@@ -101,7 +101,10 @@
                 <div class="stat">
                     <small>Сотрудников</small>
                     <strong th:text="${#lists.size(rows)}">0</strong>
-                    <span>в списке цеха</span>
+                    <span>
+                        в списке
+                        <span th:text="${unitGenitive}">цеха</span>
+                    </span>
                 </div>
 
                 <div class="stat">
@@ -156,7 +159,11 @@
                     <div class="alert danger"
                          th:if="${#lists.isEmpty(rows)}">
 
-                        <p>
+                        <p th:text="${
+                            'В подразделении нет сотрудников: отмечать '
+                            + 'отсутствие можно только у сотрудников своего '
+                            + unitGenitive
+                        }">
                             В подразделении нет сотрудников: отмечать
                             отсутствие можно только у сотрудников своего цеха
                         </p>
@@ -168,6 +175,7 @@
                           th:object="${absenceForm}"
                           id="absenceForm"
                           class="workshop-absence-form"
+                          th:attr="data-unit-genitive=${unitGenitive}"
                           th:if="${not #lists.isEmpty(rows)}">
 
                         <input th:if="${_csrf != null}"
@@ -211,7 +219,13 @@
 
                                 </select>
 
-                                <small class="field-hint">
+                                <small class="field-hint"
+                                       th:text="${
+                                           'Ctrl (или Cmd) — выбрать несколько '
+                                           + 'сотрудников; ничего не выбрано — '
+                                           + 'отметка пойдёт всем сотрудникам '
+                                           + unitGenitive
+                                       }">
                                     Ctrl (или Cmd) — выбрать несколько
                                     сотрудников; ничего не выбрано —
                                     отметка пойдёт всем сотрудникам цеха
