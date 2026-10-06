@@ -33,6 +33,15 @@ public interface ProductionOrderSerialProjection {
 
     Integer getReleasePosition();
 
+    /*
+     * Идентификатор серийника (ProductSerial.id). Нужен write-пути:
+     * по нему хук проведения на СГП находит заказы-комплектующие,
+     * вошедшие именно в этот датчик (serial_production_orders.serial_id),
+     * не поднимаясь к родительскому выпуску. Read-модули распределения
+     * поле не используют — для них значимы только номер и наименование.
+     */
+    Long getSerialId();
+
     Integer getClassifierCode();
 
     Integer getSerial();

@@ -15,7 +15,7 @@
 <aside th:fragment="sidebar(activePage)"
        id="warehouseSidebar"
        class="sidebar warehouse-sidebar"
-       aria-label="Навигация склада полуфабрикатов">
+       th:aria-label="'Навигация склада ' + ${warehouseKind}">
 
     <div class="warehouse-sidebar__inner">
 
@@ -33,7 +33,8 @@
                 Производственная система
             </span>
 
-            <strong class="department-brand__department">
+            <strong class="department-brand__department"
+               th:text="'Склад ' + ${warehouseKind}">
                 Склад полуфабрикатов
             </strong>
         </a>
@@ -123,18 +124,46 @@
             </a>
 
             <a class="warehouse-navigation__item"
-               th:classappend="${activePage == 'my-operations'} ? ' is-active' : ''"
-               th:href="@{/my-operations}"
-               title="Мои операции: работы, закреплённые за мной">
+               th:classappend="${activePage == 'kitting-znp'} ? ' is-active' : ''"
+               th:href="@{/warehouse/kitting-znp}"
+               title="Комплектование ЗНП: операции склада комплектования">
 
                 <span class="warehouse-navigation__icon">
                     <svg viewBox="0 0 24 24" aria-hidden="true">
-                        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 2c1.93 0 3.68.7 5.05 1.85L7.85 15.05A6.97 6.97 0 0 1 4 12c0-3.87 3.13-7 7-7zm0 2c-2.76 0-5 2.24-5 5s2.24 5 5 5 5-2.24 5-5-2.24-5-5-5zm0 2c1.66 0 3 1.34 3 3s-1.34 3-3 3-3-1.34-3-3 1.34-3 3-3z"/>
+                        <path d="M3 13h8V3H3v10Zm0 8h8v-6H3v6Zm10 0h8V11h-8v10Zm0-18v6h8V3h-8Z"/>
                     </svg>
                 </span>
 
                 <span class="warehouse-navigation__text">
-                    Мои операции
+                    Комплектование ЗНП
+                </span>
+
+                <span class="warehouse-navigation__counter"
+                      th:if="${kittingZnpCount != null and kittingZnpCount > 0}"
+                      th:text="${kittingZnpCount}">
+                    2
+                </span>
+            </a>
+
+            <a class="warehouse-navigation__item"
+               th:classappend="${activePage == 'kitting-semi'} ? ' is-active' : ''"
+               th:href="@{/warehouse/kitting-semi}"
+               title="Комплектование полуфабрикатов: операции склада полуфабрикатов">
+
+                <span class="warehouse-navigation__icon">
+                    <svg viewBox="0 0 24 24" aria-hidden="true">
+                        <path d="M3 13h8V3H3v10Zm0 8h8v-6H3v6Zm10 0h8V11h-8v10Zm0-18v6h8V3h-8Z"/>
+                    </svg>
+                </span>
+
+                <span class="warehouse-navigation__text">
+                    Комплектование полуфабрикатов
+                </span>
+
+                <span class="warehouse-navigation__counter"
+                      th:if="${kittingSemiCount != null and kittingSemiCount > 0}"
+                      th:text="${kittingSemiCount}">
+                    1
                 </span>
             </a>
 
@@ -167,7 +196,8 @@
 
         <div class="warehouse-topbar__left">
 
-            <span class="warehouse-topbar__section">
+            <span class="warehouse-topbar__section"
+                  th:text="'Модуль склада ' + ${warehouseKind}">
                 Модуль склада полуфабрикатов
             </span>
         </div>
@@ -251,6 +281,8 @@
      ========================================================= -->
 <th:block th:fragment="commonScripts">
     <script th:src="@{/warehouse/js/common.js}"></script>
+    <!-- Прокрутка страницы в виде датчика ДУУ2М: один большой поплавок -->
+    <script th:src="@{/js/float-scroll.js}"></script>
 </th:block>
 
 </body>

@@ -66,9 +66,19 @@
      * Предпросмотр состава выпуска.
      *
      * Состав не вводится вручную — он выводится из позиций выбранного
-     * заказа покупателя, поэтому диспетчер видит заранее, сколько
-     * экземпляров и с какими кодами изделий получит заказ. Серийные
-     * номера здесь не показываются: они выдаются при сохранении.
+     * заказа покупателя. Строка таблицы — один выпускаемый экземпляр,
+     * а не позиция спецификации: выпуск считают поштучно, и диспетчеру
+     * важнее увидеть перечень изделий, чем агрегированные строки с
+     * количеством. Поэтому колонок три, и каждая повторяет то, что
+     * подписывает изделие в цеху:
+     *
+     *   — тип изделия;
+     *   — серийный номер (из резерва заказа, если диспетчер его отметил;
+     *     пуст, пока номер не выдан);
+     *   — полное обозначение позиции «как в КД».
+     *
+     * Номера, которые ещё не выданы, остаются пустыми: предпросмотр не
+     * выдаёт серийники, их выпускает сохранение заказа.
      */
     function initializeProductionPreview() {
         const script = document.querySelector(
@@ -108,7 +118,7 @@
             const row = document.createElement('tr');
             const cell = document.createElement('td');
 
-            cell.colSpan = 6;
+            cell.colSpan = 3;
             cell.className = 'empty-table';
             cell.textContent = text;
             row.appendChild(cell);
@@ -130,16 +140,13 @@
                 return;
             }
 
-            rows.forEach((row, index) => {
+            rows.forEach((row) => {
                 const tr = document.createElement('tr');
 
                 const values = [
-                    index + 1,
-                    row.classifierCode,
-                    row.productTypeName,
-                    row.productName,
-                    row.quantity,
-                    row.instances + ' шт.'
+                    row.typeName,
+                    row.serialNumber,
+                    row.fullName
                 ];
 
                 values.forEach((value) => {
@@ -380,6 +387,152 @@
      * мог быть снят из работы, и в endpoint-список он бы не попал), но
      * слушатель изделия остаётся: изделие при правке менять можно.
      */
+    /*
+     * Перечень серийников, присваиваемых выпуску.
+     *
+     * Состав выпуска показывает, сколько экземпляров выпустится, а этот
+     * перечень — какие уже зарезерированные заказом номера можно взять.
+     * Отмеченные уходят в releaseSerialIds и переиспользуются; неотмеченные
+     * экземпляры получат новые номера при сохранении. Скрытая сервером
+     * секция (заказ-комплектующий) перечня не касается — номер ему не
+     * назначается вовсе.
+     */
+    function initializeReleaseSerials() {
+        const section =
+            document.getElementById('releaseSerialSection');
+
+        const body =
+            document.getElementById('poSerialBody');
+
+        const customerOrderSelect =
+            document.getElementById('customerOrderId');
+
+        if (!section || !body || !customerOrderSelect) {
+            return;
+        }
+
+        const script = document.querySelector(
+            'script[data-release-serials-url]'
+        );
+
+        const serialsUrl = script
+            ? script.getAttribute('data-release-serials-url')
+            : null;
+
+        /*
+         * Секция скрыта сервером у заказу-комплектующему: без выхода каждый
+         * выбор заказчика дёргал бы перечень ради невидимой таблицы.
+         */
+        if (section.hidden) {
+            return;
+        }
+
+        /*
+         * Отметки восстанавливаются после возврата формы с ошибкой:
+         * сервер вернул releaseSerialIds, и диспетчер не должен отмечать
+         * номера заново.
+         */
+        const selected = new Set(
+            (body.getAttribute('data-selected') || '')
+                .split(',')
+                .map((value) => value.trim())
+                .filter((value) => value !== '')
+        );
+
+        function message(text) {
+            body.innerHTML = '';
+
+            const row = document.createElement('tr');
+            const cell = document.createElement('td');
+
+            cell.colSpan = 4;
+            cell.className = 'empty-table';
+            cell.textContent = text;
+            row.appendChild(cell);
+            body.appendChild(row);
+        }
+
+        function render(rows) {
+            if (!rows || rows.length === 0) {
+                message(
+                    'В выбранном заказе нет свободных серийников — '
+                    + 'экземпляры получат новые номера'
+                );
+
+                return;
+            }
+
+            body.innerHTML = '';
+
+            rows.forEach((row) => {
+                const tr = document.createElement('tr');
+
+                const picker = document.createElement('td');
+                const label = document.createElement('label');
+                const input = document.createElement('input');
+
+                input.type = 'checkbox';
+                input.name = 'releaseSerialIds';
+                input.value = row.id;
+                input.checked = selected.has(String(row.id));
+                label.appendChild(input);
+                picker.appendChild(label);
+                tr.appendChild(picker);
+
+                [row.number, row.typeName, row.fullName].forEach((value) => {
+                    const td = document.createElement('td');
+
+                    td.textContent =
+                        value === null || value === undefined
+                            ? '—'
+                            : String(value);
+
+                    tr.appendChild(td);
+                });
+
+                body.appendChild(tr);
+            });
+        }
+
+        function load(customerOrderId) {
+            if (!serialsUrl) {
+                return;
+            }
+
+            if (!customerOrderId) {
+                message(
+                    'Выберите заказ покупателя, чтобы увидеть серийные номера'
+                );
+
+                return;
+            }
+
+            fetch(
+                serialsUrl + '?customerOrderId='
+                + encodeURIComponent(customerOrderId),
+                {headers: {'Accept': 'application/json'}}
+            )
+                .then((response) =>
+                    response.ok ? response.json() : [])
+                .then(render)
+                .catch(() => message('Не удалось загрузить серийные номера'));
+        }
+
+        /*
+         * Смена заказчика сбрасывает отметки: номера другого заказа не могут
+         * войти в этот выпуск, а сохранение чужого id сервис всё равно
+         * отклонит.
+         */
+        customerOrderSelect.addEventListener('change', () => {
+            selected.clear();
+            load(customerOrderSelect.value);
+        });
+
+        if (customerOrderSelect.value) {
+            load(customerOrderSelect.value);
+        }
+    }
+
     function initializeTechProcess() {
         const classifierSelect =
             document.getElementById('productClassifierId');
@@ -739,6 +892,7 @@
         initializeProductionMode();
         initializeProductionPreview();
         initializeSerialPicker();
+        initializeReleaseSerials();
         initializeTechProcess();
     }
 

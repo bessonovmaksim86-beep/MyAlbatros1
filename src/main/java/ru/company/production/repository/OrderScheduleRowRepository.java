@@ -374,6 +374,71 @@ public interface OrderScheduleRowRepository
     );
 
     /*
+     * Операции комплектования подразделения за период — основа
+     * разделов «Комплектование ЗНП» и «Комплектование
+     * полуфабрикатов».
+     *
+     * Подразделение здесь задаётся списком, а не одним идентификатором:
+     * у склада их бывает несколько (например, склад комплектования
+     * ведёт и собственное подразделение, и смежное), и раздел обязан
+     * показать работу всего склада, а не одного из его подразделений.
+     *
+     * Тип операции берётся списком: к комплектованию относятся и
+     * комплектовочная операция, и получение комплектации. Остальные
+     * этапы маршрута складу не принадлежат, и показывать их в разделе
+     * комплектования значило бы смешать разные работы.
+     *
+     * И назначенные, и неназначенные строки выводятся вместе:
+     * кладовщику нужен весь объём комплектования склада, иначе
+     * неотобранная работа исчезла бы из вида.
+     */
+    @EntityGraph(attributePaths = {
+            "operation",
+            "operation.operationName",
+            "operation.operationType",
+            "customerOrder",
+            "techProcess",
+            "workPlace"
+    })
+    @Query("""
+            select row
+            from OrderScheduleRow row
+            where row.status = :status
+              and row.customerOrder.active = true
+              and row.organizationUnit.id in :unitIds
+              and row.operation.operationType.code in :typeCodes
+              and row.plannedDate between :from and :to
+            order by row.plannedDate asc,
+                     row.operation.operationName.name asc,
+                     row.itemPosition asc, row.instanceIndex asc
+            """)
+    List<OrderScheduleRow> findKittingForUnits(
+            @Param("status") ScheduleRowStatus status,
+            @Param("unitIds") java.util.Collection<Long> unitIds,
+            @Param("typeCodes") java.util.Collection<String> typeCodes,
+            @Param("from") LocalDate from,
+            @Param("to") LocalDate to
+    );
+
+    /** Строки комплектования подразделения — счётчик в боковом меню. */
+    @Query("""
+            select count(row.id)
+            from OrderScheduleRow row
+            where row.status = :status
+              and row.customerOrder.active = true
+              and row.organizationUnit.id in :unitIds
+              and row.operation.operationType.code in :typeCodes
+              and row.plannedDate between :from and :to
+            """)
+    long countKittingForUnits(
+            @Param("status") ScheduleRowStatus status,
+            @Param("unitIds") java.util.Collection<Long> unitIds,
+            @Param("typeCodes") java.util.Collection<String> typeCodes,
+            @Param("from") LocalDate from,
+            @Param("to") LocalDate to
+    );
+
+    /*
      * Занятость сотрудников по дням — цифры загрузки в списке
      * кандидатов на операцию.
      *
@@ -542,5 +607,38 @@ public interface OrderScheduleRowRepository
             """)
     List<OpenInstanceRowView> findRouteRowsOfOrders(
             @Param("orderIds") java.util.Collection<Long> orderIds
+    );
+
+    /*
+     * ============================================================
+     * Закрытие ЗНП по проведению на СГП
+     * ============================================================
+     */
+
+    /*
+     * Проведённые работы склада готовой продукции по заказу покупателя.
+     *
+     * СГП — всегда последний этап маршрута, поэтому проведённая строка
+     * этого подразделения и есть факт «датчик дошёл до конца». Даты не
+     * ограничиваются: закрытию мешает не горизонт плана, а отсутствие
+     * факта, и строка прошлого месяца обязана учитываться так же, как
+     * сегодняшняя. Подразделение опознаётся по коду справочника (V2), а
+     * не по типу операции: СГП отличается от прочего склада именно
+     * подразделением.
+     *
+     * Активный заказ фильтруется наравне с прочими запросами: снятый с
+     * работы заказ не должен своим прошлым планом влиять на закрытие.
+     */
+    @Query("""
+            select row
+            from OrderScheduleRow row
+            where row.customerOrder.id = :customerOrderId
+              and row.customerOrder.active = true
+              and row.organizationUnit.code = :sgpUnitCode
+              and row.completedAt is not null
+            """)
+    List<OrderScheduleRow> findCompletedSgpByCustomerOrder(
+            @Param("customerOrderId") Long customerOrderId,
+            @Param("sgpUnitCode") String sgpUnitCode
     );
 }

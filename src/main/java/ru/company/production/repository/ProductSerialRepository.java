@@ -9,7 +9,9 @@ import ru.company.production.entity.AppUser;
 import ru.company.production.entity.InputControlType;
 import ru.company.production.entity.ProductSerial;
 import ru.company.production.entity.ProductSerialStatus;
+import ru.company.production.entity.ProductType;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 
@@ -114,6 +116,103 @@ public interface ProductSerialRepository
             """)
     List<ProductSerial> findFreeDetailsByCustomerOrderItemId(
             @Param("customerOrderItemId") Long customerOrderItemId
+    );
+
+    /**
+     * Серийники позиции, которые ЕЩЁ можно присвоить выпуску.
+     *
+     * От {@link #findFreeDetailsByCustomerOrderItemId} отличается вторым
+     * условием: номер не должен входить ни в один заказ-комплектующий
+     * (serial_production_orders, миграция V20).
+     *
+     * Свободный по выпуску номер уже может быть укомплектован ЗНП: выпуск
+     * и комплектование — разные связи (issued_production_order — «кем
+     * выпущен», serial_production_orders — «чем укомплектован»). Без второй
+     * проверки форма выпуска предлагала бы диспетчеру датчик, уже собранный
+     * в ячейку, — выпуск задним числом переменил бы хозяина номера, а
+     * операции ЗНП повисли бы на чужом выпуске.
+     *
+     * Подчинённый запрос, а не join: строка обязана остаться одной на
+     * номер, иначе связь «многие к одному» продублировала бы серийник
+     * столько раз, сколько ЗНП в него входит.
+     */
+    @Query("""
+            select serial
+            from ProductSerial serial
+            left join fetch serial.productClassifier classifier
+            left join fetch classifier.sensorCatalog
+            where serial.customerOrderItem.id = :customerOrderItemId
+              and serial.issuedProductionOrder is null
+              and not exists (
+                      select link.id
+                      from SerialProductionOrder link
+                      where link.serial.id = serial.id
+                  )
+            order by serial.serial asc
+            """)
+    List<ProductSerial> findAssignableDetailsByCustomerOrderItemId(
+            @Param("customerOrderItemId") Long customerOrderItemId
+    );
+
+    /**
+     * Присваиваемые серийники всего заказа покупателя — по позициям.
+     *
+     * Тот же фильтр, что у
+     * {@link #findAssignableDetailsByCustomerOrderItemId}, но срез по
+     * заказу: перечню состава выпуска нужны все позиции сразу, иначе на
+     * каждую из них шло бы отдельное обращение к базе.
+     *
+     * Позиция подтянута fetch-join'ом: предпросмотр группирует строки по
+     * номеру позиции, а open-in-view выключен.
+     */
+    @Query("""
+            select serial
+            from ProductSerial serial
+            left join fetch serial.productClassifier classifier
+            left join fetch classifier.sensorCatalog
+            left join fetch serial.customerOrderItem customerItem
+            where customerItem.customerOrder.id = :customerOrderId
+              and serial.issuedProductionOrder is null
+              and not exists (
+                      select link.id
+                      from SerialProductionOrder link
+                      where link.serial.id = serial.id
+                  )
+            order by customerItem.position asc, serial.serial asc
+            """)
+    List<ProductSerial> findAssignableDetailsByCustomerOrderId(
+            @Param("customerOrderId") Long customerOrderId
+    );
+
+    /**
+     * Присваиваемые выпуску номера заказа: только датчики и системы.
+     *
+     * Выпуск выпускает именно эти типы; приборы и ячейки — предмет
+     * других заказов, и в перечне выпуска они только мешали бы
+     * диспетчеру отметить чужой номер.
+     *
+     * Типы приходят параметром, а не вшиты в запрос: перечень живёт
+     * в форме, и список типов может измениться вместе с формой.
+     */
+    @Query("""
+            select serial
+            from ProductSerial serial
+            left join fetch serial.productClassifier classifier
+            left join fetch classifier.sensorCatalog
+            left join fetch serial.customerOrderItem customerItem
+            where customerItem.customerOrder.id = :customerOrderId
+              and serial.productType in :productTypes
+              and serial.issuedProductionOrder is null
+              and not exists (
+                      select link.id
+                      from SerialProductionOrder link
+                      where link.serial.id = serial.id
+                  )
+            order by customerItem.position asc, serial.serial asc
+            """)
+    List<ProductSerial> findAssignableReleaseDetailsByCustomerOrderId(
+            @Param("customerOrderId") Long customerOrderId,
+            @Param("productTypes") Collection<ProductType> productTypes
     );
 
     /**

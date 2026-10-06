@@ -10,6 +10,8 @@ import ru.company.production.entity.AppUser;
 import ru.company.production.repository.UserRepository;
 import ru.company.production.service.BvkAcceptanceService;
 import ru.company.production.service.CellReceivingService;
+import ru.company.production.service.ModuleRoutes;
+import ru.company.production.service.WarehouseKittingService;
 
 import java.util.Locale;
 
@@ -27,7 +29,8 @@ import java.util.Locale;
         WarehouseController.class,
         WarehouseReceivingController.class,
         WarehouseAcceptanceController.class,
-        WarehouseSupplierController.class
+        WarehouseSupplierController.class,
+        WarehouseKittingController.class
 })
 @RequiredArgsConstructor
 public class WarehouseViewAdvice {
@@ -35,6 +38,7 @@ public class WarehouseViewAdvice {
     private final UserRepository userRepository;
     private final CellReceivingService receivingService;
     private final BvkAcceptanceService acceptanceService;
+    private final WarehouseKittingService kittingService;
 
     @ModelAttribute
     public void addWarehouseContext(
@@ -52,6 +56,25 @@ public class WarehouseViewAdvice {
         model.addAttribute(
                 "awaitingAcceptanceCount",
                 acceptanceService.countAwaiting()
+        );
+
+        /*
+         * Счётчики комплектования: незакрытые работы склада видно из
+         * любого раздела модуля, иначе кладовщик узнавал бы об объёме
+         * комплектования, только открыв сам раздел.
+         */
+        model.addAttribute(
+                "kittingZnpCount",
+                kittingService.countOperations(
+                        WarehouseKittingService.Section.ZNP
+                )
+        );
+
+        model.addAttribute(
+                "kittingSemiCount",
+                kittingService.countOperations(
+                        WarehouseKittingService.Section.SEMI_FINISHED
+                )
         );
 
         if (authentication == null
@@ -82,6 +105,11 @@ public class WarehouseViewAdvice {
                 specialty == null || specialty.isBlank()
                         ? "Должность не указана"
                         : specialty
+        );
+
+        model.addAttribute(
+                "warehouseKind",
+                ModuleRoutes.warehouseKind(user.getRole())
         );
     }
 

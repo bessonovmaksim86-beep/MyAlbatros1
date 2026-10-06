@@ -869,7 +869,7 @@ public class DispatcherController {
             form.setZnpKind(znpKind.name());
 
             /*
-             * Автономер ПЗ-ГГГГ-NNN относится к выпуску. Комплектующему
+             * Автономер ЗНП-ГГГГ-NNN относится к выпуску. Комплектующему
              * номер нужен собственный — из внешнего учёта, поэтому в
              * форме ЗНП поле остаётся пустым, а не заполненным
              * неподходящим номером.
@@ -1600,7 +1600,7 @@ public class DispatcherController {
     }
 
     /**
-     * Значения формы выпуска по умолчанию: номер ПЗ-ГГГГ-NNN
+     * Значения формы выпуска по умолчанию: номер ЗНП-ГГГГ-NNN
      * и сегодняшняя дата открытия.
      *
      * Срок исполнения и статус сюда не кладутся: срок берётся из
@@ -2101,6 +2101,60 @@ public class DispatcherController {
             row.put("productName", classifier.getDisplayName());
             row.put("quantity", formatQuantity(item.getQuantity()));
             row.put("instances", instances);
+
+            rows.add(row);
+        }
+
+        return rows;
+    }
+
+    /**
+     * Серийники выпуска, которые ещё можно ему присвоить.
+     *
+     * Перечень строит резервы выбранного заказа покупателя: номера,
+     * уже выпущенные другим заказом или уже вошедшие в заказ-
+     * комплектующий, в список не попадают — выпуск не должен отнимать
+     * номер у действующего изделия. Типы ограничены датчиками и
+     * системами: остальное выпуску не принадлежит.
+     *
+     * Полное имя берётся из позиции договора, а не из классификатора:
+     * диспетчер сверяет номер с конструкторской документацией, где
+     * изделие записано полным обозначением с параметрами.
+     */
+    @GetMapping("/production-order/release-serials")
+    @ResponseBody
+    public List<Map<String, Object>> releaseSerials(
+            @RequestParam(required = false) Long customerOrderId
+    ) {
+        if (customerOrderId == null) {
+            return Collections.emptyList();
+        }
+
+        List<ProductSerial> serials = productSerialRepository
+                .findAssignableReleaseDetailsByCustomerOrderId(
+                        customerOrderId,
+                        List.of(ProductType.SENSOR, ProductType.SYSTEM)
+                );
+
+        List<Map<String, Object>> rows = new ArrayList<>();
+
+        for (ProductSerial serial : serials) {
+
+            CustomerOrderItem item = serial.getCustomerOrderItem();
+
+            String fullName = item == null ? null : item.getFullName();
+
+            if (fullName == null || fullName.isBlank()) {
+                fullName = serial.getDisplayName();
+            }
+
+            Map<String, Object> row = new LinkedHashMap<>();
+
+            row.put("id", serial.getId());
+            row.put("number", serial.getFullNumber());
+            row.put("fullName", fullName);
+            row.put("typeName", serial.getTypeName());
+            row.put("itemId", item == null ? null : item.getId());
 
             rows.add(row);
         }

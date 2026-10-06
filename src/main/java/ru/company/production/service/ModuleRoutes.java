@@ -129,6 +129,14 @@ public final class ModuleRoutes {
             ),
 
             Map.entry(
+                    Role.OMTSIK_С_EXECUTOR,
+                    new Destination(
+                            "Склад комплектования",
+                            "/warehouse/general"
+                    )
+            ),
+
+            Map.entry(
                     Role.BVK_EXECUTOR,
                     new Destination(
                             "Бюро входного контроля",
@@ -196,5 +204,34 @@ public final class ModuleRoutes {
      */
     public static boolean hasOwnModule(Role role) {
         return ROLE_DESTINATIONS.containsKey(role);
+    }
+
+    /**
+     * Принадлежит ли роль интерфейсу склада.
+     *
+     * Перечисление здесь, а не в шаблонах: боковое меню «Моих операций»
+     * берётся у того модуля, в который роль входит по входу в систему, и
+     * для кладовщика это склад, а не цех. Руководители складов в список не
+     * входят намеренно — их модуль {@code /workshop}, и меню им нужно
+     * цеховое, иначе в шапке оказался бы «Обзор склада» над списком
+     * сотрудников подразделения.
+     */
+    public static boolean isWarehouse(Role role) {
+        return role == Role.OMTSIK_EXECUTOR
+                || role == Role.OMTSIK_С_EXECUTOR;
+    }
+
+    /**
+     * Род склада для подписей меню и верхней панели.
+     *
+     * Формулировка одна на все интерфейсы: складские страницы подписывают
+     * модуль этими словами, и «Мои операции» кладовщика не должны назвать
+     * склад иначе, чем обзор склада.
+     */
+    public static String warehouseKind(Role role) {
+        return role == Role.OMTSIK_С_EXECUTOR
+                || role == Role.OMTSIK_С_MASTER
+                ? "комплектования"
+                : "полуфабрикатов";
     }
 }

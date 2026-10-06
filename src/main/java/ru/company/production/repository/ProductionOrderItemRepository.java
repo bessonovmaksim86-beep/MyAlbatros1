@@ -64,6 +64,11 @@ public interface ProductionOrderItemRepository
      * fullName не заполнен. Строки без серийного номера исключены:
      * сопоставлять нечего.
      *
+     * serialId (идентификатор ProductSerial) выбирается наряду с самим
+     * номером: write-пути (хук закрытия ЗНП на СГП) по нему ищут связи
+     * «датчик ⇄ заказ» в serial_production_orders, где ключ — id, а не
+     * человекочитаемый номер. Read-модулям распределения он безразличен.
+     *
      * Aliases join'а (serialRow) и выбранного поля (serial) разведены
      * намеренно: совпадающее имя алиаса связи и алиаса выборки
      * Hibernate трактует неоднозначно при сборке метамодели запроса.
@@ -73,6 +78,7 @@ public interface ProductionOrderItemRepository
                 customerOrder.id as customerOrderId,
                 customerItem.position as itemPosition,
                 item.position as releasePosition,
+                serialRow.id as serialId,
                 classifier.code as classifierCode,
                 serialRow.serial as serial,
                 customerItem.fullName as fullName,
@@ -89,6 +95,41 @@ public interface ProductionOrderItemRepository
             """)
     List<ProductionOrderSerialProjection> findSerialsByCustomerOrderIds(
             @Param("customerOrderIds") Collection<Long> customerOrderIds
+    );
+
+    /**
+     * Серийники выпуска для набора заказов на производство — колонка
+     * «Серийник(и)» списка заказов и фильтр по типу изделия.
+     *
+     * Пакетность обязательна: список показывает десятки заказов, и
+     * запрос на строку превратил бы страницу в N+1. Ключом строки
+     * служит production_order_id — тот же идентификатор, под которым
+     * список хранит сам заказ.
+     *
+     * Номер и тип берутся из самого серийника (product_serials), а не
+     * из классификатора позиции: реестр хранит и код, и серию, и тип
+     * изделия, поэтому строка не зависит от того, дописан ли
+     * классификатор позже. Строки без номера исключены — показывать в
+     * колонке нечего.
+     *
+     * У заказа-комплектующего (ЗНП) позиций выпуска нет, поэтому этот
+     * запрос для него пустой, а его датчики читаются из
+     * SerialProductionOrderRepository.findSerialsByOrderIds.
+     */
+    @Query("""
+            select
+                item.productionOrder.id as orderId,
+                classifier.code as classifierCode,
+                serialRow.serial as serial,
+                serialRow.productType as productType
+            from ProductionOrderItem item
+            join item.serial serialRow
+            join serialRow.productClassifier classifier
+            where item.productionOrder.id in :orderIds
+            order by item.productionOrder.id, item.position
+            """)
+    List<ProductionOrderSerialRowView> findSerialsByOrderIds(
+            @Param("orderIds") Collection<Long> orderIds
     );
 
     @Query("""

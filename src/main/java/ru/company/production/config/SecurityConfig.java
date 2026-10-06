@@ -123,7 +123,10 @@ public class SecurityConfig {
                          * поэтому право даётся только роли склада.
                          */
                         .requestMatchers("/warehouse", "/warehouse/**")
-                        .hasRole("OMTSIK_EXECUTOR")
+                        .hasAnyRole(
+                                "OMTSIK_EXECUTOR",
+                                "OMTSIK_С_EXECUTOR"
+                        )
                         /*
                          * Бюро входного контроля: проверка партий,
                          * оприходованных складом. Модуль работает с

@@ -11,7 +11,10 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 import ru.company.production.entity.AppUser;
 import ru.company.production.repository.UserRepository;
+import ru.company.production.service.BvkAcceptanceService;
+import ru.company.production.service.CellReceivingService;
 import ru.company.production.service.CustomerOrderSuspensionService;
+import ru.company.production.service.FinishedProductClosureService;
 import ru.company.production.service.ModuleRoutes;
 import ru.company.production.service.WorkshopDistributionService;
 import ru.company.production.service.WorkshopStaffService;
@@ -41,6 +44,17 @@ public class MyOperationsController {
     private final WorkshopStaffService staffService;
     private final UserRepository userRepository;
     private final CustomerOrderSuspensionService suspensionService;
+    private final CellReceivingService receivingService;
+    private final BvkAcceptanceService acceptanceService;
+
+    /*
+     * Проведение на СГП закрывает заказы-комплектующие, все датчики
+     * которых дошли до склада готовой продукции. Хук стоит здесь, а не
+     * внутри сервиса распределения: проведение — событие цеха, а
+     * закрытие ЗНП — событие производства, и смешивать их в одном
+     * сервисе незачем.
+     */
+    private final FinishedProductClosureService closureService;
 
     /**
      * Список работ текущего пользователя.
@@ -105,6 +119,34 @@ public class MyOperationsController {
         model.addAttribute("currentUser", user);
         model.addAttribute("activePage", "my-operations");
 
+        /*
+         * Боковое меню раздел берёт у того модуля, в который роль входит
+         * по входу в систему: у кладовщика это склад, и без складских
+         * подписей и счётчиков он потерял бы свой модуль — меню показалось
+         * бы цеховым, а ссылка «Обзор склада» осталась бы в меню цеха.
+         *
+         * Счётчики читаются только для складской роли: меню рисуется на
+         * каждом экране, и два запроса ради цифр, которые исполнитель
+         * цеха не увидит, стоили бы замедления ему.
+         */
+        if (ModuleRoutes.isWarehouse(user.getRole())) {
+            model.addAttribute("warehouseModule", true);
+            model.addAttribute(
+                    "warehouseKind",
+                    ModuleRoutes.warehouseKind(user.getRole())
+            );
+            model.addAttribute(
+                    "pendingReceivingCount",
+                    receivingService.countPending()
+            );
+            model.addAttribute(
+                    "awaitingAcceptanceCount",
+                    acceptanceService.countAwaiting()
+            );
+        } else {
+            model.addAttribute("warehouseModule", false);
+        }
+
         return "my-operations/index";
     }
 
@@ -136,6 +178,14 @@ public class MyOperationsController {
         try {
             suspensionService.assertRowOperable(rowId);
             distributionService.completeRow(rowId, user);
+
+            /*
+             * Хук СГП выполняется после проведения: completeRow уже
+             * записал дату факта, и закрытие видит актуальное состояние
+             * графика. Для всех прочих подразделений вызов ничего не
+             * делает.
+             */
+            closureService.onRowCompleted(rowId);
 
             redirectAttributes.addFlashAttribute(
                     "successMessage",

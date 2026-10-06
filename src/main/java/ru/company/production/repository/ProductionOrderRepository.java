@@ -157,6 +157,7 @@ public interface ProductionOrderRepository
               and ord.parentProductionOrder is null
               and ord.znpKind
                     = ru.company.production.entity.ZnpKind.KITTING
+              and ord.active = true
             """)
     boolean existsRootByCustomerOrderId(
             @Param("customerOrderId") Long customerOrderId

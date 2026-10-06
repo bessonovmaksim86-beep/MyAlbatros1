@@ -27,6 +27,7 @@ import ru.company.production.repository.ProductClassifierRepository;
 import ru.company.production.repository.ProductSerialRepository;
 import ru.company.production.repository.ProductionOrderItemRepository;
 import ru.company.production.repository.ProductionOrderRepository;
+import ru.company.production.repository.SerialProductionOrderRepository;
 import ru.company.production.repository.TechProcessClassifierRepository;
 import ru.company.production.repository.TechProcessRepository;
 
@@ -37,7 +38,10 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -75,16 +79,32 @@ public class ProductionOrderService {
      */
     private final SerialKittingService serialKittingService;
 
-    private static final String NUMBER_PREFIX = "ПЗ-";
+    /*
+     * Переиспользование резерва: claimForRelease — единственный способ
+     * отдать выпуску уже зарезерированный заказом номер, не выдавая новый.
+     * Ряд изделия считает один сервис, и второй расчёт выдал бы занятую
+     * серию, а уникальный ключ (numbering_key, serial) поймал бы это уже
+     * как нарушение целостности.
+     */
+    private final SerialIssueService serialIssueService;
+
+    /*
+     * Нужен проверке отмеченного номера: свободный по выпуску серийник
+     * уже может быть укомплектован ЗНП, и выпускать его заново нельзя.
+     */
+    private final SerialProductionOrderRepository
+            serialProductionOrderRepository;
+
+    private static final String NUMBER_PREFIX = "ЗНП-";
 
     private static final Pattern NUMBERED =
-            Pattern.compile("^ПЗ-(\\d{4})-(\\d+)$");
+            Pattern.compile("^ЗНП-(\\d{4})-(\\d+)$");
 
     /* Верхняя граница пятизначной серии (chk_product_serial_range). */
     private static final int MAX_SERIAL = 99999;
 
     /**
-     * Ближайший свободный номер заказа вида ПЗ-ГГГГ-NNN,
+     * Ближайший свободный номер заказа вида ЗНП-ГГГГ-NNN,
      * где ГГГГ — текущий год.
      */
     public String nextNumber() {
@@ -346,7 +366,7 @@ public class ProductionOrderService {
          * поле формы для него пустое, а работы задаёт техпроцесс
          * (см. requireTechProcess ниже).
          */
-        Operation operation = kind.isReleaseBound()
+        Operation operation = component && kind.isSerialBased()
                 ? requireKittingOperation(form.getProductionOperationId())
                 : null;
 
@@ -371,7 +391,7 @@ public class ProductionOrderService {
 
         /*
          * Номер ЗНП всегда вводит оператор: он приходит из внешнего
-         * учёта и автоподбор по шаблону ПЗ-ГГГГ-NNN дал бы номер,
+         * учёта и автоподбор по шаблону ЗНП-ГГГГ-NNN дал бы номер,
          * которого в документах нет. Для ЗП номер остаётся
          * автогенерируемым.
          */
@@ -447,7 +467,11 @@ public class ProductionOrderService {
          * (SerialProductionOrder).
          */
         if (!component) {
-            buildRelease(saved, customerOrder);
+            buildRelease(
+                    saved,
+                    customerOrder,
+                    form.getReleaseSerialIds()
+            );
 
             return productionOrderRepository.save(saved);
         }
@@ -587,7 +611,7 @@ public class ProductionOrderService {
          * (см. create): групповой заказ в выпуск не входит, и поле
          * формы для него пустое.
          */
-        Operation operation = kind.isReleaseBound()
+        Operation operation = !root && kind.isSerialBased()
                 ? requireKittingOperation(form.getProductionOperationId())
                 : null;
 
@@ -928,7 +952,15 @@ public class ProductionOrderService {
      * чтобы выпуск был прослеживаем вплоть до позиции договора.
      */
     private void buildRelease(ProductionOrder order,
-                              CustomerOrder customerOrder) {
+                              CustomerOrder customerOrder,
+                              List<Long> chosenSerialIds) {
+
+        /*
+         * Отмеченные диспетчером резервы разложены по позициям: строка
+         * выпуска берёт номер своей позиции, а не первого попавшегося.
+         */
+        Map<Long, List<ProductSerial>> claimed =
+                chooseReservedSerials(customerOrder, chosenSerialIds);
 
         int position = 1;
 
@@ -945,13 +977,24 @@ public class ProductionOrderService {
 
             int quantity = instanceCount(customerItem.getQuantity());
 
+            List<ProductSerial> reserved =
+                    claimed.getOrDefault(customerItem.getId(), List.of());
+
             for (int index = 0; index < quantity; index++) {
 
                 ProductionOrderItem item = new ProductionOrderItem();
 
                 item.setProductClassifier(classifier);
                 item.setCustomerOrderItem(customerItem);
-                item.setSerial(issueSerial(classifier, order));
+                /*
+                 * Отмеченный резерв переиспользуется, а не перевыпускается:
+                 * новый номер на тот же экземпляр оставил бы в базе второй
+                 * действующий серийник на одну позицию договора.
+                 */
+                item.setSerial(index < reserved.size()
+                        ? serialIssueService.claimForRelease(
+                                reserved.get(index), order)
+                        : issueSerial(classifier, order));
 
                 /*
                  * Порядок задаётся вручную: ProductionOrder.addItem
@@ -964,6 +1007,88 @@ public class ProductionOrderService {
                 order.addItem(item);
             }
         }
+    }
+
+    /**
+     * Отмеченные диспетчером резервы, разложенные по позициям заказа.
+     *
+     * Ключ — id позиции, значение — её номера по возрастанию серии: строка
+     * выпуска берёт номер своей позиции, а не первый свободный по заказу,
+     * иначе у двух позиций одного рода экземпляры обменялись бы номерами.
+     *
+     * Отмеченный номер обязан быть резервом именно выбранного заказа.
+     * Номер другого выпуска, серийник, уже укомплектованный ЗНП, или чужая
+     * позиция — это порча прослеживаемости, а не вариант выбора, поэтому
+     * каждый номер проверяется, а не молча отбрасывается.
+     */
+    private Map<Long, List<ProductSerial>> chooseReservedSerials(
+            CustomerOrder customerOrder,
+            List<Long> chosenSerialIds) {
+
+        if (chosenSerialIds == null || chosenSerialIds.isEmpty()) {
+            return Map.of();
+        }
+
+        Map<Long, CustomerOrderItem> items = new LinkedHashMap<>();
+
+        for (CustomerOrderItem item : customerOrder.getItems()) {
+            items.put(item.getId(), item);
+        }
+
+        Map<Long, List<ProductSerial>> claimed = new LinkedHashMap<>();
+
+        for (Long serialId : new LinkedHashSet<>(chosenSerialIds)) {
+
+            ProductSerial serial = productSerialRepository
+                    .findById(serialId)
+                    .orElseThrow(() -> new EntityNotFoundException(
+                            "Серийный номер не найден"
+                    ));
+
+            if (serial.getIssuedProductionOrder() != null) {
+                throw new IllegalStateException(
+                        "Номер «" + serial.getFullNumber()
+                                + "» уже выпущен заказом «"
+                                + serial.getIssuedProductionOrder().getNumber()
+                                + "»"
+                );
+            }
+
+            if (serialProductionOrderRepository.countBySerial_Id(serialId) > 0) {
+                throw new IllegalArgumentException(
+                        "Номер «" + serial.getFullNumber()
+                                + "» уже укомплектован заказом-комплектующим — "
+                                + "в новом выпуске он не участвует"
+                );
+            }
+
+            CustomerOrderItem item = serial.getCustomerOrderItem();
+
+            if (item == null || !items.containsKey(item.getId())) {
+                throw new IllegalArgumentException(
+                        "Номер «" + serial.getFullNumber()
+                                + "» не относится к позициям выбранного заказа"
+                );
+            }
+
+            List<ProductSerial> reserved = claimed.computeIfAbsent(
+                    item.getId(),
+                    key -> new ArrayList<>());
+
+            reserved.add(serial);
+
+            if (reserved.size() > instanceCount(item.getQuantity())) {
+                throw new IllegalArgumentException(
+                        "В позиции №" + item.getPosition()
+                                + " отмечено больше номеров, чем заявлено экземпляров"
+                );
+            }
+        }
+
+        claimed.values().forEach(numbers -> numbers.sort(
+                Comparator.comparingInt(ProductSerial::getSerial)));
+
+        return claimed;
     }
 
     /**

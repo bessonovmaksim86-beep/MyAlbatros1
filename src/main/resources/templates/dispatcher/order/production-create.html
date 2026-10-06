@@ -222,7 +222,7 @@
 
                                 <!--
                                     Номер подставляется сервисом по шаблону
-                                    ПЗ-ГГГГ-NNN, но остаётся редактируемым:
+                                    ЗНП-ГГГГ-NNN, но остаётся редактируемым:
                                     диспетчер может задать свой (например,
                                     зеркальный номер из Б24). Уникальность
                                     проверяется при сохранении.
@@ -633,7 +633,7 @@
                             </div>
 
                             <div class="field"
-                                 th:if="${poSerial or poRelease}">
+                                 th:if="${poSerial and !poRelease}">
 
                                 <label for="productionOperationId">
                                     Операция выпуска
@@ -718,13 +718,19 @@
                 </section>
 
                 <!--
-                    Состав выпуска — позиции заказа покупателя, из них
-                    выдаются серийники. У заказа-комплектующего такого
-                    состава нет: он сам входит внутрь изделия, а его
-                    «состав» — отмеченные датчики либо изделие с
+                    Состав выпуска — экземпляры, которые выпустятся из
+                    позиций заказа покупателя. У заказа-комплектующего
+                    такого состава нет: он сам входит внутрь изделия, а
+                    его «состав» — отмеченные датчики либо изделие с
                     количеством. Секция относится только к выпуску,
                     поэтому для комплектующего она скрыта: таблица с
                     пустой строкой выглядела бы как ошибка загрузки.
+
+                    Строка таблицы — один экземпляр, а не позиция
+                    спецификации: выпуск считают поштучно. Колонок три, и
+                    каждая повторяет подпись изделия в цеху — тип,
+                    серийный номер (из резерва, если он уже отмечен) и
+                    полное обозначение «как в КД».
                 -->
                 <section class="card"
                          id="releasePreviewSection"
@@ -760,12 +766,9 @@
 
                                 <thead>
                                 <tr>
-                                    <th style="width: 46px;">№</th>
-                                    <th style="width: 130px;">Код изделия</th>
-                                    <th style="width: 150px;">Тип изделия</th>
-                                    <th>Наименование</th>
-                                    <th style="width: 120px;">Количество</th>
-                                    <th style="width: 150px;">Экземпляров</th>
+                                    <th style="width: 170px;">Тип изделия</th>
+                                    <th style="width: 170px;">Серийный номер</th>
+                                    <th>Полное имя</th>
                                 </tr>
                                 </thead>
 
@@ -776,7 +779,7 @@
 
                                 <tr>
 
-                                    <td colspan="6"
+                                    <td colspan="3"
                                         class="empty-table"
                                         id="poPreviewEmpty">
                                         <span th:if="${!editing}">
@@ -810,6 +813,80 @@
                             </a>
                             .
                         </p>
+
+                    </div>
+
+                </section>
+
+                <!--
+                    Перечень серийников, которые можно присвоить выпуску.
+                    Показан только выпуску (как и состав): заказу-
+                    комплектующему номера не назначаются. В список попадают
+                    резервы выбранного заказа покупателя, ещё не выпущенные
+                    и не вошедшие в заказ-комплектующий; типы ограничены
+                    датчиками и системами. Отмеченные номера уходят в
+                    releaseSerialIds и переиспользуются вместо выдачи новых.
+                -->
+                <section class="card"
+                         id="releaseSerialSection"
+                         th:hidden="${!poRelease or editing}">
+
+                    <div class="card-head">
+
+                        <div>
+
+                            <h2>Серийные номера выпуска</h2>
+
+                            <small>
+                                Отметьте номера из резерва заказа покупателя —
+                                они закрепятся за выпуском. Отмечать всё не
+                                обязательно: неотмеченные экземпляры получат
+                                новые номера при сохранении
+                            </small>
+
+                        </div>
+
+                    </div>
+
+                    <div class="card-body">
+
+                        <div class="table-wrap">
+
+                            <table class="data-table">
+
+                                <thead>
+                                <tr>
+                                    <th style="width: 42px;"></th>
+                                    <th style="width: 150px;">Серийный номер</th>
+                                    <th style="width: 120px;">Тип изделия</th>
+                                    <th>Полное имя</th>
+                                </tr>
+                                </thead>
+
+                                <tbody id="poSerialBody"
+                                       th:attr="data-selected=${
+                                           #strings.listJoin(
+                                               productionOrderForm.releaseSerialIds,
+                                               ','
+                                           )
+                                       }">
+
+                                <tr>
+
+                                    <td colspan="4"
+                                        class="empty-table"
+                                        id="poSerialEmpty">
+                                        Выберите заказ покупателя,
+                                        чтобы увидеть серийные номера
+                                    </td>
+
+                                </tr>
+
+                                </tbody>
+
+                            </table>
+
+                        </div>
 
                     </div>
 
@@ -890,8 +967,9 @@
 </th:block>
 
 <script th:src="@{/dispatcher/js/production-order.js}"
-        th:attr="data-preview-url=@{/dispatcher/production-order/customer-order-items},
+        th:attr="data-preview-url=@{/dispatcher/production-order/release-preview},
                  data-serials-url=@{/dispatcher/production-order/parent-serials},
+                 data-release-serials-url=@{/dispatcher/production-order/release-serials},
                  data-kind-classifiers-url=@{/dispatcher/production-order/kind-classifiers},
                  data-routes-url=@{/dispatcher/production-order/classifier-routes}"></script>
 

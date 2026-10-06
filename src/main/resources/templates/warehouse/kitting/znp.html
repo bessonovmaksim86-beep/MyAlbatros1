@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="ru"
+      xmlns:th="http://www.thymeleaf.org">
+
+<head>
+    <meta charset="UTF-8">
+
+    <meta name="viewport"
+          content="width=device-width, initial-scale=1">
+
+    <title>Комплектование ЗНП</title>
+
+    <link rel="stylesheet"
+          th:href="@{/technology/css/technology.css}">
+
+    <link rel="stylesheet"
+          th:href="@{/technology/css/common.css}">
+
+    <link rel="stylesheet"
+          th:href="@{/warehouse/css/warehouse.css}">
+</head>
+
+<body>
+
+<div class="app-shell">
+
+    <aside th:replace="~{warehouse/fragments/layout
+            :: sidebar('kitting-znp')}">
+    </aside>
+
+    <main class="main">
+
+        <header th:replace="~{warehouse/fragments/layout
+                :: topbar}">
+        </header>
+
+        <div class="page-content warehouse-page">
+
+            <!--
+                Раздел склада комплектования. Список общий с разделом
+                полуфабрикатов: подразделение задаёт адрес, а не
+                разметка, поэтому здесь остаётся только подписать,
+                какой склад показан.
+            -->
+            <th:block th:replace="~{warehouse/kitting/fragments/section
+                    :: list('znp')}">
+            </th:block>
+
+        </div>
+
+        <th:block th:replace="~{warehouse/fragments/layout
+                :: commonScripts}">
+        </th:block>
+
+    </main>
+</div>
+
+</body>
+</html>

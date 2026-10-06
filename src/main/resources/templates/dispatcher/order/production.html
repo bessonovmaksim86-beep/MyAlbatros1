@@ -40,8 +40,8 @@
                     <h1>Заказы на производство</h1>
 
                     <p>
-                        Заказы на выпуск изделий: состав выводится
-                        из заказа покупателя, каждое изделие
+                        Заказы на выпуск датчиков и систем: состав
+                        выводится из заказа покупателя, каждое изделие
                         получает серийный номер
                     </p>
 
@@ -50,68 +50,22 @@
                 <div class="page-head-actions create-actions">
 
                     <!--
-                        Выпуск (ЗП) и заказ-комплектующий (ЗНП) заводятся
-                        разными кнопками: набор полей у них разный, и
-                        переключать тип внутри одной формы смысла нет —
-                        выбор делает сама кнопка.
+                        Кнопка выпуска (ЗП) остаётся: заказ на производство
+                        для датчиков и систем заводится именно здесь.
 
-                        Слово «Создать» из надписей убрано по требованию
-                        цеха: блок стоит под заголовком «Заказы на
-                        производство» и целиком посвящён заведению заказа,
-                        поэтому глагол в каждой из шести кнопок только
-                        раздувал надписи. Смысл перехода держит подпись
-                        группы .create-actions__label.
+                        Кнопки заведения ЗНП из шапки убраны: заказ-
+                        комплектующий верхнего уровня больше не заводится
+                        отдельной кнопкой, а появляется в этом списке после
+                        того, как получен выпуск, и связывается с его
+                        серийниками. Отдельный вид ЗНП (V37) выбирается не
+                        кнопкой списка, а в карточке выпуска при присвоении.
                     -->
-                    <span class="create-actions__label">
-                        Новый заказ
-                    </span>
-
                     <a class="btn primary"
                        th:href="@{/dispatcher/production-order/create(
                            release=true
                        )}">
                         Заказ на производство
                     </a>
-
-                    <!--
-                        По кнопке на каждый вид ЗНП (V37): заказ
-                        заводится сразу того вида, который нужен, потому
-                        что вид после создания не меняется (см.
-                        assertKindUnchanged), и откладывать выбор в
-                        форму значило бы рискнуть завести не тот
-                        документ. Надпись кнопки — то же название вида,
-                        что в колонке списка и в заголовке формы
-                        (см. ZnpKind.getCreateButtonLabel).
-
-                        Кнопки, а не выпадающее меню: меню прятало
-                        список видов за кликом и требовало стилей,
-                        которых в проекте нет, — панель не скрывалась и
-                        выбор не работал. Здесь все виды видны сразу.
-
-                        Контейнер нужен, чтобы группа не растеклась по
-                        всей шапке рядом с кнопкой выпуска: внутри него
-                        кнопки встают сеткой в несколько колонок.
-                    -->
-                    <div class="kind-buttons">
-
-                        <a class="btn kind-button"
-                           th:each="kind : ${znpKinds}"
-                           th:href="@{/dispatcher/production-order/create(
-                               kind=${kind.name()}
-                           )}">
-
-                            <span class="kind-button__title"
-                                  th:text="${kind.createButtonLabel}">
-                                ЗНП на комплектование
-                            </span>
-
-                            <span class="kind-button__hint"
-                                  th:text="${kind.compositionHint}">
-                                отмечаете датчики выпуска
-                            </span>
-                        </a>
-
-                    </div>
 
                 </div>
             </div>
@@ -177,6 +131,159 @@
                 </div>
             </div>
 
+            <!--
+                Фильтры списка. Отправляются GET'ом на тот же адрес,
+                поэтому перезагружают страницу с выбранными условиями.
+                Значения возвращаются из параметров запроса, чтобы
+                выбранный фильтр пережил перезагрузку.
+
+                Стили заданы здесь, а не в dispatcher.css: блок появился
+                вместе с редизайном списка, а отдельного класса фильтров
+                в общем стиле модуля нет — карточки и подписи формы и так
+                размечаются локально, поэтому держать эти пять правил в
+                шаблоне честнее, чем плодить сущности в чужом файле.
+
+                Отбор выполняет ProductionOrderListInterceptor: он читает
+                эти же параметры из запроса и сужает список, поэтому
+                контроллер к фильтрам не обращается и остаётся в том виде,
+                в каком отдавал список до редизайна.
+            -->
+            <form method="get"
+                  th:action="@{/dispatcher/production-order}"
+                  style="display: flex;
+                         flex-wrap: wrap;
+                         align-items: flex-end;
+                         gap: 16px;
+                         margin: 0 0 16px;
+                         padding: 16px;
+                         background: #fff;
+                         border: 1px solid var(--border, #e2e8f0);
+                         border-radius: 12px;">
+
+                <div style="display: flex;
+                            flex-direction: column;
+                            gap: 4px;
+                            min-width: 180px;">
+
+                    <label for="filterProductType"
+                           style="font-size: 12px;
+                                  color: var(--muted, #64748b);">
+                        Тип изделия
+                    </label>
+
+                    <select id="filterProductType" name="productType">
+                        <option value=""
+                                th:selected="${param.productType == null
+                                    or #lists.isEmpty(param.productType)}">
+                            Все типы
+                        </option>
+                        <option value="SENSOR"
+                                th:selected="${!#lists.isEmpty(param.productType)
+                                    and param.productType[0] == 'SENSOR'}">
+                            Датчики
+                        </option>
+                        <option value="SYSTEM"
+                                th:selected="${!#lists.isEmpty(param.productType)
+                                    and param.productType[0] == 'SYSTEM'}">
+                            Системы
+                        </option>
+                    </select>
+                </div>
+
+                <div style="display: flex;
+                            flex-direction: column;
+                            gap: 4px;
+                            min-width: 180px;">
+
+                    <label for="filterStatus"
+                           style="font-size: 12px;
+                                  color: var(--muted, #64748b);">
+                        Статус
+                    </label>
+
+                    <select id="filterStatus" name="status">
+                        <option value=""
+                                th:selected="${param.status == null
+                                    or #lists.isEmpty(param.status)}">
+                            Любой статус
+                        </option>
+                        <option value="NEW"
+                                th:selected="${!#lists.isEmpty(param.status)
+                                    and param.status[0] == 'NEW'}">
+                            Новый
+                        </option>
+                        <option value="IN_WORK"
+                                th:selected="${!#lists.isEmpty(param.status)
+                                    and param.status[0] == 'IN_WORK'}">
+                            В работе
+                        </option>
+                        <option value="PARTIALLY_DONE"
+                                th:selected="${!#lists.isEmpty(param.status)
+                                    and param.status[0] == 'PARTIALLY_DONE'}">
+                            Частично выполнен
+                        </option>
+                        <option value="DONE"
+                                th:selected="${!#lists.isEmpty(param.status)
+                                    and param.status[0] == 'DONE'}">
+                            Выполнен
+                        </option>
+                        <option value="CANCELLED"
+                                th:selected="${!#lists.isEmpty(param.status)
+                                    and param.status[0] == 'CANCELLED'}">
+                            Отменён
+                        </option>
+                    </select>
+                </div>
+
+                <div style="display: flex;
+                            flex-direction: column;
+                            gap: 4px;
+                            min-width: 220px;"
+                     th:if="${rootOrders != null
+                         and !#lists.isEmpty(rootOrders)}">
+
+                    <label for="filterReleaseOrder"
+                           style="font-size: 12px;
+                                  color: var(--muted, #64748b);">
+                        Заказ на производство
+                    </label>
+
+                    <select id="filterReleaseOrder" name="releaseOrderId">
+                        <option value=""
+                                th:selected="${param.releaseOrderId == null
+                                    or #lists.isEmpty(param.releaseOrderId)}">
+                            Все выпуски
+                        </option>
+                        <option th:each="rootOption : ${rootOrders}"
+                                th:value="${rootOption.id}"
+                                th:selected="${!#lists.isEmpty(param.releaseOrderId)
+                                    and param.releaseOrderId[0]
+                                        == #strings.toString(rootOption.id)}"
+                                th:text="${
+                                    rootOption.number
+                                    + ' — '
+                                    + rootOption.customerOrderNumber
+                                }">
+                            ЗНП-2026-001
+                        </option>
+                    </select>
+                </div>
+
+                <div style="display: flex;
+                            gap: 8px;">
+
+                    <button class="btn primary compact" type="submit">
+                        Применить
+                    </button>
+
+                    <a class="btn secondary compact"
+                       th:href="@{/dispatcher/production-order}">
+                        Сбросить
+                    </a>
+                </div>
+
+            </form>
+
             <section class="card">
 
                 <div class="card-head">
@@ -210,10 +317,9 @@
                             <thead>
                             <tr>
                                 <th>Номер заказа</th>
-                                <th>Уровень</th>
+                                <th>Серийник(и)</th>
                                 <th>Дата открытия</th>
                                 <th>Заказ покупателя</th>
-                                <th>Операция</th>
                                 <th>Изделий</th>
                                 <th>Собрано</th>
                                 <th>Срок</th>
@@ -229,7 +335,7 @@
                                     or #lists.isEmpty(productionOrders)
                                  }">
 
-                                <td colspan="10"
+                                <td colspan="9"
                                     class="empty-table">
                                     Заказы на производство пока не добавлены
                                 </td>
@@ -239,31 +345,38 @@
                             <tr th:each="order : ${productionOrders}">
 
                                 <td th:text="${order.number}">
-                                    ПЗ-2026-001
+                                    ЗНП-2026-001
                                 </td>
 
                                 <!--
-                                    Уровень дерева: выпуск верхнего уровня
-                                    (ЗП) или заказ-комплектующий (ЗНП).
-                                    Для комплектующего показан и вид (V37)
-                                    — по нему видно, чем задан состав:
-                                    перечень датчиков, изделие с
-                                    количеством. Номер выпуска, в который
-                                    он входит, рядом.
+                                    Серийные номера заказа одной строкой
+                                    через запятую. У выпуска это номера
+                                    выпускаемых экземпляров, у верхнего
+                                    ЗНП — датчики, в которые он вошёл.
+                                    Источник выбирает сервис по типу
+                                    заказа и кладёт подписанный перечень в
+                                    orderSerials по идентификатору заказа.
+
+                                    Перечень может быть длинным: датчиков у
+                                    заказа десятки, поэтому клетка тянется
+                                    и переносится, а не растягивает всю
+                                    таблицу.
+
+                                    Прочерок остаётся фолбэком: он закрывает
+                                    заказ, у которого номеров ещё нет, и не
+                                    даёт колонке выглядеть ошибкой, если
+                                    перечень не сформирован.
                                 -->
-                                <td>
-                                    <span class="status"
-                                          th:classappend="${
-                                              order.component ? 'work' : 'draft'
-                                          }"
-                                          th:text="${
-                                              order.component
-                                                  ? order.kindColumn
-                                                    + ' · ' + order.parentDisplay
-                                                  : 'ЗП'
-                                          }">
-                                        ЗП
-                                    </span>
+                                <td style="max-width: 320px;
+                                           white-space: normal;
+                                           word-break: break-word;"
+                                    th:text="${
+                                        orderSerials != null
+                                        and orderSerials.containsKey(order.id)
+                                            ? orderSerials.get(order.id)
+                                            : '—'
+                                    }">
+                                    121205333, 121205334
                                 </td>
 
                                 <td th:text="${order.formattedOrderDate}">
@@ -272,10 +385,6 @@
 
                                 <td th:text="${order.customerOrderNumber}">
                                     ЗП-2026-001
-                                </td>
-
-                                <td th:text="${order.operationName}">
-                                    Комплектовочная
                                 </td>
 
                                 <td th:text="${order.itemCount}">

@@ -1144,6 +1144,80 @@ public class WorkshopDistributionService {
     }
 
     /**
+     * Операции комплектования склада за горизонт планирования.
+     *
+     * Разделам склада («Комплектование ЗНП», «Комплектование
+     * полуфабрикатов») нужен весь объём работ склада, а не только
+     * закреплённый за человеком: планировщик создаёт их при
+     * планировании заказа покупателя и закрепляет за подразделением,
+     * поэтому кладовщик обязан видеть и назначенные, и неназначенные
+     * строки — иначе неотобранная работа исчезла бы из вида.
+     *
+     * Набор типов задаёт вызывающий: комплектованием считаются и
+     * получение комплектации, и комплектовочная операция, а цеховые
+     * этапы маршрута в раздел не попадают.
+     *
+     * Подписи групп собирает тот же {@link #groupAssigned}, что и
+     * «Мои операции»: кладовщик и исполнитель видят одну и ту же
+     * работу одинаково, различается только отбор. Источник здесь не
+     * подписывается — в разделе одна природа работ.
+     */
+    @Transactional(readOnly = true)
+    public List<AssignedOperationView> findKittingOperations(
+            Collection<Long> unitIds,
+            Collection<String> typeCodes
+    ) {
+        if (unitIds == null || unitIds.isEmpty()
+                || typeCodes == null || typeCodes.isEmpty()) {
+            return List.of();
+        }
+
+        LocalDate from = LocalDate.now();
+        LocalDate to = from.plusDays(HORIZON_DAYS);
+
+        return groupAssigned(
+                scheduleRowRepo.findKittingForUnits(
+                        ScheduleRowStatus.CONFIRMED,
+                        unitIds,
+                        typeCodes,
+                        from,
+                        to
+                ),
+                null
+        );
+    }
+
+    /**
+     * Сколько операций комплектования у склада — счётчик бокового
+     * меню.
+     *
+     * Считается запросом, а не размером списка: меню рисуется на
+     * каждой странице модуля, а подбор серийников и экземпляров
+     * ради одной цифры стоил бы десятков запросов.
+     */
+    @Transactional(readOnly = true)
+    public long countKittingOperations(
+            Collection<Long> unitIds,
+            Collection<String> typeCodes
+    ) {
+        if (unitIds == null || unitIds.isEmpty()
+                || typeCodes == null || typeCodes.isEmpty()) {
+            return 0L;
+        }
+
+        LocalDate from = LocalDate.now();
+        LocalDate to = from.plusDays(HORIZON_DAYS);
+
+        return scheduleRowRepo.countKittingForUnits(
+                ScheduleRowStatus.CONFIRMED,
+                unitIds,
+                typeCodes,
+                from,
+                to
+        );
+    }
+
+    /**
      * Работы, закреплённые за конкретным пользователем.
      *
      * Исполнитель видит только строки, где он записан в
@@ -1214,6 +1288,10 @@ public class WorkshopDistributionService {
      * проводит, а {@code completed_by} фиксирует автора отметки
      * отдельно от назначения.
      *
+     * Исключение — складские операции комплектования (KIT_RECEIPT,
+     * KITTING): они закреплены за подразделением, а не за человеком,
+     * поэтому любой авторизованный пользователь может их закрыть.
+     *
      * Проведение поштучное: строка — один экземпляр одной позиции, и
      * закрывается она своим фактом. Повторное проведение запрещено —
      * иначе дата факта перетёрлась бы, и «сколько сделано» стало бы
@@ -1234,12 +1312,21 @@ public class WorkshopDistributionService {
                         "Строка графика не найдена"
                 ));
 
-        if (row.getExecutor() == null
-                || !row.getExecutor().getId().equals(performer.getId())) {
-            throw new IllegalStateException(
-                    "Провести работу может только исполнитель, "
-                            + "за которым она закреплена"
-            );
+        /*
+         * Складские операции комплектования план закрепляет за
+         * подразделением, а не за человеком, — исполнителя у них нет.
+         * Проводить их вправе сотрудник склада: доступ к разделу
+         * ограничен правилом модуля склада, поэтому для таких строк
+         * проверяется только сам факт авторизованного пользователя.
+         */
+        if (!isWarehouseKitting(row)) {
+            if (row.getExecutor() == null
+                    || !row.getExecutor().getId().equals(performer.getId())) {
+                throw new IllegalStateException(
+                        "Провести работу может только исполнитель, "
+                                + "за которым она закреплена"
+                );
+            }
         }
 
         if (row.getCompletedAt() != null) {
@@ -1542,6 +1629,27 @@ public class WorkshopDistributionService {
     }
 
     /**
+     * Экземпляр относится к комплектованию склада — получение
+     * комплектации либо комплектовочная операция.
+     *
+     * Оба типа план закрепляет за подразделением склада, а не за
+     * человеком, поэтому у таких строк нет исполнителя и закрытие не
+     * может требовать совпадения с ним: иначе кладовщик физически не
+     * смог бы провести работу своего склада.
+     */
+    private boolean isWarehouseKitting(OrderScheduleRow row) {
+        if (row.getOperation() == null
+                || row.getOperation().getOperationType() == null) {
+            return false;
+        }
+
+        String code = row.getOperation().getOperationType().getCode();
+
+        return OperationTypeCode.KIT_RECEIPT.name().equals(code)
+                || OperationTypeCode.KITTING.name().equals(code);
+    }
+
+    /**
      * Проверка, что строку вообще можно назначить: она в плане, её
      * подразделение совпадает с подразделением руководителя и это не
      * получение комплектации.
@@ -1612,7 +1720,14 @@ public class WorkshopDistributionService {
                     row.getCompletedAt() == null
                             ? null
                             : row.getCompletedAt().format(RU_DATE_TIME),
-                    row.getExecutor() != null
+                    /*
+                     * Провести можно свой экземпляр, а также любую
+                     * работу комплектования склада: её план закрепляет
+                     * за подразделением, исполнителя у неё нет, и без
+                     * этой оговорки кнопка закрытия у кладовщика не
+                     * появилась бы никогда.
+                     */
+                    (row.getExecutor() != null || isWarehouseKitting(row))
                             && row.getCompletedAt() == null
                             && !blocker.blocked(),
                     serial == null ? null : serial.getFullNumber(),

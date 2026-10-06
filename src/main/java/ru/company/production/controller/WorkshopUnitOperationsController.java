@@ -15,10 +15,8 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.servlet.mvc.support.RedirectAttributes;
-import ru.company.production.dto.OperationForm;
 import ru.company.production.dto.WorkPlaceForm;
 import ru.company.production.entity.AppUser;
-import ru.company.production.repository.OperationTypeRepository;
 import ru.company.production.repository.UserRoleRepository;
 import ru.company.production.repository.WorkPlaceTypeRepository;
 import ru.company.production.repository.UserRepository;
@@ -29,17 +27,15 @@ import ru.company.production.service.WorkshopUnitOperationsService;
  * склада или бюро.
  *
  * Раздел нужен руководителям склада комплектации, склада полуфабрикатов
- * и бюро входного контроля: раньше операцию и рабочее место заводил
- * только технологический отдел, и мастеру приходилось просить чужой
- * раздел каждый раз, когда в подразделении появлялаcь новая работа.
- * Теперь он заводит их сам, но перечень службы и подразделения в форме
- * зафиксирован учётной записью — см.
+ * и бюро входного контроля: рабочее место он заводит сам, но перечень
+ * службы и подразделения в форме зафиксирован учётной записью — см.
  * {@link WorkshopUnitOperationsService}, куда подставляются они, а не
  * значения из запроса.
  *
- * Раздел не переопределяет справочники: операции и рабочие места те же,
- * что видит технологический отдел, поэтому план производства, выпущенный
- * там, видит и вновь заведённую операцию.
+ * Операции здесь только просматриваются и удаляются: создаёт их
+ * технолог в разделе «Справочники → Операции», поэтому справочник
+ * операций у подразделения и технологического отдела общий, и план
+ * производства, выпущенный там, видит те же операции.
  */
 @Controller
 @RequestMapping("/workshop/operations")
@@ -48,13 +44,12 @@ public class WorkshopUnitOperationsController {
 
     private final WorkshopUnitOperationsService unitOperationsService;
     private final UserRepository userRepository;
-    private final OperationTypeRepository operationTypeRepository;
     private final WorkPlaceTypeRepository workPlaceTypeRepository;
     private final UserRoleRepository roleUserRepository;
 
     /**
-     * Список операций и рабочих мест подразделения с двумя формами
-     * добавления.
+     * Список операций и рабочих мест подразделения с формой
+     * добавления рабочего места.
      */
     @GetMapping({"", "/"})
     public String index(
@@ -72,18 +67,9 @@ public class WorkshopUnitOperationsController {
         model.addAttribute("workPlaceCount", workPlaces.size());
 
         /*
-         * Формы добавления всегда пустые: после сохранения идёт
-         * redirect, и заполненная форма вернулась бы flash-атрибутом
-         * только при ошибке. Новая операция нужна обычно не одна,
-         * поэтому чистая форма экономит время.
+         * Форма добавления рабочего места всегда пустая: после
+         * сохранения идёт redirect.
          */
-        if (!model.containsAttribute("operationForm")) {
-            model.addAttribute(
-                    "operationForm",
-                    unitOperationsService.newOperationForm(supervisor)
-            );
-        }
-
         if (!model.containsAttribute("workPlaceForm")) {
             model.addAttribute(
                     "workPlaceForm",
@@ -92,57 +78,6 @@ public class WorkshopUnitOperationsController {
         }
 
         addFormData(model);
-
-        model.addAttribute("activePage", "operations");
-
-        return "workshop/operations/index";
-    }
-
-    /**
-     * Новая операция подразделения.
-     *
-     * Ошибка валидации возвращается на список, а не на отдельную
-     * страницу: форма одна из двух на странице, и уводить пользователя
-     * за ошибочным типом операции означало бы потерять и вторую форму.
-     */
-    @PostMapping("/operation/create")
-    public String createOperation(
-            @Valid @ModelAttribute("operationForm") OperationForm operationForm,
-            BindingResult bindingResult,
-            Authentication authentication,
-            Model model,
-            RedirectAttributes redirectAttributes
-    ) {
-        AppUser supervisor = currentUser(authentication);
-
-        if (!bindingResult.hasErrors()) {
-            try {
-                unitOperationsService.createOperation(
-                        operationForm,
-                        supervisor
-                );
-
-                redirectAttributes.addFlashAttribute(
-                        "successMessage",
-                        "Операция добавлена"
-                );
-
-                return "redirect:/workshop/operations";
-            } catch (
-                    IllegalArgumentException
-                    | EntityNotFoundException
-                    | IllegalStateException exception
-            ) {
-                redirectAttributes.addFlashAttribute(
-                        "errorMessage",
-                        exception.getMessage()
-                );
-
-                return "redirect:/workshop/operations";
-            }
-        }
-
-        fillIndexModel(authentication, model);
 
         model.addAttribute("activePage", "operations");
 
@@ -277,9 +212,9 @@ public class WorkshopUnitOperationsController {
     }
 
     /*
-     * Пересборка модели после ошибки валидации: список и обе формы
-     * нужны на странице целиком, иначе вторая форма пропала бы вместе
-     * с уже введёнными в неё значениями.
+     * Пересборка модели после ошибки валидации: список и форма нужны
+     * на странице целиком, иначе форма пропала бы вместе с уже
+     * введёнными в неё значениями.
      */
     private void fillIndexModel(Authentication authentication, Model model) {
         AppUser supervisor = currentUser(authentication);
@@ -292,13 +227,6 @@ public class WorkshopUnitOperationsController {
         model.addAttribute("operationCount", operations.size());
         model.addAttribute("workPlaceCount", workPlaces.size());
 
-        if (!model.containsAttribute("operationForm")) {
-            model.addAttribute(
-                    "operationForm",
-                    unitOperationsService.newOperationForm(supervisor)
-            );
-        }
-
         if (!model.containsAttribute("workPlaceForm")) {
             model.addAttribute(
                     "workPlaceForm",
@@ -310,16 +238,11 @@ public class WorkshopUnitOperationsController {
     }
 
     /*
-     * Справочники для селектов форм. Служба и подразделение в них не
+     * Справочники для селектов формы. Служба и подразделение в них не
      * выбираются — они зафиксированы учётной записью, поэтому списки
      * служб и подразделений в модель не кладутся вовсе.
      */
     private void addFormData(Model model) {
-        model.addAttribute(
-                "operationTypes",
-                operationTypeRepository.findAllByActiveTrueOrderByNameAsc()
-        );
-
         model.addAttribute(
                 "workPlaceTypes",
                 workPlaceTypeRepository.findByActiveTrueOrderByNameAsc()

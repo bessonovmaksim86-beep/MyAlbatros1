@@ -4,7 +4,6 @@ import jakarta.persistence.EntityNotFoundException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import ru.company.production.dto.OperationForm;
 import ru.company.production.dto.WorkPlaceForm;
 import ru.company.production.entity.AppUser;
 import ru.company.production.entity.Operation;
@@ -15,19 +14,16 @@ import ru.company.production.repository.OrganizationUnitRepository;
 import java.util.List;
 
 /**
- * Операции и рабочие места подразделения руководителя.
+ * Рабочие места подразделения руководителя.
  *
- * Раздел даёт руководителю склада, бюро или цеха то, что до него делал
- * только технологический отдел: завести операцию и рабочее место своего
- * подразделения и тут же закрепить их за сотрудником. Граница при этом
- * не мягче цеховой — служба и подразделение не берутся из формы, а
- * подставляются из учётной записи руководителя, поэтому отправить
- * операцию в чужое подразделение нельзя даже вручную изменив запрос.
+ * Раздел даёт руководителю склада, бюро или цеха заводить рабочие места
+ * своего подразделения. Граница при этом не мягче цеховой — служба и
+ * подразделение не берутся из формы, а подставляются из учётной записи
+ * руководителя, поэтому отправить рабочее место в чужое подразделение
+ * нельзя даже вручную изменив запрос.
  *
- * Само сохранение выполняют {@link OperationService} и
- * {@link WorkPlaceService}: проверка дублей, нормализация наименований и
- * кодов одни на систему, и вторая их копия здесь разошлась бы с
- * технологическим разделом при первой же правке правил.
+ * Само сохранение выполняет {@link WorkPlaceService}: проверка дублей,
+ * нормализация наименований и кодов одна на систему.
  */
 @Service
 @RequiredArgsConstructor
@@ -56,28 +52,12 @@ public class WorkshopUnitOperationsService {
     }
 
     /**
-     * Форма новой операции с уже проставленными службой и
-     * подразделением руководителя.
+     * Форма нового рабочего места — фиксированные служба и
+     * подразделение руководителя.
      *
      * Поля заполняются заранее, а не только подставляются при
      * сохранении: тогда они переживают возврат формы с ошибкой, и
      * руководителю не приходится выбирать подразделение заново.
-     */
-    @Transactional(readOnly = true)
-    public OperationForm newOperationForm(AppUser supervisor) {
-        OrganizationUnit unit = requireUnit(supervisor);
-
-        OperationForm form = new OperationForm();
-
-        form.setServiceId(unit.getService().getId());
-        form.setOrganizationUnitId(unit.getId());
-
-        return form;
-    }
-
-    /**
-     * Форма нового рабочего места — те же фиксированные служба и
-     * подразделение, что у операции.
      */
     @Transactional(readOnly = true)
     public WorkPlaceForm newWorkPlaceForm(AppUser supervisor) {
@@ -89,24 +69,6 @@ public class WorkshopUnitOperationsService {
         form.setOrganizationUnitId(unit.getId());
 
         return form;
-    }
-
-    /**
-     * Создание операции своего подразделения.
-     *
-     * Служба и подразделение перезаписываются значениями руководителя
-     * независимо от того, что пришло в форме: без этого подменой
-     * {@code organizationUnitId} в запросе можно было бы заводить
-     * операции чужого подразделения.
-     */
-    @Transactional
-    public Operation createOperation(OperationForm form, AppUser supervisor) {
-        OrganizationUnit unit = requireUnit(supervisor);
-
-        form.setServiceId(unit.getService().getId());
-        form.setOrganizationUnitId(unit.getId());
-
-        return operationService.create(form);
     }
 
     /**

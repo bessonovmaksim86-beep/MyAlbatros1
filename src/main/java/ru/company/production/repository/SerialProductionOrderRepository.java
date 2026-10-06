@@ -6,6 +6,7 @@ import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 import ru.company.production.entity.SerialProductionOrder;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 
@@ -80,6 +81,49 @@ public interface SerialProductionOrderRepository
             """)
     List<SerialProductionOrder> findDetailsByProductionOrderId(
             @Param("productionOrderId") Long productionOrderId
+    );
+
+    /**
+     * Датчики набора заказов — колонка «Серийник(и)» списка заказов.
+     *
+     * Это второй из двух источников колонки. У выпуска (ЗП) номера
+     * читаются из состава выпуска, а у заказа-комплектующего (ЗНП)
+     * состава выпуска нет: его серийники — датчики, в которые заказ
+     * вошёл, то есть строки этой связи.
+     *
+     * Пакетность та же, что у ProductionOrderItemRepository
+     * .findSerialsByOrderIds: список показывает десятки заказов, и
+     * запрос на строку дал бы N+1. Один вызов закрывает все строки
+     * страницы; интерцептор списка объединяет результат с выпусками в
+     * один перечень по идентификатору заказа.
+     *
+     * Номер и тип берутся из серийника (product_serials): там есть и
+     * код классификатора, и серия, и тип изделия — последний нужен
+     * фильтру «датчики / системы». Порядок — по заказу, затем типу и
+     * серии, чтобы перечень в клетке был предсказуем и не менялся от
+     * перезагрузки страницы.
+     *
+     * Отличие от findByProductionOrderId: тот отдаёт сущности связи с
+     * fetch join'ами для карточки одного заказа, здесь строки нужны
+     * только как пары «заказ → номер», поэтому скалярная проекция без
+     * разыменования связей.
+     */
+    @Query("""
+            select
+                link.productionOrder.id as orderId,
+                classifier.code as classifierCode,
+                serialRow.serial as serial,
+                serialRow.productType as productType
+            from SerialProductionOrder link
+            join link.serial serialRow
+            join serialRow.productClassifier classifier
+            where link.productionOrder.id in :orderIds
+            order by link.productionOrder.id,
+                     serialRow.productType,
+                     serialRow.serial
+            """)
+    List<ProductionOrderSerialRowView> findSerialsByOrderIds(
+            @Param("orderIds") Collection<Long> orderIds
     );
 
     /**
