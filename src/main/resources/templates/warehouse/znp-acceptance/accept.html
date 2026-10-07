@@ -1,0 +1,439 @@
+<!DOCTYPE html>
+<html lang="ru"
+      xmlns:th="http://www.thymeleaf.org">
+
+<head>
+    <meta charset="UTF-8">
+
+    <meta name="viewport"
+          content="width=device-width, initial-scale=1">
+
+    <title>Приёмка ячеек заказа-комплектующего на склад</title>
+
+    <link rel="stylesheet"
+          th:href="@{/technology/css/technology.css}">
+
+    <link rel="stylesheet"
+          th:href="@{/technology/css/common.css}">
+
+    <link rel="stylesheet"
+          th:href="@{/warehouse/css/warehouse.css}">
+</head>
+
+<body>
+
+<div class="app-shell">
+
+    <aside th:replace="~{warehouse/fragments/layout
+            :: sidebar('znp-acceptance')}">
+    </aside>
+
+    <main class="main">
+
+        <header th:replace="~{warehouse/fragments/layout
+                :: topbar}">
+        </header>
+
+        <div class="page-content warehouse-page">
+
+            <div class="page-head">
+
+                <div class="page-title">
+
+                    <h1>
+                        Приёмка на склад
+                        <span class="mono"
+                              th:text="${order.number}">
+                            ЗНП-2026-114
+                        </span>
+                    </h1>
+
+                    <p th:text="${
+                        'Комплектование по операции «' + operationName
+                        + '»: склад принимает ' + #lists.size(cellNumbers)
+                        + ' непринятых яч. состава заказа разом'
+                    }">
+                        Комплектование по операции «Комплектование ячейкой»:
+                        склад принимает 3 непринятых яч. состава заказа разом
+                    </p>
+
+                </div>
+
+                <div class="page-head-actions">
+
+                    <span class="status"
+                          th:classappend="' ' + ${order.statusBadgeClass}"
+                          th:text="${order.statusDisplayName}">
+                        В работе
+                    </span>
+
+                    <a class="btn secondary"
+                       th:href="@{/warehouse/znp-acceptance}">
+                        К списку заказов
+                    </a>
+
+                </div>
+            </div>
+
+            <div class="alert success"
+                 th:if="${successMessage}"
+                 th:text="${successMessage}">
+            </div>
+
+            <div class="alert danger"
+                 th:if="${errorMessage}"
+                 th:text="${errorMessage}">
+            </div>
+
+            <ol class="warehouse-steps">
+
+                <li class="warehouse-steps__item is-done">
+                    Выпуск ячеек и их приёмка с БВК
+                </li>
+
+                <li class="warehouse-steps__item is-done">
+                    Вхождение ячеек в состав ЗНП
+                </li>
+
+                <li class="warehouse-steps__item is-current">
+                    Приёмка состава на склад
+                </li>
+
+                <li class="warehouse-steps__item">
+                    Комплектовочная операция закрыта
+                </li>
+
+            </ol>
+
+            <!-- =====================================================
+                 РЕКВИЗИТЫ ЗАКАЗА-КОМПЛЕКТУЮЩЕГО
+
+                 Заказ читается детальным запросом, поэтому номер
+                 выпуска-родителя и наименование операции доступны: по
+                 ним кладовщик сверяет, в какой датчик пошла ячейка,
+                 прежде чем отмечать её на складе.
+                 ===================================================== -->
+            <section class="card">
+
+                <div class="card-head">
+
+                    <div>
+
+                        <h2>Заказ-комплектующий</h2>
+
+                        <small>
+                            Реквизиты выпуска и операции: по ним сверяют,
+                            в какой датчик вошли принимаемые ячейки
+                        </small>
+
+                    </div>
+
+                    <span class="warehouse-counter"
+                          th:text="${#lists.size(cellNumbers)} + ' яч.'">
+                        3 яч.
+                    </span>
+                </div>
+
+                <div class="card-body">
+
+                    <dl class="warehouse-summary">
+
+                        <div class="warehouse-summary__row">
+
+                            <dt>Номер заказа</dt>
+
+                            <dd class="mono"
+                                th:text="${order.number}">
+                                ЗНП-2026-114
+                            </dd>
+                        </div>
+
+                        <div class="warehouse-summary__row">
+
+                            <dt>Вид заказа</dt>
+
+                            <dd th:text="${order.levelDisplayName}">
+                                ЗНП на комплектование
+                            </dd>
+                        </div>
+
+                        <div class="warehouse-summary__row">
+
+                            <dt>Выпуск (родительский заказ)</dt>
+
+                            <dd class="mono"
+                                th:text="${order.parentOrderNumber}">
+                                ЗП-2026-031
+                            </dd>
+                        </div>
+
+                        <div class="warehouse-summary__row">
+
+                            <dt>Комплектовочная операция</dt>
+
+                            <dd th:text="${operationName}">
+                                Комплектование ячейкой
+                            </dd>
+                        </div>
+
+                        <div class="warehouse-summary__row">
+
+                            <dt>Заказ покупателя</dt>
+
+                            <dd class="mono"
+                                th:text="${order.customerOrderNumber}">
+                                ЗП-44/2026
+                            </dd>
+                        </div>
+
+                        <div class="warehouse-summary__row">
+
+                            <dt>Статус заказа</dt>
+
+                            <dd th:text="${order.statusDisplayName}">
+                                В работе
+                            </dd>
+                        </div>
+
+                        <div class="warehouse-summary__row">
+
+                            <dt>Дата заказа</dt>
+
+                            <dd th:text="${order.formattedOrderDate}">
+                                18.09.2026
+                            </dd>
+                        </div>
+
+                        <div class="warehouse-summary__row">
+
+                            <dt>Срок выполнения</dt>
+
+                            <dd th:text="${order.formattedDueDate}">
+                                30.09.2026
+                            </dd>
+                        </div>
+
+                        <div class="warehouse-summary__row">
+
+                            <dt>Автор заказа</dt>
+
+                            <dd th:text="${order.createdByName}">
+                                Диспетчер Д. Д.
+                            </dd>
+                        </div>
+
+                        <div class="warehouse-summary__row span-2">
+
+                            <dt>Примечание заказа</dt>
+
+                            <dd th:text="${
+                                order.note != null and !#strings.isEmpty(order.note)
+                                    ? order.note
+                                    : 'не указано'
+                            }">
+                                Комплект по спецификации 14-К
+                            </dd>
+                        </div>
+
+                    </dl>
+
+                </div>
+            </section>
+
+
+            <!-- =====================================================
+                 ПРИЁМКА НА СКЛАД
+
+                 Объект приёмки — заказ, а не отдельная ячейка:
+                 перечень вводить не нужно, его задаёт сам состав
+                 заказа. Проведение возможно один раз, поэтому состав
+                 обязан оставаться читаемым и после отметки.
+                 ===================================================== -->
+            <section class="card">
+
+                <div class="card-head">
+
+                    <div>
+
+                        <h2>Приёмка состава на склад</h2>
+
+                        <small>
+                            Приёмку проводят один раз: после проведения
+                            ячейки заказа отмечены принятыми, а их
+                            комплектовочная операция закрыта фактом —
+                            вернуть состав назад нельзя
+                        </small>
+
+                    </div>
+
+                    <span class="warehouse-counter"
+                          th:text="'принять ' + ${#lists.size(cellNumbers)} + ' яч.'">
+                        принять 3 яч.
+                    </span>
+                </div>
+
+                <div class="card-body">
+
+                    <!--
+                        Список раздела показывает только заказы с
+                        непринятыми ячейками, поэтому пустой состав здесь
+                        — следствие параллельного проведения: заказ
+                        приняли второй учётной записью. Экран обязан
+                        объяснить это, а не выглядеть сломанным.
+                    -->
+                    <div class="warehouse-problem"
+                         th:if="${#lists.isEmpty(cellNumbers)}">
+
+                        <h3>Принимать на склад нечего</h3>
+
+                        <p>
+                            В заказе «
+                            <span class="mono"
+                                  th:text="${order.number}">
+                                ЗНП-2026-114
+                            </span>
+                            » не осталось непринятых ячеек: приёмку уже
+                            провели по этому заказу либо из его состава
+                            ещё не вышла ни одна ячейка.
+                        </p>
+
+                    </div>
+
+                    <form method="post"
+                          th:unless="${#lists.isEmpty(cellNumbers)}"
+                          th:action="@{/warehouse/znp-acceptance/{id}(id=${order.id})}">
+
+                        <input th:if="${_csrf != null}"
+                               type="hidden"
+                               th:name="${_csrf.parameterName}"
+                               th:value="${_csrf.token}">
+
+                        <dl class="warehouse-summary">
+
+                            <div class="warehouse-summary__row">
+
+                                <dt>Принимается ячеек</dt>
+
+                                <dd th:text="${#lists.size(cellNumbers)} + ' шт.'">
+                                    3 шт.
+                                </dd>
+                            </div>
+
+                            <div class="warehouse-summary__row">
+
+                                <dt>Принимает на склад</dt>
+
+                                <dd th:text="${userDisplayName}">
+                                    Петров П. П.
+                                </dd>
+                            </div>
+
+                            <div class="warehouse-summary__row">
+
+                                <dt>Комплектовочная операция</dt>
+
+                                <dd th:text="${operationName}">
+                                    Комплектование ячейкой
+                                </dd>
+                            </div>
+
+                            <div class="warehouse-summary__row span-2">
+
+                                <dt>Состав приёмки</dt>
+
+                                <dd class="mono"
+                                    th:text="${#strings.listJoin(cellNumbers, ', ')}">
+                                    121200022, 121200025, 121200031
+                                </dd>
+                            </div>
+
+                        </dl>
+
+                        <div class="warehouse-actions">
+
+                            <a class="btn secondary"
+                               th:href="@{/warehouse/znp-acceptance}">
+                                К списку заказов
+                            </a>
+
+                            <button type="submit"
+                                    class="btn primary">
+                                Провести приёмку на склад
+                            </button>
+
+                        </div>
+
+                    </form>
+
+                </div>
+            </section>
+
+
+            <!-- =====================================================
+                 ПЕРЕЧЕНЬ ПРИНИМАЕМЫХ ЯЧЕЕК
+
+                 Полный номер читается из классификатора: он зафетчен
+                 запросом состава, поэтому строка печатает и номер, и
+                 наименование изделия без обращения к закрытой сессии.
+                 ===================================================== -->
+            <section class="card"
+                     th:unless="${#lists.isEmpty(cells)}">
+
+                <div class="card-head">
+
+                    <div>
+
+                        <h2>Ячейки, принимаемые на склад</h2>
+
+                        <small>
+                            Сверяйте этикетки с этим перечнем: чужой номер
+                            приёмку не пройдёт, а состав приёмки задаёт
+                            сам заказ, а не кладовщик
+                        </small>
+
+                    </div>
+
+                    <span class="warehouse-counter"
+                          th:text="${#lists.size(cells)} + ' шт.'">
+                        3 шт.
+                    </span>
+                </div>
+
+                <div class="card-body">
+
+                    <ul class="warehouse-numbers">
+
+                        <li class="warehouse-numbers__item"
+                            th:each="cell, iteration : ${cells}"
+                            th:attr="data-number=${cell.serial.fullNumber}">
+
+                            <span class="warehouse-numbers__index"
+                                  th:text="'№ ' + ${iteration.count}">
+                                № 1
+                            </span>
+
+                            <span class="mono"
+                                  th:text="${cell.serial.fullNumber}">
+                                121200022
+                            </span>
+
+                            <span th:text="${cell.serial.displayName}">
+                                Подсборка ЯПР56
+                            </span>
+                        </li>
+
+                    </ul>
+
+                </div>
+            </section>
+
+        </div>
+    </main>
+</div>
+
+<th:block th:replace="~{warehouse/fragments/layout
+        :: commonScripts}">
+</th:block>
+
+</body>
+</html>

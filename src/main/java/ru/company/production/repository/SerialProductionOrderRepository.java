@@ -4,6 +4,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
+import ru.company.production.entity.ProductionOrder;
 import ru.company.production.entity.SerialProductionOrder;
 
 import java.util.Collection;
@@ -17,7 +18,7 @@ import java.util.Optional;
  * есть в обе стороны:
  *
  *   «чем укомплектован датчик»  — карточка изделия;
- *   «какие датчики в группе ЗНП» — карточка заказа-комплектующего.
+ *   «какие датчики в группе ЗНП» — карточка заказ-комплектующего.
  */
 @Repository
 public interface SerialProductionOrderRepository
@@ -87,7 +88,7 @@ public interface SerialProductionOrderRepository
      * Датчики набора заказов — колонка «Серийник(и)» списка заказов.
      *
      * Это второй из двух источников колонки. У выпуска (ЗП) номера
-     * читаются из состава выпуска, а у заказа-комплектующего (ЗНП)
+     * читаются из состава выпуска, а у заказ-комплектующего (ЗНП)
      * состава выпуска нет: его серийники — датчики, в которые заказ
      * вошёл, то есть строки этой связи.
      *
@@ -164,4 +165,101 @@ public interface SerialProductionOrderRepository
             from SerialProductionOrder link
             """)
     long countDistinctSerials();
+
+    /*
+     * ============================================================
+     * Приёмка ячеек по серийным ЗНП
+     * ============================================================
+     *
+     * Склад принимает ячейки, которые вошли в состав заказ-
+     * комплектующего, но ещё не отмечены принятыми. Приёмка проходит
+     * по заказу: все непринятые ячейки состава переходят в «принято»
+     * разом, а их комплектовочная операция закрывается фактом.
+     *
+     * Отбор держится на признаке серийного ЗНП (родитель задан +
+     * комплектовочная операция задана), а не на перечне идентификаторов:
+     * заказ без родителя или без операции — групповой или ремонтный,
+     * приёмка ячеек к ним не относится (см. ZnpKind.isSerialBased()).
+     */
+
+    /**
+     * Серийные ЗНП, в состав которых входят непринятые ячейки:
+     * список раздела «Приёмка ячеек».
+     *
+     * EXISTS, а не join: заказ обязан попасть в выдачу один раз, даже
+     * если в его составе несколько непринятых ячеек.
+     */
+    @Query("""
+            select distinct ord
+            from ProductionOrder ord
+            where ord.active = true
+              and ord.parentProductionOrder is not null
+              and ord.productionOperation is not null
+              and exists (
+                  select 1
+                  from SerialProductionOrder link
+                  join link.serial serial
+                  where link.productionOrder.id = ord.id
+                    and serial.productType =
+                        ru.company.production.entity.ProductType.CELL
+                    and serial.acceptedAt is null
+              )
+            order by ord.orderDate desc, ord.number desc
+            """)
+    List<ProductionOrder> findPendingCellZnp();
+
+    /**
+     * Число заказов, ожидающих приёмки ячеек: счётчик пункта меню.
+     */
+    @Query("""
+            select count(distinct ord.id)
+            from ProductionOrder ord
+            where ord.active = true
+              and ord.parentProductionOrder is not null
+              and ord.productionOperation is not null
+              and exists (
+                  select 1
+                  from SerialProductionOrder link
+                  join link.serial serial
+                  where link.productionOrder.id = ord.id
+                    and serial.productType =
+                        ru.company.production.entity.ProductType.CELL
+                    and serial.acceptedAt is null
+              )
+            """)
+    long countPendingCellZnp();
+
+    /**
+     * Непринятые ячейки состава заказа: что принимает склад.
+     *
+     * Fetch join обязателен: строка списка печатает полный номер
+     * (getFullNumber() читает code классификатора), а open-in-view
+     * выключен.
+     *
+     * Форма запроса повторяет рабочий findDetailsByProductionOrderId:
+     * цепочка fetch идёт ОТ выбираемого link (join fetch link.serial →
+     * serial.productClassifier → classifier.sensorCatalog). Hibernate
+     * 6 отвергает fetch ассоциации, владелец которой не попал в select,
+     * — обычный `join link.serial` с последующим `fetch
+     * serial.productClassifier` давал бы «owner of the fetched
+     * association was not present in the select list». inner fetch join
+     * сохраняет смысл прежнего inner join: фильтр по типу «ячейка» и
+     * непринятости держится в where, distinct не нужен — связи только
+     * ManyToOne, строк связь не размножает.
+     */
+    @Query("""
+            select link
+            from SerialProductionOrder link
+            join fetch link.serial serial
+            left join fetch serial.productClassifier classifier
+            left join fetch classifier.sensorCatalog
+            where link.productionOrder.id = :productionOrderId
+              and serial.productType =
+                  ru.company.production.entity.ProductType.CELL
+              and serial.acceptedAt is null
+            order by serial.serial
+            """)
+    List<SerialProductionOrder> findPendingCellsByOrderId(
+            @Param("productionOrderId") Long productionOrderId
+    );
 }

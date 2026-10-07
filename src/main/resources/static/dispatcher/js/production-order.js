@@ -467,28 +467,42 @@
             rows.forEach((row) => {
                 const tr = document.createElement('tr');
 
-                const picker = document.createElement('td');
-                const label = document.createElement('label');
-                const input = document.createElement('input');
+                [row.number, row.typeName, row.fullName].forEach(
+                    (value, index) => {
+                        const td = document.createElement('td');
 
-                input.type = 'checkbox';
-                input.name = 'releaseSerialIds';
-                input.value = row.id;
-                input.checked = selected.has(String(row.id));
-                label.appendChild(input);
-                picker.appendChild(label);
-                tr.appendChild(picker);
+                        td.textContent =
+                            value === null || value === undefined
+                                ? '.'
+                                : String(value);
 
-                [row.number, row.typeName, row.fullName].forEach((value) => {
-                    const td = document.createElement('td');
+                        if (index === 0) {
+                            const hidden =
+                                document.createElement('input');
 
-                    td.textContent =
-                        value === null || value === undefined
-                            ? '—'
-                            : String(value);
+                            hidden.type = 'hidden';
+                            hidden.name = 'releaseSerialIds';
+                            hidden.value = row.id;
+                            td.appendChild(hidden);
+                        }
 
-                    tr.appendChild(td);
-                });
+                        tr.appendChild(td);
+                    }
+                );
+
+                const znpCell = document.createElement('td');
+                const znpInput = document.createElement('input');
+
+                znpInput.type = 'text';
+                znpInput.name = 'releaseZnpNumbers';
+                znpInput.maxLength = 100;
+                znpInput.className = 'znp-number-input';
+                znpInput.setAttribute('placeholder', '№ ЗНП');
+                if (row.znpNumber) {
+                    znpInput.value = row.znpNumber;
+                }
+                znpCell.appendChild(znpInput);
+                tr.appendChild(znpCell);
 
                 body.appendChild(tr);
             });

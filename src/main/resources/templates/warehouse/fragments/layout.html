@@ -107,6 +107,36 @@
                 </span>
             </a>
 
+            <!--
+                Приёмка ячеек по серийным ЗНП. Диспетчер выпускает
+                групповой ЗНП на ячейки, склад собирает в него
+                подсборки, а ячейки, пришедшие из цеха, принимает на
+                склад. Пункт стоит рядом с приёмкой с БВК: жест тот же
+                — принять то, что приехало, только объектом приёмки
+                выступает сам ЗНП, а не возврат из контроля.
+            -->
+            <a class="warehouse-navigation__item"
+               th:classappend="${activePage == 'znp-acceptance'} ? ' is-active' : ''"
+               th:href="@{/warehouse/znp-acceptance}"
+               title="Приёмка на склад ячеек, собранных в серийные ЗНП">
+
+                <span class="warehouse-navigation__icon">
+                    <svg viewBox="0 0 24 24" aria-hidden="true">
+                        <path d="M19 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V5a2 2 0 0 0-2-2Zm-9.5 13.5-3.5-3.5 1.4-1.4 2.1 2.1 5.1-5.1 1.4 1.4-6.5 6.5Z"/>
+                    </svg>
+                </span>
+
+                <span class="warehouse-navigation__text">
+                    Приёмка ячеек
+                </span>
+
+                <span class="warehouse-navigation__counter"
+                      th:if="${znpCellAcceptanceCount != null and znpCellAcceptanceCount > 0}"
+                      th:text="${znpCellAcceptanceCount}">
+                    1
+                </span>
+            </a>
+
             <a class="warehouse-navigation__item"
                th:classappend="${activePage == 'suppliers'} ? ' is-active' : ''"
                th:href="@{/warehouse/suppliers}"

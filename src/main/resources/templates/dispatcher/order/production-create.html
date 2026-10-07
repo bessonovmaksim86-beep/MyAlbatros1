@@ -20,7 +20,7 @@
           th:href="@{/dispatcher/css/dispatcher.css}">
 </head>
 
-<body th:attr="data-po-editing=${editing}">
+<body>
 
 <div class="app-shell">
 
@@ -43,23 +43,12 @@
 
         <div class="page-content dispatcher-page"
              th:with="
-                 poModeRelease=${
-                     editing
-                         ? !productionOrderForm.componentLevel
-                         : releaseOrder
-                 }">
+                 releaseOrder=${releaseOrder}">
 
             <div class="page-head">
 
                 <div class="page-title">
 
-                    <!--
-                        Заголовок различает режимы: форма одна, но
-                        выпуск (ЗП) и заказ-комплектующий (ЗНП) —
-                        разные документы, и общий заголовок заставлял бы
-                        диспетчера вчитываться в поля, чтобы понять, что
-                        он сейчас заводит.
-                    -->
                     <!--
                         В ЗНП-режиме вид поднимается прямо в заголовок:
                         выбор вида уже сделан кнопкой на странице списка,
@@ -70,19 +59,17 @@
                         ошибки валидации.
                     -->
                     <h1 th:text="${
-                        editing
-                            ? 'Изменение заказа на производство'
-                            : (poModeRelease
-                                   ? 'Создание заказа на производство'
-                                   : 'Создание · '
-                                         + productionOrderForm
-                                           .resolvedKind.displayName)
+                        releaseOrder
+                            ? 'Создание заказа на производство'
+                            : 'Создание · '
+                                  + productionOrderForm
+                                    .resolvedKind.displayName
                     }">
                         Создание заказа на производство
                     </h1>
 
                     <p th:text="${
-                        poModeRelease
+                        releaseOrder
                             ? 'Состав выпуска формируется из позиций
                                выбранного заказа покупателя: каждое
                                изделие получает серийный номер вида
@@ -119,16 +106,10 @@
             </div>
 
             <form method="post"
-                  th:action="${editing}
-                      ? @{/dispatcher/production-order/{id}/edit(id=${productionOrderForm.id})}
-                      : @{/dispatcher/production-order/create}"
+                  th:action="@{/dispatcher/production-order/create}"
                   th:object="${productionOrderForm}"
                   th:with="
-                      poRelease=${
-                          editing
-                              ? !productionOrderForm.componentLevel
-                              : releaseOrder
-                      },
+                      releaseOrder=${releaseOrder},
                       poSerial=${
                           productionOrderForm.resolvedKind.serialBased
                       }"
@@ -138,9 +119,6 @@
                        type="hidden"
                        th:name="${_csrf.parameterName}"
                        th:value="${_csrf.token}">
-
-                <input type="hidden" th:field="*{id}">
-                <input type="hidden" th:field="*{version}">
 
                 <div class="alert danger"
                      th:if="${#fields.hasGlobalErrors()}">
@@ -196,25 +174,7 @@
                             -->
                             <input type="hidden"
                                    name="orderLevel"
-                                   th:value="${
-                                       editing
-                                           ? (productionOrderForm
-                                                 .componentLevel
-                                                 ? 'COMPONENT' : 'ROOT')
-                                           : (releaseOrder ? 'ROOT'
-                                                           : 'COMPONENT')
-                                   }">
-
-                            <!--
-                                Режим возвращается и в POST: параметр
-                                нужен обработчику, чтобы при ошибке
-                                валидации форма отрисовалась тем же
-                                заказом, который заводили, а не
-                                переключилась на другой набор полей.
-                            -->
-                            <input type="hidden"
-                                   name="release"
-                                   th:value="${poModeRelease}">
+                                   th:value="${releaseOrder ? 'ROOT' : 'COMPONENT'}">
 
                             <div class="field">
 
@@ -269,39 +229,16 @@
                                 Групповым и ремонтным заказам выпуск не
                                 нужен: они самостоятельны, их состав —
                                 изделие и количество (см. ZnpKind).
-
-                                При правке выбор закрыт: уровень заказа
-                                неизменный. Здесь скрытое поле, а не
-                                disabled-Select — disabled в форму не
-                                попадает, и после ошибки валидации
-                                заказ отрисовался бы без родителя.
                             -->
                             <div class="field span-2"
                                  id="parentField"
-                                 th:if="${poSerial and !poRelease}">
+                                 th:if="${poSerial and !releaseOrder}">
 
                                 <label for="parentProductionOrderId">
                                     Заказ верхнего уровня (ЗП)
                                 </label>
 
-                                <th:block th:if="${editing}">
-
-                                    <input type="hidden"
-                                           id="parentProductionOrderId"
-                                           th:field="*{parentProductionOrderId}">
-
-                                    <input type="text"
-                                           th:value="${
-                                               productionOrderForm
-                                                   .parentProductionOrderId != null
-                                                   ? 'Заказ-комплектующий (уровень неизменный)'
-                                                   : 'Заказ верхнего уровня (уровень неизменный)'
-                                           }"
-                                           readonly>
-
-                                </th:block>
-
-                                <select th:unless="${editing}"
+                                <select
                                         id="parentProductionOrderId"
                                         th:field="*{parentProductionOrderId}">
 
@@ -354,7 +291,7 @@
                             -->
                             <div class="field span-2"
                                  id="serialPickerField"
-                                 th:if="${poSerial and !poRelease}">
+                                 th:if="${poSerial and !releaseOrder}">
 
                                 <label>
                                     Номера датчиков этого заказа
@@ -438,7 +375,7 @@
                             -->
                             <div class="field"
                                  id="kindClassifierField"
-                                 th:if="${!poSerial and !poRelease}">
+                                 th:if="${!poSerial and !releaseOrder}">
 
                                 <label for="productClassifierId"
                                        th:text="${
@@ -482,7 +419,7 @@
 
                             <div class="field"
                                  id="kindQuantityField"
-                                 th:if="${!poSerial and !poRelease}">
+                                 th:if="${!poSerial and !releaseOrder}">
 
                                 <label for="quantity">
                                     Количество
@@ -531,7 +468,7 @@
                             -->
                             <div class="field"
                                  id="kindTechProcessField"
-                                 th:if="${!poSerial and !poRelease}">
+                                 th:if="${!poSerial and !releaseOrder}">
 
                                 <label for="techProcessId">
                                     Техпроцесс
@@ -592,7 +529,7 @@
                             -->
                             <div class="field"
                                  id="customerOrderField"
-                                 th:if="${poSerial or poRelease}">
+                                 th:if="${poSerial or releaseOrder}">
 
                                 <label for="customerOrderId">
                                     Заказ покупателя
@@ -633,7 +570,7 @@
                             </div>
 
                             <div class="field"
-                                 th:if="${poSerial and !poRelease}">
+                                 th:if="${poSerial and !releaseOrder}">
 
                                 <label for="productionOperationId">
                                     Операция выпуска
@@ -717,106 +654,7 @@
 
                 </section>
 
-                <!--
-                    Состав выпуска — экземпляры, которые выпустятся из
-                    позиций заказа покупателя. У заказа-комплектующего
-                    такого состава нет: он сам входит внутрь изделия, а
-                    его «состав» — отмеченные датчики либо изделие с
-                    количеством. Секция относится только к выпуску,
-                    поэтому для комплектующего она скрыта: таблица с
-                    пустой строкой выглядела бы как ошибка загрузки.
-
-                    Строка таблицы — один экземпляр, а не позиция
-                    спецификации: выпуск считают поштучно. Колонок три, и
-                    каждая повторяет подпись изделия в цеху — тип,
-                    серийный номер (из резерва, если он уже отмечен) и
-                    полное обозначение «как в КД».
-                -->
-                <section class="card"
-                         id="releasePreviewSection"
-                         th:hidden="${!poRelease}">
-
-                    <div class="card-head">
-
-                        <div>
-
-                            <h2>Состав выпуска</h2>
-
-                            <small th:text="${
-                                editing
-                                    ? 'Состав сформирован при создании заказа
-                                       и меняется только вместе с ним:
-                                       серийные номера уже выданы'
-                                    : 'Заполняется автоматически после выбора
-                                       заказа покупателя: количество больше одного
-                                       даёт столько же экземпляров'
-                            }">
-                                Состав выпустится из позиций заказа покупателя
-                            </small>
-
-                        </div>
-
-                    </div>
-
-                    <div class="card-body">
-
-                        <div class="table-wrap">
-
-                            <table class="data-table">
-
-                                <thead>
-                                <tr>
-                                    <th style="width: 170px;">Тип изделия</th>
-                                    <th style="width: 170px;">Серийный номер</th>
-                                    <th>Полное имя</th>
-                                </tr>
-                                </thead>
-
-                                <tbody id="poPreviewBody"
-                                       th:attr="data-editing=${
-                                           editing ? 'true' : 'false'
-                                       }">
-
-                                <tr>
-
-                                    <td colspan="3"
-                                        class="empty-table"
-                                        id="poPreviewEmpty">
-                                        <span th:if="${!editing}">
-                                            Выберите заказ покупателя,
-                                            чтобы увидеть состав выпуска
-                                        </span>
-
-                                        <span th:if="${editing}">
-                                            Состав выпуска доступен
-                                            на странице заказа
-                                        </span>
-                                    </td>
-
-                                </tr>
-
-                                </tbody>
-
-                            </table>
-
-                        </div>
-
-                        <p th:if="${editing}"
-                           style="margin: 12px 0 0;
-                                  color: var(--muted);
-                                  font-size: 12px;">
-                            Серийные номера позиций видны
-                            в
-                            <a th:if="${productionOrderForm.id != null}"
-                               th:href="@{/dispatcher/production-order/{id}(id=${productionOrderForm.id})}">
-                                карточке заказа
-                            </a>
-                            .
-                        </p>
-
-                    </div>
-
-                </section>
+                
 
                 <!--
                     Перечень серийников, которые можно присвоить выпуску.
@@ -829,7 +667,7 @@
                 -->
                 <section class="card"
                          id="releaseSerialSection"
-                         th:hidden="${!poRelease or editing}">
+                         th:hidden="${!releaseOrder or editing}">
 
                     <div class="card-head">
 
@@ -856,10 +694,10 @@
 
                                 <thead>
                                 <tr>
-                                    <th style="width: 42px;"></th>
                                     <th style="width: 150px;">Серийный номер</th>
                                     <th style="width: 120px;">Тип изделия</th>
                                     <th>Полное имя</th>
+                                    <th style="width: 170px;">Номер ЗНП</th>
                                 </tr>
                                 </thead>
 
@@ -908,21 +746,13 @@
                         заведённой строки.
                     -->
                     <a class="btn secondary"
-                       th:if="${editing and productionOrderForm.id != null}"
-                       th:href="@{/dispatcher/production-order/{id}(id=${productionOrderForm.id})}">
-                        Отмена
-                    </a>
-
-                    <a class="btn secondary"
-                       th:if="${!(editing and productionOrderForm.id != null)
-                                and activePage == 'groupZnp'}"
+                       th:if="${activePage == 'groupZnp'}"
                        th:href="@{/dispatcher/group-znp}">
                         Отмена
                     </a>
 
                     <a class="btn secondary"
-                       th:if="${!(editing and productionOrderForm.id != null)
-                                and activePage != 'groupZnp'}"
+                       th:unless="${activePage == 'groupZnp'}"
                        th:href="@{/dispatcher/production-order}">
                         Отмена
                     </a>
@@ -939,9 +769,7 @@
                     <button class="btn primary"
                             type="submit"
                             th:text="${
-                                editing
-                                    ? 'Сохранить изменения'
-                                    : (poModeRelease
+                                (releaseOrder
                                            ? 'Создать заказ на производство'
                                            : (productionOrderForm
                                                   .resolvedKind.groupKind

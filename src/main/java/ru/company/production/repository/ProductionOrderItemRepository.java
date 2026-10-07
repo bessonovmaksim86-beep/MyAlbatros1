@@ -34,7 +34,8 @@ public interface ProductionOrderItemRepository
                 serial.serial as serialNumber,
                 item.status as status,
                 customerItem.position as customerOrderItemPosition,
-                item.note as note
+                item.note as note,
+                serial.znpNumber as znpNumber
             from ProductionOrderItem item
             join item.productClassifier classifier
             left join classifier.sensorCatalog sensor

@@ -97,7 +97,8 @@ public interface ProductionOrderRepository
             left join fetch ord.customerOrder customerOrder
             left join fetch customerOrder.customer
             left join fetch ord.parentProductionOrder
-            left join fetch ord.productClassifier
+            left join fetch ord.productClassifier classifier
+            left join fetch classifier.sensorCatalog
             left join fetch ord.productionOperation operation
             left join fetch operation.operationName
             left join fetch operation.operationType

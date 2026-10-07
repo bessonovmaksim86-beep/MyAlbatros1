@@ -275,6 +275,17 @@ public interface ProductSerialRepository
      *
      * flushAutomatically обязателен: UPDATE/DELETE исполняются напрямую,
      * и только что сохранённые позиции обязаны попасть в БД до запроса.
+     *
+     * Пустой issuedProductionOrder ещё не значит «номер свободен»:
+     * удаление выпуска (ProductionOrderService#delete) обнуляет эту
+     * ссылку, а строку состава выпуска оставляет. Реестр поэтому
+     * защищён двумя внешними ключами без ON DELETE CASCADE —
+     * production_order_items.serial_id (V17) и
+     * serial_movement_events.serial_id (V42), — и номер, попавший под
+     * любой из них, остаётся в реестре как изделие. Условие удаления
+     * обязано быть точным дополнением к
+     * {@link #unlinkReleasedByCustomerOrderId}: иначе оставшаяся ссылка
+     * на позицию сорвёт удаление состава тем же нарушением целостности.
      */
     @Modifying(
             flushAutomatically = true,
@@ -284,13 +295,24 @@ public interface ProductSerialRepository
             delete from ProductSerial serial
             where serial.issuedProductionOrder is null
               and serial.customerOrderItem.customerOrder.id = :customerOrderId
+              and not exists (
+                      select item.id
+                      from ProductionOrderItem item
+                      where item.serial.id = serial.id
+                  )
+              and not exists (
+                      select event.id
+                      from SerialMovementEvent event
+                      where event.serialId = serial.id
+                  )
             """)
     int deleteFreeByCustomerOrderId(
             @Param("customerOrderId") Long customerOrderId
     );
 
     /**
-     * Отвязывает от позиций заказа номера, уже подхваченные выпуском.
+     * Отвязывает от позиций заказа номера, которыми уже пользуется
+     * выпуск.
      *
      * Такой номер — уже не резерв диспетчера, а изделие: он стоит в
      * составе выпуска, и удалять его нельзя. Но старую позицию заказа
@@ -298,6 +320,20 @@ public interface ProductSerialRepository
      * внешний ключ product_serials.customer_order_item_id. Связь
      * снимается: дальнейшую прослеживаемость держит строка выпуска
      * (production_order_items.customer_order_item_id), а не резерв.
+     *
+     * Условие обязано быть точным дополнением к
+     * {@link #deleteFreeByCustomerOrderId}: номер либо удаляется вместе
+     * с резервом, либо отвязывается и остаётся в реестре. Третьего
+     * быть не может, иначе оставшаяся ссылка на позицию сорвёт
+     * удаление состава тем же нарушением целостности.
+     *
+     * Вторая ветвь (есть строка выпуска) нужна из-за удаления выпуска:
+     * ProductionOrderService#delete обнуляет issuedProductionOrder, но
+     * строку состава оставляет, и по одному только признаку выпуска
+     * такой номер выглядел бы свободным резервом. Третья ветвь —
+     * отметка журнала перемещений (fk_sme_serial, V42): номер уже жил
+     * своей жизнью (изолятор, ремонт), и удалять его нельзя, даже если
+     * выпуск к нему больше не привязан.
      */
     @Modifying(
             flushAutomatically = true,
@@ -306,8 +342,20 @@ public interface ProductSerialRepository
     @Query("""
             update ProductSerial serial
             set serial.customerOrderItem = null
-            where serial.issuedProductionOrder is not null
-              and serial.customerOrderItem.customerOrder.id = :customerOrderId
+            where serial.customerOrderItem.customerOrder.id = :customerOrderId
+              and (
+                      serial.issuedProductionOrder is not null
+                   or exists (
+                           select item.id
+                           from ProductionOrderItem item
+                           where item.serial.id = serial.id
+                       )
+                   or exists (
+                           select event.id
+                           from SerialMovementEvent event
+                           where event.serialId = serial.id
+                       )
+                  )
             """)
     int unlinkReleasedByCustomerOrderId(
             @Param("customerOrderId") Long customerOrderId

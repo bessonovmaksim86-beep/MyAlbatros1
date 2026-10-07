@@ -12,6 +12,7 @@ import org.springframework.web.bind.annotation.InitBinder;
 import org.springframework.web.bind.annotation.ModelAttribute;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseBody;
@@ -29,6 +30,7 @@ import ru.company.production.entity.CustomerOrderStatus;
 import ru.company.production.entity.CustomerOrderType;
 import ru.company.production.entity.ProductClassifier;
 import ru.company.production.entity.ProductSerial;
+import ru.company.production.entity.Operation;
 import ru.company.production.entity.ProductType;
 import ru.company.production.entity.ProductionItemStatus;
 import ru.company.production.entity.ProductionOrder;
@@ -1105,10 +1107,16 @@ public class DispatcherController {
          * обращение к ней из шаблона вне сессии дало бы
          * LazyInitializationException, а fetch-join в заголовке
          * размножил бы строки результата.
+         *
+         * Выпуск и заказ-комплектующий: у обоих блок «Заказы-
+         * комплектующие» создаёт ЗНП по операциям комплектования
+         * датчика (для ЗНП — его собственного датчика, без выбора),
+         * поэтому список созданных детей нужен и там и там. У
+         * группового и ремонтного заказа детей не бывает.
          */
         model.addAttribute(
                 "children",
-                order.isRoot()
+                order.isRoot() || order.isSerialBasedKind()
                         ? productionOrderRepository
                         .findActiveChildrenDetailed(id)
                         : List.<ProductionOrder>of()
@@ -1131,6 +1139,32 @@ public class DispatcherController {
         );
 
         /*
+         * Датчики для селекта блока «Заказы-комплектующие»: блок есть
+         * только в карточке выпуска, поэтому для ЗНП список пуст —
+         * раньше сюда уходил отдельный запрос findAttachedSerials,
+         * результат которого шаблон не печатал.
+         */
+        model.addAttribute(
+                "releaseSerials",
+                order.isRoot()
+                        ? serialKittingService.findAvailableSerials(id)
+                        : List.of()
+        );
+
+        /*
+         * Датчик(и) самого заказ-комплектующего: форма создания
+         * заказов-комплектующих в карточке ЗНП работает без выбора
+         * серийника — операции берутся из базового техпроцесса
+         * изделия того номера, к которому заказ уже привязан.
+         */
+        model.addAttribute(
+                "orderSerials",
+                order.isRoot()
+                        ? List.of()
+                        : serialKittingService.findAttachedSerials(id)
+        );
+
+        /*
          * Виды ЗНП нужны кнопкам блока «Заказы-комплектующие»: каждая
          * кнопка ведёт в форму сразу со своим видом (параметр kind) и с
          * родителем этого выпуска. Без атрибута шаблон отрисовал бы
@@ -1148,112 +1182,6 @@ public class DispatcherController {
         );
 
         return "dispatcher/order/production-view";
-    }
-
-    /**
-     * Форма правки заказа на производство.
-     *
-     * Состав выпуска не правится: серийные номера уже выданы,
-     * меняется только шапка заказа.
-     */
-    @GetMapping("/production-order/{id}/edit")
-    public String editProductionPage(
-            @PathVariable Long id,
-            Model model
-    ) {
-        ProductionOrder order = productionOrderRepository
-                .findDetailedById(id)
-                .orElse(null);
-
-        if (order == null) {
-            return "redirect:/dispatcher/production-order";
-        }
-
-        ProductionOrderForm form = editProductionOrderForm(order);
-
-        /*
-         * Для комплектующего возвращаются уже выбранные датчики:
-         * состав живёт отдельной связью (V20) и в шапке заказа не
-         * хранится, без явной передачи форма правки показалась бы
-         * пустой, а сохранение сняло бы весь состав.
-         */
-        form.setSerialIds(
-                serialKittingService.findSerialIds(order.getId())
-        );
-
-        model.addAttribute("productionOrderForm", form);
-        model.addAttribute("editing", true);
-
-        fillProductionFormModel(model, order);
-
-        return "dispatcher/order/production-create";
-    }
-
-    /**
-     * Сохранение изменений заказа на производство.
-     */
-    @PostMapping("/production-order/{id}/edit")
-    public String editProduction(
-            @PathVariable Long id,
-            @Valid
-            @ModelAttribute("productionOrderForm")
-            ProductionOrderForm form,
-            BindingResult errors,
-            Model model,
-            Authentication authentication,
-            RedirectAttributes redirectAttributes
-    ) {
-        form.setId(id);
-
-        AppUser author = authentication == null
-                ? null
-                : userRepository.findByUsernameIgnoreCase(
-                        authentication.getName()
-                ).orElse(null);
-
-        if (!errors.hasErrors()) {
-            try {
-                productionOrderService.update(id, form, author);
-            } catch (
-                    EntityNotFoundException
-                    | IllegalArgumentException
-                    | IllegalStateException exception
-            ) {
-                errors.reject(
-                        "productionorder.save",
-                        exception.getMessage()
-                );
-            }
-        }
-
-        if (errors.hasErrors()) {
-            model.addAttribute("editing", true);
-
-            /*
-             * Справочники правки перезаполняются вместе с редактируемым
-             * заказом: его заказчик занят выпуском и без явной передачи
-             * в список свободных не попал бы — select отрисовался бы
-             * пустым.
-             */
-            fillProductionFormModel(
-                    model,
-                    productionOrderRepository.findDetailedById(id)
-                            .orElse(null)
-            );
-
-            return "dispatcher/order/production-create";
-        }
-
-        redirectAttributes.addFlashAttribute(
-                "successMessage",
-                "Заказ на производство «"
-                        + (form.getNumber() == null
-                        ? ""
-                        : form.getNumber().trim())
-                        + "» успешно изменён"
-        );
-
-        return "redirect:/dispatcher/production-order/" + id;
     }
 
     /**
@@ -1620,81 +1548,6 @@ public class DispatcherController {
          * увидел бы «выбрана первая строка», а сохранилось бы другое.
          */
         form.setZnpKind(ZnpKind.KITTING.name());
-
-        return form;
-    }
-
-    /**
-     * Форма правки выпуска: состав не переносится — он уже
-     * сформирован и закреплён серийными номерами.
-     */
-    private ProductionOrderForm editProductionOrderForm(
-            ProductionOrder order
-    ) {
-        ProductionOrderForm form = new ProductionOrderForm();
-
-        form.setId(order.getId());
-        form.setVersion(order.getVersion());
-        form.setNumber(order.getNumber());
-        form.setCustomerOrderId(
-                order.getCustomerOrder() == null
-                        ? null
-                        : order.getCustomerOrder().getId()
-        );
-        /*
-         * Родитель переносится обязательно: без него форма правки
-         * заказала бы выпуск верхнего уровня, и сервис отклонил бы
-         * сохранение как попытку сменить уровень заказа.
-         */
-        form.setParentProductionOrderId(
-                order.getParentProductionOrder() == null
-                        ? null
-                        : order.getParentProductionOrder().getId()
-        );
-        /*
-         * Уровень ставится по сущности, а не по признаку «родителя
-         * нет»: групповой и ремонтный ЗНП (V37) существуют
-         * самостоятельно, и для них родителя нет, но выпуском они не
-         * являются. Ориентация на родителя открыла бы такой заказ как
-         * выпуск, и сервис отклонил бы сохранение как смену уровня.
-         */
-        form.setOrderLevel(
-                order.isRoot()
-                        ? ProductionOrderForm.LEVEL_ROOT
-                        : ProductionOrderForm.LEVEL_COMPONENT
-        );
-        /*
-         * Вид и состав «изделием и количеством» переносятся обязательно:
-         * без вида форма правки отдала бы заказ на комплектование, и
-         * сервис отклонил бы сохранение как попытку сменить вид
-         * (см. assertKindUnchanged), а без изделия и количества
-         * групповой заказ потерял бы свой состав при первой же правке.
-         */
-        form.setZnpKind(
-                order.getZnpKind() == null
-                        ? null
-                        : order.getZnpKind().name()
-        );
-        form.setProductClassifierId(order.getClassifierId());
-        form.setQuantity(order.getQuantity());
-        /*
-         * Маршрут переносится наравне с изделием: он обязателен
-         * групповым видам (см. ZnpKind#requiresTechProcess), и без него
-         * правка откланялась бы «выберите техпроцесс», а сохранение при
-         * ошибке валидации обнулило бы выбор.
-         */
-        form.setTechProcessId(
-                order.getTechProcess() == null
-                        ? null
-                        : order.getTechProcess().getId()
-        );
-        form.setProductionOperationId(
-                order.getProductionOperation() == null
-                        ? null
-                        : order.getProductionOperation().getId()
-        );
-        form.setOrderDate(order.getOrderDate());
-        form.setNote(order.getNote());
 
         return form;
     }
@@ -2155,6 +2008,7 @@ public class DispatcherController {
             row.put("fullName", fullName);
             row.put("typeName", serial.getTypeName());
             row.put("itemId", item == null ? null : item.getId());
+            row.put("znpNumber", serial.getZnpNumber());
 
             rows.add(row);
         }
@@ -2339,6 +2193,99 @@ public class DispatcherController {
                 );
             }
         }
+    }
+
+
+    /**
+     * Комплектовочные операции выбранного серийника.
+     *
+     * Список зависит от изделия серийника, а серийник меняют уже в
+     * карточке выпуска — поэтому операции отдаются отдельно и только
+     * для выбранного номера.
+     *
+     * Вместе с операцией отдаётся и уже внесённый номер ЗНП: диспетчер
+     * обязан увидеть прежнее значение в поле при повторном открытии
+     * строки, иначе решит, что заказ не заводился, и заведёт дубль.
+     */
+    @GetMapping("/production-order/serial-kitting-operations")
+    @ResponseBody
+    public List<Map<String, Object>> serialKittingOperations(
+            @RequestParam(required = false) Long serialId
+    ) {
+        List<Map<String, Object>> rows = new ArrayList<>();
+
+        Map<Long, String> znpNumbers =
+                serialKittingService.findZnpNumbersByOperation(serialId);
+
+        int position = 1;
+
+        for (Operation operation
+                : productionOrderService
+                        .findSerialKittingOperations(serialId)) {
+
+            Map<String, Object> row = new LinkedHashMap<>();
+
+            row.put("id", operation.getId());
+            row.put(
+                    "name",
+                    operation.getOperationName() == null
+                            ? ""
+                            : operation.getOperationName().getName()
+            );
+            row.put("position", position++);
+            row.put("znpNumber", znpNumbers.get(operation.getId()));
+
+            rows.add(row);
+        }
+
+        return rows;
+    }
+
+    /**
+     * Создаёт заказы-комплектующие по отмеченным парам
+     * «серийник + операция» внутри выпуска.
+     */
+    @PostMapping("/production-order/{id}/kitting-orders")
+    @ResponseBody
+    public Map<String, Object> createKittingOrders(
+            @PathVariable Long id,
+            @RequestBody List<Map<String, Object>> pairs,
+            Authentication authentication
+    ) {
+        AppUser author = authentication == null
+                ? null
+                : userRepository.findByUsernameIgnoreCase(
+                        authentication.getName()
+                ).orElse(null);
+
+        Map<String, Object> response = new LinkedHashMap<>();
+
+        try {
+            List<ProductionOrder> created =
+                    productionOrderService.createKittingOrders(
+                            id, pairs, author);
+
+            List<Map<String, Object>> rows = new ArrayList<>();
+
+            for (ProductionOrder order : created) {
+                Map<String, Object> row = new LinkedHashMap<>();
+                row.put("id", order.getId());
+                row.put("number", order.getNumber());
+                rows.add(row);
+            }
+
+            response.put("ok", true);
+            response.put("created", rows);
+        } catch (
+                EntityNotFoundException
+                | IllegalArgumentException
+                | IllegalStateException exception
+        ) {
+            response.put("ok", false);
+            response.put("error", exception.getMessage());
+        }
+
+        return response;
     }
 
 }

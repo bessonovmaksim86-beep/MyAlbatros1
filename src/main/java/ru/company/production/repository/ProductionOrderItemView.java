@@ -33,6 +33,11 @@ public interface ProductionOrderItemView {
 
     String getNote();
 
+    /**
+     * Номер ЗНП, привязанный к серийному номеру изделия.
+     */
+    String getZnpNumber();
+
     default String getProductTypeDisplayName() {
         ProductType type = getProductType();
 

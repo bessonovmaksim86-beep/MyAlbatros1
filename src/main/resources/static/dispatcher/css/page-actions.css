@@ -1,0 +1,170 @@
+/* ============================================================
+   КНОПКИ ДЕЙСТВИЙ В ШАПКЕ СТРАНИЦ ЗАКАЗОВ
+
+   Файл подключается после technology.css и dispatcher.css,
+   поэтому переопределяет базовые .btn / .primary / .secondary /
+   .danger без правки чужих стилей: там цвет кнопки задаётся
+   модификатором, а здесь — общий размер ряда и смысловые цвета
+   действий карточки (возврат, запуск, выполнение, отмена,
+   удаление).
+
+   Все правила пишутся парой классов (.btn.page-action--…):
+   модификаторы .secondary и .danger остаются на разметке и
+   продолжают работать в таблицах и формах, а в шапке их цвет
+   переопределяется здесь независимо от порядка подключения
+   файлов — при равной специфичности решала бы очередь, и
+   правка чужого css молча ломала бы ряд.
+
+   Ряд в шапке собран из ссылок .btn и форм с <button> внутри
+   (.inline-action): без одинаковой высоты и inline-flex у формы
+   <a> и <button> садились на разные базовые линии, и ряд
+   «гулял» по высоте — кнопки выглядели разровненными только
+   на широком экране.
+   ============================================================ */
+
+.page-head-actions {
+    align-items: center;
+    gap: 10px;
+}
+
+/* Форма действия не добавляет перенос строки и свои отступы. */
+.page-head-actions .inline-action {
+    display: inline-flex;
+    align-items: center;
+    margin: 0;
+}
+
+.page-head-actions .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+
+    box-sizing: border-box;
+    height: 42px;
+    padding: 0 18px;
+
+    font: inherit;
+    font-size: 13px;
+    font-weight: 700;
+    line-height: 1;
+    white-space: nowrap;
+    text-decoration: none;
+
+    border: 1px solid transparent;
+    border-radius: 10px;
+    box-shadow: 0 1px 2px rgba(16, 47, 75, .06);
+    cursor: pointer;
+
+    transition:
+        background-color 160ms ease,
+        border-color 160ms ease,
+        color 160ms ease,
+        box-shadow 160ms ease;
+}
+
+.page-head-actions .btn:hover {
+    text-decoration: none;
+}
+
+.page-head-actions .btn:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 3px rgba(44, 109, 167, .2);
+}
+
+.page-head-actions .btn:active {
+    transform: translateY(1px);
+}
+
+/* Главная кнопка страницы: «Создать заказ на производство». */
+.page-head-actions .btn.primary {
+    color: #ffffff;
+    background: var(--orange, #ef7d00);
+    border-color: var(--orange, #ef7d00);
+}
+
+.page-head-actions .btn.primary:hover {
+    background: #d96e00;
+    border-color: #d96e00;
+}
+
+/*
+ * Смысловые цвета действий карточки заказа.
+ *
+ * Разметка сохраняет и .secondary, и .danger: они описаны для
+ * всего модуля, а здесь уточняется только роль кнопки в ряду.
+ */
+
+/* Возврат к списку — нейтральная: уводит со страницы, ничего не меняет. */
+.page-head-actions .btn.page-action--back {
+    color: var(--navy, #073e75);
+    background: #ffffff;
+    border-color: var(--line, #dce4eb);
+}
+
+.page-head-actions .btn.page-action--back:hover {
+    background: #f3f8fd;
+    border-color: #2c6da7;
+}
+
+/* Запуск в работу — синяя: начало исполнения заказа. */
+.page-head-actions .btn.page-action--start {
+    color: #ffffff;
+    background: #0b5798;
+    border-color: #0b5798;
+}
+
+.page-head-actions .btn.page-action--start:hover {
+    background: #094a82;
+    border-color: #094a82;
+}
+
+/* Выполнение — зелёная: заказ закрывается успешно. */
+.page-head-actions .btn.page-action--complete {
+    color: #ffffff;
+    background: var(--green, #198754);
+    border-color: var(--green, #198754);
+}
+
+.page-head-actions .btn.page-action--complete:hover {
+    background: #157347;
+    border-color: #157347;
+}
+
+/* Отмена — контурная красная: заказ остаётся в системе. */
+.page-head-actions .btn.page-action--cancel {
+    color: #a12d35;
+    background: #ffffff;
+    border-color: #eeb9be;
+}
+
+.page-head-actions .btn.page-action--cancel:hover {
+    color: #8c242c;
+    background: #fdecee;
+    border-color: #e0949b;
+}
+
+/* Удаление — заливная красная: действие необратимо, не должно
+   читаться как «отменить». */
+.page-head-actions .btn.page-action--remove {
+    color: #ffffff;
+    background: var(--red, #c73a43);
+    border-color: var(--red, #c73a43);
+}
+
+.page-head-actions .btn.page-action--remove:hover {
+    background: #b0323a;
+    border-color: #b0323a;
+}
+
+.page-head-actions .btn.page-action--cancel:focus-visible,
+.page-head-actions .btn.page-action--remove:focus-visible {
+    box-shadow: 0 0 0 3px rgba(199, 58, 67, .2);
+}
+
+@media (max-width: 820px) {
+    .page-head-actions .btn {
+        height: 38px;
+        padding: 0 14px;
+        font-size: 12px;
+    }
+}

@@ -15,6 +15,9 @@
 
     <link rel="stylesheet"
           th:href="@{/dispatcher/css/dispatcher.css}">
+
+    <link rel="stylesheet"
+          th:href="@{/dispatcher/css/page-actions.css}">
 </head>
 
 <body>
@@ -58,6 +61,21 @@
 
                 </div>
 
+                <!--
+                    Ряд действий карточки. Кнопки стоят в одном ряду и
+                    выровнены по высоте: часть из них — ссылки .btn,
+                    часть — <button> внутри формы (.inline-action),
+                    поэтому общий размер и выравнивание задаёт
+                    page-actions.css, а не базовый .btn.
+
+                    Цвет несёт смысл действия, а не принадлежность к
+                    форме разметки: возврат — нейтральная, запуск в
+                    работу — синяя, выполнение — зелёная, отмена —
+                    контурная красная, удаление — заливная красная.
+                    Раньше «Отменить» и «Удалить» оба шли как .danger и
+                    выглядели одинаково, хотя первое обратимо, а второе
+                    нет.
+                -->
                 <div class="page-head-actions">
 
                     <!--
@@ -69,22 +87,16 @@
                         группового заказа диспетчер попадал бы в чужой
                         список.
                     -->
-                    <a class="btn secondary"
+                    <a class="btn secondary page-action--back"
                        th:if="${order != null and order.groupZnp}"
                        th:href="@{/dispatcher/group-znp}">
                         К списку групповых заказов
                     </a>
 
-                    <a class="btn secondary"
+                    <a class="btn secondary page-action--back"
                        th:unless="${order != null and order.groupZnp}"
                        th:href="@{/dispatcher/production-order}">
                         К списку заказов
-                    </a>
-
-                    <a class="btn primary"
-                       th:if="${order != null}"
-                       th:href="@{/dispatcher/production-order/{id}/edit(id=${order.id})}">
-                        Изменить заказ
                     </a>
 
                     <!--
@@ -105,7 +117,7 @@
                                th:name="${_csrf.parameterName}"
                                th:value="${_csrf.token}">
 
-                        <button class="btn secondary"
+                        <button class="btn secondary page-action--start"
                                 type="submit">
                             Взять в работу
                         </button>
@@ -133,7 +145,7 @@
                                th:name="${_csrf.parameterName}"
                                th:value="${_csrf.token}">
 
-                        <button class="btn secondary"
+                        <button class="btn secondary page-action--complete"
                                 type="submit">
                             Выполнить заказ
                         </button>
@@ -155,7 +167,7 @@
                                th:name="${_csrf.parameterName}"
                                th:value="${_csrf.token}">
 
-                        <button class="btn danger"
+                        <button class="btn danger page-action--cancel"
                                 type="submit">
                             Отменить заказ
                         </button>
@@ -185,7 +197,7 @@
                                th:name="${_csrf.parameterName}"
                                th:value="${_csrf.token}">
 
-                        <button class="btn danger"
+                        <button class="btn danger page-action--remove"
                                 type="submit">
                             Удалить заказ
                         </button>
@@ -289,38 +301,11 @@
                             </div>
 
                             <!--
-                                Уровень дерева: выпуск верхнего уровня (ЗП)
-                                или заказ-комплектующий (ЗНП). Ссылка на
-                                родителя сделана отдельной веткой, потому
-                                что @{...} внутрь ${...} не вкладывается.
-
-                                У комплектующего показан и вид (V37):
-                                комплектование, групповой на ячейки или
-                                приборы, ремонт ячеек или подсборок — по
-                                нему понимают, чем задан состав заказа.
+                                Уровень дерева (ЗП / ЗНП) и вид комплектующего
+                                из карточки убраны: уровень задаётся только при
+                                создании заказа, ссылку на родителя в карточке
+                                не показываем.
                             -->
-                            <div class="field">
-                                <label>Уровень заказа</label>
-
-                                <div>
-                                    <span th:if="${order.root}"
-                                          class="status draft"
-                                          th:text="${order.levelDisplayName}">
-                                        Заказ на производство
-                                    </span>
-
-                                    <a th:unless="${order.root}"
-                                       class="status work"
-                                       th:href="@{/dispatcher/production-order/{id}(id=${order.parentId})}"
-                                       th:text="${
-                                           order.znpKindDisplayName
-                                           + ' · '
-                                           + order.parentOrderNumber
-                                       }">
-                                        Заказ-комплектующий
-                                    </a>
-                                </div>
-                            </div>
 
                             <!--
                                 Изделие группового или ремонтного заказа
@@ -463,22 +448,18 @@
 
                             <h2 th:text="${
                                 order.serialBasedKind
-                                    ? 'Датчики этого заказа'
+                                    ? 'Заказы-комплектующие'
                                     : 'Состав заказа'
                             }">
-                                Датчики этого заказа
+                                Заказы-комплектующие
                             </h2>
 
                             <small th:if="${order.serialBasedKind}">
-                                Изделия выбранного выпуска, в которые
-                                вошёл заказ; номера выпускает заказ
-                                верхнего уровня
-
-                                Входит в:
+                                Созданных внутри выпуска:
 
                                 <strong th:text="${
-                                    kitting != null
-                                        ? #lists.size(kitting)
+                                    children != null
+                                        ? #lists.size(children)
                                         : 0
                                 }">
                                     0
@@ -493,69 +474,120 @@
 
                         </div>
 
-                        <a class="btn secondary"
-                           th:href="@{/dispatcher/production-order/{id}/edit(id=${order.id})}">
-                            Изменить заказ
-                        </a>
-
                     </div>
 
                     <div class="card-body"
                          th:if="${order.serialBasedKind}">
 
-                        <div class="table-wrap">
+                        <!--
+                            Карточка заказ-комплектующего: датчик здесь
+                            не выбирают — заказ уже привязан к номеру,
+                            и операции берутся из его техпроцесса.
+                            Скрытый #kittingSerial держит id этого
+                            номера: тот же id, что и в карточке
+                            выпуска, только без выпадающего списка.
+                        -->
+                        <input type="hidden"
+                               id="kittingSerial"
+                               th:if="${
+                                   orderSerials != null
+                                   and not #lists.isEmpty(orderSerials)
+                                }"
+                               th:value="${orderSerials[0].id}"
+                               th:attr="data-operations-url=@{/dispatcher/production-order/serial-kitting-operations}">
+
+                        <div class="form-grid"
+                             th:if="${
+                                 orderSerials != null
+                                 and not #lists.isEmpty(orderSerials)
+                              }">
+
+                            <div class="field">
+
+                                <label>Серийный номер выпуска</label>
+
+                                <input type="text"
+                                       th:value="${orderSerials[0].displayLabel}"
+                                       readonly>
+                            </div>
+
+                        </div>
+
+                        <div class="form-grid"
+                             th:unless="${
+                                 orderSerials != null
+                                 and not #lists.isEmpty(orderSerials)
+                              }">
+
+                            <div class="field">
+
+                                <label>Серийный номер выпуска</label>
+
+                                <input type="text"
+                                       value="Заказ ещё не внесён ни в один датчик"
+                                       readonly>
+                            </div>
+
+                        </div>
+
+                        <div class="table-wrap"
+                             style="margin-top: 12px;"
+                             th:if="${
+                                 orderSerials != null
+                                 and not #lists.isEmpty(orderSerials)
+                              }">
 
                             <table class="data-table">
 
                                 <thead>
                                 <tr>
-                                    <th style="width: 160px;">Номер</th>
-                                    <th style="width: 110px;">Тип</th>
-                                    <th>Изделие</th>
-                                    <th style="width: 200px;">Операция</th>
+                                    <th style="width: 90px;">№ операции</th>
+                                    <th>Операция комплектования</th>
+                                    <th style="width: 220px;">
+                                        Номер ЗНП (вручную)
+                                    </th>
                                 </tr>
                                 </thead>
 
-                                <tbody>
+                                <tbody id="kittingOperationsBody">
 
-                                <tr th:if="${
-                                        kitting == null
-                                        or #lists.isEmpty(kitting)
-                                     }">
-
-                                    <td colspan="4"
-                                        class="empty-table">
-                                        Заказ ещё не внесён ни в один
-                                        датчик
-                                    </td>
-
-                                </tr>
-
-                                <tr th:each="link : ${kitting}">
-
-                                    <td th:text="${link.serialNumber}">
-                                        121205333
-                                    </td>
-
-                                    <td th:text="${link.serialTypeName}">
-                                        Датчик
-                                    </td>
-
-                                    <td th:text="${link.serialName}">
-                                        Датчик давления
-                                    </td>
-
-                                    <td th:text="${link.operationName}">
-                                        Комплектование
-                                    </td>
-
-                                </tr>
+                                    <tr>
+                                        <td colspan="3"
+                                            class="empty-table">
+                                            Операции загружаются…
+                                        </td>
+                                    </tr>
 
                                 </tbody>
-
                             </table>
 
                         </div>
+
+                        <div style="margin-top: 12px;"
+                             th:if="${
+                                 orderSerials != null
+                                 and not #lists.isEmpty(orderSerials)
+                              }">
+
+                            <button type="button"
+                                    class="btn primary"
+                                    id="createKittingBtn"
+                                    th:attr="data-create-url=@{/dispatcher/production-order/{id}/kitting-orders(id=${order.id})}">
+                                Создать заказы-комплектующие
+                            </button>
+
+                            <span id="kittingMessage"
+                                  style="margin-left: 12px;"></span>
+
+                        </div>
+
+                        <input th:if="${_csrf != null
+                                       and orderSerials != null
+                                       and not #lists.isEmpty(orderSerials)}"
+                               type="hidden"
+                               id="kittingCsrf"
+                               th:name="${_csrf.parameterName}"
+                               th:value="${_csrf.token}">
 
                     </div>
 
@@ -646,6 +678,7 @@
                                     <th style="width: 140px;">Тип изделия</th>
                                     <th style="width: 150px;">Позиция заказа</th>
                                     <th style="width: 150px;">Статус</th>
+                                    <th style="width: 170px;">Номер ЗНП</th>
                                 </tr>
                                 </thead>
 
@@ -656,7 +689,7 @@
                                         or #lists.isEmpty(items)
                                      }">
 
-                                    <td colspan="6"
+                                    <td colspan="7"
                                         class="empty-table">
                                         В заказе нет выпущенных изделий
                                     </td>
@@ -700,6 +733,15 @@
                                         </span>
                                     </td>
 
+                                    <td>
+                                        <span th:text="${
+                                            item.znpNumber != null
+                                            and !#strings.isEmpty(item.znpNumber)
+                                                ? item.znpNumber
+                                                : '—'
+                                        }">—</span>
+                                    </td>
+
                                 </tr>
 
                                 </tbody>
@@ -708,6 +750,189 @@
                         </div>
                     </div>
                 </section>
+
+                <!--
+                    Заказы-комплектующие выпуска: список уже созданных ЗНП
+                    и форма создания новых по серийникам выпуска. Серийник
+                    выбирается из состава выпуска, операции — из базового
+                    техпроцесса изделия этого серийника, каждой паре
+                    «серийник + операция» — отдельный ЗНП с ручным номером.
+
+                    Блок принадлежит только выпуску. У заказа-комплектующего
+                    комплектующих быть не может: форму создания ЗНП заводят
+                    внутри выпуска, и родителя в ней выбирают из заказов
+                    верхнего уровня (rootOrders). Прежнее условие
+                    «root or serialBasedKind» показывало блок и в карточке
+                    ЗНП, где он предлагал создать ЗНП на операцию, ради
+                    которой этот заказ уже заведён, — а серийник брался из
+                    состава самого ЗНП, так что сервис отклонял такое
+                    создание как «выпущен другим заказом».
+                -->
+                <section class="card"
+                         th:if="${order.root}">
+
+                    <div class="card-head">
+
+                        <div>
+
+                            <h2>Заказы-комплектующие</h2>
+
+                            <small>
+                                Созданных внутри выпуска:
+
+                                <strong th:text="${
+                                    children != null
+                                        ? #lists.size(children)
+                                        : 0
+                                }">
+                                    0
+                                </strong>
+                            </small>
+
+                        </div>
+
+                    </div>
+
+                    <div class="card-body">
+
+                        <div class="table-wrap">
+
+                            <table class="data-table">
+
+                                <thead>
+                                <tr>
+                                    <th style="width: 56px;">№</th>
+                                    <th style="width: 180px;">Номер ЗНП</th>
+                                    <th>Вид</th>
+                                    <th style="width: 150px;">Статус</th>
+                                </tr>
+                                </thead>
+
+                                <tbody>
+
+                                <tr th:if="${
+                                        children == null
+                                        or #lists.isEmpty(children)
+                                     }">
+
+                                    <td colspan="4"
+                                        class="empty-table">
+                                        Заказов-комплектующих пока нет
+                                    </td>
+
+                                </tr>
+
+                                <tr th:each="child : ${children}">
+
+                                    <td th:text="${childStat.count}">
+                                        1
+                                    </td>
+
+                                    <td>
+                                        <a th:href="@{/dispatcher/production-order/{id}(id=${child.id})}"
+                                           th:text="${child.number}">
+                                            ЗНП-2025-001
+                                        </a>
+                                    </td>
+
+                                    <td th:text="${child.znpKindDisplayName}">
+                                        Комплектование
+                                    </td>
+
+                                    <td>
+                                        <span class="status"
+                                              th:classappend="${child.statusBadgeClass}"
+                                              th:text="${child.statusDisplayName}">
+                                            Новый
+                                        </span>
+                                    </td>
+
+                                </tr>
+
+                                </tbody>
+                            </table>
+
+                        </div>
+
+                        <div class="form-grid"
+                             style="margin-top: 16px;">
+
+                            <div class="field">
+
+                                <label>Серийный номер выпуска</label>
+
+                                <select id="kittingSerial"
+                                        th:attr="data-operations-url=@{/dispatcher/production-order/serial-kitting-operations}">
+
+                                    <option value="">
+                                        — выберите датчик —
+                                    </option>
+
+                                    <option th:each="serial : ${releaseSerials}"
+                                            th:value="${serial.id}"
+                                            th:text="${serial.displayLabel}">
+                                        121205333 — Датчик
+                                    </option>
+
+                                </select>
+
+                            </div>
+
+                        </div>
+
+                        <div class="table-wrap"
+                             style="margin-top: 12px;">
+
+                            <table class="data-table">
+
+                                <thead>
+                                <tr>
+                                    <th style="width: 90px;">№ операции</th>
+                                    <th>Операция комплектования</th>
+                                    <th style="width: 220px;">
+                                        Номер ЗНП (вручную)
+                                    </th>
+                                </tr>
+                                </thead>
+
+                                <tbody id="kittingOperationsBody">
+
+                                    <tr>
+                                        <td colspan="3"
+                                            class="empty-table">
+                                            Выберите датчик, чтобы увидеть
+                                            операции комплектования
+                                        </td>
+                                    </tr>
+
+                                </tbody>
+                            </table>
+
+                        </div>
+
+                        <div style="margin-top: 12px;">
+
+                            <button type="button"
+                                    class="btn primary"
+                                    id="createKittingBtn"
+                                    th:attr="data-create-url=@{/dispatcher/production-order/{id}/kitting-orders(id=${order.id})}">
+                                Создать заказы-комплектующие
+                            </button>
+
+                            <span id="kittingMessage"
+                                  style="margin-left: 12px;"></span>
+
+                        </div>
+
+                        <input th:if="${_csrf != null}"
+                               type="hidden"
+                               id="kittingCsrf"
+                               th:name="${_csrf.parameterName}"
+                               th:value="${_csrf.token}">
+
+                    </div>
+                </section>
+
 
             </th:block>
 
@@ -718,6 +943,201 @@
 <th:block th:replace="~{dispatcher/fragments/layout
         :: commonScripts}">
 </th:block>
+
+
+<script>
+    (function () {
+        var serialSelect = document.getElementById('kittingSerial');
+        var opsBody = document.getElementById('kittingOperationsBody');
+        var createBtn = document.getElementById('createKittingBtn');
+        var message = document.getElementById('kittingMessage');
+        var csrfInput = document.getElementById('kittingCsrf');
+
+        if (!opsBody || !createBtn) {
+            return;
+        }
+
+        /*
+         * Имя скрытого поля — это имя ПАРАМЕТРА запроса (_csrf), а не
+         * заголовка: CsrfFilter читает заголовок только под именем
+         * X-CSRF-TOKEN. Отсюда и «Forbidden»: токен уходил в заголовок
+         * с именем _csrf и фильтром не распознавался.
+         */
+        var csrfToken = csrfInput ? csrfInput.value : '';
+
+        function escapeHtml(text) {
+            var div = document.createElement('div');
+            div.textContent = text == null ? '' : text;
+            return div.innerHTML;
+        }
+
+        function clearBody(text) {
+            opsBody.innerHTML =
+                '<tr><td colspan="3" class="empty-table">' +
+                escapeHtml(text) + '</td></tr>';
+        }
+
+        function load(serialId) {
+            var url = serialSelect
+                ? serialSelect.getAttribute('data-operations-url')
+                : null;
+
+            message.textContent = '';
+
+            if (!serialId || !url) {
+                clearBody('Сначала выберите датчик');
+                return;
+            }
+
+            fetch(url + '?serialId=' + encodeURIComponent(serialId), {
+                headers: { 'Accept': 'application/json' }
+            })
+            .then(function (response) { return response.json(); })
+            .then(function (rows) {
+                if (!rows || !rows.length) {
+                    clearBody(
+                        'У датчика нет операций комплектования ' +
+                        '(проверьте базовый техпроцесс)'
+                    );
+                    return;
+                }
+
+                var html = '';
+
+                for (var i = 0; i < rows.length; i++) {
+                    var op = rows[i];
+                    html += '<tr data-op-id="' + op.id + '">' +
+                        '<td>' + op.position + '</td>' +
+                        '<td>' + escapeHtml(op.name) + '</td>' +
+                        '<td><input type="text" class="kitting-number" ' +
+                            'placeholder="номер ЗНП"' +
+                            (op.znpNumber ? ' value="' + escapeHtml(op.znpNumber) + '"' : '') +
+                            '></td>' +
+                        '</tr>';
+                }
+
+                opsBody.innerHTML = html;
+            })
+            .catch(function () {
+                clearBody('Не удалось загрузить операции');
+            });
+        }
+
+        if (serialSelect) {
+            serialSelect.addEventListener('change', function () {
+                load(serialSelect.value);
+            });
+
+            /*
+             * Карточка заказ-комплектующего: серийник не выбирают,
+             * он уже привязан и лежит в скрытом поле с готовым id.
+             * События change здесь не будет, поэтому операции
+             * грузятся сразу при открытии карточки.
+             */
+            if (serialSelect.tagName.toLowerCase() !== 'select'
+                    && serialSelect.value) {
+                load(serialSelect.value);
+            }
+        }
+
+        createBtn.addEventListener('click', function () {
+            var serialId = serialSelect ? serialSelect.value : '';
+            message.textContent = '';
+
+            if (!serialId) {
+                message.textContent = 'Сначала выберите датчик';
+                return;
+            }
+
+            var rows = opsBody.querySelectorAll('tr[data-op-id]');
+
+            if (!rows.length) {
+                message.textContent = 'Нет операций для создания';
+                return;
+            }
+
+            var pairs = [];
+            var seen = {};
+            var duplicates = false;
+
+            for (var i = 0; i < rows.length; i++) {
+                var row = rows[i];
+                var numberInput = row.querySelector('.kitting-number');
+                var number = numberInput ? numberInput.value.trim() : '';
+
+                if (!number) {
+                    message.textContent =
+                        'Заполните номер ЗНП для всех операций';
+                    return;
+                }
+
+                if (seen[number]) {
+                    duplicates = true;
+                }
+
+                seen[number] = true;
+
+                pairs.push({
+                    serialId: Number(serialId),
+                    operationId: Number(row.getAttribute('data-op-id')),
+                    number: number
+                });
+            }
+
+            if (duplicates && !window.confirm(
+                'Среди введённых номеров ЗНП есть повторяющиеся. ' +
+                'Повтор значений приведёт к ошибке сохранения. ' +
+                'Продолжить?'
+            )) {
+                return;
+            }
+
+            createBtn.disabled = true;
+            message.textContent = 'Создание...';
+
+            var headers = {
+                'Content-Type': 'application/json',
+                'Accept': 'application/json',
+                'X-CSRF-TOKEN': csrfToken
+            };
+
+            fetch(createBtn.getAttribute('data-create-url'), {
+                method: 'POST',
+                headers: headers,
+                body: JSON.stringify(pairs)
+            })
+            .then(function (response) {
+                if (response.status === 403) {
+                    throw new Error(
+                        'Сессия истекла или токен защиты не принят. ' +
+                        'Перезагрузите страницу и повторите.'
+                    );
+                }
+
+                return response.json();
+            })
+            .then(function (result) {
+                if (result && result.ok) {
+                    location.reload();
+                    return;
+                }
+
+                message.textContent = (result && result.error)
+                    ? result.error
+                    : 'Не удалось создать заказы';
+                createBtn.disabled = false;
+            })
+            .catch(function (error) {
+                message.textContent = (error
+                    && error.message
+                    && error.message !== 'Ошибка запроса')
+                    ? error.message
+                    : 'Ошибка запроса';
+                createBtn.disabled = false;
+            });
+        });
+    })();
+</script>
 
 </body>
 </html>

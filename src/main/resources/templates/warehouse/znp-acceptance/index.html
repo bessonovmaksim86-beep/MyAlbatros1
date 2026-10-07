@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="ru"
+      xmlns:th="http://www.thymeleaf.org">
+
+<head>
+    <meta charset="UTF-8">
+
+    <meta name="viewport"
+          content="width=device-width, initial-scale=1">
+
+    <title>Приёмка ячеек по заказам-комплектующим</title>
+
+    <link rel="stylesheet"
+          th:href="@{/technology/css/technology.css}">
+
+    <link rel="stylesheet"
+          th:href="@{/technology/css/common.css}">
+
+    <link rel="stylesheet"
+          th:href="@{/warehouse/css/warehouse.css}">
+</head>
+
+<body>
+
+<div class="app-shell">
+
+    <aside th:replace="~{warehouse/fragments/layout
+            :: sidebar('znp-acceptance')}">
+    </aside>
+
+    <main class="main">
+
+        <header th:replace="~{warehouse/fragments/layout
+                :: topbar}">
+        </header>
+
+        <div class="page-content warehouse-page">
+
+            <div class="page-head">
+
+                <div class="page-title">
+
+                    <h1>Приёмка ячеек по заказам-комплектующим</h1>
+
+                    <p>
+                        Заказы-комплектующие (ЗНП), в состав которых
+                        вошли ячейки, ещё не отмеченные на складе:
+                        приёмку проводят по заказу разом — все его
+                        непринятые ячейки переходят в «принято», а их
+                        комплектовочная операция закрывается фактом
+                    </p>
+
+                </div>
+
+                <div class="page-head-actions">
+
+                    <a class="btn secondary"
+                       th:href="@{/warehouse/acceptance}">
+                        Приёмка с БВК
+                    </a>
+
+                    <a class="btn secondary"
+                       th:href="@{/warehouse/general}">
+                        Обзор склада
+                    </a>
+
+                </div>
+            </div>
+
+            <div class="alert success"
+                 th:if="${successMessage}"
+                 th:text="${successMessage}">
+            </div>
+
+            <div class="alert danger"
+                 th:if="${errorMessage}"
+                 th:text="${errorMessage}">
+            </div>
+
+            <section class="card">
+
+                <div class="card-head">
+
+                    <div>
+
+                        <h2>Заказы с непринятыми ячейками</h2>
+
+                        <small>
+                            В список попадают серийные ЗНП: у них есть
+                            выпуск-родитель и комплектовочная операция,
+                            а значит — что принимать и чем закрывать
+                            приёмку. Групповые и ремонтные заказы здесь
+                            не появляются
+                        </small>
+
+                    </div>
+
+                    <span class="badge"
+                          th:if="${znpCellAcceptanceCount != null
+                                  and znpCellAcceptanceCount > 0}">
+
+                        Ожидают приёмки:
+
+                        <strong th:text="${znpCellAcceptanceCount}">
+                            1
+                        </strong>
+                    </span>
+                </div>
+
+                <div class="card-body">
+
+                    <div class="alert danger"
+                         th:if="${orders == null or #lists.isEmpty(orders)}">
+
+                        <p>
+                            Заказов с непринятыми ячейками пока нет:
+                            приёмку открывает ЗНП, в состав которого
+                            вошла хотя бы одна ячейка, ещё не отмеченная
+                            кладовщиком
+                        </p>
+
+                    </div>
+
+                    <div class="table-wrap"
+                         th:unless="${orders == null or #lists.isEmpty(orders)}">
+
+                        <table class="data-table warehouse-batch-table">
+
+                            <thead>
+
+                            <tr>
+                                <th>Заказ-комплектующий</th>
+                                <th>Вид</th>
+                                <th>Дата заказа</th>
+                                <th>Срок</th>
+                                <th>Статус</th>
+                                <th></th>
+                            </tr>
+
+                            </thead>
+
+                            <tbody>
+
+                            <!--
+                                Строка печатает только собственные поля
+                                заказа: список раздела читается запросом
+                                без fetch join, а сессия к рендерингу
+                                закрыта (open-in-view: false). Номер
+                                родителя и наименование операции — на
+                                экране приёмки, где заказ читается
+                                детальным запросом.
+                            -->
+                            <tr th:each="row : ${orders}">
+
+                                <td class="warehouse-number-cell">
+                                    <a class="mono"
+                                       th:href="@{/warehouse/znp-acceptance/{id}(id=${row.id})}"
+                                       th:text="${row.number}">
+                                        ЗНП-2026-114
+                                    </a>
+                                </td>
+
+                                <td th:text="${row.levelDisplayName}">
+                                    ЗНП на комплектование
+                                </td>
+
+                                <td th:text="${row.formattedOrderDate}">
+                                    18.09.2026
+                                </td>
+
+                                <td th:text="${row.formattedDueDate}">
+                                    30.09.2026
+                                </td>
+
+                                <td>
+                                    <span class="status"
+                                          th:classappend="' ' + ${row.statusBadgeClass}"
+                                          th:text="${row.statusDisplayName}">
+                                        В работе
+                                    </span>
+                                </td>
+
+                                <td class="table-actions">
+
+                                    <a class="btn primary compact"
+                                       th:href="@{/warehouse/znp-acceptance/{id}(id=${row.id})}">
+                                        Принять на склад
+                                    </a>
+
+                                </td>
+
+                            </tr>
+
+                            </tbody>
+                        </table>
+
+                    </div>
+
+                </div>
+            </section>
+
+        </div>
+    </main>
+</div>
+
+<th:block th:replace="~{warehouse/fragments/layout
+        :: commonScripts}">
+</th:block>
+
+</body>
+</html>

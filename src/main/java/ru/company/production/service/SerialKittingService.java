@@ -13,8 +13,10 @@ import ru.company.production.repository.ProductSerialRepository;
 import ru.company.production.repository.SerialProductionOrderRepository;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 /**
@@ -95,6 +97,94 @@ public class SerialKittingService {
     /**
      * Привязывает заказ к выбранным датчикам.
      */
+    /**
+     * Привязанные серийники заказа.
+     */
+    @Transactional(readOnly = true)
+    public List<ProductSerial> findAttachedSerials(Long productionOrderId) {
+        List<ProductSerial> result = new ArrayList<>();
+
+        if (productionOrderId == null) {
+            return result;
+        }
+
+        for (SerialProductionOrder link
+                : serialProductionOrderRepository
+                .findDetailsByProductionOrderId(productionOrderId)) {
+
+            if (link.getSerial() != null) {
+                result.add(link.getSerial());
+            }
+        }
+
+        return result;
+    }
+
+    /**
+     * Номера ЗНП, уже внесённые по операциям комплектования серийника.
+     *
+     * Ключ — идентификатор операции, значение — номер заказа, который
+     * вошёл в изделие этой операцией. Нужен карточке выпуска: таблица
+     * операций заполняется один раз, а при повторном открытии строки
+     * диспетчер обязан увидеть прежний номер, а не пустое поле — иначе
+     * он сочтёт, что заказ не заводился, и заведёт дубль.
+     *
+     * Заказ без операции в перечне не участвует: на этапе выпуска ЗНП
+     * создаётся без операции, и напротив конкретной операции его быть
+     * не может.
+     */
+    @Transactional(readOnly = true)
+    public Map<Long, String> findZnpNumbersByOperation(Long serialId) {
+
+        Map<Long, String> numbers = new LinkedHashMap<>();
+
+        if (serialId == null) {
+            return numbers;
+        }
+
+        for (SerialProductionOrder link
+                : serialProductionOrderRepository
+                .findDetailsBySerialId(serialId)) {
+
+            if (link.getOperation() == null
+                    || link.getProductionOrder() == null) {
+                continue;
+            }
+
+            numbers.putIfAbsent(
+                    link.getOperation().getId(),
+                    link.getProductionOrder().getNumber()
+            );
+        }
+
+        return numbers;
+    }
+
+    /**
+     * Серийник принадлежит цепочке заказа,
+     * если выпущен им или любым родителем.
+     */
+    private static boolean belongsToOrderChain(
+            Long issuedOrderId,
+            ProductionOrder order
+    ) {
+        if (issuedOrderId == null) {
+            return false;
+        }
+
+        ProductionOrder current = order;
+
+        while (current != null) {
+            if (issuedOrderId.equals(current.getId())) {
+                return true;
+            }
+
+            current = current.getParentProductionOrder();
+        }
+
+        return false;
+    }
+
     @Transactional
     public void attach(ProductionOrder order,
                        List<Long> serialIds,
@@ -196,7 +286,7 @@ public class SerialKittingService {
                     ? null
                     : serial.getIssuedProductionOrder().getId();
 
-            if (!parentId.equals(issuedOrderId)) {
+            if (!belongsToOrderChain(issuedOrderId, order)) {
                 throw new IllegalArgumentException(
                         "Датчик «" + serial.getFullNumber()
                                 + "» выпущен другим заказом — "

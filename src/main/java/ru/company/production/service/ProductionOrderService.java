@@ -19,6 +19,7 @@ import ru.company.production.entity.ProductionOrder;
 import ru.company.production.entity.ProductionOrderItem;
 import ru.company.production.entity.ProductionOrderStatus;      
 import ru.company.production.entity.TechProcess;
+import ru.company.production.entity.TechProcessOperation;
 import ru.company.production.entity.ZnpKind;
 import ru.company.production.repository.ClassifierRouteOptionView;
 import ru.company.production.repository.CustomerOrderRepository;
@@ -30,6 +31,7 @@ import ru.company.production.repository.ProductionOrderRepository;
 import ru.company.production.repository.SerialProductionOrderRepository;
 import ru.company.production.repository.TechProcessClassifierRepository;
 import ru.company.production.repository.TechProcessRepository;
+import ru.company.production.repository.TechProcessOperationRepository;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -70,6 +72,9 @@ public class ProductionOrderService {
     private final ProductClassifierRepository productClassifierRepository;
     private final TechProcessRepository techProcessRepository;
     private final TechProcessClassifierRepository techProcessClassifierRepository;
+
+    private final TechProcessOperationRepository
+            techProcessOperationRepository;
 
     /*
      * Комплектование ЗНП: привязка заказа к уже выпущенным серийникам.
@@ -149,6 +154,396 @@ public class ProductionOrderService {
         return operationRepository.findByOperationTypeCode(
                 OperationTypeCode.KITTING.name()
         );
+    }
+
+    /**
+     * Комплектовочные операции изделия конкретного серийного номера.
+     *
+     * Операции берутся из базового техпроцесса классификатора серийника,
+     * а не из выпуска: именно маршрут изделия-датчика задаёт, в каких
+     * операциях комплектования он участвует. Пустой список означает, что
+     * у серийника нет изделия или изделие не имеет базового маршрута —
+     * диспетчер увидит пустой выбор и поймёт, что маршрут не настроен.
+     */
+    @Transactional(readOnly = true)
+    public List<Operation> findSerialKittingOperations(Long serialId) {
+        if (serialId == null) {
+            return List.of();
+        }
+
+        ProductSerial serial = productSerialRepository
+                .findById(serialId)
+                .orElse(null);
+
+        if (serial == null || serial.getProductClassifier() == null) {
+            return List.of();
+        }
+
+        List<Operation> operations = new ArrayList<>();
+
+        for (TechProcessOperation node
+                : techProcessOperationRepository
+                .findBasicProcessKittingByClassifier(
+                        serial.getProductClassifier().getId(),
+                        OperationTypeCode.KITTING.name())) {
+
+            if (node.getOperation() != null) {
+                operations.add(node.getOperation());
+            }
+        }
+
+        return operations;
+    }
+
+    /**
+     * Создаёт заказы-комплектующие по отмеченным парам
+     * «серийник + операция»: каждой паре — отдельный ЗНП.
+     *
+     * Номер задаётся вручную (он приходит из внешнего учёта), поэтому
+     * автоподбор для комплектования не выполняется, а пустой номер
+     * отклоняется. Каждый ЗНП привязывается к ровно одному серийнику
+     * родителя через SerialProductionOrder.
+     *
+     * Операция обязана быть комплектовочной и входить в базовый маршрут
+     * изделия этого серийника — иначе ЗНП повесил бы операцию на чужое
+     * изделие.
+     */
+    @Transactional
+    public List<ProductionOrder> createKittingOrders(
+            Long releaseId,
+            List<Map<String, Object>> pairs,
+            AppUser author
+    ) {
+        if (releaseId == null || pairs == null || pairs.isEmpty()) {
+            throw new IllegalArgumentException(
+                    "Не выбрано ни одной пары «серийник + операция»"
+            );
+        }
+
+        ProductionOrder release = productionOrderRepository
+                .findById(releaseId)
+                .orElseThrow(() -> new EntityNotFoundException(
+                        "Заказ верхнего уровня не найден"
+                ));
+
+        if (!release.isRoot() && !release.isSerialBasedKind()) {
+            throw new IllegalStateException(
+                    "Заказы-комплектующие создают только внутри выпуска"
+            );
+        }
+
+        CustomerOrder customerOrder = requireCustomerOrder(release);
+        LocalDate dueDate = resolveDueDate(customerOrder);
+
+        List<ProductionOrder> created = new ArrayList<>();
+
+        for (Map<String, Object> pair : pairs) {
+            Long serialId = toLongOrNull(pair.get("serialId"));
+            Long operationId = toLongOrNull(pair.get("operationId"));
+            String number = trimToNullString(pair.get("number"));
+
+            ProductSerial serial =
+                    requireSerialOfRelease(serialId, release);
+            Operation operation =
+                    requireKittingOperation(operationId);
+
+            requireSerialOperationAllowed(serial, operation);
+
+            if (number == null) {
+                throw new IllegalArgumentException(
+                        "Укажите номер заказа для серийника «"
+                                + serial.getFullNumber() + "»"
+                );
+            }
+
+            if (productionOrderRepository.existsByNumber(number)) {
+                throw new IllegalArgumentException(
+                        "Заказ с номером «" + number
+                                + "» уже существует"
+                );
+            }
+
+            ProductionOrder order = new ProductionOrder();
+
+            order.setNumber(number);
+            order.setCustomerOrder(customerOrder);
+            order.setParentProductionOrder(release);
+            order.setZnpKind(ZnpKind.KITTING);
+            order.setProductClassifier(serial.getProductClassifier());
+            order.setProductionOperation(operation);
+            order.setOrderDate(LocalDate.now());
+            order.setDueDate(dueDate);
+            order.setStatus(ProductionOrderStatus.NEW);
+            order.setCreatedBy(author);
+            order.setActive(true);
+
+            ProductionOrder saved =
+                    productionOrderRepository.save(order);
+
+            serialKittingService.attach(
+                    saved,
+                    List.of(serial.getId()),
+                    operation,
+                    author
+            );
+
+            created.add(saved);
+        }
+
+        return created;
+    }
+
+    /** Серийник обязан быть выпущен именно этим заказом верхнего уровня. */
+    private ProductSerial requireSerialOfRelease(
+            Long serialId,
+            ProductionOrder release
+    ) {
+        if (serialId == null) {
+            throw new IllegalArgumentException(
+                    "Серийный номер не выбран"
+            );
+        }
+
+        ProductSerial serial = productSerialRepository
+                .findById(serialId)
+                .orElseThrow(() -> new IllegalArgumentException(
+                        "Серийный номер не найден"
+                ));
+
+        Long issuedOrderId = serial.getIssuedProductionOrder() == null
+                ? null
+                : serial.getIssuedProductionOrder().getId();
+
+        if (!isSerialOfReleaseChain(issuedOrderId, release)) {
+            throw new IllegalArgumentException(
+                    "Датчик «" + serial.getFullNumber()
+                            + "» выпущен другим заказом"
+            );
+        }
+
+        return serial;
+    }
+
+    /**
+     * Операция обязана входить в базовый маршрут изделия серийника —
+     * тот же источник, что и список в findSerialKittingOperations.
+     */
+    private void requireSerialOperationAllowed(
+            ProductSerial serial,
+            Operation operation
+    ) {
+        if (serial.getProductClassifier() == null) {
+            throw new IllegalArgumentException(
+                    "У датчика «" + serial.getFullNumber()
+                            + "» нет изделия, а значит и маршрута"
+            );
+        }
+
+        boolean allowed = findSerialKittingOperations(serial.getId())
+                .stream()
+                .anyMatch(op -> op.getId().equals(operation.getId()));
+
+        if (!allowed) {
+            throw new IllegalArgumentException(
+                    "Операция не входит в маршрут изделия датчика «"
+                            + serial.getFullNumber() + "»"
+            );
+        }
+    }
+
+    /**
+     * Создаёт ЗНП комплектования на каждый серийник
+     * выпуска с ручным номером из формы создания выпуска.
+     *
+     * Пары «серийник ↔ номер ЗНП» выровнены по индексу:
+     * releaseSerialIds[i] ↔ releaseZnpNumbers[i]. Операция на этом
+     * этапе не привязывается (пустая), она выбирается позже.
+     */
+    private void createReleaseKittingOrders(
+            ProductionOrder release,
+            ProductionOrderForm form,
+            AppUser author
+    ) {
+        List<Long> serialIds = form.getReleaseSerialIds();
+        List<String> numbers = form.getReleaseZnpNumbers();
+
+        if (serialIds == null || serialIds.isEmpty()) {
+            return;
+        }
+
+        CustomerOrder customerOrder = requireCustomerOrder(release);
+        LocalDate dueDate = resolveDueDate(customerOrder);
+
+        /*
+         * Изделия сгруппированы по введённому номеру ЗНП: один заказ
+         * на комплектование законно покрывает несколько изделий,
+         * поэтому строки с одинаковым номером должны сойтись в один
+         * ProductionOrder с несколькими связями SerialProductionOrder,
+         * а не завести несколько заказов-дублей (уникальность номера в
+         * базе этого и не позволила бы).
+         *
+         * LinkedHashMap держит порядок第一次 встречающегося номера —
+         * так перечень в карточке выпуска читается в том же порядке,
+         * в котором диспетчер заполнял таблицу.
+         */
+        Map<String, List<ProductSerial>> byNumber = new LinkedHashMap<>();
+
+        for (int index = 0; index < serialIds.size(); index++) {
+            Long serialId = serialIds.get(index);
+            String raw = numbers != null && index < numbers.size()
+                    ? numbers.get(index)
+                    : null;
+            String number = trimToNullString(raw);
+
+            ProductSerial serial =
+                    requireSerialOfRelease(serialId, release);
+
+            if (number == null) {
+                throw new IllegalArgumentException(
+                        "Заполните номер ЗНП для серийника "
+                                + serial.getFullNumber() + ". "
+                                + "Номер ЗНП обязателен для каждого серийника."
+                );
+            }
+
+            /*
+             * Номер ЗНП остаётся на самом серийнике: предпросмотр
+             * выпуска и карточка изделия читают его, чтобы при
+             * повторном открытии формы уже внесённые значения
+             * оказались в своих полях.
+             */
+            serial.setZnpNumber(number);
+            productSerialRepository.save(serial);
+
+            byNumber
+                    .computeIfAbsent(number, key -> new ArrayList<>())
+                    .add(serial);
+        }
+
+        for (Map.Entry<String, List<ProductSerial>> entry
+                : byNumber.entrySet()) {
+
+            String number = entry.getKey();
+            List<ProductSerial> serials = entry.getValue();
+
+            /*
+             * Заказ с таким номером мог быть заведён раньше — в этом
+             * же выпуске он дополняется изделиями, а не создаётся
+             * заново (тот же документ может добираться изделиями
+             * постепенно).
+             */
+            ProductionOrder existing = productionOrderRepository
+                    .findByNumber(number)
+                    .filter(ProductionOrder::isActive)
+                    .filter(candidate ->
+                            release.getId().equals(candidate.getParentId()))
+                    .orElse(null);
+
+            if (existing != null) {
+                List<Long> attached = new ArrayList<>();
+
+                for (ProductSerial serial : serials) {
+                    attached.add(serial.getId());
+                }
+
+                serialKittingService.attach(
+                        existing, attached, null, author);
+
+                continue;
+            }
+
+            if (productionOrderRepository.existsByNumber(number)) {
+                throw new IllegalArgumentException(
+                        "Заказ с номером «" + number
+                                + "» уже существует и относится "
+                                + "к другому выпуску."
+                );
+            }
+
+            ProductionOrder order = new ProductionOrder();
+
+            order.setNumber(number);
+            order.setCustomerOrder(customerOrder);
+            order.setParentProductionOrder(release);
+            order.setZnpKind(ZnpKind.KITTING);
+            order.setProductClassifier(
+                    serials.get(0).getProductClassifier());
+            order.setOrderDate(LocalDate.now());
+            order.setDueDate(dueDate);
+            order.setStatus(ProductionOrderStatus.NEW);
+            order.setCreatedBy(author);
+            order.setActive(true);
+
+            ProductionOrder saved =
+                    productionOrderRepository.save(order);
+
+            List<Long> attached = new ArrayList<>();
+
+            for (ProductSerial serial : serials) {
+                attached.add(serial.getId());
+            }
+
+            serialKittingService.attach(
+                    saved, attached, null, author);
+        }
+    }
+
+    /**
+     * Датчик допустим, если выпущен самим заказом
+     * или любым из его родителей по цепочке (выпуск
+     * для вложенного ЗНП).
+     */
+    private static boolean isSerialOfReleaseChain(
+            Long issuedOrderId,
+            ProductionOrder order
+    ) {
+        if (issuedOrderId == null) {
+            return false;
+        }
+
+        ProductionOrder current = order;
+
+        while (current != null) {
+            if (issuedOrderId.equals(current.getId())) {
+                return true;
+            }
+
+            current = current.getParentProductionOrder();
+        }
+
+        return false;
+    }
+
+    private static Long toLongOrNull(Object value) {
+        if (value == null) {
+            return null;
+        }
+
+        if (value instanceof Number number) {
+            return number.longValue();
+        }
+
+        String text = value.toString().trim();
+
+        if (text.isEmpty()) {
+            return null;
+        }
+
+        try {
+            return Long.parseLong(text);
+        } catch (NumberFormatException ignored) {
+            return null;
+        }
+    }
+
+    private static String trimToNullString(Object value) {
+        if (value == null) {
+            return null;
+        }
+
+        String text = value.toString().trim();
+
+        return text.isEmpty() ? null : text;
     }
 
     /**
@@ -473,7 +868,17 @@ public class ProductionOrderService {
                     form.getReleaseSerialIds()
             );
 
-            return productionOrderRepository.save(saved);
+            ProductionOrder persisted =
+                    productionOrderRepository.save(saved);
+
+            /*
+             * На этапе выпуска привязка к операциям НЕ делается:
+             * на каждый серийник создаётся ЗНП комплектования
+             * с ручным номером, привязанный к датчику без операции.
+             */
+            createReleaseKittingOrders(persisted, form, author);
+
+            return productionOrderRepository.save(persisted);
         }
 
         /*
@@ -938,6 +1343,27 @@ public class ProductionOrderService {
                             + "» входят заказы-комплектующие — "
                             + "сначала удалите их"
             );
+        }
+
+        /*
+         * Освобождаем серийные номера, выданные выпуском:
+         * снимаем ссылку на заказ и удаляем висячие
+         * ссылки комплектования (SerialProductionOrder),
+         * чтобы номера вернулись в свободный резерв.
+         */
+        if (order.isRoot()) {
+            for (ProductSerial serial : productSerialRepository
+                    .findByProductionOrderId(order.getId())) {
+
+                serialProductionOrderRepository
+                        .findDetailsBySerialId(serial.getId())
+                        .forEach(link ->
+                                serialProductionOrderRepository
+                                        .delete(link));
+
+                serial.setIssuedProductionOrder(null);
+                productSerialRepository.save(serial);
+            }
         }
 
         order.setActive(false);

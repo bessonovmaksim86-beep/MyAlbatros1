@@ -12,6 +12,7 @@ import ru.company.production.service.BvkAcceptanceService;
 import ru.company.production.service.CellReceivingService;
 import ru.company.production.service.ModuleRoutes;
 import ru.company.production.service.WarehouseKittingService;
+import ru.company.production.service.ZnpAcceptanceService;
 
 import java.util.Locale;
 
@@ -29,6 +30,7 @@ import java.util.Locale;
         WarehouseController.class,
         WarehouseReceivingController.class,
         WarehouseAcceptanceController.class,
+        WarehouseZnpAcceptanceController.class,
         WarehouseSupplierController.class,
         WarehouseKittingController.class
 })
@@ -38,6 +40,7 @@ public class WarehouseViewAdvice {
     private final UserRepository userRepository;
     private final CellReceivingService receivingService;
     private final BvkAcceptanceService acceptanceService;
+    private final ZnpAcceptanceService znpAcceptanceService;
     private final WarehouseKittingService kittingService;
 
     @ModelAttribute
@@ -56,6 +59,16 @@ public class WarehouseViewAdvice {
         model.addAttribute(
                 "awaitingAcceptanceCount",
                 acceptanceService.countAwaiting()
+        );
+
+        /*
+         * Серийные ЗНП с непринятыми ячейками: приёмка ячеек стоит рядом
+         * с приёмкой с БВК и тоже ждёт кладовщика — счётчик держат на
+         * любой странице модуля, чтобы объём приёмки был виден сразу.
+         */
+        model.addAttribute(
+                "znpCellAcceptanceCount",
+                znpAcceptanceService.countPending()
         );
 
         /*

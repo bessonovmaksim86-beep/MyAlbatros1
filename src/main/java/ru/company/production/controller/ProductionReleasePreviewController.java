@@ -120,6 +120,8 @@ public class ProductionReleasePreviewController {
                 row.put("fullName", fullName);
                 row.put("serialId", serial == null ? null : serial.getId());
                 row.put("itemId", item.getId());
+                row.put("znpNumber",
+                        serial == null ? null : serial.getZnpNumber());
 
                 rows.add(row);
             }
