@@ -1350,6 +1350,44 @@ public class ProductionOrderService {
     }
 
     /**
+     * Возврат отменённого заказа-комплектующего (ЗНП) в работу.
+     *
+     * Отменённый выпуск остаётся закрытым: его позиции и серийники
+     * помнят, на какой стадии остановили выпуск. ЗНП возвращают —
+     * заказ переходит в «Новый», и диспетчер берёт его в работу
+     * заново, уже с внесёнными номерами ЗНП (проверка в plan).
+     *
+     * Возврат симметричен отмене: cancel перевёл в «Отменён» всё
+     * поддерево, поэтому reopen возвращает в «Новый» тоже всё
+     * поддерево — иначе вложенные ЗНП остались бы отменёнными
+     * внутри возвращённого заказа.
+     */
+    @Transactional
+    public ProductionOrder reopen(Long id) {
+
+        ProductionOrder order = requireActiveOrder(id);
+
+        if (!order.isComponent()) {
+            throw new IllegalStateException(
+                    "Возвращать в работу можно только заказ-комплектующий"
+                            + " (ЗНП), а заказ «" + order.getNumber()
+                            + "» — выпуск"
+            );
+        }
+
+        if (order.getStatus() != ProductionOrderStatus.CANCELLED) {
+            throw new IllegalStateException(
+                    "Заказ «" + order.getNumber()
+                            + "» не отменён — возвращать в работу нечего"
+            );
+        }
+
+        applyStatus(order, ProductionOrderStatus.NEW);
+
+        return order;
+    }
+
+    /**
      * Удаление заказа на производство.
      *
      * Удаляется только заказ, по которому ещё не начат выпуск

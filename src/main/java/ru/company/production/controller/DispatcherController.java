@@ -1233,6 +1233,22 @@ public class DispatcherController {
     }
 
     /**
+     * Возврат отменённого ЗНП в работу: заказ переходит в «Новый».
+     */
+    @PostMapping("/production-order/{id}/reopen")
+    public String reopenProduction(
+            @PathVariable Long id,
+            RedirectAttributes redirectAttributes
+    ) {
+        return runProductionAction(
+                () -> productionOrderService.reopen(id),
+                id,
+                "Заказ-комплектующий возвращён в работу, статус — «Новый»",
+                redirectAttributes
+        );
+    }
+
+    /**
      * Удаление заказа на производство.
      */
     @PostMapping("/production-order/{id}/delete")

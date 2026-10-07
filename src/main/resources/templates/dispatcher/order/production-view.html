@@ -122,7 +122,39 @@
 
                     </form>
 
-                    <!--
+                                        <!--
+                        Возврат из отмены — только заказам-комплектующим:
+                        отменённый выпуск остаётся закрытым, его позиции и
+                        серийники помнят стадию остановки (см.
+                        ProductionOrderService#reopen).
+                    -->
+                    <form method="post"
+                          th:if="${
+                              order != null
+                              and order.component
+                              and order.status != null
+                              and order.status.name() == 'CANCELLED'
+                          }"
+                          th:action="@{/dispatcher/production-order/{id}/reopen(id=${order.id})}"
+                          class="inline-action"
+                          onsubmit="return confirm(
+                              'Вернуть заказ-комплектующий в работу? '
+                              + 'Он и вложенные в него заказы перейдут в статус «Новый».'
+                          );">
+
+                        <input th:if="${_csrf != null}"
+                               type="hidden"
+                               th:name="${_csrf.parameterName}"
+                               th:value="${_csrf.token}">
+
+                        <button class="btn primary page-action--start"
+                                type="submit">
+                            Вернуть в работу
+                        </button>
+
+                    </form>
+
+<!--
                         Кнопку убирали по статусу «Не новый», и она выглядела
                         пропавшей: теперь она всегда на месте, а отказ
                         объясняет сервис (см. ProductionOrderService#delete)

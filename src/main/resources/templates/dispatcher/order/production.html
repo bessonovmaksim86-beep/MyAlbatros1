@@ -423,7 +423,37 @@
                                             Открыть
                                         </a>
 
-                                                                        <!--
+                                                                                                            <!--
+                                        Тот же возврат из отмены, что в карточке:
+                                        у отменённого ЗНП в списке не осталось
+                                        ни одного действия, кроме «Открыть».
+                                    -->
+                                    <form method="post"
+                                          th:if="${
+                                              order.component
+                                              and order.status != null
+                                              and order.status.name() == 'CANCELLED'
+                                          }"
+                                          th:action="@{/dispatcher/production-order/{id}/reopen(id=${order.id})}"
+                                          th:attr="data-confirm=${
+                                              'Вернуть ЗНП «' + order.number
+                                              + '» в работу? Заказ перейдёт в статус «Новый».'
+                                          }"
+                                          onsubmit="return confirm(this.getAttribute('data-confirm'));">
+
+                                        <input th:if="${_csrf != null}"
+                                               type="hidden"
+                                               th:name="${_csrf.parameterName}"
+                                               th:value="${_csrf.token}">
+
+                                        <button class="btn primary compact"
+                                                type="submit">
+                                            Вернуть в работу
+                                        </button>
+
+                                    </form>
+
+<!--
                                         Кнопка есть у любой строки списка:
                                         отказывает сервис, а не разметка, — так
                                         строка не «исчезает» при взятии заказа
