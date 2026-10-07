@@ -99,59 +99,7 @@
                         К списку заказов
                     </a>
 
-                    <!--
-                        Новый выпуск запускается в работу отдельной кнопкой:
-                        со статусом «Новый» позиции ещё не видны операторам.
-                    -->
-                    <form method="post"
-                          th:if="${
-                              order != null
-                              and order.status != null
-                              and order.status.name() == 'NEW'
-                          }"
-                          th:action="@{/dispatcher/production-order/{id}/plan(id=${order.id})}"
-                          class="inline-action">
-
-                        <input th:if="${_csrf != null}"
-                               type="hidden"
-                               th:name="${_csrf.parameterName}"
-                               th:value="${_csrf.token}">
-
-                        <button class="btn secondary page-action--start"
-                                type="submit">
-                            Взять в работу
-                        </button>
-
-                    </form>
-
-                    <!--
-                        Выполнение закрывает все позиции и серийники,
-                        поэтому доступно только незакрытому выпуску.
-                    -->
-                    <form method="post"
-                          th:if="${
-                              order != null
-                              and order.status != null
-                              and (
-                                  order.status.name() == 'IN_WORK'
-                                  or order.status.name() == 'PARTIALLY_DONE'
-                              )
-                          }"
-                          th:action="@{/dispatcher/production-order/{id}/complete(id=${order.id})}"
-                          class="inline-action">
-
-                        <input th:if="${_csrf != null}"
-                               type="hidden"
-                               th:name="${_csrf.parameterName}"
-                               th:value="${_csrf.token}">
-
-                        <button class="btn secondary page-action--complete"
-                                type="submit">
-                            Выполнить заказ
-                        </button>
-
-                    </form>
-
+                    
                     <form method="post"
                           th:if="${
                               order != null
@@ -175,16 +123,13 @@
                     </form>
 
                     <!--
-                        Удаляется только новый выпуск: выданные серийные
-                        номера остаются в реестре, поэтому у взятого
-                        в работу заказа удаления нет.
+                        Кнопку убирали по статусу «Не новый», и она выглядела
+                        пропавшей: теперь она всегда на месте, а отказ
+                        объясняет сервис (см. ProductionOrderService#delete)
+                        — баннером после возврата на карточку.
                     -->
                     <form method="post"
-                          th:if="${
-                              order != null
-                              and order.status != null
-                              and order.status.name() == 'NEW'
-                          }"
+                          th:if="${order != null}"
                           th:action="@{/dispatcher/production-order/{id}/delete(id=${order.id})}"
                           class="inline-action"
                           onsubmit="return confirm(

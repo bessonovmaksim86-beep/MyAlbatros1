@@ -1137,6 +1137,26 @@ public class ProductionOrderService {
             );
         }
 
+        /*
+         * Выпуск берут в работу только когда номер ЗНП внесён напротив
+         * каждого серийника состава: статус «В работе» открывает заказ
+         * цеху, и изделие без документа комплектования ушло бы в работу
+         * неучтённым. Проверка держится здесь, а не в форме, потому что
+         * ЗНП дописывают и после создания заказа.
+         */
+        long total = productionOrderItemRepository.countByOrderId(id);
+        long missing = productionOrderItemRepository
+                .countWithoutZnpByOrderId(id);
+
+        if (missing > 0) {
+            throw new IllegalStateException(
+                    "В заказе «" + order.getNumber()
+                            + "» внесены не все ЗНП: осталось заполнить "
+                            + missing + " из " + total
+                            + " — заполните номер ЗНП напротив каждого серийника"
+            );
+        }
+
         applyStatus(order, ProductionOrderStatus.IN_WORK);
 
         return order;
@@ -1185,9 +1205,9 @@ public class ProductionOrderService {
      * Применяет статус к заказу и ко всему, что в него входит.
      *
      * Заказ-комплектующий не имеет смысла отдельно от выпуска: он либо
-     * собран вместе с ним, либо не собран. Поэтому перевод ЗП
-     * распространяется на детей, а перевод ЗНП не трогает родителя —
-     * выпуск может достраиваться остальными комплектующими.
+     * собран вместе с ним, либо не собран. Поэтому статус распространяется
+     * вниз по всей цепочке состава, а вверх — никогда: выпуск может
+     * достраиваться остальными комплектующими.
      *
      * Статусы позиций и серийников выводятся из статуса заказа через
      * switch без default: компилятор требует перечислить все значения
@@ -1200,29 +1220,49 @@ public class ProductionOrderService {
     private void applyStatus(ProductionOrder order,
                              ProductionOrderStatus status) {
 
+        /*
+         * Обход идёт по всей цепочке, а не на один уровень: выпуск
+         * включает ЗНП, а в ЗНП, в свою очередь, входят свои ЗНП, и
+         * выпуск считается начатым для всего состава сразу. Порядок —
+         * от родителя к детям; множество посещённых нужно как защита от
+         * цикла, который сделала бы бы рекурсия бесконечной.
+         */
         List<ProductionOrder> tree = new ArrayList<>();
+        Set<Long> visited = new HashSet<>();
 
-        tree.add(order);
+        List<ProductionOrder> pending = new ArrayList<>();
+        pending.add(order);
+        visited.add(order.getId());
 
-        if (order.isRoot()) {
+        while (!pending.isEmpty()) {
+
+            ProductionOrder node = pending.remove(pending.size() - 1);
+            tree.add(node);
+
             for (ProductionOrder child
                     : productionOrderRepository
-                    .findActiveChildren(order.getId())) {
+                    .findActiveChildren(node.getId())) {
+
+                if (child.getId() == null || !visited.add(child.getId())) {
+                    continue;
+                }
 
                 /*
-                 * Взятие выпуска в работу не «воскрешает» комплектующие,
-                 * по которым выпуск уже закрыт или отменён: их статус —
+                 * Взятие в работу не «воскрешает» комплектующие, по
+                 * которым выпуск уже закрыт или отменён: их статус —
                  * запись о завершённой работе, и перезапись потеряла бы
-                 * историю. На закрытие и отмену родителя правило не
-                 * распространяется: закрытый выпуск закрывает и свои
-                 * комплектующие (требование диспетчера).
+                 * историю. Поддерево закрытого заказа не обходится
+                 * целиком по той же причине. На закрытие и отмену
+                 * родителя правило не распространяется: закрытый выпуск
+                 * закрывает и всё, что в него входит (требование
+                 * диспетчера).
                  */
                 if (status == ProductionOrderStatus.IN_WORK
                         && isClosed(child.getStatus())) {
                     continue;
                 }
 
-                tree.add(child);
+                pending.add(child);
             }
         }
 
@@ -1236,9 +1276,10 @@ public class ProductionOrderService {
          * Позиции и серийники переводятся одним запросом на узел.
          * У отменённого выпуска позиции остаются как были: серийные
          * номера не переиздаются, а возврат позиции в «Новую»
-         * означал бы потерь записи о том, на какой стадии выпуск
+         * означал бы потерю записи о том, на какой стадии выпуск
          * остановили.
          */
+
         ProductionItemStatus itemStatus = switch (status) {
             case NEW -> ProductionItemStatus.NEW;
             case IN_WORK, PARTIALLY_DONE -> ProductionItemStatus.IN_WORK;

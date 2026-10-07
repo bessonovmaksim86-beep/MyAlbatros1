@@ -175,4 +175,35 @@ public interface ProductionOrderItemRepository
             @Param("productionOrderId") Long productionOrderId,
             @Param("status") ProductionItemStatus status
     );
+
+    /**
+     * Строки состава выпуска, для которых номер ЗНП ещё не внесён.
+     *
+     * Нужен проверке при взятии выпуска в работу: номер ЗНП диспетчер
+     * вписывает напротив каждого серийника, и заказ, где часть строк
+     * пуста, в работу брать нельзя — цех получит изделия без
+     * документа комплектования.
+     *
+     * Строка без серийного номера засчитывается как невнесённая:
+     * выпуск с незаполненным резервом ровно в том же положении.
+     * Пустая строка и строка из пробелов считаются невнесёнными —
+     * поле в форме остаётся именно таким, когда его не трогали.
+     *
+     * У заказа-комплектующего позиций выпуска нет, поэтому запрос для
+     * него возвращает ноль и проверка к нему неприменима.
+     */
+    @Query("""
+            select count(item.id)
+            from ProductionOrderItem item
+            left join item.serial serial
+            where item.productionOrder.id = :productionOrderId
+              and (
+                      serial.id is null
+                   or serial.znpNumber is null
+                   or trim(serial.znpNumber) = ''
+                  )
+            """)
+    long countWithoutZnpByOrderId(
+            @Param("productionOrderId") Long productionOrderId
+    );
 }

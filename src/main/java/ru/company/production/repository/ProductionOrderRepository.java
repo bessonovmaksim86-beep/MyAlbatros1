@@ -61,6 +61,12 @@ public interface ProductionOrderRepository
                     where item.productionOrder = ord
                       and item.status = :doneStatus
                 ) as doneItemCount,
+                (
+                    select count(child.id)
+                    from ProductionOrder child
+                    where child.parentProductionOrder = ord
+                      and child.active = true
+                ) as childCount,
                 ord.status as status
             from ProductionOrder ord
             left join ord.customerOrder customerOrder

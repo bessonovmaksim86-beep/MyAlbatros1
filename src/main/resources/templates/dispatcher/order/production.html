@@ -423,6 +423,35 @@
                                             Открыть
                                         </a>
 
+                                                                        <!--
+                                        Кнопка есть у любой строки списка:
+                                        отказывает сервис, а не разметка, — так
+                                        строка не «исчезает» при взятии заказа
+                                        в работу и диспетчер видит причину в
+                                        подтверждении и в баннере.
+
+                                        Текст подтверждения несёт проекция
+                                        (getDeleteConfirmText): только она знает
+                                        про вложенные комплектующие без
+                                        дополнительного запроса на строку.
+                                    -->
+                                    <form method="post"
+                                          th:action="@{/dispatcher/production-order/{id}/delete(id=${order.id})}"
+                                          th:attr="data-confirm=${order.deleteConfirmText}"
+                                          onsubmit="return confirm(this.getAttribute('data-confirm'));">
+
+                                        <input th:if="${_csrf != null}"
+                                               type="hidden"
+                                               th:name="${_csrf.parameterName}"
+                                               th:value="${_csrf.token}">
+
+                                        <button class="btn danger compact"
+                                                type="submit">
+                                            Удалить
+                                        </button>
+
+                                    </form>
+
                                     </div>
 
                                 </td>

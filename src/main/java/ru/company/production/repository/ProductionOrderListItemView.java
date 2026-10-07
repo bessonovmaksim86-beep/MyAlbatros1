@@ -85,6 +85,14 @@ public interface ProductionOrderListItemView {
     /* Сколько позиций доведено до статуса «Выполнена». */
     Long getDoneItemCount();
 
+    /*
+     * Число активных заказов-комплектующих, входящих в этот заказ.
+     *
+     * Скалярный подзапрос, а не связь: список читает проекцию, у которой
+     * сущности нет, а обход детей запросом на строку дал бы N+1.
+     */
+    Long getChildCount();
+
     ProductionOrderStatus getStatus();
 
     default String getFormattedOrderDate() {
@@ -202,5 +210,44 @@ public interface ProductionOrderListItemView {
         long done = getDoneItemCount() == null ? 0L : getDoneItemCount();
 
         return done + " из " + total;
+    }
+
+    /*
+     * Текст подтверждения удаления в списке.
+     *
+     * Кнопку показывают в любой строке, поэтому причины отказа перечисляют
+     * здесь, а не в разметке: и вложенные комплектующие, и статус, при
+     * котором удаление запрещено (см. ProductionOrderService#delete). Без
+     * этого отказ сервиса выглядел бы для списка необъяснимым.
+     *
+     * Количество подставляют в форму «включено N шт.» без склонения
+     * падежей — окончание числительного в шаблоне разошлось бы с текстом
+     * сервиса при первой же правке.
+     */
+    default String getDeleteConfirmText() {
+        long children = getChildCount() == null ? 0L : getChildCount();
+
+        StringBuilder text = new StringBuilder("Удалить заказ «")
+                .append(getNumber())
+                .append("»? ");
+
+        if (children > 0) {
+            text.append("В него включены заказы-комплектующие (")
+                    .append(children)
+                    .append(" шт.) — сначала удалите их.");
+        } else {
+            text.append("Состав выпуска будет освобождён.");
+        }
+
+        /*
+         * Статус проверяют здесь, а не формой: кнопка одна для всего
+         * списка, и пустой th:if оставил бы её без объяснения отказа.
+         */
+        if (getStatus() != ProductionOrderStatus.NEW) {
+            text.append(" Удаление доступно заказу в статусе «Новый», ")
+                    .append("сейчас — «").append(getStatusDisplayName()).append("».");
+        }
+
+        return text.toString();
     }
 }
