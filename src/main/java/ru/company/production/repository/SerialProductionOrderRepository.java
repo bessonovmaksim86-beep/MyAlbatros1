@@ -10,6 +10,7 @@ import ru.company.production.entity.SerialProductionOrder;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 /**
  * Связь «многие ко многим» изделия и заказа на производство.
@@ -139,6 +140,72 @@ public interface SerialProductionOrderRepository
             Long productionOrderId
     );
 
+    /**
+     * Заказы-комплектующие в работе, вошедшие в набор изделий, —
+     * ключ пары «серийник + операция».
+     *
+     * Раздел комплектования обязан показать только те операции сборки,
+     * под которые диспетчер поднял заказ комплектующих в статусе «в
+     * работе». Связь изделия с заказом (SerialProductionOrder, V20)
+     * хранит и операцию, в которую заказ вошёл, и сам заказ, поэтому
+     * один пакетный запрос отдаёт тройки, по которым сопоставляется
+     * строка графика (ключ — серийник + операция, тот же, что в
+     * карточке выпуска).
+     *
+     * Пакетная форма обязательна: раздел перечисляет много изделий, и
+     * выборка на каждую строку обернулась бы N+1. Неактивные заказы
+     * исключены, поэтому снятый с работы заказ не вернётся в список.
+     */
+    @Query("""
+            select
+                link.serial.id as serialId,
+                operation.id as operationId,
+                ord.number as znpNumber
+            from SerialProductionOrder link
+            join link.operation operation
+            join link.productionOrder ord
+            where link.serial.id in :serialIds
+              and ord.active = true
+              and ord.status =
+                  ru.company.production.entity.ProductionOrderStatus.IN_WORK
+            """)
+    List<KittingZnpLinkView> findActiveZnpLinksBySerialIds(
+            @Param("serialIds") Collection<Long> serialIds
+    );
+
+    /**
+     * Действующие заказы-комплектующие, вошедшие в набор изделий, —
+     * ключ пары «серийник + операция», независимо от статуса заказа.
+     *
+     * Отличие от {@link #findActiveZnpLinksBySerialIds}: здесь нет
+     * ограничения статусом «в работе». Разделы комплектования обязаны
+     * показать операцию, как только под неё заведён заказ: диспетчер
+     * вносит номера ЗНП в карточке выпуска и ждёт, что склад увидит
+     * работу сразу, а не после отдельного поднятия заказа в работу.
+     * Граница списка строится тем же признаком «есть привязка с
+     * операцией», что и в карточке выпуска, поэтому оба склада
+     * показывают ровно те изделия, которым диспетчер завёл заказ, и не
+     * показывают те, у которых заказа нет.
+     *
+     * Исключён только снятый с работы заказ (active = false): он не
+     * возвращает операцию в список. Отменённый заказ деактивируется,
+     * поэтому отдельная проверка статуса не нужна.
+     */
+    @Query("""
+            select
+                link.serial.id as serialId,
+                operation.id as operationId,
+                ord.number as znpNumber
+            from SerialProductionOrder link
+            join link.operation operation
+            join link.productionOrder ord
+            where link.serial.id in :serialIds
+              and ord.active = true
+            """)
+    List<KittingZnpLinkView> findZnpLinksBySerialIds(
+            @Param("serialIds") Collection<Long> serialIds
+    );
+
     Optional<SerialProductionOrder> findBySerial_IdAndProductionOrder_Id(
             Long serialId,
             Long productionOrderId
@@ -228,6 +295,29 @@ public interface SerialProductionOrderRepository
               )
             """)
     long countPendingCellZnp();
+
+    /**
+     * Комплектовочные операции, которыми изделие уже закрыто
+     * действующим заказом.
+     *
+     * Нужен проверке при взятии заказ-комплектующего в работу: состав
+     * ЗНП — операции базового маршрута изделия, в которое он вошёл, и
+     * каждая операция считается закрытой, если в это изделие вошёл
+     * активный заказ именно этой операцией. Сам проверяемый заказ тоже
+     * попадает в набор: его собственная операция закрыта им же, и
+     * требовать от него второго ЗНП на ту же операцию незачем.
+     */
+    @Query("""
+            select distinct operation.id
+            from SerialProductionOrder link
+            join link.operation operation
+            join link.productionOrder ord
+            where link.serial.id = :serialId
+              and ord.active = true
+            """)
+    Set<Long> findCoveredOperationIdsBySerialId(
+            @Param("serialId") Long serialId
+    );
 
     /**
      * Непринятые ячейки состава заказа: что принимает склад.

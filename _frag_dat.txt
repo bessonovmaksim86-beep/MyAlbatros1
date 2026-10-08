@@ -1,0 +1,49 @@
+                        <div class="field"
+                             th:if="${
+                                 !order.root
+                                 and releaseSerials != null
+                                 and not #lists.isEmpty(releaseSerials)
+                             }"
+                             style="margin-top: 16px;">
+
+                            <label>Датчик</label>
+
+                            <input type="text"
+                                   th:value="${releaseSerials[0].displayLabel}"
+                                   readonly>
+
+                            <input type="hidden"
+                                   id="kittingSerial"
+                                   th:value="${releaseSerials[0].id}"
+                                   th:attr="data-operations-url=@{/dispatcher/production-order/serial-kitting-operations},
+                                            data-single=true">
+
+                        </div>
+
+                        <div class="form-grid"
+                             style="margin-top: 16px;"
+                             th:if="${order.root}">
+
+                            <div class="field">
+
+                                <label>Серийный номер выпуска</label>
+
+                                <select id="kittingSerial"
+                                        th:attr="data-operations-url=@{/dispatcher/production-order/serial-kitting-operations},
+                                                 data-single=false">
+
+                                    <option value="">
+                                        — выберите датчик —
+                                    </option>
+
+                                    <option th:each="serial : ${releaseSerials}"
+                                            th:value="${serial.id}"
+                                            th:text="${serial.displayLabel}">
+                                        121205333 — Датчик
+                                    </option>
+
+                                </select>
+
+                            </div>
+
+                        </div>

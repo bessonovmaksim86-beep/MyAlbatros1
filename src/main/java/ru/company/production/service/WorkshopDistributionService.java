@@ -77,7 +77,7 @@ public class WorkshopDistributionService {
      * меняются: фильтр по неделям относится только к экрану
      * распределения и задаётся отдельным параметром.
      */
-    private static final int HORIZON_DAYS = 7 * DEFAULT_WEEKS;
+    static final int HORIZON_DAYS = 7 * DEFAULT_WEEKS;
     private static final BigDecimal SHIFT_HOURS = new BigDecimal("8");
 
     /** Подпись даты проведения в списках экземпляров. */
@@ -1218,6 +1218,38 @@ public class WorkshopDistributionService {
     }
 
     /**
+     * Сырые строки графика комплектования склада.
+     *
+     * Раздел «Комплектование ЗНП» перечисляет изделия, а не группы
+     * операций: серийный номер принадлежит экземпляру, поэтому разрезу
+     * «изделие → операции» нужны исходные строки, а не собранные
+     * группы. Те же горизонт и отбор, что у
+     * {@link #findKittingOperations}: два разреза одного раздела не
+     * должны показывать разный объём работы.
+     */
+    @Transactional(readOnly = true)
+    public List<OrderScheduleRow> findKittingRows(
+            Collection<Long> unitIds,
+            Collection<String> typeCodes
+    ) {
+        if (unitIds == null || unitIds.isEmpty()
+                || typeCodes == null || typeCodes.isEmpty()) {
+            return List.of();
+        }
+
+        LocalDate from = LocalDate.now();
+        LocalDate to = from.plusDays(HORIZON_DAYS);
+
+        return scheduleRowRepo.findKittingForUnits(
+                ScheduleRowStatus.CONFIRMED,
+                unitIds,
+                typeCodes,
+                from,
+                to
+        );
+    }
+
+    /**
      * Работы, закреплённые за конкретным пользователем.
      *
      * Исполнитель видит только строки, где он записан в
@@ -1758,6 +1790,29 @@ public class WorkshopDistributionService {
         /** Экземпляр никому не должен: самая частая ситуация. */
         static final InstanceBlocker FREE =
                 new InstanceBlocker(false, null);
+    }
+
+    /**
+     * Блокированные строки и их подписи — read-модель, общая для
+     * других разделов.
+     *
+     * Раздел комплектования строит свой разрез («изделие → операции»),
+     * но зависимость маршрута обязана считаться ровно тем же правилом,
+     * что и в распределении: иначе два экрана разошлись бы во мнении,
+     * можно ли проводить работу. Возвращаются только заблокированные
+     * строки — свободная строка в карте просто отсутствует.
+     */
+    @Transactional(readOnly = true)
+    public Map<Long, String> blockerLabelsOf(List<OrderScheduleRow> rows) {
+        Map<Long, String> result = new HashMap<>();
+
+        blockersOf(rows).forEach((rowId, blocker) -> {
+            if (blocker.blocked()) {
+                result.put(rowId, blocker.blockerLabel());
+            }
+        });
+
+        return result;
     }
 
     /**

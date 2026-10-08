@@ -1387,3 +1387,87 @@ body {
         transition: none !important;
     }
 }
+
+/* ============================================================
+   КОМПЛЕКТОВАНИЕ ЗНП: РАЗРЕЗ «ИЗДЕЛИЕ → ОПЕРАЦИИ»
+
+   Строка таблицы — изделие (серийник + наименование), клик
+   раскрывает панель с операциями этого изделия и кнопкой
+   «Провести». Каркас (data-table, badge, btn) приходит из
+   technology.css/common.css; здесь — только доли колонок и
+   механика раскрытия. table-layout: fixed требует ровно 100 %.
+   Сумма: 20 + 55 + 25 = 100 %.
+   ============================================================ */
+.kitting-znp-table {
+    table-layout: fixed;
+}
+
+.kitting-znp-table col.col-serial { width: 20%; }
+.kitting-znp-table col.col-name   { width: 55%; }
+.kitting-znp-table col.col-toggle { width: 25%; }
+
+.kitting-znp-row {
+    cursor: pointer;
+}
+
+.kitting-znp-row:hover {
+    background: #f7faf8;
+}
+
+.kitting-znp-row.is-blocked {
+    background: #fffaf3;
+    box-shadow: inset 3px 0 0 #d98324;
+}
+
+.kitting-znp-row.is-blocked:hover {
+    background: #fdf3e6;
+}
+
+.kitting-znp-table .cell-serial {
+    font-variant-numeric: tabular-nums;
+    overflow-wrap: anywhere;
+}
+
+.kitting-znp-table .cell-name {
+    line-height: 1.35;
+    overflow-wrap: anywhere;
+}
+
+.kitting-znp-toggle {
+    text-align: right;
+    white-space: nowrap;
+}
+
+.kitting-znp-caret {
+    margin-left: 8px;
+}
+
+.kitting-znp-panel > td {
+    padding: 0;
+    background: #f6faf8;
+}
+
+.kitting-znp-panel__inner {
+    padding: 14px 16px 16px;
+    border-top: 1px solid rgba(18, 58, 46, 0.12);
+}
+
+.kitting-znp-panel__inner > strong {
+    display: block;
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: #35514a;
+    margin-bottom: 8px;
+}
+
+.kitting-znp-table .instance-table__serial {
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+
+@media (max-width: 820px) {
+    .kitting-znp-panel__inner {
+        padding: 12px 10px 14px;
+    }
+}

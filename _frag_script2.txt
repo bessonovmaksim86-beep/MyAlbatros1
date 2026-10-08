@@ -1,0 +1,175 @@
+<script>
+    (function () {
+        var serialSelect = document.getElementById('kittingSerial');
+        var opsBody = document.getElementById('kittingOperationsBody');
+        var createBtn = document.getElementById('createKittingBtn');
+        var message = document.getElementById('kittingMessage');
+        var csrfInput = document.getElementById('kittingCsrf');
+
+        if (!opsBody || !createBtn) {
+            return;
+        }
+
+        var csrfHeader = csrfInput ? csrfInput.name : '_csrf';
+        var csrfToken = csrfInput ? csrfInput.value : '';
+        var single = serialSelect
+            ? serialSelect.getAttribute('data-single') === 'true'
+            : false;
+
+        function escapeHtml(text) {
+            var div = document.createElement('div');
+            div.textContent = text == null ? '' : text;
+            return div.innerHTML;
+        }
+
+        function clearBody(text) {
+            opsBody.innerHTML =
+                '<tr><td colspan="3" class="empty-table">' +
+                escapeHtml(text) + '</td></tr>';
+        }
+
+        function load(serialId) {
+            var url = serialSelect
+                ? serialSelect.getAttribute('data-operations-url')
+                : null;
+
+            message.textContent = '';
+
+            if (!serialId || !url) {
+                clearBody('Сначала выберите датчик');
+                return;
+            }
+
+            fetch(url + '?serialId=' + encodeURIComponent(serialId), {
+                headers: { 'Accept': 'application/json' }
+            })
+            .then(function (response) { return response.json(); })
+            .then(function (rows) {
+                if (!rows || !rows.length) {
+                    clearBody(
+                        'У датчика нет операций комплектования ' +
+                        '(проверьте базовый техпроцесс)'
+                    );
+                    return;
+                }
+
+                var html = '';
+
+                for (var i = 0; i < rows.length; i++) {
+                    var op = rows[i];
+                    html += '<tr data-op-id="' + op.id + '">' +
+                        '<td>' + op.position + '</td>' +
+                        '<td>' + escapeHtml(op.name) + '</td>' +
+                        '<td><input type="text" class="kitting-number" ' +
+                            'placeholder="номер ЗНП"></td>' +
+                        '</tr>';
+                }
+
+                opsBody.innerHTML = html;
+            })
+            .catch(function () {
+                clearBody('Не удалось загрузить операции');
+            });
+        }
+
+        if (serialSelect) {
+            serialSelect.addEventListener('change', function () {
+                load(serialSelect.value);
+            });
+        }
+
+        createBtn.addEventListener('click', function () {
+            var serialId = serialSelect ? serialSelect.value : '';
+            message.textContent = '';
+
+            if (!serialId) {
+                message.textContent = 'Сначала выберите датчик';
+                return;
+            }
+
+            var rows = opsBody.querySelectorAll('tr[data-op-id]');
+
+            if (!rows.length) {
+                message.textContent = 'Нет операций для создания';
+                return;
+            }
+
+            var pairs = [];
+            var seen = {};
+            var duplicates = false;
+
+            for (var i = 0; i < rows.length; i++) {
+                var row = rows[i];
+                var numberInput = row.querySelector('.kitting-number');
+                var number = numberInput ? numberInput.value.trim() : '';
+
+                if (!number) {
+                    message.textContent =
+                        'Заполните номер ЗНП для всех операций';
+                    return;
+                }
+
+                if (seen[number]) {
+                    duplicates = true;
+                }
+
+                seen[number] = true;
+
+                pairs.push({
+                    serialId: Number(serialId),
+                    operationId: Number(row.getAttribute('data-op-id')),
+                    number: number
+                });
+            }
+
+            if (duplicates && !window.confirm(
+                'Среди введённых номеров ЗНП есть повторяющиеся. ' +
+                'Повтор значений приведёт к ошибке сохранения. ' +
+                'Продолжить?'
+            )) {
+                return;
+            }
+
+            createBtn.disabled = true;
+            message.textContent = 'Создание...';
+
+            var headers = {
+                'Content-Type': 'application/json',
+                'Accept': 'application/json'
+            };
+
+            headers[csrfHeader] = csrfToken;
+
+            fetch(createBtn.getAttribute('data-create-url'), {
+                method: 'POST',
+                headers: headers,
+                body: JSON.stringify(pairs)
+            })
+            .then(function (response) { return response.json(); })
+            .then(function (result) {
+                if (result && result.ok) {
+                    location.reload();
+                    return;
+                }
+
+                message.textContent = (result && result.error)
+                    ? result.error
+                    : 'Не удалось создать заказы';
+                createBtn.disabled = false;
+            })
+            .catch(function () {
+                message.textContent = 'Ошибка запроса';
+                createBtn.disabled = false;
+            });
+        });
+
+        if (single && serialSelect) {
+            var first = serialSelect.querySelector('option[value]:not([value=""])');
+
+            if (first) {
+                serialSelect.value = first.value;
+                load(first.value);
+            }
+        }
+    })();
+</script>

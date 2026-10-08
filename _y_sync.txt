@@ -1,0 +1,30 @@
+        Long parentId = order.getParentProductionOrder().getId();
+
+        List<SerialProductionOrder> current =
+                serialProductionOrderRepository
+                        .findDetailsByProductionOrderId(order.getId());
+
+        for (SerialProductionOrder link : current) {
+
+            Long serialId = link.getSerial() == null
+                    ? null
+                    : link.getSerial().getId();
+
+            if (serialId == null || wanted.contains(serialId)) {
+                continue;
+            }
+
+            if (productSerialOperationRepository
+                    .existsBySerial_IdAndProductionOrder_Id(
+                            serialId, order.getId())) {
+                throw new IllegalStateException(
+                        "Изделие «" + link.getSerial().getFullNumber()
+                                + "» уже имеет операции по заказу «"
+                                + order.getNumber()
+                                + "» — сначала закройте их"
+                );
+            }
+
+            serialProductionOrderRepository.delete(link);
+        }
+

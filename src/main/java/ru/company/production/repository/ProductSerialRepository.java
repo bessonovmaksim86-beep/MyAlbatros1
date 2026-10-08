@@ -52,6 +52,30 @@ public interface ProductSerialRepository
     );
 
     /**
+     * Принято ли какое-либо изделие из перечня на склад
+     * ({@code accepted_at}).
+     *
+     * Отметку приёмки ставит склад (BvkAcceptanceService,
+     * ZnpAcceptanceService) — это событие склада на самом изделии,
+     * независимое от того, каким заказом шла операция. Нужна проверке
+     * удаления выпуска (ЗП): выпуск сам приёмку не проводит, но его
+     * номера принимает склад, и освободить принятый номер — значит
+     * вернуть в резерв изделие, уже побывавшее на складе.
+     *
+     * Пустой перечень вызывающий не передаёт (проверка обёрнута в
+     * сервисе), поэтому {@code in :ids} здесь всегда непустой.
+     */
+    @Query("""
+            select count(serial) > 0
+            from ProductSerial serial
+            where serial.id in :serialIds
+              and serial.acceptedAt is not null
+            """)
+    boolean existsAcceptedByIdIn(
+            @Param("serialIds") Collection<Long> serialIds
+    );
+
+    /**
      * Серийники, выпущенные заказом, со связями для вывода строкой.
      *
      * Отличие от findByProductionOrderId: здесь есть fetch join

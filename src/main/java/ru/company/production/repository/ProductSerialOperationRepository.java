@@ -206,6 +206,78 @@ public interface ProductSerialOperationRepository
     );
 
     /**
+     * Есть ли по заказу проведения фактом ({@code actual_date}).
+     *
+     * Дата факта в рамках заказа — событие, а не намерение, и в
+     * текущем маршруте её ставит склад: приёмка заказа-комплектующего
+     * закрывает комплектовочную операцию принятых ячеек именно этим
+     * заказом (см. ZnpAcceptanceService#closeKittingOperations). Поэтому
+     * наличие такой строки и означает «по заказу проведены операции на
+     * складе», а их отсутствие — что заказ содержит один план и
+     * снимается с работы без потери истории.
+     *
+     * Переделанная попытка (REWORKED) тоже несёт дату факта: работа по
+     * ней выполнялась, событие было — в отказе она участвует наравне с
+     * закрытой.
+     */
+    @Query("""
+            select count(op) > 0
+            from ProductSerialOperation op
+            where op.productionOrder.id = :productionOrderId
+              and op.actualDate is not null
+            """)
+    boolean existsPerformedByProductionOrderId(
+            @Param("productionOrderId") Long productionOrderId
+    );
+
+    /**
+     * Есть ли факт по перечню изделий — независимо от того, каким
+     * заказом операция поставлена.
+     *
+     * Нужен удалению выпуска (ЗП): сам выпуск складских операций не
+     * проводит, но его датчики укомплектованы чужими ЗНП, и приёмка
+     * такого ЗНП оставила факт на изделии выпуска. Освободить номер с
+     * пройденной складом операцией — значит потерять прослеживаемость,
+     * поэтому выпуск проверяют и по своим изделиям тоже.
+     */
+    @Query("""
+            select count(op) > 0
+            from ProductSerialOperation op
+            where op.serial.id in :serialIds
+              and op.actualDate is not null
+            """)
+    boolean existsPerformedBySerialIdIn(
+            @Param("serialIds") java.util.Collection<Long> serialIds
+    );
+
+    /**
+     * Снимает ЗАПЛАНИРОВАННЫЕ операции в рамках заказа при его удалении.
+     *
+     * Снятый с работы заказ не вправе оставлять в цеху и на складе
+     * работу, которой не бывать: строка без факта — намерение, и
+     * повисшая она осталась бы в матрице изделия и в загрузке
+     * исполнителя. Проведённая строка — факт, она заказ переживает;
+     * условие {@code actual_date is null} стоит и здесь, чтобы запрос
+     * нельзя было применить к заказу с фактами в обход проверки сервиса.
+     *
+     * Только own-заказ: операции чужих ЗНП, вошедшие в те же изделия,
+     * к удаляемому заказу не относятся (колонка production_order_id,
+     * V20 — «в рамках какого заказа выполнена операция»).
+     */
+    @Modifying(
+            flushAutomatically = true,
+            clearAutomatically = true
+    )
+    @Query("""
+            delete from ProductSerialOperation op
+            where op.productionOrder.id = :productionOrderId
+              and op.actualDate is null
+            """)
+    int deletePlannedByProductionOrderId(
+            @Param("productionOrderId") Long productionOrderId
+    );
+
+    /**
      * Снимает статус «В работе» с незакрытых попыток при отмене заказа:
      * пакетный UPDATE вместо сохранения сотен сущностей по одной.
      */

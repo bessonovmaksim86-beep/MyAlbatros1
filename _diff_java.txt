@@ -1,0 +1,204 @@
+warning: in the working copy of 'src/main/java/ru/company/production/repository/ProductionOrderListItemView.java', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/main/java/ru/company/production/repository/ProductionOrderRepository.java', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/main/java/ru/company/production/repository/SerialProductionOrderRepository.java', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/main/java/ru/company/production/service/ProductionOrderService.java', LF will be replaced by CRLF the next time Git touches it
+diff --git a/src/main/java/ru/company/production/repository/ProductionOrderListItemView.java b/src/main/java/ru/company/production/repository/ProductionOrderListItemView.java
+index 817f94f..49a0544 100644
+--- a/src/main/java/ru/company/production/repository/ProductionOrderListItemView.java
++++ b/src/main/java/ru/company/production/repository/ProductionOrderListItemView.java
+@@ -93,6 +93,14 @@ public interface ProductionOrderListItemView {
+      */
+     Long getChildCount();
+ 
++    /*
++     * Число позиций состава, для которых номер ЗНП ещё не внесён
++     * (пустой серийник или пустой/пробельный номер ЗНП). Совпадает с
++     * проверкой ProductionOrderService#plan: взять выпуск в работу
++     * можно, только когда таких строк нет.
++     */
++    Long getMissingZnpCount();
++
+     ProductionOrderStatus getStatus();
+ 
+     default String getFormattedOrderDate() {
+@@ -250,4 +258,37 @@ public interface ProductionOrderListItemView {
+ 
+         return text.toString();
+     }
++
++    /*
++     * Причина, по которой заказ нельзя взять в работу, либо null, если
++     * можно. Один источник для подсказки кнопки и для её отключения:
++     * перечень причин совпадает с проверками plan(), поэтому список не
++     * разрешает то, что сервис потом отвергнет.
++     *
++     * Неотмеченные ЗНП — то же условие, что в countWithoutZnpByOrderId:
++     * выпуск открывают цеху, и изделие без документа комплектования
++     * ушло бы в работу неучтённым.
++     */
++    default String getPlanBlockReason() {
++        ProductionOrderStatus status = getStatus();
++
++        if (status == ProductionOrderStatus.DONE
++                || status == ProductionOrderStatus.CANCELLED) {
++            return "Заказ закрыт и не может быть взят в работу";
++        }
++
++        long missing = getMissingZnpCount() == null ? 0L : getMissingZnpCount();
++
++        if (missing > 0) {
++            return "Внесены не все ЗНП: осталось заполнить " + missing
++                    + " — заполните номер напротив каждого серийника";
++        }
++
++        return null;
++    }
++
++    /* Кнопка «В работу» активна, только когда причин блокировки нет. */
++    default boolean isPlanAllowed() {
++        return getPlanBlockReason() == null;
++    }
+ }
+diff --git a/src/main/java/ru/company/production/repository/ProductionOrderRepository.java b/src/main/java/ru/company/production/repository/ProductionOrderRepository.java
+index a9a0431..c2894d0 100644
+--- a/src/main/java/ru/company/production/repository/ProductionOrderRepository.java
++++ b/src/main/java/ru/company/production/repository/ProductionOrderRepository.java
+@@ -67,6 +67,17 @@ public interface ProductionOrderRepository
+                     where child.parentProductionOrder = ord
+                       and child.active = true
+                 ) as childCount,
++                (
++                    select count(znpItem.id)
++                    from ProductionOrderItem znpItem
++                    left join znpItem.serial znpSerial
++                    where znpItem.productionOrder = ord
++                      and (
++                              znpSerial.id is null
++                           or znpSerial.znpNumber is null
++                           or trim(znpSerial.znpNumber) = ''
++                          )
++                ) as missingZnpCount,
+                 ord.status as status
+             from ProductionOrder ord
+             left join ord.customerOrder customerOrder
+diff --git a/src/main/java/ru/company/production/repository/SerialProductionOrderRepository.java b/src/main/java/ru/company/production/repository/SerialProductionOrderRepository.java
+index 4b79e10..3e06de2 100644
+--- a/src/main/java/ru/company/production/repository/SerialProductionOrderRepository.java
++++ b/src/main/java/ru/company/production/repository/SerialProductionOrderRepository.java
+@@ -10,6 +10,7 @@ import ru.company.production.entity.SerialProductionOrder;
+ import java.util.Collection;
+ import java.util.List;
+ import java.util.Optional;
++import java.util.Set;
+ 
+ /**
+  * Связь «многие ко многим» изделия и заказа на производство.
+@@ -229,6 +230,29 @@ public interface SerialProductionOrderRepository
+             """)
+     long countPendingCellZnp();
+ 
++    /**
++     * Комплектовочные операции, которыми изделие уже закрыто
++     * действующим заказом.
++     *
++     * Нужен проверке при взятии заказ-комплектующего в работу: состав
++     * ЗНП — операции базового маршрута изделия, в которое он вошёл, и
++     * каждая операция считается закрытой, если в это изделие вошёл
++     * активный заказ именно этой операцией. Сам проверяемый заказ тоже
++     * попадает в набор: его собственная операция закрыта им же, и
++     * требовать от него второго ЗНП на ту же операцию незачем.
++     */
++    @Query("""
++            select distinct operation.id
++            from SerialProductionOrder link
++            join link.operation operation
++            join link.productionOrder ord
++            where link.serial.id = :serialId
++              and ord.active = true
++            """)
++    Set<Long> findCoveredOperationIdsBySerialId(
++            @Param("serialId") Long serialId
++    );
++
+     /**
+      * Непринятые ячейки состава заказа: что принимает склад.
+      *
+diff --git a/src/main/java/ru/company/production/service/ProductionOrderService.java b/src/main/java/ru/company/production/service/ProductionOrderService.java
+index c4f8ef9..3c5fe9b 100644
+--- a/src/main/java/ru/company/production/service/ProductionOrderService.java
++++ b/src/main/java/ru/company/production/service/ProductionOrderService.java
+@@ -1157,11 +1157,74 @@ public class ProductionOrderService {
+             );
+         }
+ 
++        /*
++         * Заказ-комплектующий берут в работу только когда каждая
++         * комплектовочная операция изделия, в которое он вошёл, закрыта
++         * вложенным ЗНП. Без этого цех получил бы изделие, у которого
++         * часть операций комплектования не оформлена ни одним
++         * документом, — ровно то, на что указал диспетчер.
++         *
++         * Проверка держится здесь, а не в карточке: вложенные ЗНП
++         * дописывают и после создания заказа, и тот же страж обязан
++         * сработать и при повторном взятии в работу.
++         */
++        if (order.isSerialBasedKind()) {
++            requireNestedZnpCovered(order);
++        }
++
+         applyStatus(order, ProductionOrderStatus.IN_WORK);
+ 
+         return order;
+     }
+ 
++    /**
++     * Все ли операции комплектования изделия закрыты вложенным ЗНП.
++     *
++     * Состав заказ-комплектующего — операции базового маршрута того
++     * изделия, в которое он вошёл. Операция считается закрытой, если в
++     * это изделие вошёл активный заказ именно этой операцией; сам
++     * проверяемый заказ закрывает свою операцию и требовать второго
++     * ЗНП на неё незачем.
++     *
++     * Изделие без настроенного маршрута проверять нечем — пустой
++     * перечень операций не блокирует взятие в работу.
++     */
++    private void requireNestedZnpCovered(ProductionOrder order) {
++
++        Set<String> uncoveredNames = new LinkedHashSet<>();
++
++        for (ProductSerial serial
++                : serialKittingService.findAttachedSerials(order.getId())) {
++
++            Set<Long> covered = serialProductionOrderRepository
++                    .findCoveredOperationIdsBySerialId(serial.getId());
++
++            for (Operation operation
++                    : findSerialKittingOperations(serial.getId())) {
++
++                if (operation.getId() != null
++                        && !covered.contains(operation.getId())) {
++
++                    uncoveredNames.add(
++                            operation.getOperationName() == null
++                                    ? ""
++                                    : operation.getOperationName().getName()
++                    );
++                }
++            }
++        }
++
++        if (!uncoveredNames.isEmpty()) {
++            throw new IllegalStateException(
++                    "В заказ-комплектующий «" + order.getNumber()
++                            + "» не внесены номера ЗНП для операций: "
++                            + String.join(", ", uncoveredNames)
++                            + " — создайте вложенные заказы-комплектующие"
++                            + " напротив каждой операции"
++            );
++        }
++    }
++
+     /**
+      * Перевод всех позиций заказа в «Выполнена».
+      *

@@ -1,0 +1,133 @@
+<script>
+    (function () {
+        var serialSelect = document.getElementById('kittingSerial');
+        var opsBody = document.getElementById('kittingOperationsBody');
+        var createBtn = document.getElementById('createKittingBtn');
+        var message = document.getElementById('kittingMessage');
+        var csrfInput = document.getElementById('kittingCsrf');
+
+        if (!serialSelect || !opsBody || !createBtn) {
+            return;
+        }
+
+        var csrfHeader = csrfInput ? csrfInput.name : '_csrf';
+        var csrfToken = csrfInput ? csrfInput.value : '';
+
+        function escapeHtml(text) {
+            var div = document.createElement('div');
+            div.textContent = text == null ? '' : text;
+            return div.innerHTML;
+        }
+
+        serialSelect.addEventListener('change', function () {
+            var serialId = serialSelect.value;
+            var url = serialSelect.getAttribute('data-operations-url');
+            message.textContent = '';
+
+            if (!serialId) {
+                opsBody.innerHTML =
+                    '<tr><td colspan="4" class="empty-table">' +
+                    'Выберите серийник, чтобы увидеть операции</td></tr>';
+                return;
+            }
+
+            fetch(url + '?serialId=' + encodeURIComponent(serialId), {
+                headers: { 'Accept': 'application/json' }
+            })
+            .then(function (response) { return response.json(); })
+            .then(function (rows) {
+                if (!rows || !rows.length) {
+                    opsBody.innerHTML =
+                        '<tr><td colspan="4" class="empty-table">' +
+                        'У изделия этого серийника нет комплектовочных ' +
+                        'операций (базовый маршрут не настроен)</td></tr>';
+                    return;
+                }
+
+                var html = '';
+
+                for (var i = 0; i < rows.length; i++) {
+                    var op = rows[i];
+                    html += '<tr>' +
+                        '<td><input type="checkbox" class="kitting-check" ' +
+                            'data-op-id="' + op.id + '"></td>' +
+                        '<td>' + op.position + '</td>' +
+                        '<td>' + escapeHtml(op.name) + '</td>' +
+                        '<td><input type="text" class="kitting-number" ' +
+                            'placeholder="номер ЗНП"></td>' +
+                        '</tr>';
+                }
+
+                opsBody.innerHTML = html;
+            })
+            .catch(function () {
+                opsBody.innerHTML =
+                    '<tr><td colspan="4" class="empty-table">' +
+                    'Не удалось загрузить операции</td></tr>';
+            });
+        });
+
+        createBtn.addEventListener('click', function () {
+            var serialId = serialSelect.value;
+            message.textContent = '';
+
+            if (!serialId) {
+                message.textContent = 'Сначала выберите серийник';
+                return;
+            }
+
+            var checks = opsBody.querySelectorAll('.kitting-check:checked');
+
+            if (!checks.length) {
+                message.textContent = 'Отметьте хотя бы одну операцию';
+                return;
+            }
+
+            var pairs = [];
+
+            for (var i = 0; i < checks.length; i++) {
+                var check = checks[i];
+                var row = check.closest('tr');
+                var numberInput = row.querySelector('.kitting-number');
+
+                pairs.push({
+                    serialId: Number(serialId),
+                    operationId: Number(check.getAttribute('data-op-id')),
+                    number: numberInput ? numberInput.value.trim() : ''
+                });
+            }
+
+            createBtn.disabled = true;
+            message.textContent = 'Создание...';
+
+            var headers = {
+                'Content-Type': 'application/json',
+                'Accept': 'application/json'
+            };
+
+            headers[csrfHeader] = csrfToken;
+
+            fetch(createBtn.getAttribute('data-create-url'), {
+                method: 'POST',
+                headers: headers,
+                body: JSON.stringify(pairs)
+            })
+            .then(function (response) { return response.json(); })
+            .then(function (result) {
+                if (result && result.ok) {
+                    location.reload();
+                    return;
+                }
+
+                message.textContent = (result && result.error)
+                    ? result.error
+                    : 'Не удалось создать заказы';
+                createBtn.disabled = false;
+            })
+            .catch(function () {
+                message.textContent = 'Ошибка запроса';
+                createBtn.disabled = false;
+            });
+        });
+    })();
+</script>

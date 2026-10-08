@@ -423,6 +423,43 @@
                                             Открыть
                                         </a>
 
+                                        <!--
+                                            Взятие в работу из списка. Кнопку
+                                            показывают у незакрытого заказа; если
+                                            в составе есть позиции без номера ЗНП,
+                                            кнопка неактивна, а причина — в
+                                            подсказке (getPlanBlockReason повторяет
+                                            проверку plan(), поэтому список не
+                                            предлагает того, что сервис отвергнет).
+                                        -->
+                                        <form method="post"
+                                              th:if="${
+                                                  order.status != null
+                                                  and order.status.name() != 'DONE'
+                                                  and order.status.name() != 'CANCELLED'
+                                              }"
+                                              th:action="@{/dispatcher/production-order/{id}/plan(id=${order.id})}"
+                                              th:attr="data-confirm=${
+                                                  'Взять заказ «' + order.number + '» в работу?'
+                                              }"
+                                              onsubmit="return this.querySelector('button').disabled
+                                                  ? false
+                                                  : confirm(this.getAttribute('data-confirm'));">
+
+                                            <input th:if="${_csrf != null}"
+                                                   type="hidden"
+                                                   th:name="${_csrf.parameterName}"
+                                                   th:value="${_csrf.token}">
+
+                                            <button class="btn primary compact"
+                                                    type="submit"
+                                                    th:disabled="${!order.planAllowed}"
+                                                    th:title="${order.planBlockReason}">
+                                                В работу
+                                            </button>
+
+                                        </form>
+
                                                                                                             <!--
                                         Тот же возврат из отмены, что в карточке:
                                         у отменённого ЗНП в списке не осталось

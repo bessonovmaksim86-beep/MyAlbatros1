@@ -18,13 +18,16 @@ import ru.company.production.entity.ProductionItemStatus;
 import ru.company.production.entity.ProductionOrder;
 import ru.company.production.entity.ProductionOrderItem;
 import ru.company.production.entity.ProductionOrderStatus;      
+import ru.company.production.entity.ScheduleRowStatus;
 import ru.company.production.entity.TechProcess;
 import ru.company.production.entity.TechProcessOperation;
 import ru.company.production.entity.ZnpKind;
 import ru.company.production.repository.ClassifierRouteOptionView;
 import ru.company.production.repository.CustomerOrderRepository;
 import ru.company.production.repository.OperationRepository;
+import ru.company.production.repository.OrderScheduleRowRepository;
 import ru.company.production.repository.ProductClassifierRepository;
+import ru.company.production.repository.ProductSerialOperationRepository;
 import ru.company.production.repository.ProductSerialRepository;
 import ru.company.production.repository.ProductionOrderItemRepository;
 import ru.company.production.repository.ProductionOrderRepository;
@@ -67,6 +70,8 @@ public class ProductionOrderService {
     private final ProductionOrderRepository productionOrderRepository;
     private final ProductionOrderItemRepository productionOrderItemRepository;
     private final ProductSerialRepository productSerialRepository;
+    private final ProductSerialOperationRepository
+            productSerialOperationRepository;
     private final CustomerOrderRepository customerOrderRepository;
     private final OperationRepository operationRepository;
     private final ProductClassifierRepository productClassifierRepository;
@@ -75,6 +80,15 @@ public class ProductionOrderService {
 
     private final TechProcessOperationRepository
             techProcessOperationRepository;
+
+    /*
+     * График заказов покупателя — источник признака «поставлен в
+     * планирование». Проверка при взятии ЗНП в работу сверяется именно с
+     * ним: плановая дата живёт в строке графика (order_schedule_rows), а
+     * не у цеховой операции изделия, которая появляется только после
+     * выпуска номера.
+     */
+    private final OrderScheduleRowRepository orderScheduleRowRepository;
 
     /*
      * Комплектование ЗНП: привязка заказа к уже выпущенным серийникам.
@@ -1157,9 +1171,187 @@ public class ProductionOrderService {
             );
         }
 
+        /*
+         * Заказ-комплектующий берут в работу только когда каждая
+         * комплектовочная операция изделия, в которое он вошёл, закрыта
+         * вложенным ЗНП. Без этого цех получил бы изделие, у которого
+         * часть операций комплектования не оформлена ни одним
+         * документом, — ровно то, на что указал диспетчер.
+         *
+         * Проверка держится здесь, а не в карточке: вложенные ЗНП
+         * дописывают и после создания заказа, и тот же страж обязан
+         * сработать и при повторном взятии в работу.
+         */
+        if (order.isSerialBasedKind()) {
+            requireNestedZnpCovered(order);
+        }
+
+        /*
+         * Заказ берут в работу только когда его вложенные заказы-
+         * комплектующие, для которых уже заявлены операции, поставлены в
+         * планирование (у каждой такой операции есть плановая дата).
+         * Иначе «В работе» родителя каскадом перевёл бы непропланированный
+         * ЗНП в работу — ровно тот случай, на который указал диспетчер:
+         * заказ в работе, а работы по нему ни в каком плане нет.
+         *
+         * Проверка держится здесь, а не в каскаде applyStatus: отказ
+         * обязан вернуться до любых изменений статуса, иначе часть дерева
+         * осталась бы переведённой.
+         */
+        requireChildrenPlanned(order);
+
         applyStatus(order, ProductionOrderStatus.IN_WORK);
 
         return order;
+    }
+
+    /**
+     * Все ли вложенные заказы-комплектующие с операциями спланированы.
+     *
+     * «Поставлен в планирование» значит, что по основанию заказа (заказу
+     * покупателя) расчёт внесён в план: строка его комплектовочной операции
+     * есть в графике в статусе CONFIRMED, а плановая дата у такой строки
+     * обязательна на уровне схемы. Черновик (DRAFT) планом не считается: он
+     * ничего не занимает и цеху не виден.
+     *
+     * Проверка идёт по всей цепочке вниз, а не на один уровень: статус
+     * «В работе» распространяется каскадом на всё поддерево, поэтому
+     * непропланированный ЗНП на любом уровне ушёл бы в работу вместе с
+     * родителем — ровно то, на что указал диспетчер. Закрытые
+     * (выполненные/отменённые) заказы не обходятся: каскад их не трогает,
+     * и требовать плана от закрытого заказа незачем.
+     *
+     * Заказ без комплектовочной операции в счёт не идёт: планировать его
+     * нечем, и требование плана заблокировало бы заказ, для которого работа
+     * ещё не заявлена.
+     */
+    private void requireChildrenPlanned(ProductionOrder order) {
+
+        Set<String> unplannedNumbers = new LinkedHashSet<>();
+        Set<Long> visited = new HashSet<>();
+        List<ProductionOrder> pending = new ArrayList<>();
+
+        if (order.getId() != null) {
+            visited.add(order.getId());
+            pending.add(order);
+        }
+
+        while (!pending.isEmpty()) {
+
+            ProductionOrder node = pending.remove(pending.size() - 1);
+
+            for (ProductionOrder child
+                    : productionOrderRepository
+                    .findActiveChildren(node.getId())) {
+
+                if (child.getId() == null
+                        || child.getStatus() == null
+                        || !visited.add(child.getId())) {
+                    continue;
+                }
+
+                if (isClosed(child.getStatus())) {
+                    continue;
+                }
+
+                if (!isPlanned(child)) {
+                    unplannedNumbers.add(child.getNumber());
+                }
+
+                pending.add(child);
+            }
+        }
+
+        if (!unplannedNumbers.isEmpty()) {
+            throw new IllegalStateException(
+                    "Нельзя взять заказ «" + order.getNumber()
+                            + "» в работу: входящие заказы-комплектующие ("
+                            + String.join(", ", unplannedNumbers)
+                            + ") не поставлены в планирование — сначала "
+                            + "внесите их операции в план"
+            );
+        }
+    }
+
+    /**
+     * Спланирован ли заказ-комплектующий: есть ли внесённая в план строка
+     * его операции по его же заказу покупателя.
+     *
+     * Идентификаторы читаются с ленивых связей напрямую — в транзакции
+     * это не вызывает догрузки, а разыменовывать справочники ради сверки
+     * ключа незачем.
+     */
+    private boolean isPlanned(ProductionOrder order) {
+
+        Long operationId = order.getProductionOperation() == null
+                ? null
+                : order.getProductionOperation().getId();
+
+        if (operationId == null) {
+            return true;
+        }
+
+        Long customerOrderId = order.getCustomerOrder() == null
+                ? null
+                : order.getCustomerOrder().getId();
+
+        if (customerOrderId == null) {
+            return false;
+        }
+
+        return orderScheduleRowRepository.countConfirmedByOrderAndOperation(
+                customerOrderId,
+                operationId,
+                ScheduleRowStatus.CONFIRMED
+        ) > 0;
+    }
+
+    /**
+     * Все ли операции комплектования изделия закрыты вложенным ЗНП.
+     *
+     * Состав заказ-комплектующего — операции базового маршрута того
+     * изделия, в которое он вошёл. Операция считается закрытой, если в
+     * это изделие вошёл активный заказ именно этой операцией; сам
+     * проверяемый заказ закрывает свою операцию и требовать второго
+     * ЗНП на неё незачем.
+     *
+     * Изделие без настроенного маршрута проверять нечем — пустой
+     * перечень операций не блокирует взятие в работу.
+     */
+    private void requireNestedZnpCovered(ProductionOrder order) {
+
+        Set<String> uncoveredNames = new LinkedHashSet<>();
+
+        for (ProductSerial serial
+                : serialKittingService.findAttachedSerials(order.getId())) {
+
+            Set<Long> covered = serialProductionOrderRepository
+                    .findCoveredOperationIdsBySerialId(serial.getId());
+
+            for (Operation operation
+                    : findSerialKittingOperations(serial.getId())) {
+
+                if (operation.getId() != null
+                        && !covered.contains(operation.getId())) {
+
+                    uncoveredNames.add(
+                            operation.getOperationName() == null
+                                    ? ""
+                                    : operation.getOperationName().getName()
+                    );
+                }
+            }
+        }
+
+        if (!uncoveredNames.isEmpty()) {
+            throw new IllegalStateException(
+                    "В заказ-комплектующий «" + order.getNumber()
+                            + "» не внесены номера ЗНП для операций: "
+                            + String.join(", ", uncoveredNames)
+                            + " — создайте вложенные заказы-комплектующие"
+                            + " напротив каждой операции"
+            );
+        }
     }
 
     /**
@@ -1390,24 +1582,55 @@ public class ProductionOrderService {
     /**
      * Удаление заказа на производство.
      *
-     * Удаляется только заказ, по которому ещё не начат выпуск
-     * (статус «Новый»): как только заказ взят в работу или закрыт,
-     * история выпуска должна сохраниться.
+     * Удаляется заказ, по которому выпуск ещё не довёден до события
+     * склада: «Новый» — план, «В работе» и «Частично выполнен» — тоже
+     * снимаются, пока по заказу НЕ было проведено ни одной складской
+     * операции (требование диспетчера). Закрытый («Выполнен») и
+     * отменённый заказы — запись истории, их не удаляют.
      *
-     * Серийные номера при этом не освобождаются и не переиздаются —
-     * реестр неизменяем, занятый номер остаётся занятым.
+     * Признак «были складские операции» — проведение фактом
+     * ({@code product_serial_operations.actual_date}) и отметка приёмки
+     * ячейки на склад ({@code product_serials.accepted_at}): их ставит
+     * только склад (приёмка ЗНП, приёмка после БВК), поэтому факт и
+     * есть граница «снять с работы можно / уже нельзя». Пока таких
+     * записей нет, заказ содержит один план, и его удаление ничего не
+     * стирает из истории цеха и склада.
+     *
+     * С планом поступают как при удалении заказа покупателя: снятый
+     * заказ не оставляет в цеху работу, которой не бывать, —
+     * запланированные (без факта) операции own-заказа удаляются.
+     * Проведённые фактом переживают заказ, но до них дело не доходит:
+     * заказ с фактами отсекается проверкой выше.
+     *
+     * Серийные номера выпуска возвращаются в свободный резерв: снимается
+     * ссылка на заказ, висячие связи комплектования и статус «В работе»
+     * (номер снова «Выпущен»). Реестр при этом неизменяем — номера не
+     * переиздаются и занятая серия остаётся занятой.
      */
     @Transactional
     public ProductionOrder delete(Long id) {
 
         ProductionOrder order = requireActiveOrder(id);
 
-        if (order.getStatus() != ProductionOrderStatus.NEW) {
+        if (isClosedStatus(order.getStatus())) {
             throw new IllegalStateException(
-                    "Удалить можно только новый заказ, "
-                            + "а заказ «" + order.getNumber()
-                            + "» в статусе «"
+                    "Удалить можно незакрытый заказ, а заказ «"
+                            + order.getNumber() + "» в статусе «"
                             + order.getStatus().getDisplayName() + "»"
+            );
+        }
+
+        /*
+         * Заказ в работе удаляют, только если склад по нему ещё не
+         * работал. Проверка предшествует освобождению номеров: отказ
+         * обязан вернуться до любых изменений, иначе часть состава
+         * осталась бы отвязанной от заказа.
+         */
+        if (hasWarehouseOperations(order)) {
+            throw new IllegalStateException(
+                    "Заказ «" + order.getNumber()
+                            + "» удалить нельзя: по нему уже проведены "
+                            + "операции на складе"
             );
         }
 
@@ -1425,12 +1648,29 @@ public class ProductionOrderService {
         }
 
         /*
-         * Освобождаем серийные номера, выданные выпуском:
-         * снимаем ссылку на заказ и удаляем висячие
-         * ссылки комплектования (SerialProductionOrder),
-         * чтобы номера вернулись в свободный резерв.
+         * Уровень заказа фиксируется ДО снятий: isRoot() читает
+         * ленивую связь parentProductionOrder, а запросы ниже идут с
+         * clearAutomatically и очищают контекст — обращение к связи
+         * после них был бы LazyInitializationException (open-in-view
+         * выключен). Тот же приём, что при удалении заказа покупателя.
          */
-        if (order.isRoot()) {
+        boolean root = order.isRoot();
+
+        /*
+         * Плановые операции own-заказа снимаются первыми: запрос идёт с
+         * clearAutomatically и очищает контекст, поэтому серийники и
+         * заказ перечитываются ниже заново.
+         */
+        productSerialOperationRepository
+                .deletePlannedByProductionOrderId(id);
+
+        /*
+         * Освобождаем серийные номера, выданные выпуском: снимаем ссылку
+         * на заказ, удаляем висячие ссылки комплектования
+         * (SerialProductionOrder) и возвращаем статус «Выпущен», чтобы
+         * номер вернулся в свободный резерв неотмеченным складом.
+         */
+        if (root) {
             for (ProductSerial serial : productSerialRepository
                     .findByProductionOrderId(order.getId())) {
 
@@ -1440,14 +1680,65 @@ public class ProductionOrderService {
                                 serialProductionOrderRepository
                                         .delete(link));
 
+                serial.setStatus(ProductSerialStatus.NEW);
                 serial.setIssuedProductionOrder(null);
-                productSerialRepository.save(serial);
+                productSerialRepository.saveAndFlush(serial);
             }
         }
 
-        order.setActive(false);
+        ProductionOrder fresh = requireActiveOrder(id);
+        fresh.setActive(false);
 
-        return productionOrderRepository.save(order);
+        return productionOrderRepository.save(fresh);
+    }
+
+    /**
+     * Закрыт ли статус: заказ-запись истории, его не снимают с работы.
+     */
+    private static boolean isClosedStatus(ProductionOrderStatus status) {
+        return status == ProductionOrderStatus.DONE
+                || status == ProductionOrderStatus.CANCELLED;
+    }
+
+    /**
+     * Проведены ли по заказу складские операции.
+     *
+     * У заказа-комплектующего (ЗНП) достаточно фактов в его рамках:
+     * приёмка ячеек закрывает комплектовочную операцию именно этим
+     * заказом, и это и есть его складское событие.
+     *
+     * У выпуска (ЗП) собственных складских операций нет, но его номера
+     * укомплектованы чужими ЗНП, и приёмка такого ЗНП оставила факт или
+     * отметку приёмки на изделии выпуска. Освободить номер, уже
+     * побывавший на складе, — потерять прослеживаемость, поэтому выпуск
+     * проверяют и по своим изделиям: любой факт операции либо отметка
+     * приёмки по выпущенным номерам.
+     */
+    private boolean hasWarehouseOperations(ProductionOrder order) {
+
+        if (productSerialOperationRepository
+                .existsPerformedByProductionOrderId(order.getId())) {
+            return true;
+        }
+
+        if (!order.isRoot()) {
+            return false;
+        }
+
+        List<Long> serialIds = productSerialRepository
+                .findByProductionOrderId(order.getId()).stream()
+                .map(ProductSerial::getId)
+                .filter(java.util.Objects::nonNull)
+                .toList();
+
+        if (serialIds.isEmpty()) {
+            return false;
+        }
+
+        return productSerialOperationRepository
+                        .existsPerformedBySerialIdIn(serialIds)
+                || productSerialRepository
+                        .existsAcceptedByIdIn(serialIds);
     }
 
     /**

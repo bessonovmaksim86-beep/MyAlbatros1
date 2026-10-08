@@ -56,6 +56,31 @@ public interface OrderScheduleRowRepository
             """)
     List<OrderScheduleRow> findByOrderId(@Param("orderId") Long orderId);
 
+    /**
+     * Внесённые в план строки заказа по конкретной операции.
+     *
+     * Нужен проверке при взятии ЗНП в работу: «заказ поставлен в
+     * планирование» означает, что по его основанию (заказу покупателя)
+     * расчёт внесён в план, то есть строки этой операции есть в статусе
+     * CONFIRMED. Строка DRAFT планом не считается — она ничего не занимает
+     * и цеху не видна (см. комментарий класса).
+     *
+     * Навигация по идентификаторам, а не по сущностям: проверка вызывается
+     * в момент смены статуса, и разыменовывать lazy-связи незачем.
+     */
+    @Query("""
+            select count(row.id)
+            from OrderScheduleRow row
+            where row.customerOrder.id = :orderId
+              and row.operation.id = :operationId
+              and row.status = :status
+            """)
+    long countConfirmedByOrderAndOperation(
+            @Param("orderId") Long orderId,
+            @Param("operationId") Long operationId,
+            @Param("status") ScheduleRowStatus status
+    );
+
     List<OrderScheduleRow> findByCustomerOrderIdAndStatus(
             Long orderId,
             ScheduleRowStatus status

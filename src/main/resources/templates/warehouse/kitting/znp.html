@@ -37,12 +37,12 @@
         <div class="page-content warehouse-page">
 
             <!--
-                Раздел склада комплектования. Список общий с разделом
-                полуфабрикатов: подразделение задаёт адрес, а не
-                разметка, поэтому здесь остаётся только подписать,
-                какой склад показан.
+                Раздел склада комплектования: список разрезан
+                «изделие → операции». Раздел полуфабрикатов остаётся
+                плоским — у него нет заказов-комплектующих, поэтому
+                разметка у него своя, а не общая на два склада.
             -->
-            <th:block th:replace="~{warehouse/kitting/fragments/section
+            <th:block th:replace="~{warehouse/kitting/fragments/znp-list
                     :: list('znp')}">
             </th:block>
 
@@ -51,6 +51,45 @@
         <th:block th:replace="~{warehouse/fragments/layout
                 :: commonScripts}">
         </th:block>
+
+        <script>
+            /*
+             * Раскрытие панели изделия — тот же приём, что в
+             * «Мои операции»: ключ — индекс строки списка, а не id
+             * изделия, потому что индекс остаётся единственным
+             * устойчивым идентификатором разметки.
+             */
+            function toggleZnp(index) {
+                const panel = document.getElementById('znp-panel-' + index);
+                const caret = document.getElementById('znp-caret-' + index);
+
+                if (!panel) {
+                    return;
+                }
+
+                const hidden = panel.style.display === 'none';
+
+                panel.style.display = hidden ? '' : 'none';
+                if (caret) {
+                    caret.textContent = hidden ? '▲' : '▼';
+                }
+            }
+
+            /*
+             * Панели свёрнуты по умолчанию: кладовщик выбирает изделие
+             * по серийному номеру и наименованию, а проведение живёт в
+             * раскрытии. Кнопка в скрытой панели не теряется — строка
+             * сразу показывает число операций и то, можно ли провести
+             * хоть одну.
+             */
+            (function collapseZnpPanels() {
+                document
+                    .querySelectorAll('.kitting-znp-panel')
+                    .forEach(panel => {
+                        panel.style.display = 'none';
+                    });
+            })();
+        </script>
 
     </main>
 </div>

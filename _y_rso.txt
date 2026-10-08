@@ -1,0 +1,29 @@
+    private ProductSerial requireSerialOfRelease(
+            Long serialId,
+            ProductionOrder release
+    ) {
+        if (serialId == null) {
+            throw new IllegalArgumentException(
+                    "Серийный номер не выбран"
+            );
+        }
+
+        ProductSerial serial = productSerialRepository
+                .findById(serialId)
+                .orElseThrow(() -> new IllegalArgumentException(
+                        "Серийный номер не найден"
+                ));
+
+        Long issuedOrderId = serial.getIssuedProductionOrder() == null
+                ? null
+                : serial.getIssuedProductionOrder().getId();
+
+        if (!release.getId().equals(issuedOrderId)) {
+            throw new IllegalArgumentException(
+                    "Датчик «" + serial.getFullNumber()
+                            + "» выпущен другим заказом"
+            );
+        }
+
+        return serial;
+    }

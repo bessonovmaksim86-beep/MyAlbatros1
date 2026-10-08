@@ -10,6 +10,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 import ru.company.production.dto.AssignedOperationView;
+import ru.company.production.dto.KittingZnpSerialRow;
 import ru.company.production.entity.AppUser;
 import ru.company.production.repository.UserRepository;
 import ru.company.production.service.CustomerOrderSuspensionService;
@@ -61,18 +62,51 @@ public class WarehouseKittingController {
 
     /**
      * Комплектование ЗНП — работы склада комплектования.
+     *
+     * Список разрезан «изделие → операции»: серийный номер принадлежит
+     * экземпляру, а не группе операций, поэтому главной строкой идёт
+     * изделие, а его операции раскрываются по клику. Операции без
+     * поднятого заказа-комплектующего в список не попадают — проводить
+     * их не под что.
      */
     @GetMapping({"/kitting-znp", "/kitting-znp/"})
     public String znp(Model model) {
-        return section(WarehouseKittingService.Section.ZNP, model);
+        WarehouseKittingService.Section section =
+                WarehouseKittingService.Section.ZNP;
+
+        List<KittingZnpSerialRow> products =
+                kittingService.findZnpProducts(section);
+
+        addSectionAttributes(section, model);
+
+        model.addAttribute("products", products);
+
+        return section.getView();
     }
 
     /**
      * Комплектование полуфабрикатов — работы склада полуфабрикатов.
+     *
+     * Тот же иерархический разрез «изделие → операции», что и у
+     * комплектования ЗНП: кладовщику нужно видеть изделия, их
+     * комплектовочные операции и номер заказа-комплектующего, под
+     * который поднята работа. Различаются только подразделение склада
+     * и подпись заголовка — разметка и логика обобщены в
+     * warehouse/kitting/fragments/znp-list.
      */
     @GetMapping({"/kitting-semi", "/kitting-semi/"})
     public String semiFinished(Model model) {
-        return section(WarehouseKittingService.Section.SEMI_FINISHED, model);
+        WarehouseKittingService.Section section =
+                WarehouseKittingService.Section.SEMI_FINISHED;
+
+        List<KittingZnpSerialRow> products =
+                kittingService.findZnpProducts(section);
+
+        addSectionAttributes(section, model);
+
+        model.addAttribute("products", products);
+
+        return section.getView();
     }
 
     /**
@@ -149,14 +183,9 @@ public class WarehouseKittingController {
         List<AssignedOperationView> operations =
                 kittingService.findOperations(section);
 
+        addSectionAttributes(section, model);
+
         model.addAttribute("operations", operations);
-        model.addAttribute("sectionTitle", section.getTitle());
-        model.addAttribute(
-                "sectionDescription",
-                section.getDescription()
-        );
-        model.addAttribute("sectionParam", section.param());
-        model.addAttribute("activePage", section.getActivePage());
 
         /*
          * Список строится поштучно, поэтому в шапке карточки считается
@@ -166,6 +195,27 @@ public class WarehouseKittingController {
         model.addAttribute("instanceCount", countInstances(operations));
 
         return section.getView();
+    }
+
+    /**
+     * Подписи раздела: заголовок, описание и ключ активной страницы.
+     *
+     * Общие для обоих разрезов — плоского и «изделие → операции»:
+     * различается только содержимое таблицы, а шапка обязана оставаться
+     * одинаковой, иначе два склада одного маршрута выглядели бы разными
+     * экранами.
+     */
+    private void addSectionAttributes(
+            WarehouseKittingService.Section section,
+            Model model
+    ) {
+        model.addAttribute("sectionTitle", section.getTitle());
+        model.addAttribute(
+                "sectionDescription",
+                section.getDescription()
+        );
+        model.addAttribute("sectionParam", section.param());
+        model.addAttribute("activePage", section.getActivePage());
     }
 
     /** Сколько изделий в списке — строка таблицы равна одному изделию. */

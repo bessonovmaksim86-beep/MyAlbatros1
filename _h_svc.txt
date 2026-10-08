@@ -1,0 +1,27 @@
+    /**
+     * Датчик допустим, если выпущен самим заказом
+     * или любым из его родителей по цепочке (выпуск
+     * для вложенного ЗНП).
+     */
+    private static boolean isSerialOfReleaseChain(
+            Long issuedOrderId,
+            ProductionOrder order
+    ) {
+        if (issuedOrderId == null) {
+            return false;
+        }
+
+        ProductionOrder current = order;
+
+        while (current != null) {
+            if (issuedOrderId.equals(current.getId())) {
+                return true;
+            }
+
+            current = current.getParentProductionOrder();
+        }
+
+        return false;
+    }
+
+    private static Long toLongOrNull(Object value) {

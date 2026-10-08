@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html lang="ru"
+      xmlns:th="http://www.thymeleaf.org">
+
+<body>
+
+<!-- =========================================================
+     КОМПЛЕКТОВАНИЕ ЗНП: ИЗДЕЛИЕ → ЕГО ОПЕРАЦИИ
+
+     Прежний список перечислял операции плоско: серийный номер и
+     наименование датчика повторялись в каждой строке группы, а
+     порядок сборки терялся между группами. Здесь разрез обратный —
+     одна строка это одно изделие (серийник + наименование), а
+     раскрытие перечисляет операции комплектования, под которые
+     диспетчер поднял заказ-комплектующий. Тот же приём, что в
+     «Мои операции» у исполнителей.
+
+     В список попадают только операции с активным ЗНП: строка без
+     такого заказа складу не видна, потому что проводить её не под
+     что. Проводится конкретная строка графика, поэтому форма
+     проведения живёт в раскрытии и использует существующий
+     POST /warehouse/kitting/complete — отдельного write-пути
+     раздел не заводит.
+     ========================================================= -->
+<th:block th:fragment="list(sectionKey)">
+
+    <div class="page-head">
+
+        <div class="page-title">
+
+            <h1 th:text="${sectionTitle}">
+                Комплектование ЗНП
+            </h1>
+
+            <p th:text="${sectionDescription}">
+                Заказы-комплектующие склада комплектования
+            </p>
+
+        </div>
+
+        <div class="page-head-actions">
+
+            <!--
+                Второй раздел всегда под рукой: один и тот же
+                кладовщик ведёт и сборку ЗНП, и выдачу
+                полуфабрикатов, а адрес раздела жёстко связан с
+                подразделением, поэтому ссылка не может показать
+                чужой склад.
+            -->
+            <a class="btn secondary"
+               th:href="@{/warehouse/kitting-semi}">
+                Комплектование полуфабрикатов
+            </a>
+
+            <a class="btn secondary"
+               th:href="@{/warehouse/general}">
+                Обзор склада
+            </a>
+
+        </div>
+    </div>
+
+    <div class="alert success"
+         th:if="${successMessage}"
+         th:text="${successMessage}">
+    </div>
+
+    <div class="alert danger"
+         th:if="${errorMessage}"
+         th:text="${errorMessage}">
+    </div>
+
+    <section class="card">
+
+        <div class="card-head">
+
+            <div>
+
+                <h2>Изделия к комплектации</h2>
+
+                <small>
+                    Строка — изделие: его операции комплектования
+                    раскрываются по клику. В список попадают только
+                    операции, под которые поднят заказ-комплектующий в
+                    работе
+                </small>
+
+            </div>
+
+            <span class="badge"
+                  th:if="${products != null and !#lists.isEmpty(products)}">
+
+                Изделий:
+
+                <strong th:text="${#lists.size(products)}">
+                    4
+                </strong>
+            </span>
+        </div>
+
+        <div class="card-body">
+
+            <div class="alert danger"
+                 th:if="${products == null or #lists.isEmpty(products)}">
+
+                <p>
+                    Работы по заказам-комплектующим у этого склада пока
+                    нет: операции создаёт планирование заказа
+                    покупателя, а в список их выводит заказ-
+                    комплектующий, поднятый диспетчером в статус «в
+                    работе». Пока ни один ЗНП не начат, складу нечего
+                    собирать
+                </p>
+
+            </div>
+
+            <div class="table-wrap"
+                 th:unless="${products == null or #lists.isEmpty(products)}">
+
+                <table class="data-table kitting-znp-table">
+
+                    <colgroup>
+                        <col class="col-serial">
+                        <col class="col-name">
+                        <col class="col-toggle">
+                    </colgroup>
+
+                    <thead>
+
+                    <tr>
+                        <th>Серийный номер</th>
+                        <th>Наименование изделия</th>
+                        <th></th>
+                    </tr>
+
+                    </thead>
+
+                    <tbody>
+
+                    <th:block th:each="product, stat : ${products}">
+
+                        <tr class="kitting-znp-row"
+                            th:classappend="${product.hasBlocked()}
+                                    ? ' is-blocked' : ''"
+                            th:onclick="|toggleZnp(${stat.index})|">
+
+                            <td class="cell-serial">
+                                <strong th:text="${product.serialLabel()}">
+                                    121200022
+                                </strong>
+                            </td>
+
+                            <td class="cell-name"
+                                th:text="${product.nameLabel()}">
+                                Датчик уровня ультразвуковой
+                            </td>
+
+                            <td class="kitting-znp-toggle">
+
+                                <span class="badge"
+                                      th:text="${product.operationCount()
+                                              + ' оп.'}">
+                                    3 оп.
+                                </span>
+
+                                <span class="badge badge--success"
+                                      th:if="${product.hasCompletable()}">
+                                    можно провести
+                                </span>
+
+                                <small class="kitting-znp-caret"
+                                       th:id="'znp-caret-' + ${stat.index}">
+                                    ▼
+                                </small>
+                            </td>
+
+                        </tr>
+
+                        <!--
+                            Раскрытие: операции этого изделия. Ключ —
+                            индекс строки списка, а не id изделия:
+                            один и тот же серийник встречается в
+                            списке один раз, но индекс остаётся
+                            единственным устойчивым идентификатором
+                            разметки.
+                        -->
+                        <tr class="kitting-znp-panel"
+                            th:id="'znp-panel-' + ${stat.index}">
+
+                            <td colspan="3">
+
+                                <div class="kitting-znp-panel__inner">
+
+                                    <strong>
+                                        Операции комплектования изделия
+                                    </strong>
+
+                                    <div class="table-wrap">
+
+                                        <table class="data-table instance-table">
+
+                                            <thead>
+                                            <tr>
+                                                <th>Операция</th>
+                                                <th>Заказ-комплектующий</th>
+                                                <th>План</th>
+                                                <th>Статус</th>
+                                                <th></th>
+                                            </tr>
+                                            </thead>
+
+                                            <tbody>
+
+                                            <tr th:each="operation : ${product.operations()}"
+                                                th:classappend="${operation.blocked()
+                                                        and !operation.completed()}
+                                                        ? ' is-blocked' : ''">
+
+                                                <td>
+                                                    <strong
+                                                            th:text="${operation.title()}">
+                                                        Комплектование
+                                                    </strong>
+                                                </td>
+
+                                                <td class="instance-table__serial"
+                                                    th:text="${operation.znpLabel()}">
+                                                        ЗК-2026-014
+                                                </td>
+
+                                                <td th:text="${operation.formattedDate()}">
+                                                    12.02.2026
+                                                </td>
+
+                                                <td>
+
+                                                    <!--
+                                                        Проведённая
+                                                        операция
+                                                        подписывается
+                                                        фактом закрытия:
+                                                        кладовщик обязан
+                                                        видеть принятую
+                                                        работу, а не
+                                                        только отсутствие
+                                                        кнопки.
+                                                    -->
+                                                    <span class="badge badge--success"
+                                                          th:if="${operation.completed()}"
+                                                          th:text="'Проведён '
+                                                                  + ${operation.completedLabel()}">
+                                                        Проведён 12.02.2026 14:05
+                                                    </span>
+
+                                                    <span class="badge badge--attention"
+                                                          th:if="${!operation.completed()
+                                                                  and operation.blocked()}"
+                                                          th:text="${operation.blockedLabel()}">
+                                                        ждёт: Сборка узла
+                                                    </span>
+
+                                                    <span class="badge"
+                                                          th:if="${!operation.completed()
+                                                                  and !operation.blocked()}">
+                                                        В работе
+                                                    </span>
+                                                </td>
+
+                                                <td class="table-actions">
+
+                                                    <!--
+                                                        Право проводить
+                                                        считает сервис:
+                                                        операция не
+                                                        закрыта и не ждёт
+                                                        предшественника.
+                                                        Проведение — POST:
+                                                        оно меняет
+                                                        состояние
+                                                        графика.
+                                                    -->
+                                                    <form th:if="${operation.canComplete()}"
+                                                          method="post"
+                                                          th:action="@{/warehouse/kitting/complete}"
+                                                          class="inline-form">
+
+                                                        <input th:if="${_csrf != null}"
+                                                               type="hidden"
+                                                               th:name="${_csrf.parameterName}"
+                                                               th:value="${_csrf.token}">
+
+                                                        <input type="hidden"
+                                                               name="rowId"
+                                                               th:value="${operation.rowId()}">
+
+                                                        <input type="hidden"
+                                                               name="section"
+                                                               th:value="${sectionKey}">
+
+                                                        <button type="submit"
+                                                                class="btn primary compact">
+                                                            Провести операцию
+                                                        </button>
+                                                    </form>
+
+                                                    <span th:unless="${operation.canComplete()}">
+                                                        —
+                                                    </span>
+                                                </td>
+
+                                            </tr>
+
+                                            </tbody>
+                                        </table>
+
+                                    </div>
+
+                                </div>
+
+                            </td>
+                        </tr>
+
+                    </th:block>
+
+                    </tbody>
+                </table>
+
+            </div>
+
+        </div>
+    </section>
+
+</th:block>
+
+</body>
+</html>

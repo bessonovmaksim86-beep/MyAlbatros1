@@ -1,0 +1,163 @@
+warning: in the working copy of 'src/main/java/ru/company/production/controller/DispatcherController.java', LF will be replaced by CRLF the next time Git touches it
+diff --git a/src/main/java/ru/company/production/controller/DispatcherController.java b/src/main/java/ru/company/production/controller/DispatcherController.java
+index 907c0a2..4380eba 100644
+--- a/src/main/java/ru/company/production/controller/DispatcherController.java
++++ b/src/main/java/ru/company/production/controller/DispatcherController.java
+@@ -12,6 +12,7 @@ import org.springframework.web.bind.annotation.InitBinder;
+ import org.springframework.web.bind.annotation.ModelAttribute;
+ import org.springframework.web.bind.annotation.PathVariable;
+ import org.springframework.web.bind.annotation.PostMapping;
++import org.springframework.web.bind.annotation.RequestBody;
+ import org.springframework.web.bind.annotation.RequestMapping;
+ import org.springframework.web.bind.annotation.RequestParam;
+ import org.springframework.web.bind.annotation.ResponseBody;
+@@ -29,6 +30,7 @@ import ru.company.production.entity.CustomerOrderStatus;
+ import ru.company.production.entity.CustomerOrderType;
+ import ru.company.production.entity.ProductClassifier;
+ import ru.company.production.entity.ProductSerial;
++import ru.company.production.entity.Operation;
+ import ru.company.production.entity.ProductType;
+ import ru.company.production.entity.ProductionItemStatus;
+ import ru.company.production.entity.ProductionOrder;
+@@ -1105,10 +1107,16 @@ public class DispatcherController {
+          * обращение к ней из шаблона вне сессии дало бы
+          * LazyInitializationException, а fetch-join в заголовке
+          * размножил бы строки результата.
++         *
++         * Выпуск и заказ-комплектующий: у обоих блок «Заказы-
++         * комплектующие» создаёт ЗНП по операциям комплектования
++         * датчика (для ЗНП — его собственного датчика, без выбора),
++         * поэтому список созданных детей нужен и там и там. У
++         * группового и ремонтного заказа детей не бывает.
+          */
+         model.addAttribute(
+                 "children",
+-                order.isRoot()
++                order.isRoot() || order.isSerialBasedKind()
+                         ? productionOrderRepository
+                         .findActiveChildrenDetailed(id)
+                         : List.<ProductionOrder>of()
+@@ -1130,6 +1138,32 @@ public class DispatcherController {
+                         : serialKittingService.findKitting(id)
+         );
+ 
++        /*
++         * Датчики для селекта блока «Заказы-комплектующие»: блок есть
++         * только в карточке выпуска, поэтому для ЗНП список пуст —
++         * раньше сюда уходил отдельный запрос findAttachedSerials,
++         * результат которого шаблон не печатал.
++         */
++        model.addAttribute(
++                "releaseSerials",
++                order.isRoot()
++                        ? serialKittingService.findAvailableSerials(id)
++                        : List.of()
++        );
++
++        /*
++         * Датчик(и) самого заказ-комплектующего: форма создания
++         * заказов-комплектующих в карточке ЗНП работает без выбора
++         * серийника — операции берутся из базового техпроцесса
++         * изделия того номера, к которому заказ уже привязан.
++         */
++        model.addAttribute(
++                "orderSerials",
++                order.isRoot()
++                        ? List.of()
++                        : serialKittingService.findAttachedSerials(id)
++        );
++
+         /*
+          * Виды ЗНП нужны кнопкам блока «Заказы-комплектующие»: каждая
+          * кнопка ведёт в форму сразу со своим видом (параметр kind) и с
+@@ -2341,4 +2375,89 @@ public class DispatcherController {
+         }
+     }
+ 
++
++    /**
++     * Комплектовочные операции выбранного серийника.
++     *
++     * Список зависит от изделия серийника, а серийник меняют уже в
++     * карточке выпуска — поэтому операции отдаются отдельно и только
++     * для выбранного номера.
++     */
++    @GetMapping("/production-order/serial-kitting-operations")
++    @ResponseBody
++    public List<Map<String, Object>> serialKittingOperations(
++            @RequestParam(required = false) Long serialId
++    ) {
++        List<Map<String, Object>> rows = new ArrayList<>();
++
++        int position = 1;
++
++        for (Operation operation
++                : productionOrderService
++                        .findSerialKittingOperations(serialId)) {
++
++            Map<String, Object> row = new LinkedHashMap<>();
++
++            row.put("id", operation.getId());
++            row.put(
++                    "name",
++                    operation.getOperationName() == null
++                            ? ""
++                            : operation.getOperationName().getName()
++            );
++            row.put("position", position++);
++
++            rows.add(row);
++        }
++
++        return rows;
++    }
++
++    /**
++     * Создаёт заказы-комплектующие по отмеченным парам
++     * «серийник + операция» внутри выпуска.
++     */
++    @PostMapping("/production-order/{id}/kitting-orders")
++    @ResponseBody
++    public Map<String, Object> createKittingOrders(
++            @PathVariable Long id,
++            @RequestBody List<Map<String, Object>> pairs,
++            Authentication authentication
++    ) {
++        AppUser author = authentication == null
++                ? null
++                : userRepository.findByUsernameIgnoreCase(
++                        authentication.getName()
++                ).orElse(null);
++
++        Map<String, Object> response = new LinkedHashMap<>();
++
++        try {
++            List<ProductionOrder> created =
++                    productionOrderService.createKittingOrders(
++                            id, pairs, author);
++
++            List<Map<String, Object>> rows = new ArrayList<>();
++
++            for (ProductionOrder order : created) {
++                Map<String, Object> row = new LinkedHashMap<>();
++                row.put("id", order.getId());
++                row.put("number", order.getNumber());
++                rows.add(row);
++            }
++
++            response.put("ok", true);
++            response.put("created", rows);
++        } catch (
++                EntityNotFoundException
++                | IllegalArgumentException
++                | IllegalStateException exception
++        ) {
++            response.put("ok", false);
++            response.put("error", exception.getMessage());
++        }
++
++        return response;
++    }
++
+ }
+\ No newline at end of file

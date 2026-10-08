@@ -1,0 +1,49 @@
+    /**
+     * Привязанные серийники заказа.
+     */
+    @Transactional(readOnly = true)
+    public List<ProductSerial> findAttachedSerials(Long productionOrderId) {
+        List<ProductSerial> result = new ArrayList<>();
+
+        if (productionOrderId == null) {
+            return result;
+        }
+
+        for (SerialProductionOrder link
+                : serialProductionOrderRepository
+                .findDetailsByProductionOrderId(productionOrderId)) {
+
+            if (link.getSerial() != null) {
+                result.add(link.getSerial());
+            }
+        }
+
+        return result;
+    }
+
+    /**
+     * Серийник принадлежит цепочке заказа,
+     * если выпущен им или любым родителем.
+     */
+    private static boolean belongsToOrderChain(
+            Long issuedOrderId,
+            ProductionOrder order
+    ) {
+        if (issuedOrderId == null) {
+            return false;
+        }
+
+        ProductionOrder current = order;
+
+        while (current != null) {
+            if (issuedOrderId.equals(current.getId())) {
+                return true;
+            }
+
+            current = current.getParentProductionOrder();
+        }
+
+        return false;
+    }
+
+    public void attach(ProductionOrder order,

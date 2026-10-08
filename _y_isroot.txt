@@ -1,0 +1,5 @@
+        if (!release.isRoot()) {
+            throw new IllegalStateException(
+                    "Заказы-комплектующие создают только внутри выпуска"
+            );
+        }

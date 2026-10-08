@@ -67,6 +67,17 @@ public interface ProductionOrderRepository
                     where child.parentProductionOrder = ord
                       and child.active = true
                 ) as childCount,
+                (
+                    select count(znpItem.id)
+                    from ProductionOrderItem znpItem
+                    left join znpItem.serial znpSerial
+                    where znpItem.productionOrder = ord
+                      and (
+                              znpSerial.id is null
+                           or znpSerial.znpNumber is null
+                           or trim(znpSerial.znpNumber) = ''
+                          )
+                ) as missingZnpCount,
                 ord.status as status
             from ProductionOrder ord
             left join ord.customerOrder customerOrder
