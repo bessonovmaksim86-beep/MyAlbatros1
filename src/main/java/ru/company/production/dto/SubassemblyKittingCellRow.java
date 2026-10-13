@@ -18,6 +18,7 @@ public record SubassemblyKittingCellRow(
         String fullNumber,
         String displayName,
         String classifierCode,
+        Long classifierId,
         boolean taken
 ) {
 
@@ -25,14 +26,17 @@ public record SubassemblyKittingCellRow(
     public SubassemblyKittingCellRow(Long serialId,
                                      String fullNumber,
                                      String displayName,
-                                     String classifierCode) {
-        this(serialId, fullNumber, displayName, classifierCode, false);
+                                     String classifierCode,
+                                     Long classifierId) {
+        this(serialId, fullNumber, displayName, classifierCode,
+                classifierId, false);
     }
 
     /** Та же строка с отметкой «внесена в заказ». */
     public SubassemblyKittingCellRow mark(boolean takenFlag) {
         return new SubassemblyKittingCellRow(
-                serialId, fullNumber, displayName, classifierCode, takenFlag
+                serialId, fullNumber, displayName, classifierCode,
+                classifierId, takenFlag
         );
     }
 

@@ -1,27 +1,34 @@
 package ru.company.production.dto;
 
+import java.math.BigDecimal;
 import java.util.List;
 
 /**
- * Строка списка комплектования подсборок: заказ-комплектующий с операцией
- * приёмки на склад полуфабрикатов.
+ * Строка списка комплектования подсборок: ЗНП, подсборки которого
+ * принимает склад полуфабрикатов.
  *
- * Список строится по ЗНП, у которых комплектовочная операция имеет тип
- * RECEIVING («Приёмка на склад») и относится к подразделению
- * «Склад полуфабрикатов». Кладовщик открывает ЗНП и вводит номера
- * ячеек, которые есть на складе.
+ * Операцию приёмки раздел ищет у заказа (тип RECEIVING) либо в его
+ * техпроцессе (тип KITTING_SUBASSEMBLY) — в обоих случаях она обязана
+ * относиться к подразделению «Склад полуфабрикатов». Кладовщик открывает
+ * заказ и вводит номера ячеек, которые есть на складе.
+ *
+ * Техпроцесс показан вместо родителя: групповой ЗНП заводят без выпуска
+ * (V38), и колонка «Родитель» была бы в его строке прочерком, тогда как
+ * маршрут заказа кладовщику полезен — по нему сверяют операцию приёмки.
  */
 public record SubassemblyKittingZnpRow(
         Long id,
         String number,
         String znpKindDisplayName,
-        String parentOrderNumber,
+        String productTypeName,
+        String techProcessCode,
         String operationName,
         String formattedOrderDate,
         String formattedDueDate,
         String statusDisplayName,
         String statusBadgeClass,
         String note,
+        BigDecimal requiredQuantity,
         List<SubassemblyKittingCellRow> cells
 ) {
 
@@ -32,6 +39,24 @@ public record SubassemblyKittingZnpRow(
                 .count();
     }
 
+    /*
+     * Сколько ячеек заказано.
+     *
+     * Готовность меряют заказом, а не складским остатком: на складе
+     * лежит тридцать подсборок, а в заказ их входит пять, и «взято 2 из
+     * 30» кладовщик прочёл бы как недоукомплектованный заказ.
+     *
+     * Количество задают только групповым и ремонтным видам; у заказа на
+     * комплектование состава нет, и знаменателем остаётся складской
+     * перечень.
+     */
+    public long requiredCount() {
+        return requiredQuantity == null
+                ? availableCount()
+                : requiredQuantity.setScale(0, java.math.RoundingMode.CEILING)
+                .longValue();
+    }
+
     /** Сколько всего ячеек на складе. */
     public long availableCount() {
         return cells == null ? 0L : cells.size();
@@ -39,14 +64,12 @@ public record SubassemblyKittingZnpRow(
 
     /** Подпись готовности: «Взято X из Y». */
     public String readinessLabel() {
-        long done = doneCount();
-        long avail = availableCount();
-        return "Взято " + done + " из " + avail;
+        return "Взято " + doneCount() + " из " + requiredCount();
     }
 
-    /** Заказ укомплектован: все ячейки взяты. */
+    /** Заказ укомплектован: взято заказанное количество. */
     public boolean completed() {
-        long avail = availableCount();
-        return avail > 0 && doneCount() >= avail;
+        long required = requiredCount();
+        return required > 0 && doneCount() >= required;
     }
 }

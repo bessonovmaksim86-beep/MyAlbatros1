@@ -122,11 +122,38 @@
 
                         <div class="warehouse-summary__row">
 
-                            <dt>Родитель (ЗП)</dt>
+                            <dt>Тип ячеек</dt>
+
+                            <dd th:text="${view.order.productTypeName}">
+                                Ячейка
+                            </dd>
+                        </div>
+
+                        <div class="warehouse-summary__row">
+
+                            <dt>Изделие заказа</dt>
+
+                            <dd th:text="${view.order.classifierLabel}">
+                                8888 — ЯПР1
+                            </dd>
+                        </div>
+
+                        <div class="warehouse-summary__row">
+
+                            <dt>Заказано</dt>
+
+                            <dd th:text="${view.order.formattedQuantity}">
+                                5
+                            </dd>
+                        </div>
+
+                        <div class="warehouse-summary__row">
+
+                            <dt>Техпроцесс</dt>
 
                             <dd class="mono"
-                                th:text="${view.order.parentOrderNumber}">
-                                ЗП-2026-031
+                                th:text="${view.order.techProcessCode}">
+                                ТП-005
                             </dd>
                         </div>
 
@@ -230,8 +257,8 @@
                         </div>
 
                         <span class="warehouse-counter"
-                              th:text="${view.takenCount()} + ' из ' + ${view.availableCount()} + ' яч.'">
-                            3 из 10 яч.
+                              th:text="${view.takenCount()} + ' из ' + ${view.requiredCount()} + ' яч.'">
+                            3 из 5 яч.
                         </span>
                     </div>
 
@@ -281,32 +308,29 @@
             <!-- =====================================================
                  ПЕРЕЧЕНЬ ЯЧЕЕК НА СКЛАДЕ
 
-                 Показывает все ячейки, принятые на склад полуфабрикатов,
-                 и статус каждой — внесена или нет.
+                 Показывает ячейки изделия заказа, принятые на склад,
+                 и статус каждой — внесена или нет. Блок сворачиваемый:
+                 перечень длинный, а вносят номера по полю выше.
                  ===================================================== -->
-            <section class="card"
+            <details class="collapsible"
                      th:if="${view.cells != null and not #lists.isEmpty(view.cells)}">
 
-                <div class="card-head">
+                <summary class="collapsible__summary">
+                    <span>Ячейки на складе полуфабрикатов</span>
 
-                    <div>
-
-                        <h2>Ячейки на складе полуфабрикатов</h2>
-
-                        <small>
-                            Все ячейки, принятые на склад.
-                            Зелёная отметка — ячейка уже внесена в заказ
-                        </small>
-
-                    </div>
-
-                    <span class="warehouse-counter"
+                    <span class="collapsible__counter"
                           th:text="${#lists.size(view.cells)} + ' шт.'">
                         10 шт.
                     </span>
-                </div>
+                </summary>
 
-                <div class="card-body">
+                <div class="collapsible__body">
+
+                    <p class="field-hint"
+                       style="margin-bottom: 12px;">
+                        Ячейки изделия заказа, принятые на склад.
+                        Зелёная отметка — ячейка уже внесена в заказ
+                    </p>
 
                     <div class="table-wrap">
 
@@ -368,7 +392,91 @@
                     </div>
 
                 </div>
-            </section>
+            </details>
+
+
+            <!-- =====================================================
+                 ИЗОЛЯТОР БРАКА
+
+                 Ячейки и подсборки того же изделия, списанные в
+                 изолятор. Справочный блок: на склад они не приняты,
+                 и внести их в заказ нельзя — кладовщик видит, где
+                 недостающие подсборки.
+                 ===================================================== -->
+            <details class="collapsible"
+                     th:if="${view.quarantine != null and not #lists.isEmpty(view.quarantine)}">
+
+                <summary class="collapsible__summary">
+                    <span>Ячейки и подсборки в изоляторе брака</span>
+
+                    <span class="collapsible__counter"
+                          th:text="${#lists.size(view.quarantine)} + ' шт.'">
+                        3 шт.
+                    </span>
+                </summary>
+
+                <div class="collapsible__body">
+
+                    <p class="field-hint"
+                       style="margin-bottom: 12px;">
+                        На склад они не приняты — внести в заказ их
+                        нельзя. Показаны, чтобы было видно, где
+                        недостающие подсборки
+                    </p>
+
+                    <div class="table-wrap">
+
+                        <table class="data-table warehouse-batch-table">
+
+                            <thead>
+
+                            <tr>
+                                <th>№</th>
+                                <th>Номер</th>
+                                <th>Тип</th>
+                                <th>Поставщик</th>
+                                <th>Причина брака</th>
+                            </tr>
+
+                            </thead>
+
+                            <tbody>
+
+                            <tr th:each="cell, iteration : ${view.quarantine}">
+
+                                <td class="warehouse-number-cell"
+                                    th:text="${iteration.count}">
+                                    1
+                                </td>
+
+                                <td class="warehouse-number-cell">
+                                    <span class="mono"
+                                          th:text="${cell.fullNumber}">
+                                        777700001
+                                    </span>
+                                </td>
+
+                                <td th:text="${cell.kindLabel}">
+                                    Ячейка
+                                </td>
+
+                                <td th:text="${cell.supplierName}">
+                                    Поставщик
+                                </td>
+
+                                <td th:text="${cell.reasonChain}">
+                                    Механическое повреждение → Скол корпуса
+                                </td>
+
+                            </tr>
+
+                            </tbody>
+                        </table>
+
+                    </div>
+
+                </div>
+            </details>
 
         </div>
     </main>

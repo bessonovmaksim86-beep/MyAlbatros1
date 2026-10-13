@@ -120,6 +120,7 @@ public interface ProductionOrderRepository
             left join fetch ord.productionOperation operation
             left join fetch operation.operationName
             left join fetch operation.operationType
+            left join fetch operation.organizationUnit
             left join fetch ord.techProcess
             left join fetch ord.priority
             left join fetch ord.createdBy
@@ -439,28 +440,37 @@ public interface ProductionOrderRepository
      * Комплектование подсборок в ЗНП (склад полуфабрикатов)
      * ============================================================
      *
-     * Граница раздела — сама операция заказа, а не маршрут техпроцесса:
-     * склад принимает подсборки по операции, закреплённой за заказом
-     * (production_operation_id), и именно она обязана быть операцией
-     * приёма на склад (тип RECEIVING) подразделения «Склад
-     * полуфабрикатов». Отличие от ремонтного комплектования, где
-     * операция ищётся внутри техпроцесса: здесь маршрут заказу не
-     * назначают, и искать операцию в техпроцессе было бы негде.
+     * Раздел собирает ЗНП, у которых подсборки принимает склад
+     * полуфабрикатов. Операция такой приёмки ищется в ДВУХ местах,
+     * потому что заказывает её по-разному:
+     *
+     *   * заказ-комплектующий, вложенный в выпуск, ведёт операцию на
+     *       самом заказе (production_operation_id) — маршрут ему не
+     *       назначают (см. ZnpKind#requiresTechProcess);
+     *   * групповой или ремонтный ЗНП самостоятелен и ведётся по
+     *       техпроцессу, поэтому его приёмка живёт внутри маршрута.
+     *
+     * Подходящей считает операцию сервис: тип из перечня (приёмка на
+     * склад либо комплектование подсборок) и подразделение «Склад
+     * полуфабрикатов». Оба признака параметрами, а не вшиты: коды
+     * справочников заведены миграциями V2, V54 и V55.
      *
      * В список берут заказы в работе: закрытый или отменённый заказ
      * складу не интересен, а «новый» ещё не поднят в работу.
      */
 
     /**
-     * Действующие ЗНП с операцией приёма на склад полуфабрикатов —
+     * Действующие ЗНП с приёмкой подсборок на склад полуфабрикатов —
      * список раздела «Комплектование подсборок в ЗНП».
      *
-     * Заказ обязан быть комплектующим (родитель задан): выпуск
-     * подсборки на склад не принимает, у него другой маршрут.
+     * Родитель НЕ требуется: групповой ЗНП заводят без выпуска (V38),
+     * и подсборки в него идут те же самые.
      *
      * Справочники дочитаны fetch-join'ом: open-in-view выключен, и
      * номер родителя, вид заказа, наименование операции и автор в
-     * шаблоне читались бы через ленивую связь вне сессии.
+     * шаблоне читались бы через ленивую связь вне сессии. Техпроцесс
+     * дочитан затем же: когда операции заказа нет, сервис смотрит
+     * наименование приёмки в маршруте.
      */
     @Query("""
             select distinct ord
@@ -471,18 +481,32 @@ public interface ProductionOrderRepository
             left join fetch operation.operationName
             left join fetch operation.operationType
             left join fetch operation.organizationUnit
+            left join fetch ord.techProcess
             left join fetch ord.createdBy
             where ord.active = true
               and ord.status = :status
-              and ord.parentProductionOrder is not null
-              and ord.productionOperation is not null
-              and operation.operationType.code = :receivingCode
-              and operation.organizationUnit.code = :unitCode
+              and (
+                    (
+                          ord.productionOperation is not null
+                      and operation.operationType.code in :typeCodes
+                      and operation.organizationUnit.code = :unitCode
+                    )
+                 or exists (
+                        select 1
+                        from TechProcessOperation node
+                        join node.operation routeOperation
+                        join routeOperation.operationType routeType
+                        join routeOperation.organizationUnit routeUnit
+                        where node.techProcess = ord.techProcess
+                          and routeType.code in :typeCodes
+                          and routeUnit.code = :unitCode
+                    )
+              )
             order by ord.orderDate desc, ord.number desc
             """)
     List<ProductionOrder> findSubassemblyKittingOrders(
             @Param("status") ProductionOrderStatus status,
-            @Param("receivingCode") String receivingCode,
+            @Param("typeCodes") List<String> typeCodes,
             @Param("unitCode") String unitCode
     );
 
@@ -496,14 +520,29 @@ public interface ProductionOrderRepository
             from ProductionOrder ord
             where ord.active = true
               and ord.status = :status
-              and ord.parentProductionOrder is not null
-              and ord.productionOperation is not null
-              and ord.productionOperation.operationType.code = :receivingCode
-              and ord.productionOperation.organizationUnit.code = :unitCode
+              and (
+                    (
+                          ord.productionOperation is not null
+                      and ord.productionOperation.operationType.code
+                            in :typeCodes
+                      and ord.productionOperation.organizationUnit.code
+                            = :unitCode
+                    )
+                 or exists (
+                        select 1
+                        from TechProcessOperation node
+                        join node.operation routeOperation
+                        join routeOperation.operationType routeType
+                        join routeOperation.organizationUnit routeUnit
+                        where node.techProcess = ord.techProcess
+                          and routeType.code in :typeCodes
+                          and routeUnit.code = :unitCode
+                    )
+              )
             """)
     long countSubassemblyKittingOrders(
             @Param("status") ProductionOrderStatus status,
-            @Param("receivingCode") String receivingCode,
+            @Param("typeCodes") List<String> typeCodes,
             @Param("unitCode") String unitCode
     );
 }

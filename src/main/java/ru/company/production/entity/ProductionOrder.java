@@ -448,6 +448,24 @@ public class ProductionOrder {
     }
 
     /*
+     * Тип заказанного изделия — «Ячейка» или «Прибор».
+     *
+     * Нужен комплектованию подсборок на складе: кладовщик обязан
+     * видеть, какого рода изделия заказаны, и не искать подсборки
+     * среди ячеек. Связь классификатора ленивая, поэтому подпись
+     * отдаётся этим методом (см. getClassifierLabel).
+     */
+    @Transient
+    public String getProductTypeName() {
+        if (productClassifier == null
+                || productClassifier.getProductType() == null) {
+            return "—";
+        }
+
+        return productClassifier.getProductType().getDisplayName();
+    }
+
+    /*
      * Количество без хвостовых нулей: «24», а не «24.000» — заказ
      * группой считают в штуках, и дробный хвост в карточке только
      * мешает.

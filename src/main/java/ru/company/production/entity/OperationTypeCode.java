@@ -13,6 +13,7 @@ public enum OperationTypeCode {
     WORK_DISTRIBUTION("Распределение работ"),
     KIT_RECEIPT("Получение комплектации"),
     KITTING("Комплектовочная"),
+    KITTING_SUBASSEMBLY("Комплектование подсборок"),
     CONTROL("Контрольная"),
     RECEIVING("Приёмка на склад");
 
