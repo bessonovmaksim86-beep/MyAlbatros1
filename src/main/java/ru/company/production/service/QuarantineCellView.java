@@ -1,6 +1,7 @@
 package ru.company.production.service;
 
 import ru.company.production.entity.CellReceivingBatch;
+import ru.company.production.entity.QuarantineCellKind;
 
 /**
  * Строка поштучного перечня изолятора брака: одна ячейка — одна строка.
@@ -43,9 +44,20 @@ public record QuarantineCellView(
         return batch == null ? fullNumber : batch.getCellLabel();
     }
 
-    /** Ячейка это или подсборка. */
+    /** Вид ячейки: «Ячейка» или «Подсборка». */
     public String getKindLabel() {
         return record.getKindLabel();
+    }
+
+    /**
+     * Разновидность тем же способом, что и подпись.
+     *
+     * Нужна комплектованию ремонтных ЗНП: вид заказа (ячейки /
+     * подсборки) сверяется с разновидностью ячейки, а не с её
+     * надписью — текст переименовывают, а требование типа нет.
+     */
+    public QuarantineCellKind getKind() {
+        return record.getKind();
     }
 
     /** Причина брака: цепочка типов и видов через «→». */

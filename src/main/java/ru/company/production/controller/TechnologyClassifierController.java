@@ -15,10 +15,20 @@ import ru.company.production.entity.InclusionMode;
 import ru.company.production.entity.MeasurementUnit;
 import ru.company.production.entity.ProductClassifier;
 import ru.company.production.entity.ProductType;
+import ru.company.production.repository.ActiveRouteOptionView;
+import ru.company.production.repository.ClassifierRouteLinkView;
+import ru.company.production.repository.ClassifierRouteOptionView;
+import ru.company.production.service.ClassifierRouteService;
 import ru.company.production.service.ProductClassifierService;
+import ru.company.production.service.TechProcessService;
 
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 @Controller
 @RequestMapping("/technology/classifier")
@@ -26,6 +36,8 @@ import java.util.List;
 public class TechnologyClassifierController {
 
     private final ProductClassifierService classifierService;
+    private final TechProcessService techProcessService;
+    private final ClassifierRouteService routeService;
 
     /**
      * Порядок типов на главной странице классификатора.
@@ -68,6 +80,7 @@ public class TechnologyClassifierController {
         model.addAttribute("totalCount", all.size());
 
         fillClassifierCards(model, all);
+        fillRouteColumns(model, all);
 
         return "technology/classifier/index";
     }
@@ -115,6 +128,50 @@ public class TechnologyClassifierController {
         model.addAttribute("classifierCards", cards);
     }
 
+    /**
+     * Готовит данные колонок «Техпроцессы» и базового маршрута.
+     *
+     * Группировку делают на стороне приложения, а не в шаблоне: сотни
+     * изделий, каждый обход которых перебирал бы весь список
+     * маршрутов, дали бы миллионы сравнений на одну отрисовку.
+     * Маршруты читают одним запросом (см. ClassifierRouteService),
+     * поэтому список не уходит в N+1.
+     */
+    private void fillRouteColumns(
+            Model model,
+            List<ProductClassifier> all
+    ) {
+        Map<Long, List<ClassifierRouteLinkView>> byClassifier =
+                new LinkedHashMap<>();
+
+        for (ClassifierRouteLinkView link
+                : routeService.findAllActiveRoutes()) {
+
+            byClassifier
+                    .computeIfAbsent(
+                            link.getClassifierId(),
+                            key -> new ArrayList<>()
+                    )
+                    .add(link);
+        }
+
+        Map<Long, String> basicCode = new HashMap<>();
+
+        for (ProductClassifier classifier : all) {
+            byClassifier
+                    .getOrDefault(classifier.getId(), List.of())
+                    .stream()
+                    .filter(ClassifierRouteLinkView::isBasic)
+                    .findFirst()
+                    .ifPresent(link -> basicCode.put(
+                            classifier.getId(),
+                            link.getCode()
+                    ));
+        }
+
+        model.addAttribute("routesByClassifier", byClassifier);
+        model.addAttribute("basicRouteCode", basicCode);
+    }
 
     /**
      * Страница создания классификатора.
@@ -354,6 +411,179 @@ public class TechnologyClassifierController {
     }
 
     /**
+     * Страница «Добавить техпроцесс» для изделия.
+     *
+     * Маршрут не дублируют: изделию назначают уже существующий
+     * техпроцесс либо ведут технолога в конструктор нового.
+     *
+     * В список выбора не попадают маршруты, которые изделию уже
+     * применены: сервис и так откажет дублем, но показывать их
+     * бессмысленно.
+     */
+    @GetMapping("/{id}/tp")
+    public String addTechProcessPage(
+            @PathVariable Long id,
+            Model model,
+            RedirectAttributes redirectAttributes
+    ) {
+        try {
+            ProductClassifier classifier =
+                    classifierService.findOne(id);
+
+            List<ClassifierRouteOptionView> applied =
+                    techProcessService.findRoutesForClassifier(id);
+
+            Set<Long> appliedIds = applied.stream()
+                    .map(ClassifierRouteOptionView::getId)
+                    .collect(Collectors.toSet());
+
+            List<ActiveRouteOptionView> options =
+                    routeService.findAllActiveRouteOptions()
+                            .stream()
+                            .filter(option ->
+                                    !appliedIds.contains(
+                                            option.getProcessId()))
+                            .toList();
+
+            model.addAttribute("classifier", classifier);
+            model.addAttribute("routeOptions", options);
+            model.addAttribute("appliedRoutes", applied);
+
+            fillRoutePageModel(model);
+
+            return "technology/classifier/routes";
+        } catch (EntityNotFoundException exception) {
+            redirectAttributes.addFlashAttribute(
+                    "errorMessage",
+                    exception.getMessage()
+            );
+
+            return "redirect:/technology/classifier";
+        }
+    }
+
+    /**
+     * Применение существующего маршрута к изделию.
+     *
+     * Галочка «сделать базовым» передаётся флагом asBasic; без неё
+     * маршрут остаётся обычным применённым. Иначе выпуск изделия
+     * молча переключался бы на последний добавленный маршрут, а
+     * технолог терял бы основной маршрут, который не менял.
+     *
+     * Привязка и перенос базовости выполняются одним действием
+     * сервиса: при отказе переноса откатывается и привязка, чтобы
+     * изделие не осталось с маршрутом, но со старым базовым.
+     */
+    @PostMapping("/{id}/tp")
+    public String addTechProcess(
+            @PathVariable Long id,
+            @RequestParam Long processId,
+            @RequestParam(
+                    name = "asBasic",
+                    defaultValue = "false"
+            )
+            boolean asBasic,
+            RedirectAttributes redirectAttributes
+    ) {
+        try {
+            routeService.applyRoute(id, processId, asBasic);
+
+            redirectAttributes.addFlashAttribute(
+                    "successMessage",
+                    asBasic
+                            ? "Техпроцесс добавлен к изделию "
+                                    + "и стал базовым"
+                            : "Техпроцесс добавлен к изделию"
+            );
+        } catch (
+                EntityNotFoundException |
+                IllegalArgumentException |
+                IllegalStateException exception
+        ) {
+            redirectAttributes.addFlashAttribute(
+                    "errorMessage",
+                    exception.getMessage()
+            );
+
+            return "redirect:/technology/classifier/" + id + "/tp";
+        }
+
+        return "redirect:/technology/classifier";
+    }
+
+    /**
+     * Страница «Изменить базовый техпроцесс» изделия.
+     */
+    @GetMapping("/{id}/tp/basic")
+    public String basicTechProcessPage(
+            @PathVariable Long id,
+            Model model,
+            RedirectAttributes redirectAttributes
+    ) {
+        try {
+            model.addAttribute(
+                    "classifier",
+                    classifierService.findOne(id)
+            );
+
+            model.addAttribute(
+                    "appliedRoutes",
+                    techProcessService.findRoutesForClassifier(id)
+            );
+
+            fillRoutePageModel(model);
+
+            return "technology/classifier/basic";
+        } catch (EntityNotFoundException exception) {
+            redirectAttributes.addFlashAttribute(
+                    "errorMessage",
+                    exception.getMessage()
+            );
+
+            return "redirect:/technology/classifier";
+        }
+    }
+
+    /**
+     * Перенос базовости на выбранный маршрут изделия.
+     *
+     * Прежняя отметка снимается в сервисе: базовый маршрут у изделия
+     * обязан остаться единственным.
+     */
+    @PostMapping("/{id}/tp/basic")
+    public String changeBasicTechProcess(
+            @PathVariable Long id,
+            @RequestParam Long processId,
+            RedirectAttributes redirectAttributes
+    ) {
+        try {
+            techProcessService.makeBasicForClassifier(
+                    processId,
+                    id
+            );
+
+            redirectAttributes.addFlashAttribute(
+                    "successMessage",
+                    "Базовый техпроцесс изделия изменён"
+            );
+        } catch (
+                EntityNotFoundException |
+                IllegalArgumentException |
+                IllegalStateException exception
+        ) {
+            redirectAttributes.addFlashAttribute(
+                    "errorMessage",
+                    exception.getMessage()
+            );
+
+            return "redirect:/technology/classifier/"
+                    + id + "/tp/basic";
+        }
+
+        return "redirect:/technology/classifier";
+    }
+
+    /**
      * Дополнительная проверка полей,
      * зависящих от выбранного типа изделия.
      */
@@ -392,6 +622,18 @@ public class TechnologyClassifierController {
                     "Укажите наименование классификатора"
             );
         }
+    }
+
+    /**
+     * Минимальная модель страниц работы с техпроцессами изделия.
+     *
+     * Общую fillCommonModel здесь не вызывают: она тянет полный
+     * список классификаторов с составом для форм выбора, а на
+     * страницах «Добавить ТП» и «Изменить базовый ТП» таких форм нет —
+     * лишний тяжёлый запрос на каждое открытие страницы.
+     */
+    private void fillRoutePageModel(Model model) {
+        model.addAttribute("activePage", "classifier");
     }
 
     /**

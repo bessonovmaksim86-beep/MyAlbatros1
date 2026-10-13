@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="ru"
+      xmlns:th="http://www.thymeleaf.org">
+
+<body>
+
+<!-- =========================================================
+     ПУНКТЫ МОДУЛЯ БЮРО ВХОДНОГО КОНТРОЛЯ В МЕНЮ РУКОВОДИТЕЛЯ
+
+     Мастер бюро работает в цеховом модуле (/workshop/**): у него те же
+     сотрудники, календарь и операции подразделения. Но партии приходят
+     и проверяются в /input-control, и без ссылок на них руководителю
+     бюро приходилось бы смотреть работу своих контролёров через чужой
+     адрес или не видеть её вовсе.
+
+     Адреса те же, что в меню исполнителя
+     (input-control/fragments/layout): у руководителя и исполнителя
+     обязан получаться один и тот же список, иначе они говорили бы о
+     разных партиях, глядя в разные реестры.
+
+     Проводку партии руководитель не открывает — решение по партии
+     остаётся за контролёром (см. SecurityConfig), поэтому пункты здесь
+     читющие.
+     ========================================================= -->
+<th:block th:fragment="items">
+
+    <th:block th:if="${bvkModule}">
+
+        <div class="workshop-sidebar__divider"></div>
+
+        <a class="workshop-navigation__item"
+           th:classappend="${activePage == 'bvk-general'} ? ' is-active' : ''"
+           th:href="@{/input-control/general}"
+           title="Обзор бюро входного контроля">
+
+            <span class="workshop-navigation__icon">
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="M3 13h8V3H3v10Zm0 8h8v-6H3v6Zm10 0h8V11h-8v10Zm0-18v6h8V3h-8Z"/>
+                </svg>
+            </span>
+
+            <span class="workshop-navigation__text">
+                Обзор бюро
+            </span>
+        </a>
+
+        <a class="workshop-navigation__item"
+           th:classappend="${activePage == 'bvk-control'} ? ' is-active' : ''"
+           th:href="@{/input-control/control}"
+           title="Входной контроль оприходованных партий">
+
+            <span class="workshop-navigation__icon">
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="M12 1 3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4Zm-1.2 15.2-4-4 1.4-1.4 2.6 2.6 5.6-5.6 1.4 1.4-7 7Z"/>
+                </svg>
+            </span>
+
+            <span class="workshop-navigation__text">
+                Входной контроль
+            </span>
+
+            <span class="workshop-navigation__counter"
+                  th:if="${inWorkCount != null and inWorkCount > 0}"
+                  th:text="${inWorkCount}">
+                2
+            </span>
+        </a>
+
+        <a class="workshop-navigation__item"
+           th:classappend="${activePage == 'bvk-returns'} ? ' is-active' : ''"
+           th:href="@{/input-control/returns}"
+           title="Партии, забракованные с возвратом поставщику">
+
+            <span class="workshop-navigation__icon">
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="M12 5V1L7 6l5 5V7c3.31 0 6 2.69 6 6s-2.69 6-6 6-6-2.69-6-6H4c0 4.42 3.58 8 8 8s8-3.58 8-8-3.58-8-8-8Z"/>
+                </svg>
+            </span>
+
+            <span class="workshop-navigation__text">
+                Возврат поставщику
+            </span>
+
+            <span class="workshop-navigation__counter"
+                  th:if="${returnCount != null and returnCount > 0}"
+                  th:text="${returnCount}">
+                1
+            </span>
+        </a>
+
+        <a class="workshop-navigation__item"
+           th:classappend="${activePage == 'bvk-quarantine'} ? ' is-active' : ''"
+           th:href="@{/input-control/quarantine}"
+           title="Ячейки, оставленные в изоляторе брака">
+
+            <span class="workshop-navigation__icon">
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="M12 2 4 5v6.09c0 5.05 3.41 9.76 8 10.91 4.59-1.15 8-5.86 8-10.91V5l-8-3Zm1 15h-2v-2h2v2Zm0-4h-2V9h2v4Z"/>
+                </svg>
+            </span>
+
+            <span class="workshop-navigation__text">
+                Изолятор брака
+            </span>
+
+            <span class="workshop-navigation__counter"
+                  th:if="${quarantineCount != null and quarantineCount > 0}"
+                  th:text="${quarantineCount}">
+                2
+            </span>
+        </a>
+
+    </th:block>
+
+</th:block>
+
+</body>
+</html>

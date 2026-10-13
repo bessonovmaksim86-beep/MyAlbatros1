@@ -285,6 +285,92 @@
                                             Открыть
                                         </a>
 
+                                        <!--
+                                            Действия строки — те же, что в
+                                            списке заказов на производство:
+                                            эндпоинты (/plan, /reopen, /delete)
+                                            общие для обоих разделов, а
+                                            проекция списка отдаёт те же
+                                            planAllowed, planBlockReason и
+                                            deleteConfirmText, поэтому группа
+                                            не предлагает того, что сервис
+                                            отвергнет.
+                                        -->
+                                        <form method="post"
+                                              th:if="${
+                                                  order.status != null
+                                                  and order.status.name() != 'DONE'
+                                                  and order.status.name() != 'CANCELLED'
+                                              }"
+                                              th:action="@{/dispatcher/production-order/{id}/plan(id=${order.id})}"
+                                              th:attr="data-confirm=${
+                                                  'Взять заказ «' + order.number + '» в работу?'
+                                              }"
+                                              onsubmit="return this.querySelector('button').disabled
+                                                  ? false
+                                                  : confirm(this.getAttribute('data-confirm'));">
+
+                                            <input th:if="${_csrf != null}"
+                                                   type="hidden"
+                                                   th:name="${_csrf.parameterName}"
+                                                   th:value="${_csrf.token}">
+
+                                            <button class="btn primary compact"
+                                                    type="submit"
+                                                    th:disabled="${!order.planAllowed}"
+                                                    th:title="${order.planBlockReason}">
+                                                В работу
+                                            </button>
+
+                                        </form>
+
+                                        <!--
+                                            Возврат из отмены: у отменённого
+                                            группового заказа не оставалось ни
+                                            одного действия, кроме «Открыть».
+                                        -->
+                                        <form method="post"
+                                              th:if="${
+                                                  order.component
+                                                  and order.status != null
+                                                  and order.status.name() == 'CANCELLED'
+                                              }"
+                                              th:action="@{/dispatcher/production-order/{id}/reopen(id=${order.id})}"
+                                              th:attr="data-confirm=${
+                                                  'Вернуть заказ «' + order.number
+                                                  + '» в работу? Заказ перейдёт в статус «Новый».'
+                                              }"
+                                              onsubmit="return confirm(this.getAttribute('data-confirm'));">
+
+                                            <input th:if="${_csrf != null}"
+                                                   type="hidden"
+                                                   th:name="${_csrf.parameterName}"
+                                                   th:value="${_csrf.token}">
+
+                                            <button class="btn primary compact"
+                                                    type="submit">
+                                                Вернуть в работу
+                                            </button>
+
+                                        </form>
+
+                                        <form method="post"
+                                              th:action="@{/dispatcher/production-order/{id}/delete(id=${order.id})}"
+                                              th:attr="data-confirm=${order.deleteConfirmText}"
+                                              onsubmit="return confirm(this.getAttribute('data-confirm'));">
+
+                                            <input th:if="${_csrf != null}"
+                                                   type="hidden"
+                                                   th:name="${_csrf.parameterName}"
+                                                   th:value="${_csrf.token}">
+
+                                            <button class="btn danger compact"
+                                                    type="submit">
+                                                Удалить
+                                            </button>
+
+                                        </form>
+
                                     </div>
 
                                 </td>

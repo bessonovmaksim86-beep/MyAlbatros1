@@ -1,5 +1,6 @@
 package ru.company.production.repository;
 
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -144,6 +145,37 @@ public interface ProductionOrderRepository
     Optional<ProductionOrder> findByNumber(String number);
 
     boolean existsByNumber(String number);
+
+    /*
+     * Глобальный поиск по номеру заказа на производство (ЗНП).
+     *
+     * Выборка отдаёт заказы ЛЮБОГО уровня и вида: автономер единый
+     * («ЗНП-ГГГГ-NNN») и для выпуска, и для комплектующего, поэтому
+     * различить их по номеру нельзя — уровень строке выдачи даёт
+     * getLevelDisplayName() самой сущности.
+     *
+     * Готовый шаблон LIKE, как и в CustomerOrderRepository#search,
+     * передаёт TechnologySearchService. Комментарии внутри @Query
+     * недопустимы.
+     *
+     * Родительский заказ дочитывается fetch-join'ом обязательно:
+     * getLevelDisplayName() спрашивает isRoot(), а тот читает
+     * parentProductionOrder; при open-in-view: false ленивая связь
+     * вне сессии дала бы LazyInitializationException — ровно так же,
+     * как это учтено в findDetailedById.
+     */
+    @Query("""
+            select distinct ord
+            from ProductionOrder ord
+            left join fetch ord.parentProductionOrder
+            where ord.active = true
+              and lower(ord.number) like lower(:pattern)
+            order by ord.orderDate desc, ord.number desc
+            """)
+    List<ProductionOrder> search(
+            @Param("pattern") String pattern,
+            Pageable pageable
+    );
 
     boolean existsByNumberAndIdNot(String number, Long id);
 
@@ -400,5 +432,78 @@ public interface ProductionOrderRepository
             @Param("kinds") List<ZnpKind> kinds,
             @Param("kittingCode") String kittingCode,
             @Param("bvkUnitCode") String bvkUnitCode
+    );
+
+    /*
+     * ============================================================
+     * Комплектование подсборок в ЗНП (склад полуфабрикатов)
+     * ============================================================
+     *
+     * Граница раздела — сама операция заказа, а не маршрут техпроцесса:
+     * склад принимает подсборки по операции, закреплённой за заказом
+     * (production_operation_id), и именно она обязана быть операцией
+     * приёма на склад (тип RECEIVING) подразделения «Склад
+     * полуфабрикатов». Отличие от ремонтного комплектования, где
+     * операция ищётся внутри техпроцесса: здесь маршрут заказу не
+     * назначают, и искать операцию в техпроцессе было бы негде.
+     *
+     * В список берут заказы в работе: закрытый или отменённый заказ
+     * складу не интересен, а «новый» ещё не поднят в работу.
+     */
+
+    /**
+     * Действующие ЗНП с операцией приёма на склад полуфабрикатов —
+     * список раздела «Комплектование подсборок в ЗНП».
+     *
+     * Заказ обязан быть комплектующим (родитель задан): выпуск
+     * подсборки на склад не принимает, у него другой маршрут.
+     *
+     * Справочники дочитаны fetch-join'ом: open-in-view выключен, и
+     * номер родителя, вид заказа, наименование операции и автор в
+     * шаблоне читались бы через ленивую связь вне сессии.
+     */
+    @Query("""
+            select distinct ord
+            from ProductionOrder ord
+            left join fetch ord.parentProductionOrder parent
+            left join fetch ord.productClassifier
+            left join fetch ord.productionOperation operation
+            left join fetch operation.operationName
+            left join fetch operation.operationType
+            left join fetch operation.organizationUnit
+            left join fetch ord.createdBy
+            where ord.active = true
+              and ord.status = :status
+              and ord.parentProductionOrder is not null
+              and ord.productionOperation is not null
+              and operation.operationType.code = :receivingCode
+              and operation.organizationUnit.code = :unitCode
+            order by ord.orderDate desc, ord.number desc
+            """)
+    List<ProductionOrder> findSubassemblyKittingOrders(
+            @Param("status") ProductionOrderStatus status,
+            @Param("receivingCode") String receivingCode,
+            @Param("unitCode") String unitCode
+    );
+
+    /**
+     * Тот же отбор количеством: счётчик пункта меню. Отдельный запрос,
+     * а не size() списка — страница существует без загрузки заказа
+     * целиком, а fetch-join'ы счётчику не нужны.
+     */
+    @Query("""
+            select count(ord)
+            from ProductionOrder ord
+            where ord.active = true
+              and ord.status = :status
+              and ord.parentProductionOrder is not null
+              and ord.productionOperation is not null
+              and ord.productionOperation.operationType.code = :receivingCode
+              and ord.productionOperation.organizationUnit.code = :unitCode
+            """)
+    long countSubassemblyKittingOrders(
+            @Param("status") ProductionOrderStatus status,
+            @Param("receivingCode") String receivingCode,
+            @Param("unitCode") String unitCode
     );
 }

@@ -1083,6 +1083,17 @@ public class DispatcherController {
 
         model.addAttribute("order", order);
 
+        /*
+         * Причина, по которой заказ нельзя взять в работу (null — можно).
+         * Карточка раньше не предлагала запуск вовсе: диспетчер видел
+         * «Отменить» и «Удалить» и обязан был идти за «В работу» в список.
+         * Проверка повторяет ProductionOrderService#plan и
+         * ProductionOrderListItemView#getPlanBlockReason — тот же признак
+         * (позиции без номера ЗНП), поэтому карточка и список не спорят о
+         * том, разрешён ли запуск.
+         */
+        model.addAttribute("planBlockReason", planBlockReason(order));
+
         model.addAttribute(
                 "items",
                 productionOrderItemRepository.findItemsByOrderId(id)
@@ -1339,6 +1350,37 @@ public class DispatcherController {
      * на страницу заказа, успех — тоже на неё, чтобы был виден
      * новый статус.
      */
+    /**
+     * Причина, по которой заказ нельзя взять в работу, либо {@code null}.
+     *
+     * Карточка показывает кнопку «В работу» и без этой причины, но
+     * отключённая кнопка обязана объяснять отказ наведением — так же, как
+     * это делает подсказка в списке (см.
+     * ProductionOrderListItemView#getPlanBlockReason). Здесь тот же
+     * признак: закрытый статус и позиции состава без номера ЗНП.
+     *
+     * Остальные проверки сервиса (вложенные комплектующие, план операций)
+     * не дублируются: они требуют обхода дерева, а отказывает в них
+     * сервис — баннером после возврата на карточку.
+     */
+    private String planBlockReason(ProductionOrder order) {
+
+        ProductionOrderStatus status = order.getStatus();
+
+        if (status == ProductionOrderStatus.DONE
+                || status == ProductionOrderStatus.CANCELLED) {
+            return "Заказ закрыт и не может быть взят в работу";
+        }
+
+        long missing = productionOrderItemRepository
+                .countWithoutZnpByOrderId(order.getId());
+
+        return missing > 0
+                ? "Внесены не все ЗНП: осталось заполнить " + missing
+                        + " — заполните номер напротив каждого серийника"
+                : null;
+    }
+
     private String runProductionAction(
             Runnable action,
             Long id,

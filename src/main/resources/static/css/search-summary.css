@@ -1,0 +1,215 @@
+/*
+ * Общий интерфейс поиска: сводка по объекту и страница поиска.
+ *
+ * Переменные --navy, --orange, --muted, --line и классы .app,
+ * .sidebar, .topbar, .card, .btn берутся из technology.css, который
+ * подключается раньше этого файла. Здесь только то, чего в общей
+ * палитре нет: раскладка сводки и перечня результатов.
+ */
+
+/* Пробел между левыми часами topbar и правыми кнопками. */
+.topbar-spacer {
+    flex: 1;
+}
+
+/* ---------- Сводка по объекту ---------- */
+
+.search-summary {
+    max-width: 820px;
+}
+
+.search-summary__head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 16px;
+    margin-bottom: 18px;
+}
+
+.search-summary__title {
+    margin: 0;
+    font-size: 26px;
+    line-height: 1.2;
+    color: var(--text);
+    word-break: break-word;
+}
+
+.search-summary__kind {
+    margin: 6px 0 0;
+    color: var(--muted);
+    font-size: 13px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: .6px;
+}
+
+.search-summary__status {
+    flex-shrink: 0;
+    padding: 6px 14px;
+    border-radius: 999px;
+    background: #fff0df;
+    color: var(--orange);
+    font-size: 13px;
+    font-weight: 700;
+    white-space: nowrap;
+}
+
+/*
+ * Перечень свойств: dt — подпись, dd — значение. Двухколоночная сетка
+ * держит подписи в одной колонне, чтобы длинные значения не «уезжали»
+ * и список читался по вертикали.
+ */
+.search-summary__fields {
+    margin: 0;
+    display: grid;
+    gap: 0;
+}
+
+.search-summary__field {
+    display: grid;
+    grid-template-columns: 220px minmax(0, 1fr);
+    gap: 16px;
+    padding: 12px 0;
+    border-bottom: 1px solid var(--line);
+}
+
+.search-summary__field:last-child {
+    border-bottom: 0;
+}
+
+.search-summary__field dt {
+    color: var(--muted);
+    font-size: 13px;
+    font-weight: 600;
+}
+
+.search-summary__field dd {
+    margin: 0;
+    color: var(--text);
+    font-size: 14px;
+    word-break: break-word;
+}
+
+.search-summary__actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-top: 22px;
+}
+
+/* ---------- Страница поиска ---------- */
+
+.search-page {
+    max-width: 820px;
+}
+
+.search-page__form {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 22px;
+}
+
+.search-page__input {
+    flex: 1;
+    height: 46px;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 0 16px;
+    font-size: 15px;
+    font-family: inherit;
+    color: var(--text);
+    background: #fff;
+}
+
+.search-page__input:focus {
+    outline: none;
+    border-color: var(--navy);
+    box-shadow: 0 0 0 3px rgba(7, 62, 117, .12);
+}
+
+.search-page__group {
+    margin: 0 0 22px;
+}
+
+.search-page__group-label {
+    margin: 0 0 10px;
+    color: var(--muted);
+    font-size: 12px;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: .8px;
+}
+
+.search-page__list {
+    display: grid;
+    gap: 8px;
+}
+
+.search-page__item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 14px;
+    padding: 13px 16px;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    background: #fff;
+    box-shadow: var(--shadow);
+    transition: border-color .15s ease, transform .05s ease;
+}
+
+.search-page__item:hover {
+    border-color: var(--navy);
+}
+
+.search-page__item:active {
+    transform: translateY(1px);
+}
+
+.search-page__item-data {
+    display: grid;
+    gap: 3px;
+    min-width: 0;
+}
+
+.search-page__item-title {
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--text);
+    word-break: break-word;
+}
+
+.search-page__item-subtitle {
+    font-size: 13px;
+    color: var(--muted);
+    word-break: break-word;
+}
+
+.search-page__item-kind {
+    flex-shrink: 0;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--navy);
+    background: #eaf1f8;
+    padding: 4px 10px;
+    border-radius: 999px;
+    white-space: nowrap;
+}
+
+.search-page__empty {
+    padding: 26px;
+    text-align: center;
+    color: var(--muted);
+    font-size: 14px;
+}
+
+@media (max-width: 640px) {
+    .search-summary__field {
+        grid-template-columns: minmax(0, 1fr);
+        gap: 4px;
+    }
+
+    .search-summary__head {
+        flex-direction: column;
+    }
+}

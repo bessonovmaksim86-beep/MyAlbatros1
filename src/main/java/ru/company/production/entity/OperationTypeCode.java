@@ -12,7 +12,9 @@ public enum OperationTypeCode {
     RETURN("Возвратная"),
     WORK_DISTRIBUTION("Распределение работ"),
     KIT_RECEIPT("Получение комплектации"),
-    KITTING("Комплектовочная");
+    KITTING("Комплектовочная"),
+    CONTROL("Контрольная"),
+    RECEIVING("Приёмка на склад");
 
     private final String displayName;
 }

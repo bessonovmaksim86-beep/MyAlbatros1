@@ -18,20 +18,26 @@
 
     <link rel="stylesheet"
           th:href="@{/workshop/css/workshop.css}">
+
+    <link rel="stylesheet"
+          th:if="${isSKGeneral}"
+          th:href="@{/quality/css/quality.css}">
 </head>
 
 <body>
 
 <div class="app-shell">
 
-    <aside th:replace="~{workshop/fragments/layout
-            :: sidebar('operations')}">
+    <aside th:replace="${isSKGeneral}
+            ? ~{quality/fragments/layout :: sidebar(${activePage})}
+            : ~{workshop/fragments/layout :: sidebar('operations')}">
     </aside>
 
     <main class="main">
 
-        <header th:replace="~{workshop/fragments/layout
-                :: topbar}">
+        <header th:replace="${isSKGeneral}
+                ? ~{quality/fragments/layout :: topbar}
+                : ~{workshop/fragments/layout :: topbar}">
         </header>
 
         <div class="page-content workshop-page">
@@ -99,7 +105,16 @@
 
             </div>
 
-            <section class="card">
+            <!--
+                Форма рабочего места — только пользователям с правами
+                на изменение (fullModule или canViewUnit). Служба
+                качества заходит в раздел почитать операции своего
+                подразделения: POST /workshop/operations/work-place/create
+                перед её ролью закрыт, и кнопка здесь была бы приглашением
+                на 403.
+            -->
+            <section class="card"
+                     th:if="${canManage}">
 
                 <div class="card-head">
 
@@ -132,10 +147,36 @@
                         <input type="hidden"
                                th:field="*{serviceId}">
 
+                        <!--
+                            Подразделение зафиксировано, только если оно
+                            одно — у мастера цеха или склада. Руководителю
+                            службы служба отвечает за БТК и БВК разом: ему
+                            дают селект, иначе оба бюро работали бы одними
+                            рабочими местами.
+                        -->
                         <input type="hidden"
+                               th:unless="${formUnits != null and formUnits.size() > 1}"
                                th:field="*{organizationUnitId}">
 
                         <div class="form-grid">
+
+                            <div class="field"
+                                 th:if="${formUnits != null and formUnits.size() > 1}">
+
+                                <label for="workPlaceUnitId">Подразделение</label>
+
+                                <select id="workPlaceUnitId"
+                                        th:field="*{organizationUnitId}">
+
+                                    <option th:each="unit : ${formUnits}"
+                                            th:value="${unit.id}"
+                                            th:text="${unit.name}">
+                                        Бюро технического контроля
+                                    </option>
+
+                                </select>
+
+                            </div>
 
                             <div class="field">
 
@@ -314,7 +355,7 @@
                                 <th>Наименование</th>
                                 <th>Тип</th>
                                 <th>Исполнитель</th>
-                                <th></th>
+                                <th th:if="${canManage}"></th>
                             </tr>
 
                             </thead>
@@ -369,7 +410,7 @@
                                     Исполнитель
                                 </td>
 
-                                <td>
+                                <td th:if="${canManage}">
 
                                     <form th:action="@{/workshop/operations/operation/delete}"
                                           method="post"
@@ -465,7 +506,7 @@
                                 <th>Наименование</th>
                                 <th>Тип</th>
                                 <th>Исполнитель</th>
-                                <th></th>
+                                <th th:if="${canManage}"></th>
                             </tr>
 
                             </thead>
@@ -512,7 +553,7 @@
                                     Исполнитель
                                 </td>
 
-                                <td>
+                                <td th:if="${canManage}">
 
                                     <form th:action="@{/workshop/operations/work-place/delete}"
                                           method="post"
@@ -559,8 +600,9 @@
 
 </div>
 
-<th:block th:replace="~{workshop/fragments/layout
-        :: commonScripts}">
+<th:block th:replace="${isSKGeneral}
+        ? ~{quality/fragments/layout :: commonScripts}
+        : ~{workshop/fragments/layout :: commonScripts}">
 </th:block>
 
 <script th:src="@{/workshop/js/operations.js}"></script>

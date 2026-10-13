@@ -867,8 +867,20 @@ body {
     border-radius: 99px;
 }
 
+/*
+ * Выходной день месяца: фон обязан читаться рядом с белым фоном
+ * рабочего дня — иначе руководитель не отличает субботу от будня
+ * и требует отмечать то, что уже видно. Шапка таблицы получает
+ * тот же класс (headerCells строит те же cellClass), поэтому
+ * затемняется сильнее ячеек.
+ */
 .workshop-calendar__day.is-weekend {
-    background: #f7fafc;
+    background: #e8eef4;
+}
+
+.workshop-calendar thead .workshop-calendar__day.is-weekend {
+    background: #d7e2ec;
+    color: #51637a;
 }
 
 .workshop-calendar__day.is-today {
@@ -935,6 +947,18 @@ body {
 }
 
 /*
+ * Выходной: справочник администратора раскладывает AbsenceType.DAY_OFF
+ * по всем сотрудникам тем же отметком, что и отсутствия, поэтому день
+ * обязан краситься наравне с отпуском и больничным. Без этого класса
+ * нерабочий день оставался бы пустой ячейкой — руководитель видел бы
+ * «рабочий» день там, где предприятие не работает.
+ */
+.workshop-day.is-dayoff {
+    color: #ffffff;
+    background: #64748b;
+}
+
+/*
  * Выделение диапазона мышью: ячейки помечает скрипт, а форма
  * в это же время получает границы диапазона, поэтому отметка и
  * выделение всегда совпадают.
@@ -945,7 +969,8 @@ body {
 
 .workshop-day.is-vacation.is-selected,
 .workshop-day.is-sick.is-selected,
-.workshop-day.is-unpaid.is-selected {
+.workshop-day.is-unpaid.is-selected,
+.workshop-day.is-dayoff.is-selected {
     box-shadow:
         inset 0 0 0 2px #ef7d00,
         inset 0 0 0 4px rgba(255, 255, 255, 0.75);

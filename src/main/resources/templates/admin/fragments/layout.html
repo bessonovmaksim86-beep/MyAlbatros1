@@ -227,11 +227,15 @@
 
     <header class="topbar admin-topbar">
 
-        <div class="admin-topbar__left">
+        <div class="admin-topbar__left gs-host">
 
-            <span class="admin-topbar__section">
+            <span class="gs-host__section">
                 Модуль администрирования
             </span>
+
+            <div th:replace="~{fragments/global-search
+                    :: field('Поиск по техпроцессам, изделиям, операциям и рабочим местам; заказ — по номеру (ЗП-2026-005 или 57)')}">
+            </div>
         </div>
 
         <div class="admin-topbar__right">

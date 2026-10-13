@@ -85,6 +85,61 @@ public class SerialMovementJournalService {
         }
     }
 
+    /**
+     * Ячейки взяты из изолятора в ремонтный заказ-комплектующий.
+     *
+     * Заказ кладётся в свободную колонку production_order_id (V42): у
+     * события уже есть ремонтный заказ службы качества, и смешивать их
+     * в одной колонке нельзя — «заказ на ремонт» и «заказ-комплектующий
+     * на производство» разные документы, а по журналу нужно различать,
+     * кто именно забрал ячейку.
+     *
+     * Момент передаётся параметром, а не берётся здесь: проводка
+     * состава и журнала обязана нести одну и ту же дату, иначе в
+     * карточке ячейки комплектование и её строка в заказе
+     * разошлись бы по времени.
+     */
+    @Transactional
+    public void recordKittedToRepairZnp(List<RepairKittingItem> items,
+                                        ProductionOrder order,
+                                        AppUser actor,
+                                        LocalDateTime moment) {
+        for (RepairKittingItem item : items) {
+            SerialMovementEvent event = newEvent(
+                    item.getFullNumber(), null,
+                    SerialMovementType.KITTED_TO_REPAIR_ZNP,
+                    moment, actor, null, null, null);
+
+            event.setProductionOrder(order);
+
+            journalRepository.save(event);
+        }
+    }
+
+    /**
+     * Ячейки внесены в ЗНП (склад полуфабрикатов).
+     *
+     * Обратное к ACCEPTED: ячейка уходит со склада в производство.
+     * Заказ-комплектующий (V20) кладётся в колонку production_order_id,
+     * чтобы по журналу можно было понять, в какой именно заказ ушла
+     * ячейка.
+     */
+    @Transactional
+    public void recordInProduction(List<ProductSerial> serials,
+                                   ProductionOrder order,
+                                   AppUser actor) {
+        for (ProductSerial serial : serials) {
+            SerialMovementEvent event = newEvent(
+                    serial.getFullNumber(), serial.getId(),
+                    SerialMovementType.IN_PRODUCTION,
+                    LocalDateTime.now(), actor, null, null, null);
+
+            event.setProductionOrder(order);
+
+            journalRepository.save(event);
+        }
+    }
+
     /** Хронология номера (карточка/отчёт). */
     @Transactional(readOnly = true)
     public List<SerialMovementEvent> historyOf(String fullNumber) {

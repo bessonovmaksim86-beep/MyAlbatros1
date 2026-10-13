@@ -56,6 +56,15 @@ public interface UserRepository extends JpaRepository<AppUser, Long> {
             Long organizationUnitId
     );
 
+    /*
+     * Сотрудники по списку подразделений: руководитель службы качества
+     * отвечает за БТК и БВК разом, и выборка одного подразделения
+     * показала бы ему половину его людей.
+     */
+    List<AppUser> findByOrganizationUnitIdInAndActiveTrueOrderByFullNameAscUsernameAsc(
+            List<Long> organizationUnitIds
+    );
+
     /**
      * Сотрудники по роли: резервный список цеха, когда у руководителя
      * подразделение в справочнике не заполнено.

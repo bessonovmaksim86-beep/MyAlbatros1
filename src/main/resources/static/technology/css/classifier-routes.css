@@ -1,0 +1,207 @@
+/* =========================================================
+   Колонка «Техпроцессы» и выравнивание кнопок списка
+   классификатора
+
+   Отдельный файл, а не правка classifier.css: здесь только то,
+   что относится к колонкам техпроцессов, сетке кнопок и флагу
+   базовости, поэтому страницы создания и изменения классификатора
+   не затрагиваются.
+   ========================================================= */
+
+/*
+ * Раскладка таблицы фиксируется (table-layout: fixed), а не
+ * рассчитывается браузером по содержимому.
+ *
+ * При авторасчёте ширина колонок «Техпроцессы» и «Действия»
+ * определялась бы самым широким содержимым строки: плашки кодов ТП
+ * и подписи кнопок в разных строках имеют разную ширину, поэтому
+ * левый край кнопок уезжал то вправо, то влево и кнопки в колонке
+ * не выстраивались по одной вертикали. Фиксированная раскладка с
+ * явными ширинами делает обе колонки постоянными во всех строках,
+ * и кнопки начинают стоять ровно друг под другом.
+ *
+ * Ширина колонок задана в процентах, чтобы таблица одинаково
+ * выглядела на разных мониторах: сумма ширинок равна 100%.
+ */
+.classifier-list-table {
+    table-layout: fixed;
+    width: 100%;
+}
+
+/* Код */
+.classifier-list-table th:nth-child(1),
+.classifier-list-table td:nth-child(1) {
+    width: 6%;
+}
+
+/* Тип изделия */
+.classifier-list-table th:nth-child(2),
+.classifier-list-table td:nth-child(2) {
+    width: 10%;
+}
+
+/* Наименование */
+.classifier-list-table th:nth-child(3),
+.classifier-list-table td:nth-child(3) {
+    width: 24%;
+}
+
+/* Техпроцессы */
+.classifier-list-table th:nth-child(4),
+.classifier-list-table td:nth-child(4) {
+    width: 14%;
+}
+
+/* Действия: 4 кнопки в один ряд. */
+.classifier-list-table th:nth-child(5),
+.classifier-list-table td:nth-child(5) {
+    width: 46%;
+}
+
+/*
+ * Длинное наименование и коды ТП переносятся внутри своей колонки,
+ * а не растягивают её: иначе фиксированная ширина была бы лишь
+ * пожеланием и колонки снова поплыли бы.
+ */
+.classifier-list-table td {
+    overflow-wrap: anywhere;
+    vertical-align: middle;
+}
+
+/*
+ * Кнопки строятся сеткой с равными колонками на всю ширину ячейки:
+ * четыре кнопки занимают одинаковую ширину и стоят в одних и тех же
+ * позициях в каждой строке.
+ *
+ * Правила привязаны к таблице списка (classifier-list-table), а не
+ * ко всей странице: на страницах «Добавить ТП» и «Изменить базовый
+ * ТП» в .table-actions по одной кнопке, и жёсткая сетка им не нужна.
+ */
+.classifier-list-table .table-actions {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    align-items: stretch;
+    gap: 6px;
+}
+
+.classifier-list-table .table-actions .btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    min-height: 38px;
+    margin: 0;
+    padding: 8px 6px;
+    border: 0;
+    border-radius: 9px;
+    text-align: center;
+    white-space: normal;
+    line-height: 1.25;
+    overflow-wrap: break-word;
+}
+
+/*
+ * Формы «Сделать базовым» стоят в той же сетке, что и ссылки, поэтому
+ * поле формы не должно добавлять собственных отступов. Правило общее:
+ * формы есть и в списке, и на странице переноса базовости.
+ */
+.classifier-page .table-actions form {
+    margin: 0;
+}
+
+/* Код техпроцесса в ячейке: компактная плашка, а не текст. */
+.tp-code {
+    display: inline-block;
+    padding: 3px 9px;
+    border-radius: 7px;
+    background: #eef2f7;
+    color: #344054;
+    font-size: 12px;
+    font-weight: 700;
+    line-height: 1.4;
+}
+
+/* Базовый маршрут изделия — единственный, его выделяют зелёным. */
+.tp-code--basic {
+    background: #dcfce7;
+    color: #166534;
+}
+
+/* Пустое значение колонки: «техпроцессов нет», «базовый не задан». */
+.tp-code-empty {
+    color: #98a2b3;
+    font-size: 12px;
+    line-height: 1.4;
+}
+
+/*
+ * Несколько кодов в одной ячейке переносятся списком: у изделия
+ * может быть больше двух маршрутов, и строка не должна растягивать
+ * таблицу по горизонтали.
+ */
+.classifier-routes {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+}
+
+/* =========================================================
+   Флаг «сделать базовым» на странице добавления техпроцесса
+   ========================================================= */
+
+/*
+ * Чекбокс — не отдельная карточка, а строка под выбором маршрута:
+ * он уточняет то же действие, а не создаёт новый шаг.
+ */
+.classifier-checkbox-field {
+    padding: 14px 16px;
+    border: 1px solid #dbe5f4;
+    border-radius: 12px;
+    background: linear-gradient(145deg, #f8fbff, #ffffff);
+}
+
+.classifier-checkbox {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    margin: 0;
+    color: #344054;
+    font-size: 14px;
+    font-weight: 650;
+    line-height: 1.45;
+    cursor: pointer;
+}
+
+.classifier-checkbox input {
+    flex: 0 0 auto;
+    width: 18px;
+    height: 18px;
+    margin: 1px 0 0;
+    accent-color: var(--classifier-primary, #2563eb);
+    cursor: pointer;
+}
+
+.classifier-checkbox-field small {
+    margin-left: 28px;
+}
+
+/*
+ * На узких экранах фиксированная раскладка ломается: четыре кнопки и
+ * пять колонок не помещаются. Возвращаем авторасчёт колонок, а кнопки
+ * перестраиваем в две колонки — так внутри карточки не появляется
+ * горизонтальный скролл.
+ */
+@media (max-width: 1100px) {
+    .classifier-list-table {
+        table-layout: auto;
+    }
+
+    .classifier-list-table th,
+    .classifier-list-table td {
+        width: auto;
+    }
+
+    .classifier-list-table .table-actions {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}

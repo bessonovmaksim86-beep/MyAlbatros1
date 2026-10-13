@@ -1,5 +1,6 @@
 package ru.company.production.repository;
 
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -89,6 +90,38 @@ public interface CustomerOrderRepository
     Optional<CustomerOrder> findByNumber(String number);
 
     boolean existsByNumber(String number);
+
+    /*
+     * Глобальный поиск по номеру заказа покупателя (ЗП).
+     *
+     * Ищем только по номеру: у заказа нет наименования, а заказчик и
+     * статус — уточнение строки выдачи, а не признак поиска (заказ
+     * помнят именно его номером).
+     *
+     * Готовый шаблон LIKE передаёт TechnologySearchService, а не
+     * подстраивается здесь: разделители номера («ЗП-2026-005») он
+     * заменяет на «%» и сам решает, где шаблон обязан оборваться.
+     * Завершающая «%» не дописывается сознательно — иначе запрос
+     * «ЗП57» выдал бы и «ЗП-2026-571». Регистр, как и в прочих
+     * поисковых выборках модуля, не учитывается; внутри @Query
+     * комментарии недопустимы.
+     *
+     * Заказчик дочитывается fetch-join'ом: строка выдачи печатает его
+     * наименование, а open-in-view выключен — ленивая связь вне сессии
+     * дала бы LazyInitializationException.
+     */
+    @Query("""
+            select distinct ord
+            from CustomerOrder ord
+            join fetch ord.customer
+            where ord.active = true
+              and lower(ord.number) like lower(:pattern)
+            order by ord.orderDate desc, ord.number desc
+            """)
+    List<CustomerOrder> search(
+            @Param("pattern") String pattern,
+            Pageable pageable
+    );
 
     boolean existsByNumberAndIdNot(String number, Long id);
 

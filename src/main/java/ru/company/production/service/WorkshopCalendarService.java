@@ -250,12 +250,12 @@ public class WorkshopCalendarService {
     ) {
         if (employeeIds == null || employeeIds.isEmpty()) {
             List<AppUser> all = staffService.findEmployees(
-                    staffService.workshopUnitId(supervisor)
+                    staffService.unitScope(supervisor)
             );
 
             if (all.isEmpty()) {
                 throw new IllegalArgumentException(
-                        "В вашем цехе нет сотрудников"
+                        "В вашем подразделении нет сотрудников"
                 );
             }
 

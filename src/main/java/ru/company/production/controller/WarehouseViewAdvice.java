@@ -11,6 +11,7 @@ import ru.company.production.repository.UserRepository;
 import ru.company.production.service.BvkAcceptanceService;
 import ru.company.production.service.CellReceivingService;
 import ru.company.production.service.ModuleRoutes;
+import ru.company.production.service.SubassemblyKittingService;
 import ru.company.production.service.WarehouseKittingService;
 import ru.company.production.service.ZnpAcceptanceService;
 
@@ -32,7 +33,8 @@ import java.util.Locale;
         WarehouseAcceptanceController.class,
         WarehouseZnpAcceptanceController.class,
         WarehouseSupplierController.class,
-        WarehouseKittingController.class
+        WarehouseKittingController.class,
+        SubassemblyKittingController.class
 })
 @RequiredArgsConstructor
 public class WarehouseViewAdvice {
@@ -42,6 +44,7 @@ public class WarehouseViewAdvice {
     private final BvkAcceptanceService acceptanceService;
     private final ZnpAcceptanceService znpAcceptanceService;
     private final WarehouseKittingService kittingService;
+    private final SubassemblyKittingService subassemblyKittingService;
 
     @ModelAttribute
     public void addWarehouseContext(
@@ -88,6 +91,17 @@ public class WarehouseViewAdvice {
                 kittingService.countOperations(
                         WarehouseKittingService.Section.SEMI_FINISHED
                 )
+        );
+
+        /*
+         * Заказы-комплектующие с операцией приёмки на склад
+         * полуфабрикатов: кладовщик обязан видеть объём комплектования,
+         * не заходя в сам раздел, — иначе счётчик терялся бы за
+         * переходом.
+         */
+        model.addAttribute(
+                "subassemblyKittingCount",
+                subassemblyKittingService.countPending()
         );
 
         if (authentication == null

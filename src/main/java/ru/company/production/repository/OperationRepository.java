@@ -1,5 +1,6 @@
 package ru.company.production.repository;
 
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
@@ -141,6 +142,78 @@ public interface OperationRepository
             @Param("organizationUnitId") Long organizationUnitId
     );
 
+    /*
+     * Тот же список, но по нескольким подразделениям — граница
+     * руководителя службы качества: он отвечает за БТК и БВК разом, и
+     * запрос одного подразделения показал бы ему только одно из них.
+     * Пустой список в JPQL — синтаксическая ошибка, поэтому вызывающая
+     * сторона обязана проверить границу до обращения.
+     */
+    @EntityGraph(attributePaths = {
+            "operationName",
+            "operationType",
+            "service",
+            "organizationUnit",
+            "executorRole"
+    })
+    @Query("""
+            select operation
+            from Operation operation
+            where operation.organizationUnit.id in :organizationUnitIds
+            order by operation.organizationUnit.name asc,
+                     operation.operationName.name asc
+            """)
+    List<Operation> findAllByOrganizationUnitIds(
+            @Param("organizationUnitIds") List<Long> organizationUnitIds
+    );
+
+    /**
+     * Операции по списку подразделений с ролью исполнителя — граница
+     * службы качества для закрепления работ.
+     */
+    @EntityGraph(attributePaths = {
+            "operationName",
+            "operationType",
+            "service",
+            "organizationUnit",
+            "executorRole"
+    })
+    @Query("""
+            select operation
+            from Operation operation
+            where operation.organizationUnit.id in :organizationUnitIds
+              and operation.executorRole.code = :executorRoleCode
+            order by operation.organizationUnit.name asc,
+                     operation.operationName.name asc
+            """)
+    List<Operation> findUnitExecutorOperationsByUnitIds(
+            @Param("organizationUnitIds") List<Long> organizationUnitIds,
+            @Param("executorRoleCode") String executorRoleCode
+    );
+
+    /**
+     * Операции получения комплектации по списку подразделений.
+     */
+    @EntityGraph(attributePaths = {
+            "operationName",
+            "operationType",
+            "service",
+            "organizationUnit",
+            "executorRole"
+    })
+    @Query("""
+            select operation
+            from Operation operation
+            where operation.organizationUnit.id in :organizationUnitIds
+              and operation.operationType.code = :typeCode
+            order by operation.organizationUnit.name asc,
+                     operation.operationName.name asc
+            """)
+    List<Operation> findUnitKitReceiptOperationsByUnitIds(
+            @Param("organizationUnitIds") List<Long> organizationUnitIds,
+            @Param("typeCode") String typeCode
+    );
+
     /**
      * Количество операций подразделения — счётчик бокового меню.
      * Отдельный запрос нужен потому, что для счётчика в списке строк
@@ -148,6 +221,19 @@ public interface OperationRepository
      * означало бы читать справочник без надобности.
      */
     long countByOrganizationUnitId(Long organizationUnitId);
+
+    /**
+     * Количество операций по списку подразделений — счётчик меню для
+     * границы службы качества.
+     */
+    @Query("""
+            select count(operation)
+            from Operation operation
+            where operation.organizationUnit.id in :organizationUnitIds
+            """)
+    long countByOrganizationUnitIds(
+            @Param("organizationUnitIds") List<Long> organizationUnitIds
+    );
 
     @Query("""
             select count(operation)
@@ -227,5 +313,30 @@ public interface OperationRepository
 
             @Param("operationId")
             Long operationId
+    );
+
+    /*
+     * Глобальный поиск операций.
+     *
+     * Ищем по имени операции и типу: именно по этим полям
+     * пользователь ориентируется в списке операций.
+     */
+    @Query("""
+            select operation.id as id,
+                   operationName.name as operationName,
+                   operationType.code as operationTypeCode,
+                   operationType.name as operationTypeName
+            from Operation operation
+            join operation.operationName operationName
+            join operation.operationType operationType
+            where lower(operationName.name)
+                        like lower(concat('%', :term, '%'))
+               or lower(operationType.name)
+                        like lower(concat('%', :term, '%'))
+            order by operationName.name
+            """)
+    List<OperationSearchView> search(
+            @Param("term") String term,
+            Pageable pageable
     );
 }

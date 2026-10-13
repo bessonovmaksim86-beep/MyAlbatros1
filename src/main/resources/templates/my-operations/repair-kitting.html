@@ -1,0 +1,690 @@
+<!DOCTYPE html>
+<html lang="ru"
+      xmlns:th="http://www.thymeleaf.org">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport"
+          content="width=device-width, initial-scale=1">
+
+    <title>Комплектование ремонтного ЗНП</title>
+
+    <link rel="stylesheet"
+          th:href="@{/technology/css/technology.css}">
+    <link rel="stylesheet"
+          th:href="@{/technology/css/common.css}">
+    <link rel="stylesheet"
+          th:href="@{/workshop/css/workshop.css}">
+    <link rel="stylesheet"
+          th:href="@{/workshop/css/distribution.css}">
+    <link rel="stylesheet"
+          th:href="@{/workshop/css/distribution-groups.css}">
+
+    <!-- Внешний вид фильтра и перечня — те же, что у изолятора брака. -->
+    <link rel="stylesheet"
+          th:href="@{/input-control/css/input-control.css}">
+    <link rel="stylesheet"
+          th:href="@{/input-control/css/quarantine.css}">
+
+    <link rel="stylesheet"
+          th:href="@{/workshop/css/repair-kitting.css}">
+
+    <link rel="stylesheet"
+          th:if="${isSKGeneral}"
+          th:href="@{/quality/css/quality.css}">
+</head>
+
+<body>
+
+<div class="app-shell">
+
+    <aside th:replace="${isSKGeneral}
+            ? ~{quality/fragments/layout :: sidebar('my-operations')}
+            : ~{workshop/fragments/layout :: sidebar('my-operations')}">
+    </aside>
+
+    <main class="main">
+
+        <header th:replace="${isSKGeneral}
+                ? ~{quality/fragments/layout :: topbar}
+                : ~{workshop/fragments/layout :: topbar}">
+        </header>
+
+        <div class="page-content workshop-page">
+
+            <div class="page-head">
+
+                <div class="page-title">
+
+                    <h1>
+                        Комплектование ЗНП
+                        <span th:text="${znp.number()}">ЗК-2026-014</span>
+                    </h1>
+
+                    <p th:text="${
+                        'Ячейки берутся из изолятора брака и проводятся по комплектовочной '
+                        + 'операции бюро: заказ закрывается списком взятых номеров, '
+                        + 'а не отметкой о выполнении'
+                    }">
+                        Ячейки берутся из изолятора брака
+                    </p>
+
+                </div>
+
+                <div class="page-head-actions">
+
+                    <!--
+                        Карточка заказа принадлежит диспетчерскому
+                        модулю, но ссылка ведёт туда, куда ведёт и
+                        прочие заказы этого вида — раздел зависит от
+                        вида заказа, а не от того, кто на неё смотрит.
+                    -->
+                    <a class="btn secondary"
+                       th:href="@{/my-operations}">
+                        Мои операции
+                    </a>
+
+                </div>
+
+            </div>
+
+            <div class="alert success"
+                 th:if="${successMessage}"
+                 th:text="${successMessage}">
+            </div>
+
+            <div class="alert danger"
+                 th:if="${errorMessage}"
+                 th:text="${errorMessage}">
+            </div>
+
+            <!-- =====================================================
+                 ЗАКАЗ И ЕГО ГОТОВНОСТЬ
+
+                 Реквизиты держатся над перечнем: отмечать ячейки
+                 человек начинает, уже сверив изделие, количество и
+                 срок, — иначе состав отмечался бы по памяти.
+                 ===================================================== -->
+            <section class="card">
+
+                <div class="card-head">
+
+                    <div>
+
+                        <h2 th:text="${znp.requiredKindLabel()} + ' в ремонте'">
+                            Ячейка в ремонте
+                        </h2>
+
+                        <small>
+                            Отмеченные ячейки проводятся по комплектовочной
+                            операции заказа; взять можно не больше, чем
+                            заказано
+                        </small>
+
+                    </div>
+
+                    <span class="badge"
+                          th:classappend="${znp.completed()}
+                              ? ' badge--success'
+                              : ' badge--attention'"
+                          th:text="${znp.readinessLabel()}">
+                        Готово 4 из 10
+                    </span>
+
+                </div>
+
+                <!--
+                    Изделие и разновидность в строку не вынесены: вид
+                    заказа задает их оба, и показаны они в его заголовке
+                    — повтор ниже только множил бы одно и то же.
+                -->
+                <div class="kitting-summary">
+
+                    <div class="kitting-summary__item">
+                        <small>Номер ЗНП</small>
+                        <strong th:text="${znp.number()}">ЗК-2026-014</strong>
+                    </div>
+
+                    <div class="kitting-summary__item">
+                        <small>Дата плана</small>
+                        <strong th:text="${znp.plannedDateLabel()}">15.10.2026</strong>
+                    </div>
+
+                    <div class="kitting-summary__item">
+                        <small>Заказано</small>
+                        <strong th:text="${znp.quantityLabel()} + ' шт.'">10 шт.</strong>
+                    </div>
+
+                    <div class="kitting-summary__item">
+                        <small>Техпроцесс</small>
+                        <strong th:text="${znp.techProcessLabel()}">ТП-014</strong>
+                    </div>
+
+                    <div class="kitting-summary__item">
+                        <small>Осталось взять</small>
+                        <strong th:text="${znp.remainingCount()} + ' шт.'">6 шт.</strong>
+                    </div>
+
+                </div>
+
+            </section>
+
+            <!-- =====================================================
+                 ОТБОР ИЗОЛЯТОРА
+
+                 Имена параметров те же, что на странице «Изолятор
+                 брака»: человек, умеющий искать ячейку там, делает то
+                 же здесь. Форма — GET, поэтому отбор возвращается в
+                 адрес и ссылку можно переслать коллеге.
+
+                 Разновидность и изделие в отбор не вынесены: и то и
+                 другое задано самим заказом и показаны в его строке —
+                 предлагать выбрать их значило бы дать возможность
+                 задать заведомо отвергнутый заказом вариант.
+                 ===================================================== -->
+            <form class="bvk-filter"
+                  method="get"
+                  th:action="@{/my-operations/repair-kitting/{id}(id=${znpId})}">
+
+                <input type="hidden"
+                       name="kind"
+                       th:if="${filterKind != null}"
+                       th:value="${filterKind.name()}">
+
+                <input type="hidden"
+                       name="classifierId"
+                       th:if="${filterClassifierId != null}"
+                       th:value="${filterClassifierId}">
+
+                <div class="bvk-filter__field">
+
+                    <label for="kittingReason">Вид брака</label>
+
+                    <select id="kittingReason" name="reasonId">
+
+                        <option value=""
+                                th:selected="${filterReasonId == null}">
+                            Все виды брака
+                        </option>
+
+                        <optgroup th:each="grp : ${reasonGroups}"
+                                  th:if="${grp.reason != null}"
+                                  th:label="${grp.reason.name}">
+
+                            <option th:value="${grp.reason.id}"
+                                    th:text="'Весь тип: ' + ${grp.reason.name}"
+                                    th:selected="${filterReasonId != null and filterReasonId == grp.reason.id}">
+                                Весь тип: Механическое повреждение
+                            </option>
+
+                            <option th:each="child : ${grp.children}"
+                                    th:value="${child.id}"
+                                    th:text="'— ' + ${child.name}"
+                                    th:selected="${filterReasonId != null and filterReasonId == child.id}">
+                                — Скол корпуса
+                            </option>
+
+                        </optgroup>
+
+                        <optgroup th:each="grp : ${reasonGroups}"
+                                  th:if="${grp.reason == null}"
+                                  label="Уточнения без типа">
+
+                            <option th:each="child : ${grp.children}"
+                                    th:value="${child.id}"
+                                    th:text="${child.name}"
+                                    th:selected="${filterReasonId != null and filterReasonId == child.id}">
+                                Скол корпуса
+                            </option>
+
+                        </optgroup>
+
+                    </select>
+
+                    <span class="bvk-filter__hint">
+                        Выбор типа захватывает и его уточнения
+                    </span>
+                </div>
+
+                <div class="bvk-filter__actions">
+
+                    <button type="submit" class="btn primary">
+                        Применить отбор
+                    </button>
+
+                    <a class="btn secondary"
+                       th:href="@{/my-operations/repair-kitting/{id}(id=${znpId})}">
+                        Сбросить
+                    </a>
+
+                </div>
+
+            </form>
+
+            <!-- =====================================================
+                 ПЕРЕЧЕНЬ ЯЧЕЕК И ПРОВЕДЕНИЕ
+
+                 Одна POST-форма на весь перечень: провести надо ровно
+                 то, что отмечено на экране, и ни одна ячейка не должна
+                 потеряться между отметкой и кнопкой. Фильтр
+                 возвращается скрытыми полями — после проведения
+                 исполнитель остаётся на том же отборе.
+
+                 Уже взятые ячейки показаны, но не отмечаются: человек
+                 обязан видеть, что заказ частично закрыт ранее (возможно,
+                 другим контролёром), иначе он искал бы ячейку, которой
+                 «нет».
+                 ===================================================== -->
+            <form method="post"
+                  th:action="@{/my-operations/repair-kitting/{id}/kit(id=${znpId})}">
+
+                <input th:if="${_csrf != null}"
+                       type="hidden"
+                       th:name="${_csrf.parameterName}"
+                       th:value="${_csrf.token}">
+
+                <input type="hidden"
+                       name="kind"
+                       th:if="${filterKind != null}"
+                       th:value="${filterKind.name()}">
+
+                <input type="hidden"
+                       name="classifierId"
+                       th:if="${filterClassifierId != null}"
+                       th:value="${filterClassifierId}">
+
+                <input type="hidden"
+                       name="reasonId"
+                       th:if="${filterReasonId != null}"
+                       th:value="${filterReasonId}">
+
+                <section class="card">
+
+                    <div class="card-head">
+
+                        <div>
+
+                            <h2>Ячейки в изоляторе брака</h2>
+
+                            <small>
+                                Отметьте ячейки, которые берёте в заказ.
+                                Проведение закрывает комплектовочную
+                                операцию бюро по каждой отмеченной ячейке
+                                и записывает её в журнал перемещений
+                            </small>
+
+                        </div>
+
+                        <span class="badge"
+                              th:if="${cells != null and !#lists.isEmpty(cells)}"
+                              th:text="'строк: ' + ${#lists.size(cells)}">
+                            строк: 24
+                        </span>
+
+                    </div>
+
+                    <div class="alert danger"
+                         th:if="${cells == null or #lists.isEmpty(cells)}">
+
+                        <p>
+                            По заданному отбору в изоляторе ничего нет:
+                            снимите условие или возьмите ячейки по
+                            другому виду брака — заказ останется в работе,
+                            пока его состав не набран
+                        </p>
+
+                    </div>
+
+                    <div class="card-body"
+                         th:unless="${cells == null or #lists.isEmpty(cells)}">
+
+                        <div class="table-wrap">
+
+                            <table class="kitting-cell-table">
+
+                                <colgroup>
+                                    <col class="col-pick">
+                                    <col class="col-number">
+                                    <col class="col-kind">
+                                    <col class="col-cell">
+                                    <col class="col-supply">
+                                    <col class="col-reason">
+                                    <col class="col-state">
+                                </colgroup>
+
+                                <thead>
+                                <tr>
+                                    <th class="col-pick">
+                                        <input type="checkbox"
+                                               id="kittingPickAll"
+                                               title="Отметить все доступные">
+                                    </th>
+                                    <th>Номер ячейки</th>
+                                    <th>Тип</th>
+                                    <th>Позиция прихода</th>
+                                    <th>Поставщик</th>
+                                    <th>Причина брака</th>
+                                    <th>Состояние</th>
+                                </tr>
+                                </thead>
+
+                                <tbody>
+
+                                <tr th:each="row : ${cells}"
+                                    th:classappend="${row.takenSomewhere()}
+                                        ? ' is-taken' : ''">
+
+                                    <td class="col-pick">
+
+                                        <!--
+                                            name="cell" повторяется на
+                                            каждую строку: Spring
+                                            собирает из повторов список,
+                                            и неотмеченные ячейки в него
+                                            не попадают — именно так
+                                            форма передаёт состав
+                                            проведения.
+                                        -->
+                                        <input type="checkbox"
+                                               name="cell"
+                                               class="kitting-pick"
+                                               th:value="${row.fullNumber}"
+                                               th:disabled="${!row.selectable()}"
+                                               th:title="${row.stateLabel}">
+
+                                    </td>
+
+                                    <td class="kitting-cell-table__number"
+                                        th:text="${row.fullNumber}">
+                                        121200022
+                                    </td>
+
+                                    <td th:text="${row.kindLabel}">Ячейка</td>
+
+                                    <td>
+
+                                        <div class="kitting-cell-table__stack">
+
+                                            <span th:text="${row.cellLabel}">
+                                                1212 — Подсборка ЯПР56
+                                            </span>
+
+                                            <small th:text="'проверка: ' + ${row.completedLabel}">
+                                                проверка: 02.10.2026
+                                            </small>
+
+                                        </div>
+
+                                    </td>
+
+                                    <td>
+
+                                        <div class="kitting-cell-table__stack">
+
+                                            <span th:text="${row.supplierName}">
+                                                Альбатрос
+                                            </span>
+
+                                            <small th:text="'приход: ' + ${row.incomingOrderNumber}">
+                                                приход: ПД-114
+                                            </small>
+
+                                        </div>
+
+                                    </td>
+
+                                    <td>
+
+                                        <div class="kitting-cell-table__stack">
+
+                                            <span th:text="${row.reasonChain}">
+                                                Механическое повреждение → Скол корпуса
+                                            </span>
+
+                                            <small th:text="${row.decisionLabel}">
+                                                Перемещение в изолятор брака
+                                            </small>
+
+                                        </div>
+
+                                    </td>
+
+                                    <td>
+
+                                        <span th:class="${row.stateBadgeClass}"
+                                              th:text="${row.stateLabel}">
+                                            можно взять
+                                        </span>
+
+                                    </td>
+
+                                </tr>
+
+                                </tbody>
+
+                            </table>
+
+                        </div>
+
+                    </div>
+
+                    <!--
+                        Панель проведения прижата к низу карточки и
+                        остаётся видимой при прокрутке: отмечать ячейки
+                        приходится внизу длинного перечня, и кнопка
+                        обязана быть рядом.
+                    -->
+                    <div class="kitting-actions"
+                         th:unless="${cells == null or #lists.isEmpty(cells)}">
+
+                        <span class="kitting-actions__counter">
+                            Отмечено
+                            <strong id="kittingPickedCount">0</strong>
+                            из заказа осталось взять
+                            <strong th:text="${znp.remainingCount()}">6</strong>
+                        </span>
+
+                        <span class="kitting-actions__buttons">
+
+                            <a class="btn secondary"
+                               th:href="@{/my-operations}">
+                                Назад
+                            </a>
+
+                            <button type="submit"
+                                    class="btn primary"
+                                    th:disabled="${znp.completed()}">
+                                Скомплектовать
+                            </button>
+
+                        </span>
+
+                    </div>
+
+                    <div class="alert attention"
+                         th:if="${znp.completed()}">
+
+                        <p>
+                            Заказ укомплектован: взято
+                            <span th:text="${znp.doneCount()}">10</span>
+                            из
+                            <span th:text="${znp.quantityLabel()}">10</span>.
+                            Состав ниже — справочный, проводить больше нечего
+                        </p>
+
+                    </div>
+
+                </section>
+
+            </form>
+
+            <!-- =====================================================
+                 СОСТАВ ЗАКАЗА
+
+                 Отдельно от перечня изолятора: это уже совершённые
+                 проводки, и читать их надо независимо от того, какой
+                 отбор задан для новых ячеек.
+                 ===================================================== -->
+            <section class="card">
+
+                <div class="card-head">
+
+                    <div>
+
+                        <h2>Уже взято в заказ</h2>
+
+                        <small>
+                            Проводки бюро входного контроля по этому заказу:
+                            номер, разновидность на момент проведения, автор
+                            и дата
+                        </small>
+
+                    </div>
+
+                    <span class="badge"
+                          th:text="${znp.doneCount()} + ' из ' + ${znp.requiredCount()}">
+                        4 из 10
+                    </span>
+
+                </div>
+
+                <div class="alert success"
+                     th:if="${items == null or #lists.isEmpty(items)}">
+
+                    <p>
+                        В заказ ещё не взята ни одна ячейка: отметьте
+                        ячейки выше и проведите комплектование
+                    </p>
+
+                </div>
+
+                <div class="card-body"
+                     th:unless="${items == null or #lists.isEmpty(items)}">
+
+                    <div class="table-wrap">
+
+                        <table class="kitting-items-table">
+
+                            <colgroup>
+                                <col class="col-number">
+                                <col class="col-kind">
+                                <col class="col-cls">
+                                <col class="col-by">
+                                <col class="col-at">
+                            </colgroup>
+
+                            <thead>
+                            <tr>
+                                <th>Номер ячейки</th>
+                                <th>Тип</th>
+                                <th>Изделие</th>
+                                <th>Провёл</th>
+                                <th>Дата</th>
+                            </tr>
+                            </thead>
+
+                            <tbody>
+
+                            <tr th:each="item : ${items}">
+
+                                <td class="kitting-items-table__number"
+                                    th:text="${item.fullNumber}">
+                                    121200022
+                                </td>
+
+                                <td th:text="${item.cellKindLabel}">Ячейка</td>
+
+                                <td th:text="${item.classifierLabel}">
+                                    1212 — Подсборка ЯПР56
+                                </td>
+
+                                <td th:text="${item.kittedByLabel}">
+                                    Иванов И. И.
+                                </td>
+
+                                <td th:text="${item.kittedAtLabel}">
+                                    12.10.2026 14:05
+                                </td>
+
+                            </tr>
+
+                            </tbody>
+
+                        </table>
+
+                    </div>
+
+                </div>
+
+            </section>
+
+        </div>
+
+    </main>
+
+</div>
+
+<th:block th:replace="${isSKGeneral}
+        ? ~{quality/fragments/layout :: commonScripts}
+        : ~{workshop/fragments/layout :: commonScripts}">
+</th:block>
+
+<script>
+/*
+ * Счётчик отмеченных ячеек.
+ *
+ * Считается по DOM, а не хранится на сервере: отметка меняется
+ * десятками кликов за один заход, и каждый клик не должен стоить
+ * обращения к серверу — человек сверяет цифру с остатком заказа, а не
+ * фиксирует её.
+ */
+(function () {
+    const boxes = Array.from(
+        document.querySelectorAll('.kitting-pick:not(:disabled)')
+    );
+    const counter = document.getElementById('kittingPickedCount');
+    const pickAll = document.getElementById('kittingPickAll');
+
+    function refresh() {
+        if (counter) {
+            counter.textContent = boxes.filter(box => box.checked).length;
+        }
+    }
+
+    boxes.forEach(box => box.addEventListener('change', refresh));
+
+    /*
+     * «Отметить все» отмечает только доступные строки: уже взятые
+     * ячейки сняты по существу (они в составе), и отмечать их — значит
+     * получить отказ проверки вместо проводки.
+     */
+    if (pickAll) {
+        pickAll.addEventListener('change', function () {
+            boxes.forEach(box => {
+                box.checked = pickAll.checked;
+            });
+
+            refresh();
+        });
+    }
+
+    /*
+     * Пустая проводка отсекается на месте: сервис ответил бы тем же
+     * отказом, но человек узнал бы о нём после перезагрузки страницы и
+     * потерял бы отбор и отмеченный состав.
+     */
+    document.querySelectorAll('form[method="post"]').forEach(form => {
+        form.addEventListener('submit', function (event) {
+            if (boxes.filter(box => box.checked).length === 0) {
+                event.preventDefault();
+                window.alert('Отметьте ячейки, которые берёте в заказ');
+            }
+        });
+    });
+
+    refresh();
+})();
+</script>
+
+</body>
+</html>

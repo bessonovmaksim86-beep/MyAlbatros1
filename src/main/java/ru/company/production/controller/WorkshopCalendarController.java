@@ -184,9 +184,14 @@ public class WorkshopCalendarController {
             YearMonth month,
             Model model
     ) {
-        Long unitId = staffService.workshopUnitId(currentUser(authentication));
-
-        List<AppUser> employees = staffService.findEmployees(unitId);
+        /*
+         * Сотрудники календаря берутся по той же границе, что и список
+         * «Сотрудники»: руководителю службы качества видны контролёры
+         * всех подразделений его службы, а не одного.
+         */
+        List<AppUser> employees = staffService.findEmployees(
+                staffService.unitScope(currentUser(authentication))
+        );
 
         Map<Long, Map<LocalDate, EmployeeAbsence>> calendar =
                 calendarService.buildMonth(employees, month);

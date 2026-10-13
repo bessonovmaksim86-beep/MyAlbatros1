@@ -396,6 +396,8 @@ body {
 }
 
 .technology-topbar__left {
+    position: relative;
+
     display: flex;
     flex: 1 1 auto;
     align-items: center;
@@ -460,6 +462,148 @@ body {
     background: #ffffff;
     border-color: #2c6da7;
     box-shadow: 0 0 0 3px rgba(44, 109, 167, 0.12);
+}
+
+
+/* ============================================================
+   РЕЗУЛЬТАТЫ ПОИСКА
+   ============================================================ */
+
+/*
+ * Панель висит под полем и повторяет его ширину.
+ *
+ * max-height и overflow нужны, чтобы список из четырёх категорий
+ * не растягивался на весь экран и не перекрывал время и пользователя.
+ */
+.technology-search__results {
+    position: absolute;
+    top: calc(100% + 6px);
+    left: 0;
+    z-index: 900;
+
+    box-sizing: border-box;
+    width: 100%;
+    max-width: 760px;
+    max-height: min(420px, calc(100vh - 110px));
+    overflow-x: hidden;
+    overflow-y: auto;
+
+    background: #ffffff;
+    border: 1px solid var(--line, #dfe6ed);
+    border-radius: 12px;
+    box-shadow: 0 18px 42px rgba(18, 38, 63, 0.18);
+}
+
+.technology-search__results[hidden] {
+    display: none;
+}
+
+.technology-search__group-label {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+
+    padding: 8px 14px 6px;
+
+    color: #748397;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+
+    background: #f4f7fa;
+    border-bottom: 1px solid #e8edf2;
+}
+
+.technology-search__item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+
+    box-sizing: border-box;
+    padding: 9px 14px;
+
+    color: inherit;
+    text-decoration: none;
+
+    border-bottom: 1px solid #f0f3f7;
+
+    transition:
+        background-color 120ms ease,
+        box-shadow 120ms ease;
+}
+
+.technology-search__item:last-child {
+    border-bottom: 0;
+}
+
+.technology-search__item:hover,
+.technology-search__item:focus-visible,
+.technology-search__item.is-active {
+    text-decoration: none;
+
+    background: #f2f7fc;
+    box-shadow: inset 3px 0 0 var(--technology-accent);
+    outline: none;
+}
+
+.technology-search__item-data {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.technology-search__item-title {
+    display: block;
+    overflow: hidden;
+
+    color: #27394d;
+    font-size: 13px;
+    font-weight: 600;
+    line-height: 1.3;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.technology-search__item-subtitle {
+    display: block;
+    overflow: hidden;
+
+    color: #748397;
+    font-size: 11px;
+    line-height: 1.3;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.technology-search__item-subtitle:empty {
+    display: none;
+}
+
+/*
+ * Метка типа результата: «техпроцесс», «изделие» и т. п.
+ * Стоит справа и не участвует в сжатии, поэтому не переезжает
+ * длинное название.
+ */
+.technology-search__item-kind {
+    flex: 0 0 auto;
+
+    padding: 3px 8px;
+
+    color: #5a6b80;
+    font-size: 10px;
+    font-weight: 700;
+    white-space: nowrap;
+
+    background: #eef2f7;
+    border-radius: 6px;
+}
+
+.technology-search__empty {
+    padding: 14px;
+
+    color: #748397;
+    font-size: 12px;
+    text-align: center;
 }
 
 

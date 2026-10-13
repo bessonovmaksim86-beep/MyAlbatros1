@@ -23,6 +23,16 @@ public interface OrganizationUnitRepository
             String code
     );
 
+    /*
+     * Действующие подразделения службы по её идентификатору. Граница
+     * руководителя службы качества: он отвечает не за одно
+     * подразделение, а за всю службу (БТК и БВК), поэтому его список
+     * сотрудников строится по всем подразделениям службы разом.
+     */
+    List<OrganizationUnit> findByServiceIdAndActiveTrueOrderByNameAsc(
+            Long serviceId
+    );
+
     boolean existsByCodeIgnoreCase(String code);
 
     boolean existsByServiceAndNameIgnoreCase(

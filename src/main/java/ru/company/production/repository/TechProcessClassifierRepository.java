@@ -83,4 +83,30 @@ public interface TechProcessClassifierRepository
     List<AppliedClassifierView> findAppliedClassifiers(
             @Param("processId") Long processId
     );
+
+    /**
+     * Все активные маршруты сразу для всех изделий.
+     *
+     * Один запрос вместо выборки на каждое изделие: в списке
+     * классификатора сотни записей, построчные запросы ушли бы в N+1.
+     * Порядок — внутри изделия базовый маршрут первым, поэтому
+     * шаблону не нужно сортировать группы заново.
+     */
+    @Query("""
+            select
+                link.classifier.id as classifierId,
+                process.id         as processId,
+                process.code       as code,
+                link.basic         as basic,
+                (
+                    select count(node)
+                    from TechProcessOperation node
+                    where node.techProcess = process
+                ) as operationCount
+            from TechProcessClassifier link
+            join link.techProcess process
+            where process.active = true
+            order by link.classifier.id, link.basic desc, process.code
+            """)
+    List<ClassifierRouteLinkView> findAllActiveRoutes();
 }

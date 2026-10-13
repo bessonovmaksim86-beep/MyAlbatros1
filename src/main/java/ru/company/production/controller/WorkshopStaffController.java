@@ -50,9 +50,14 @@ public class WorkshopStaffController {
     ) {
         AppUser supervisor = currentUser(authentication);
 
-        Long unitId = staffService.workshopUnitId(supervisor);
+        /*
+         * Граница — список подразделений, а не одно: руководитель службы
+         * качества отвечает и за БТК, и за БВК, и выборка одного
+         * подразделения показала бы ему половину его же сотрудников.
+         */
+        var scope = staffService.unitScope(supervisor);
 
-        var staff = staffService.findStaff(unitId);
+        var staff = staffService.findStaff(scope);
 
         model.addAttribute("staff", staff);
         model.addAttribute(
@@ -60,7 +65,7 @@ public class WorkshopStaffController {
                 staff.stream().mapToInt(StaffMemberView::bindingCount).sum()
         );
         var operationGroups = staffService.findBindingOperationGroups(
-                unitId,
+                scope,
                 staffService.unitKind(supervisor).getGenitive()
         );
 
@@ -73,7 +78,7 @@ public class WorkshopStaffController {
         );
         model.addAttribute(
                 "workPlaces",
-                staffService.findWorkshopWorkPlaces(unitId)
+                staffService.findWorkshopWorkPlaces(scope)
         );
         model.addAttribute("bindingTypes", StaffBindingType.values());
         model.addAttribute("activePage", "staff");

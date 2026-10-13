@@ -22,6 +22,10 @@
     <link
             rel="stylesheet"
             th:href="@{/technology/css/classifier.css}">
+
+    <link
+            rel="stylesheet"
+            th:href="@{/technology/css/classifier-routes.css}">
 </head>
 
 <body>
@@ -149,13 +153,14 @@
 
                         <div class="table-wrap">
 
-                            <table class="data-table">
+                            <table class="data-table classifier-list-table">
 
                                 <thead>
                                 <tr>
                                     <th>Код</th>
                                     <th>Тип изделия</th>
                                     <th>Наименование</th>
+                                    <th>Техпроцессы</th>
                                     <th>Действия</th>
                                 </tr>
                                 </thead>
@@ -164,14 +169,37 @@
 
                                 <tr th:if="${#lists.isEmpty(classifiers)}">
 
-                                    <td colspan="4"
+                                    <td colspan="5"
                                         class="empty-table">
                                         Классификаторы не найдены
                                     </td>
 
                                 </tr>
 
-                                <tr th:each="classifier : ${classifiers}">
+                                <tr th:each="classifier : ${classifiers}"
+                                    th:with="
+                                        links=${
+                                            routesByClassifier
+                                            != null
+                                            and routesByClassifier.containsKey(
+                                                classifier.id
+                                            )
+                                                ? routesByClassifier.get(
+                                                    classifier.id
+                                                )
+                                                : null
+                                        },
+                                        basicCode=${
+                                            basicRouteCode
+                                            != null
+                                            and basicRouteCode.containsKey(
+                                                classifier.id
+                                            )
+                                                ? basicRouteCode.get(
+                                                    classifier.id
+                                                )
+                                                : null
+                                        }">
 
                                     <td th:text="${classifier.code}">
                                         1001
@@ -183,13 +211,62 @@
                                     </td>
 
                                     <td th:text="${
-                                        classifier.displayName}">
+                                        classifier.fullDisplayName}">
                                         Наименование
                                     </td>
 
                                     <td>
 
+                                        <div class="classifier-routes"
+                                             th:if="${links != null}">
+
+                                            <span class="tp-code tp-code--basic"
+                                                  th:if="${basicCode != null}"
+                                                  th:text="${basicCode}">
+                                                ТП-0001
+                                            </span>
+
+                                            <span class="tp-code"
+                                                  th:each="link : ${links}"
+                                                  th:unless="${link.basic}"
+                                                  th:text="${link.code}">
+                                                ТП-0002
+                                            </span>
+
+                                        </div>
+
+                                        <span class="tp-code-empty"
+                                              th:if="${
+                                                  basicCode == null
+                                                  and links != null
+                                              }">
+                                            базовый не задан
+                                        </span>
+
+                                        <span class="tp-code-empty"
+                                              th:if="${links == null}">
+                                            техпроцессов нет
+                                        </span>
+
+                                    </td>
+
+                                    <td>
+
                                         <div class="table-actions">
+
+                                            <a class="btn secondary compact"
+                                               th:href="@{
+                                                  /technology/classifier/{id}/tp(
+                                                  id=${classifier.id})}">
+                                                Добавить ТП
+                                            </a>
+
+                                            <a class="btn secondary compact"
+                                               th:href="@{
+                                                  /technology/classifier/{id}/tp/basic(
+                                                  id=${classifier.id})}">
+                                                Изменить базовый ТП
+                                            </a>
 
                                             <a class="btn secondary compact"
                                                th:href="@{

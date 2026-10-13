@@ -3,13 +3,12 @@ package ru.company.production.repository;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
-import org.springframework.stereotype.Repository;
+import org.springframework.data.domain.Pageable;
 import ru.company.production.entity.TechProcess;
 
 import java.util.List;
 import java.util.Optional;
 
-@Repository
 public interface TechProcessRepository
         extends JpaRepository<TechProcess, Long> {
 
@@ -184,6 +183,38 @@ public interface TechProcessRepository
             """)
     List<RepairRouteOptionView> findRepairRouteOptions();
 
+    /**
+     * Все активные маршруты с основным изделием — для страницы
+     * «Добавить техпроцесс» в классификаторе.
+     *
+     * Изделие берут основным (productClassifier), а не списком
+     * применений: маршрут, назначенный нескольким изделиям, иначе
+     * занял бы в списке выбора несколько строк. Вид изделия и род
+     * датчика отдают подписью — у изделия типа «Датчик» своего
+     * наименования нет.
+     */
+    @Query("""
+            select
+                process.id           as processId,
+                process.code         as code,
+                classifier.id        as classifierId,
+                classifier.code      as classifierCode,
+                classifier.productType as productType,
+                classifier.name      as classifierName,
+                sensor.name          as sensorClassName,
+                (
+                    select count(node)
+                    from TechProcessOperation node
+                    where node.techProcess = process
+                ) as operationCount
+            from TechProcess process
+            join process.productClassifier classifier
+            left join classifier.sensorCatalog sensor
+            where process.active = true
+            order by process.code
+            """)
+    List<ActiveRouteOptionView> findAllActiveRouteOptions();
+
     /*
      * Рабочие места, на которых маршрут допускает операцию.
      *
@@ -208,5 +239,48 @@ public interface TechProcessRepository
     List<Long> findRouteWorkPlaceIds(
             @Param("operationId") Long operationId,
             @Param("processIds") java.util.Collection<Long> processIds
+    );
+
+    /*
+     * Глобальный поиск техпроцессов.
+     *
+     * Ищем по коду маршрута и по изделию основного маршрута (код,
+     * наименование, род датчика): технолог помнит маршрут либо его
+     * кодом «ТП-14», либо изделием, для которого он построен.
+     *
+     * Изделие берут через productClassifier, а не через список
+     * применений classifierLinks: маршрут, применённый к нескольким
+     * изделиям, иначе дал бы несколько одинаковых строк поиска.
+     *
+     * Код изделия — число, поэтому для поиска по подстроке его
+     * приводят к строке; регистр числу не мешает, и lower() к нему
+     * не применяют.
+     */
+    @Query("""
+            select
+                process.id as id,
+                process.code as code,
+                classifier.code as classifierCode,
+                classifier.name as classifierName,
+                sensor.name as sensorClassName
+            from TechProcess process
+            join process.productClassifier classifier
+            left join classifier.sensorCatalog sensor
+            where process.active = true
+              and (
+                    lower(process.code)
+                        like lower(concat('%', :term, '%'))
+                 or cast(classifier.code as string)
+                        like concat('%', :term, '%')
+                 or lower(classifier.name)
+                        like lower(concat('%', :term, '%'))
+                 or lower(sensor.name)
+                        like lower(concat('%', :term, '%'))
+              )
+            order by process.code
+            """)
+    List<TechProcessSearchView> search(
+            @Param("term") String term,
+            Pageable pageable
     );
 }

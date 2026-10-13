@@ -152,15 +152,16 @@ public class WorkshopStaffService {
     private final WorkshopStaffBindingRepository bindingRepository;
 
     /**
-     * Сотрудники цеха вместе с их привязками.
+     * Сотрудники подразделения (или нескольких подразделений — см.
+     * {@link #unitScope(AppUser)}) вместе с их привязками.
      *
      * Привязки читаются одним запросом по всем идентификаторам и
      * раскладываются в карту: обход списка в шаблоне не должен
      * порождать запрос на каждого сотрудника.
      */
     @Transactional(readOnly = true)
-    public List<StaffMemberView> findStaff(Long unitId) {
-        List<AppUser> employees = findEmployees(unitId);
+    public List<StaffMemberView> findStaff(Collection<Long> unitIds) {
+        List<AppUser> employees = findEmployees(unitIds);
 
         if (employees.isEmpty()) {
             return List.of();
@@ -200,31 +201,57 @@ public class WorkshopStaffService {
     }
 
     /**
-     * Сотрудники цеха для выпадающего списка календаря.
+     * Сотрудники по списку подразделений — список цеха для руководителя
+     * и выпадающий список календаря.
+     *
+     * Список, а не одно подразделение: границей руководителя службы
+     * качества служит служба целиком, а её контролёры разложены по БТК и
+     * БВК, и выборка одного подразделения показала бы ему половину его
+     * же людей.
      */
     @Transactional(readOnly = true)
-    public List<AppUser> findEmployees(Long unitId) {
-        if (unitId == null) {
+    public List<AppUser> findEmployees(Collection<Long> unitIds) {
+        List<Long> ids = cleanIds(unitIds);
+
+        if (ids.isEmpty()) {
             return List.of();
         }
 
         return userRepository
-                .findByOrganizationUnitIdAndActiveTrueOrderByFullNameAscUsernameAsc(
-                        unitId
+                .findByOrganizationUnitIdInAndActiveTrueOrderByFullNameAscUsernameAsc(
+                        ids
                 );
     }
 
-    /**
-     * Операции цеха с ролью «Исполнитель».
+    /*
+     * Идентификаторы границ без null и повторов: пустой список в
+     * `in (...)` — синтаксическая ошибка JPQL, а повтор удваивал бы
+     * строки выборки с join.
      */
-    @Transactional(readOnly = true)
-    public List<Operation> findWorkshopOperations(Long unitId) {
-        if (unitId == null) {
+    private static List<Long> cleanIds(Collection<Long> ids) {
+        if (ids == null || ids.isEmpty()) {
             return List.of();
         }
 
-        return operationRepository.findUnitExecutorOperations(
-                unitId,
+        return new ArrayList<>(
+                new LinkedHashSet<>(ids).stream().filter(Objects::nonNull)
+                        .toList()
+        );
+    }
+
+    /**
+     * Операции подразделения (подразделений) с ролью «Исполнитель».
+     */
+    @Transactional(readOnly = true)
+    public List<Operation> findWorkshopOperations(Collection<Long> unitIds) {
+        List<Long> ids = cleanIds(unitIds);
+
+        if (ids.isEmpty()) {
+            return List.of();
+        }
+
+        return operationRepository.findUnitExecutorOperationsByUnitIds(
+                ids,
                 EXECUTOR_ROLE_CODE
         );
     }
@@ -249,17 +276,19 @@ public class WorkshopStaffService {
      */
     @Transactional(readOnly = true)
     public List<StaffOperationGroup> findBindingOperationGroups(
-            Long unitId,
+            Collection<Long> unitIds,
             String unitGenitive
     ) {
-        if (unitId == null) {
+        List<Long> ids = cleanIds(unitIds);
+
+        if (ids.isEmpty()) {
             return List.of();
         }
 
         return StaffOperationGroup.of(
-                findWorkshopOperations(unitId),
-                operationRepository.findUnitKitReceiptOperations(
-                        unitId,
+                findWorkshopOperations(ids),
+                operationRepository.findUnitKitReceiptOperationsByUnitIds(
+                        ids,
                         OperationTypeCode.KIT_RECEIPT.name()
                 ),
                 unitGenitive
@@ -267,8 +296,8 @@ public class WorkshopStaffService {
     }
 
     /**
-     * Все операции подразделения без фильтра по роли исполнителя —
-     * список раздела «Операции и рабочие места».
+     * Все операции подразделения (подразделений) без фильтра по роли
+     * исполнителя — список раздела «Операции и рабочие места».
      *
      * От выборки для закрепления отличается принципиально: там нужны
      * только те операции, которые сотрудник подразделения и выполняет,
@@ -276,34 +305,41 @@ public class WorkshopStaffService {
      * приёма, выдачи и перемещения, и заводит новые.
      */
     @Transactional(readOnly = true)
-    public List<Operation> findAllUnitOperations(Long unitId) {
-        if (unitId == null) {
+    public List<Operation> findAllUnitOperations(Collection<Long> unitIds) {
+        List<Long> ids = cleanIds(unitIds);
+
+        if (ids.isEmpty()) {
             return List.of();
         }
 
-        return operationRepository.findAllByOrganizationUnitId(unitId);
+        return operationRepository.findAllByOrganizationUnitIds(ids);
     }
 
     /**
-     * Количество операций подразделения — счётчик бокового меню.
+     * Количество операций подразделения (подразделений) — счётчик
+     * бокового меню.
      */
     @Transactional(readOnly = true)
-    public long countUnitOperations(Long unitId) {
-        return unitId == null
+    public long countUnitOperations(Collection<Long> unitIds) {
+        List<Long> ids = cleanIds(unitIds);
+
+        return ids.isEmpty()
                 ? 0L
-                : operationRepository.countByOrganizationUnitId(unitId);
+                : operationRepository.countByOrganizationUnitIds(ids);
     }
 
     /**
-     * Действующие рабочие места цеха.
+     * Действующие рабочие места подразделения (подразделений).
      */
     @Transactional(readOnly = true)
-    public List<WorkPlace> findWorkshopWorkPlaces(Long unitId) {
-        if (unitId == null) {
+    public List<WorkPlace> findWorkshopWorkPlaces(Collection<Long> unitIds) {
+        List<Long> ids = cleanIds(unitIds);
+
+        if (ids.isEmpty()) {
             return List.of();
         }
 
-        return workPlaceRepository.findActiveByOrganizationUnitId(unitId);
+        return workPlaceRepository.findActiveByOrganizationUnitIds(ids);
     }
 
     /**
@@ -339,7 +375,7 @@ public class WorkshopStaffService {
 
         requireSameWorkshop(employee, supervisor);
 
-        Long unitId = workshopUnitId(supervisor);
+        List<Long> unitIds = unitScope(supervisor);
 
         WorkshopStaffBinding binding = new WorkshopStaffBinding();
 
@@ -368,7 +404,7 @@ public class WorkshopStaffService {
                     operation.getOrganizationUnit() == null
                             ? null
                             : operation.getOrganizationUnit().getId(),
-                    unitId,
+                    unitIds,
                     "Операция «" + operation.getOperationName().getName()
                             + "» относится к другому подразделению"
             );
@@ -399,7 +435,7 @@ public class WorkshopStaffService {
                     place.getOrganizationUnit() == null
                             ? null
                             : place.getOrganizationUnit().getId(),
-                    unitId,
+                    unitIds,
                     "Рабочее место «" + place.getCode()
                             + "» относится к другому подразделению"
             );
@@ -464,6 +500,85 @@ public class WorkshopStaffService {
         return workshopUnit(supervisor)
                 .map(unit -> unit.getName())
                 .orElse("Подразделение не назначено");
+    }
+
+    /*
+     * Роли, чья граница проходит по службе, а не по одному
+     * подразделению.
+     *
+     * Руководитель службы качества отвечает и за отдел (бюро)
+     * технического контроля, и за бюро входного контроля: карточки
+     * входного контроля заводятся в одном подразделении, ячейки
+     * разбираются в другом, и мастер одной из половин службы не видит
+     * картину целиком. Поэтому его список сотрудников, операций и
+     * рабочих мест строится по всем подразделениям его службы.
+     */
+    private static final Set<Role> SERVICE_WIDE_ROLES = Set.of(
+            Role.SK_GENERAL
+    );
+
+    /**
+     * Ведёт ли пользователь всю службу, а не одно подразделение.
+     */
+    public boolean isServiceWide(AppUser supervisor) {
+        return supervisor != null
+                && supervisor.getRole() != null
+                && SERVICE_WIDE_ROLES.contains(supervisor.getRole());
+    }
+
+    /**
+     * Граница модуля: идентификаторы подразделений, по которым
+     * строятся все выборки — сотрудники, операции, рабочие места и
+     * счётчики.
+     *
+     * Для мастера цеха, склада или бюро это один идентификатор его
+     * подразделения, и поведение модуля не меняется. Для руководителя
+     * службы — все действующие подразделения его службы: иначе он
+     * получил бы список людей и работ только одной из двух своих
+     * половин. Если служба в карточке учётной записи не заполнена,
+     * граница остаётся одиночной — выдумывать службу по названию
+     * подразделения значило бы показать чужих сотрудников.
+     */
+    @Transactional(readOnly = true)
+    public List<Long> unitScope(AppUser supervisor) {
+        if (supervisor == null) {
+            return List.of();
+        }
+
+        if (isServiceWide(supervisor) && supervisor.getService() != null) {
+            List<Long> scope = organizationUnitRepository
+                    .findByServiceIdAndActiveTrueOrderByNameAsc(
+                            supervisor.getService().getId()
+                    )
+                    .stream()
+                    .map(unit -> unit.getId())
+                    .toList();
+
+            if (!scope.isEmpty()) {
+                return scope;
+            }
+        }
+
+        Long unitId = workshopUnitId(supervisor);
+
+        return unitId == null ? List.of() : List.of(unitId);
+    }
+
+    /**
+     * Подпись границы в заголовках и счётчиках: для руководителя службы
+     * — наименование службы, иначе — подразделения.
+     */
+    @Transactional(readOnly = true)
+    public String scopeName(AppUser supervisor) {
+        if (isServiceWide(supervisor) && supervisor.getService() != null) {
+            String name = supervisor.getService().getName();
+
+            if (name != null && !name.isBlank()) {
+                return name;
+            }
+        }
+
+        return workshopName(supervisor);
     }
 
     /*
@@ -578,15 +693,44 @@ public class WorkshopStaffService {
                 && supervisor.getRole() != null
                 && WORKSHOP_MODULE_ROLES.contains(supervisor.getRole());
     }
+
+    /*
+     * Роли, которым подразделение видно, но не принадлежит целиком:
+     * руководитель службы качества читает сотрудников, операции и
+     * календарь своего подразделения (его же контролёры), но права
+     * менять закрепления, создавать рабочие места и отмечать
+     * отсутствия у него нет — запись закрыта перед его ролью в
+     * SecurityConfig (общий матчер "/workshop/**" без SK_GENERAL).
+     */
+    private static final Set<Role> UNIT_VIEW_ONLY_ROLES = Set.of(
+            Role.SK_GENERAL
+    );
+
     /**
-     * Сотрудник и руководитель должны относиться к одному цеху — иначе
+     * видно ли пользователю подразделение: полный ли это модуль или
+     * только чтение (служба качества). Отличается от
+     * {@link #hasFullModule(AppUser)} ровно на {@link #UNIT_VIEW_ONLY_ROLES}:
+     * меню рисует по этому признаку пункты «сотрудники», «операции» и
+     * «календарь», а write-формы тех же страниц остаются на
+     * {@code fullModule}, поэтому служба качества получает списки без
+     * кнопок закрепления, удаления и отметки.
+     */
+    public boolean canViewUnit(AppUser supervisor) {
+        return hasFullModule(supervisor)
+                || (supervisor != null
+                        && supervisor.getRole() != null
+                        && UNIT_VIEW_ONLY_ROLES.contains(supervisor.getRole()));
+    }
+    /**
+     * Сотрудник и руководитель должны относиться к одному подразделению
+     * (для руководителя службы — к одному из её подразделений) — иначе
      * руководитель одного цеха мог бы закреплять операции чужого.
      * Метод публичный: та же граница нужна календарю отсутствий.
      */
     public void requireSameWorkshop(AppUser employee, AppUser supervisor) {
-        Long supervisorUnitId = workshopUnitId(supervisor);
+        List<Long> scope = unitScope(supervisor);
 
-        if (supervisorUnitId == null) {
+        if (scope.isEmpty()) {
             throw new IllegalStateException(
                     "Вашему подразделению не сопоставлен цех: "
                             + "обратитесь к администратору"
@@ -594,8 +738,7 @@ public class WorkshopStaffService {
         }
 
         if (employee.getOrganizationUnit() == null
-                || !supervisorUnitId.equals(
-                employee.getOrganizationUnit().getId())) {
+                || !scope.contains(employee.getOrganizationUnit().getId())) {
 
             throw new IllegalArgumentException(
                     "Сотрудник «" + displayName(employee)
@@ -606,10 +749,14 @@ public class WorkshopStaffService {
 
     private static void requireBelongsToWorkshop(
             Long targetUnitId,
-            Long workshopUnitId,
+            Collection<Long> workshopUnitIds,
             String message
     ) {
-        if (workshopUnitId == null || !workshopUnitId.equals(targetUnitId)) {
+        List<Long> scope = cleanIds(workshopUnitIds);
+
+        if (scope.isEmpty()
+                || targetUnitId == null
+                || !scope.contains(targetUnitId)) {
             throw new IllegalArgumentException(message);
         }
     }

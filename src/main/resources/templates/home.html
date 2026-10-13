@@ -55,10 +55,17 @@
 
         <header class="topbar">
 
-            <span class="clock">
-                <strong th:text="${workspaceName}">Рабочий стол</strong>
-                <small>Собственный модуль для роли настраивается отдельно</small>
-            </span>
+            <div class="gs-host">
+
+                <span class="gs-host__section"
+                      th:text="${workspaceName}">
+                    Рабочий стол
+                </span>
+
+                <div th:replace="~{fragments/global-search
+                        :: field('Поиск по техпроцессам, изделиям, операциям и рабочим местам; заказ — по номеру (ЗП-2026-005 или 57)')}">
+                </div>
+            </div>
 
             <div class="user">
 

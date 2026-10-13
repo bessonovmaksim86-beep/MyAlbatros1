@@ -1,5 +1,6 @@
 package ru.company.production.repository;
 
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -137,4 +138,32 @@ public interface ProductClassifierRepository extends JpaRepository<ProductClassi
 
     boolean existsByCode(Integer code);
     boolean existsByCodeAndIdNot(Integer code, Long id);
+
+    /*
+     * Глобальный поиск изделий классификатора.
+     *
+     * Ищем по коду изделия (число приводят к строке), его
+     * наименованию и роду датчика: у изделия типа «Датчик» своего
+     * наименования нет, и искать нужно по справочнику родов.
+     */
+    @Query("""
+            select classifier.id as id,
+                   classifier.code as code,
+                   classifier.productType as productType,
+                   classifier.name as name,
+                   sensor.name as sensorClassName
+            from ProductClassifier classifier
+            left join classifier.sensorCatalog sensor
+            where cast(classifier.code as string)
+                        like concat('%', :term, '%')
+               or lower(classifier.name)
+                        like lower(concat('%', :term, '%'))
+               or lower(sensor.name)
+                        like lower(concat('%', :term, '%'))
+            order by classifier.code
+            """)
+    List<ClassifierSearchView> search(
+            @Param("term") String term,
+            Pageable pageable
+    );
 }

@@ -40,6 +40,7 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 
 /**
@@ -108,6 +109,21 @@ public class WorkshopDistributionService {
             Role.SK_GENERAL
     );
 
+    /*
+     * Подразделения, где работу не распределяют: бюро входного контроля.
+     *
+     * Контролёр бюро берёт любую работу из перечня бюро, а планировщик
+     * закрепляет строку графика за подразделением, а не за человеком,
+     * поэтому и меню, и право проведения здесь считаются по
+     * подразделению, а не по executor_id. Руководитель бюро и
+     * руководитель службы качества видят тот же перечень целиком.
+     */
+    private static final Set<Role> UNIT_POOL_ROLES = Set.of(
+            Role.BVK_EXECUTOR,
+            Role.BVK_MASTER,
+            Role.SK_GENERAL
+    );
+
     private final OrderScheduleRowRepository scheduleRowRepo;
     private final WorkshopStaffBindingRepository bindingRepo;
     private final TechProcessRepository techProcessRepo;
@@ -140,11 +156,13 @@ public class WorkshopDistributionService {
      */
     @Transactional(readOnly = true)
     public List<ProductOperationsView> findProductOperations(
-            Long unitId,
+            Collection<Long> unitIds,
             AppUser supervisor,
             int weeks
     ) {
-        if (unitId == null) {
+        List<Long> scope = cleanIds(unitIds);
+
+        if (scope.isEmpty()) {
             return List.of();
         }
 
@@ -152,9 +170,9 @@ public class WorkshopDistributionService {
         LocalDate to = from.plusDays(7L * normalizeWeeks(weeks));
 
         return groupByProduct(
-                scheduleRowRepo.findAssignableForUnit(
+                scheduleRowRepo.findAssignableForUnitIds(
                         ScheduleRowStatus.CONFIRMED,
-                        unitId,
+                        scope,
                         OperationTypeCode.KIT_RECEIPT.name(),
                         from,
                         to
@@ -175,10 +193,12 @@ public class WorkshopDistributionService {
      */
     @Transactional(readOnly = true)
     public List<ProductOperationsView> findAssignedProductOperations(
-            Long unitId,
+            Collection<Long> unitIds,
             int weeks
     ) {
-        if (unitId == null) {
+        List<Long> scope = cleanIds(unitIds);
+
+        if (scope.isEmpty()) {
             return List.of();
         }
 
@@ -186,9 +206,9 @@ public class WorkshopDistributionService {
         LocalDate to = from.plusDays(7L * normalizeWeeks(weeks));
 
         return groupByProduct(
-                scheduleRowRepo.findAssignedForUnit(
+                scheduleRowRepo.findAssignedForUnitIds(
                         ScheduleRowStatus.CONFIRMED,
-                        unitId,
+                        scope,
                         from,
                         to
                 ),
@@ -362,7 +382,7 @@ public class WorkshopDistributionService {
                     group.size(),
                     assigned,
                     executors,
-                    buildInstances(group, serialMap, blockers),
+                    buildInstances(group, serialMap, blockers, List.of()),
                     serialsOf(group, serialMap),
                     executor
             ));
@@ -578,14 +598,14 @@ public class WorkshopDistributionService {
             throw new IllegalArgumentException("Выберите исполнителя");
         }
 
-        Long unitId = staffService.workshopUnitId(supervisor);
+        List<Long> unitIds = staffService.unitScope(supervisor);
 
         OrderScheduleRow row = scheduleRowRepo.findById(rowId)
                 .orElseThrow(() -> new EntityNotFoundException(
                         "Строка графика не найдена"
                 ));
 
-        requireAssignable(row, unitId);
+        requireAssignable(row, unitIds);
 
         if (row.getExecutor() != null) {
             throw new IllegalArgumentException(
@@ -617,7 +637,7 @@ public class WorkshopDistributionService {
             throw new IllegalArgumentException("Экземпляр не указан");
         }
 
-        Long unitId = staffService.workshopUnitId(supervisor);
+        List<Long> unitIds = staffService.unitScope(supervisor);
 
         OrderScheduleRow row = scheduleRowRepo.findById(rowId)
                 .orElseThrow(() -> new EntityNotFoundException(
@@ -625,7 +645,7 @@ public class WorkshopDistributionService {
                 ));
 
         if (row.getOrganizationUnit() == null
-                || !row.getOrganizationUnit().getId().equals(unitId)) {
+                || !cleanIds(unitIds).contains(row.getOrganizationUnit().getId())) {
             throw new IllegalArgumentException(
                     "Работа относится к другому подразделению"
             );
@@ -750,7 +770,7 @@ public class WorkshopDistributionService {
                     totalHours,
                     new ArrayList<>(orderNumbers),
                     executors,
-                    buildInstances(group, serialMap, blockers),
+                    buildInstances(group, serialMap, blockers, List.of()),
                     serialsOf(group, serialMap),
                     itemNamesOf(group, itemNames)
             ));
@@ -832,7 +852,7 @@ public class WorkshopDistributionService {
                     totalHours,
                     new ArrayList<>(orderNumbers),
                     List.of(),
-                    buildInstances(group, serialMap, blockers),
+                    buildInstances(group, serialMap, blockers, List.of()),
                     serialsOf(group, serialMap),
                     itemNamesOf(group, itemNames)
             ));
@@ -866,12 +886,12 @@ public class WorkshopDistributionService {
             throw new IllegalArgumentException("Выберите исполнителя");
         }
 
-        Long unitId = staffService.workshopUnitId(supervisor);
+        List<Long> unitIds = staffService.unitScope(supervisor);
 
         List<OrderScheduleRow> group = scheduleRowRepo
-                .findGroupRows(
+                .findGroupRowsForUnitIds(
                         ScheduleRowStatus.CONFIRMED,
-                        unitId,
+                        unitIds,
                         operationId,
                         plannedDate
                 );
@@ -935,12 +955,12 @@ public class WorkshopDistributionService {
             throw new IllegalArgumentException("Операция не указана");
         }
 
-        Long unitId = staffService.workshopUnitId(supervisor);
+        List<Long> unitIds = staffService.unitScope(supervisor);
 
         List<OrderScheduleRow> group = scheduleRowRepo
-                .findGroupRows(
+                .findGroupRowsForUnitIds(
                         ScheduleRowStatus.CONFIRMED,
-                        unitId,
+                        unitIds,
                         operationId,
                         plannedDate
                 );
@@ -994,12 +1014,12 @@ public class WorkshopDistributionService {
             throw new IllegalArgumentException("Выберите исполнителя");
         }
 
-        Long unitId = staffService.workshopUnitId(supervisor);
+        List<Long> unitIds = staffService.unitScope(supervisor);
 
         List<OrderScheduleRow> group = scheduleRowRepo
-                .findProductOperationRows(
+                .findProductOperationRowsForUnitIds(
                         ScheduleRowStatus.CONFIRMED,
-                        unitId,
+                        unitIds,
                         operationId,
                         plannedDate,
                         orderId,
@@ -1013,7 +1033,7 @@ public class WorkshopDistributionService {
         }
 
         for (OrderScheduleRow row : group) {
-            requireAssignable(row, unitId);
+            requireAssignable(row, unitIds);
 
             if (row.getExecutor() != null) {
                 throw new IllegalArgumentException(
@@ -1060,12 +1080,12 @@ public class WorkshopDistributionService {
             );
         }
 
-        Long unitId = staffService.workshopUnitId(supervisor);
+        List<Long> unitIds = staffService.unitScope(supervisor);
 
         List<OrderScheduleRow> group = scheduleRowRepo
-                .findProductOperationRows(
+                .findProductOperationRowsForUnitIds(
                         ScheduleRowStatus.CONFIRMED,
-                        unitId,
+                        unitIds,
                         operationId,
                         plannedDate,
                         orderId,
@@ -1139,7 +1159,8 @@ public class WorkshopDistributionService {
                         from,
                         to
                 ),
-                "Распределено"
+                "Распределено",
+                List.of()
         );
     }
 
@@ -1183,7 +1204,8 @@ public class WorkshopDistributionService {
                         from,
                         to
                 ),
-                null
+                null,
+                List.of()
         );
     }
 
@@ -1271,6 +1293,32 @@ public class WorkshopDistributionService {
         LocalDate from = LocalDate.now();
         LocalDate to = from.plusDays(HORIZON_DAYS);
 
+        /*
+         * Бюро входного контроля: меню строится по подразделению, а не
+         * по закреплённому исполнителю. План закрепляет строку за
+         * бюро, а контролёр берёт любую работу из его перечня, поэтому
+         * список по executor_id показался бы пустым и работу пришлось
+         * бы искать в чужом разделе. Если подразделение в карточке
+         * учётной записи не заполнено, граница не выдумывается —
+         * остаётся личный список, как у прочих ролей.
+         */
+        if (isUnitPool(user)) {
+            List<Long> poolScope = staffService.unitScope(user);
+
+            if (!poolScope.isEmpty()) {
+                return groupAssigned(
+                        scheduleRowRepo.findAllForUnits(
+                                ScheduleRowStatus.CONFIRMED,
+                                poolScope,
+                                from,
+                                to
+                        ),
+                        null,
+                        poolScope
+                );
+            }
+        }
+
         List<AssignedOperationView> result = new ArrayList<>(
                 groupAssigned(
                         scheduleRowRepo.findForExecutor(
@@ -1278,7 +1326,8 @@ public class WorkshopDistributionService {
                                 from,
                                 to
                         ),
-                        null
+                        null,
+                        List.of()
                 )
         );
 
@@ -1286,21 +1335,28 @@ public class WorkshopDistributionService {
             return result;
         }
 
-        Long unitId = staffService.workshopUnitId(user);
+        /*
+         * Граница — список подразделений службы, а не одно: у
+         * руководителя службы качества карточка подразделения пуста, и
+         * проверка одиночного идентификатора отсекла бы ему получение
+         * комплектации целиком.
+         */
+        List<Long> scope = staffService.unitScope(user);
 
-        if (unitId == null) {
+        if (scope.isEmpty()) {
             return result;
         }
 
         result.addAll(groupAssigned(
                 scheduleRowRepo.findOwnKitReceipt(
                         ScheduleRowStatus.CONFIRMED,
-                        List.of(unitId),
+                        scope,
                         OperationTypeCode.KIT_RECEIPT.name(),
                         from,
                         to
                 ),
-                "Получение комплектации"
+                "Получение комплектации",
+                List.of()
         ));
 
         result.sort((a, b) -> {
@@ -1350,8 +1406,13 @@ public class WorkshopDistributionService {
          * Проводить их вправе сотрудник склада: доступ к разделу
          * ограничен правилом модуля склада, поэтому для таких строк
          * проверяется только сам факт авторизованного пользователя.
+         *
+         * То же правило работает для бюро входного контроля: его строки
+         * принадлежат бюро, а не человеку, и контролёр закрывает любую
+         * работу из перечня бюро. Граница — подразделение учётной
+         * записи, поэтому чужую работу так не провести.
          */
-        if (!isWarehouseKitting(row)) {
+        if (!isWarehouseKitting(row) && !isPoolPerformable(row, performer)) {
             if (row.getExecutor() == null
                     || !row.getExecutor().getId().equals(performer.getId())) {
                 throw new IllegalStateException(
@@ -1425,6 +1486,24 @@ public class WorkshopDistributionService {
         LocalDate from = LocalDate.now();
         LocalDate to = from.plusDays(HORIZON_DAYS);
 
+        /*
+         * Бюро входного контроля: цифра должна совпадать со списком,
+         * а список строится по подразделению, поэтому и счётчик
+         * считается по нему же.
+         */
+        if (isUnitPool(user)) {
+            List<Long> poolScope = staffService.unitScope(user);
+
+            if (!poolScope.isEmpty()) {
+                return scheduleRowRepo.countAllForUnits(
+                        ScheduleRowStatus.CONFIRMED,
+                        poolScope,
+                        from,
+                        to
+                );
+            }
+        }
+
         long total = scheduleRowRepo.countForExecutor(
                 user.getId(), from, to
         );
@@ -1441,7 +1520,7 @@ public class WorkshopDistributionService {
 
         return total + scheduleRowRepo.countOwnKitReceipt(
                 ScheduleRowStatus.CONFIRMED,
-                List.of(unitId),
+                staffService.unitScope(user),
                 OperationTypeCode.KIT_RECEIPT.name(),
                 from,
                 to
@@ -1451,18 +1530,24 @@ public class WorkshopDistributionService {
     /**
      * Нераспределённые работы подразделения за горизонт — счётчик
      * бокового меню.
+     *
+     * Принимает список: руководитель службы качества видит очередь
+     * сразу двух своих подразделений, и цифра по одному из них не
+     * сошлась бы с тем, что он увидит, войдя в раздел.
      */
     @Transactional(readOnly = true)
-    public long countAssignable(Long unitId) {
-        if (unitId == null) {
+    public long countAssignable(Collection<Long> unitIds) {
+        List<Long> scope = cleanIds(unitIds);
+
+        if (scope.isEmpty()) {
             return 0L;
         }
 
         LocalDate from = LocalDate.now();
 
-        return scheduleRowRepo.countAssignableForUnit(
+        return scheduleRowRepo.countAssignableForUnitIds(
                 ScheduleRowStatus.CONFIRMED,
-                unitId,
+                scope,
                 OperationTypeCode.KIT_RECEIPT.name(),
                 from,
                 from.plusDays(HORIZON_DAYS)
@@ -1476,10 +1561,17 @@ public class WorkshopDistributionService {
      * операции»: различается только подпись природы группы — там
      * «Распределено», там «Получение комплектации», а для исполнителя
      * источник не подписывается вовсе.
+     *
+     * {@code poolUnitIds} — подразделения, где работу не распределяют
+     * (бюро входного контроля): для них кнопка проведения полагается на
+     * любую строку своего подразделения, а не только на строку, где
+     * человек вписан исполнителем. Для прочих разделов передаётся пустым
+     * — там работа всегда закреплена за конкретным человеком.
      */
     private List<AssignedOperationView> groupAssigned(
             List<OrderScheduleRow> rows,
-            String source
+            String source,
+            List<Long> poolUnitIds
     ) {
         if (rows == null || rows.isEmpty()) {
             return List.of();
@@ -1532,7 +1624,7 @@ public class WorkshopDistributionService {
                                     first.getExecutor()
                             ),
                     source,
-                    buildInstances(group, serialMap, blockers),
+                    buildInstances(group, serialMap, blockers, poolUnitIds),
                     serialsOf(group, serialMap),
                     itemNamesOf(group, itemNames)
             ));
@@ -1660,41 +1752,105 @@ public class WorkshopDistributionService {
                         row.getOperation().getOperationType().getCode());
     }
 
-    /**
-     * Экземпляр относится к комплектованию склада — получение
-     * комплектации либо комплектовочная операция.
-     *
-     * Оба типа план закрепляет за подразделением склада, а не за
-     * человеком, поэтому у таких строк нет исполнителя и закрытие не
-     * может требовать совпадения с ним: иначе кладовщик физически не
-     * смог бы провести работу своего склада.
+    private static boolean isKitReceiptType(String code) {
+        return OperationTypeCode.KIT_RECEIPT.name().equals(code)
+                || OperationTypeCode.KITTING.name().equals(code);
+    }
+
+    /*
+     * Складские работы комплектации: план закрепляет их за
+     * подразделением, а не за человеком, — исполнителя у такой строки
+     * нет. Проводить их вправе любой сотрудник склада, доступ к
+     * разделу которого ограничен правилом модуля склада.
      */
-    private boolean isWarehouseKitting(OrderScheduleRow row) {
+    private static boolean isWarehouseKitting(OrderScheduleRow row) {
         if (row.getOperation() == null
                 || row.getOperation().getOperationType() == null) {
             return false;
         }
 
-        String code = row.getOperation().getOperationType().getCode();
+        return isKitReceiptType(
+                row.getOperation().getOperationType().getCode()
+        );
+    }
 
-        return OperationTypeCode.KIT_RECEIPT.name().equals(code)
-                || OperationTypeCode.KITTING.name().equals(code);
+    /**
+     * Строка принадлежит подразделению без распределения — работа
+     * берётся любым его сотрудником.
+     */
+    private static boolean isPoolRow(OrderScheduleRow row,
+                                     List<Long> poolUnitIds) {
+        return poolUnitIds != null
+                && !poolUnitIds.isEmpty()
+                && row.getOrganizationUnit() != null
+                && poolUnitIds.contains(row.getOrganizationUnit().getId());
+    }
+
+    /**
+     * Проводит ли сотрудник чужую строку по праву подразделения.
+     *
+     * Граница берётся из учётной записи, а не из запроса: список
+     * подразделений того же состава, что у меню, поэтому контролёр бюро
+     * закрывает работу своего бюро, но не чужого.
+     */
+    private boolean isPoolPerformable(OrderScheduleRow row,
+                                      AppUser performer) {
+        if (!isUnitPool(performer) || row.getOrganizationUnit() == null) {
+            return false;
+        }
+
+        return staffService.unitScope(performer)
+                .contains(row.getOrganizationUnit().getId());
+    }
+
+    /**
+     * Ведёт ли пользователь работу по подразделению, а не по личной
+     * закрепке: в бюро входного контроля работы не распределяются.
+     */
+    public boolean isUnitPool(AppUser user) {
+        return user != null
+                && user.getRole() != null
+                && UNIT_POOL_ROLES.contains(user.getRole());
+    }
+
+    /*
+     * Идентификаторы без null и повторов: пустой список — безопаснее,
+     * чем пустой «in ()» в JPQL, а LinkedHashSet убирает дубли.
+     */
+    private static List<Long> cleanIds(Collection<Long> ids) {
+        if (ids == null || ids.isEmpty()) {
+            return List.of();
+        }
+
+        return new ArrayList<>(
+                new LinkedHashSet<>(ids).stream().filter(Objects::nonNull)
+                        .toList()
+        );
     }
 
     /**
      * Проверка, что строку вообще можно назначить: она в плане, её
-     * подразделение совпадает с подразделением руководителя и это не
-     * получение комплектации.
+     * подразделение входит в границу руководителя и это не получение
+     * комплектации.
+     *
+     * Граница — список, а не одно подразделение: руководителю службы
+     * качества принадлежат и БТК, и БВК, и сравнение с единственным
+     * подразделением его карточки отклонило бы любую его работу.
      */
-    private void requireAssignable(OrderScheduleRow row, Long unitId) {
+    private void requireAssignable(
+            OrderScheduleRow row,
+            Collection<Long> unitIds
+    ) {
         if (row.getStatus() != ScheduleRowStatus.CONFIRMED) {
             throw new IllegalStateException(
                     "Назначать можно только внесённые в план работы"
             );
         }
 
+        List<Long> scope = cleanIds(unitIds);
+
         if (row.getOrganizationUnit() == null
-                || !row.getOrganizationUnit().getId().equals(unitId)) {
+                || !scope.contains(row.getOrganizationUnit().getId())) {
             throw new IllegalArgumentException(
                     "Работа относится к другому подразделению"
             );
@@ -1720,11 +1876,17 @@ public class WorkshopDistributionService {
      * и ещё не закрыт. Строки очереди распределения (DRAFT) и
      * получения комплектации исполнителя не имеют — для них
      * canComplete ложна.
+     *
+     * {@code poolUnitIds} — подразделения без распределения (бюро
+     * входного контроля): там строка принадлежит подразделению, а не
+     * человеку, и провести её может любой контролёр этого бюро, поэтому
+     * признак строится по подразделению строки.
      */
     private List<OperationInstance> buildInstances(
             List<OrderScheduleRow> group,
             Map<Long, ProductionOrderSerialProjection> serialMap,
-            Map<Long, InstanceBlocker> blockers
+            Map<Long, InstanceBlocker> blockers,
+            List<Long> poolUnitIds
     ) {
         List<OperationInstance> instances = new ArrayList<>();
 
@@ -1757,9 +1919,13 @@ public class WorkshopDistributionService {
                      * работу комплектования склада: её план закрепляет
                      * за подразделением, исполнителя у неё нет, и без
                      * этой оговорки кнопка закрытия у кладовщика не
-                     * появилась бы никогда.
+                     * появилась бы никогда. Та же оговорка работает для
+                     * бюро входного контроля (poolUnitIds): его строки
+                     * закреплены за бюро, а не за человеком.
                      */
-                    (row.getExecutor() != null || isWarehouseKitting(row))
+                    (row.getExecutor() != null
+                            || isWarehouseKitting(row)
+                            || isPoolRow(row, poolUnitIds))
                             && row.getCompletedAt() == null
                             && !blocker.blocked(),
                     serial == null ? null : serial.getFullNumber(),

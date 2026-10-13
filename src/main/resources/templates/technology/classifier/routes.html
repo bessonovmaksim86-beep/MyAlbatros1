@@ -1,0 +1,376 @@
+<!DOCTYPE html>
+<html lang="ru"
+      xmlns:th="http://www.thymeleaf.org">
+
+<head>
+    <meta charset="UTF-8">
+
+    <meta name="viewport"
+          content="width=device-width, initial-scale=1">
+
+    <title>Добавление техпроцесса</title>
+
+    <link rel="stylesheet"
+          th:href="@{/technology/css/technology.css}">
+
+    <link rel="stylesheet"
+          th:href="@{/technology/css/common.css}">
+
+    <link rel="stylesheet"
+          th:href="@{/technology/css/classifier.css}">
+
+    <link rel="stylesheet"
+          th:href="@{/technology/css/classifier-routes.css}">
+</head>
+
+<body>
+
+<div class="app-shell">
+
+    <aside th:replace="~{
+            technology/fragments/layout
+            :: sidebar('classifier')}">
+    </aside>
+
+    <main class="main">
+
+        <header th:replace="~{
+                technology/fragments/layout
+                :: topbar}">
+        </header>
+
+        <div class="page-content classifier-page">
+
+            <div class="page-head classifier-page-head">
+
+                <div>
+                    <span class="classifier-page-kicker">
+                        Классификатор изделий
+                    </span>
+
+                    <h1>Добавление техпроцесса</h1>
+
+                    <p>
+                        Изделию назначают уже существующий маршрут
+                        или создают для него новый.
+                    </p>
+                </div>
+
+                <nav class="classifier-action-menu"
+                     aria-label="Операции с классификатором">
+
+                    <a class="btn primary"
+                       th:href="@{/technology/classifier/create}">
+                        Добавить классификатор
+                    </a>
+
+                    <a class="btn secondary"
+                       th:href="@{/technology/classifier/update}">
+                        Изменить классификатор
+                    </a>
+
+                    <a class="btn danger"
+                       th:href="@{/technology/classifier/delete}">
+                        Удалить классификатор
+                    </a>
+                </nav>
+            </div>
+
+            <div class="alert alert-success"
+                 th:if="${successMessage != null}"
+                 th:text="${successMessage}">
+                Операция выполнена.
+            </div>
+
+            <div class="alert alert-danger"
+                 th:if="${errorMessage != null}"
+                 th:text="${errorMessage}">
+                Ошибка операции.
+            </div>
+
+            <section class="classifier-selection-card">
+
+                <div class="classifier-selection-card__head">
+
+                    <span class="classifier-selection-number">1</span>
+
+                    <div>
+                        <h2>Изделие</h2>
+
+                        <p>
+                            Маршрут будет назначен этому изделию
+                            классификатора.
+                        </p>
+                    </div>
+                </div>
+
+                <div class="classifier-readonly-fields classifier-type-row">
+
+                    <div class="form-group">
+
+                        <label>Номер классификатора</label>
+
+                        <input class="form-control"
+                               type="text"
+                               disabled
+                               th:value="${classifier.code}">
+                    </div>
+
+                    <div class="form-group">
+
+                        <label>Тип изделия</label>
+
+                        <input class="form-control"
+                               type="text"
+                               disabled
+                               th:value="${
+                                   classifier.productType.displayName}">
+                    </div>
+
+                    <div class="form-group">
+
+                        <label>Наименование</label>
+
+                        <input class="form-control"
+                               type="text"
+                               disabled
+                               th:value="${classifier.displayName}">
+                    </div>
+                </div>
+            </section>
+
+            <section class="classifier-editor-card">
+
+                <div class="classifier-editor-card__head">
+
+                    <span class="classifier-selection-number">+</span>
+
+                    <div>
+                        <h2>Добавить техпроцесс</h2>
+
+                        <p>
+                            Маршрут не копируется: изделие добавляется
+                            к выбранному техпроцессу и получает его
+                            операции, нормы и зависимости.
+                        </p>
+                    </div>
+                </div>
+
+                <form th:unless="${#lists.isEmpty(routeOptions)}"
+                      method="post"
+                      th:action="@{
+                          /technology/classifier/{id}/tp(
+                              id=${classifier.id}
+                          )}">
+
+                    <input th:if="${_csrf != null}"
+                           type="hidden"
+                           th:name="${_csrf.parameterName}"
+                           th:value="${_csrf.token}">
+
+                    <div class="form-group">
+
+                        <label for="processId">
+                            Техпроцесс
+                            <span class="required">*</span>
+                        </label>
+
+                        <select id="processId"
+                                name="processId"
+                                class="form-control classifier-picker"
+                                required>
+
+                            <option value="">
+                                Выберите техпроцесс
+                            </option>
+
+                            <option th:each="option : ${routeOptions}"
+                                    th:value="${option.processId}"
+                                    th:text="${
+                                        option.code
+                                        + ' — '
+                                        + option.classifierCode
+                                        + ' '
+                                        + option.productType.displayName
+                                        + (
+                                            option.classifierName != null
+                                            and !#strings.isEmpty(
+                                                option.classifierName
+                                            )
+                                                ? ' · ' + option.classifierName
+                                                : (
+                                                    option.sensorClassName != null
+                                                        ? ' · ' + option.sensorClassName
+                                                        : ''
+                                                )
+                                        )
+                                        + ' · '
+                                        + option.operationCount
+                                        + ' опер.'
+                                    }">
+                                ТП-0001 — 1001 Датчик · 5 опер.
+                            </option>
+                        </select>
+
+                        <small>
+                            В списке — активные маршруты, которые ещё
+                            не применены к этому изделию.
+                        </small>
+                    </div>
+
+                    <div class="form-group classifier-checkbox-field">
+
+                        <label class="classifier-checkbox">
+
+                            <input type="checkbox"
+                                   id="asBasic"
+                                   name="asBasic"
+                                   value="true">
+
+                            <span>
+                                Сделать базовым техпроцессом изделия
+                            </span>
+                        </label>
+
+                        <small>
+                            Базовый маршрут у изделия один: прежний
+                            перестанет быть основным. Без галочки
+                            маршрут останется применённым, а базовым
+                            его сделает действие «Изменить базовый ТП».
+                        </small>
+                    </div>
+
+                    <div class="classifier-form-actions">
+
+                        <a class="btn btn-secondary"
+                           th:href="@{/technology/classifier}">
+                            Отмена
+                        </a>
+
+                        <a class="btn btn-secondary"
+                           th:href="@{
+                               /technology/techprocess/create/new(
+                                   classifierId=${classifier.id}
+                               )}">
+                            Создать новый техпроцесс
+                        </a>
+
+                        <button class="btn btn-primary"
+                                type="submit">
+                            Добавить техпроцесс
+                        </button>
+                    </div>
+                </form>
+
+                <div class="classifier-empty-selection"
+                     th:if="${#lists.isEmpty(routeOptions)}">
+
+                    <span class="classifier-empty-selection__icon">
+                        +
+                    </span>
+
+                    <h2>
+                        Все активные маршруты уже применены
+                    </h2>
+
+                    <p>
+                        Создайте новый техпроцесс для этого изделия.
+                    </p>
+                </div>
+
+                <div class="classifier-form-actions"
+                     th:if="${#lists.isEmpty(routeOptions)}">
+
+                    <a class="btn btn-secondary"
+                       th:href="@{/technology/classifier}">
+                        Отмена
+                    </a>
+
+                    <a class="btn btn-primary"
+                       th:href="@{
+                           /technology/techprocess/create/new(
+                               classifierId=${classifier.id}
+                           )}">
+                        Создать новый техпроцесс
+                    </a>
+                </div>
+            </section>
+
+            <section class="classifier-statistics"
+                     th:unless="${#lists.isEmpty(appliedRoutes)}">
+
+                <div class="classifier-statistics__head">
+
+                    <div>
+                        <h2>Уже применённые маршруты</h2>
+
+                        <p>
+                            Базовый маршрут отмечен и идёт первым.
+                        </p>
+                    </div>
+                </div>
+
+                <div class="card">
+
+                    <div class="card-body">
+
+                        <div class="table-wrap">
+
+                            <table class="data-table">
+
+                                <thead>
+                                <tr>
+                                    <th>Техпроцесс</th>
+                                    <th>Операций</th>
+                                    <th>Статус</th>
+                                </tr>
+                                </thead>
+
+                                <tbody>
+
+                                <tr th:each="route : ${appliedRoutes}">
+
+                                    <td th:text="${route.code}">
+                                        ТП-0001
+                                    </td>
+
+                                    <td th:text="${route.operationCount}">
+                                        5
+                                    </td>
+
+                                    <td>
+
+                                        <span class="tp-code tp-code--basic"
+                                              th:if="${route.basic}">
+                                            Базовый
+                                        </span>
+
+                                        <span class="tp-code"
+                                              th:unless="${route.basic}">
+                                            Применённый
+                                        </span>
+                                    </td>
+                                </tr>
+
+                                </tbody>
+                            </table>
+
+                        </div>
+
+                    </div>
+                </div>
+            </section>
+
+        </div>
+    </main>
+</div>
+
+<th:block th:replace="~{
+        technology/fragments/layout
+        :: commonScripts}">
+</th:block>
+
+<script th:src="@{/technology/js/classifier.js}"></script>
+
+</body>
+</html>

@@ -413,23 +413,31 @@
 
 /* Действия в таблице и пустое состояние */
 
+/*
+ * Кнопки в столбце «Действия» выстроены сеткой, чтобы все они
+ * были одинаковой ширины и высоты независимо от длины подписи.
+ */
 .operation-page .table-actions {
-    display: flex;
-    flex-wrap: wrap;
+    display: grid;
+    grid-template-columns: repeat(3, minmax(96px, 1fr));
     gap: 8px;
+    align-items: stretch;
 }
 
 .operation-page .table-actions .btn {
     display: inline-flex;
     align-items: center;
     justify-content: center;
+    width: 100%;
     min-height: 34px;
-    padding: 7px 12px;
+    padding: 7px 10px;
     border: 0;
     border-radius: 8px;
     font-weight: 700;
     font-size: 12px;
-    line-height: 1;
+    line-height: 1.2;
+    text-align: center;
+    white-space: normal;
     text-decoration: none;
     cursor: pointer;
 }

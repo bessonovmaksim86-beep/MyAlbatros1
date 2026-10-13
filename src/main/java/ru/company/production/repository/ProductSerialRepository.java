@@ -425,6 +425,32 @@ public interface ProductSerialRepository
     );
 
     /**
+     * Ячейка по коду классификатора и серии.
+     *
+     * Нужен комплектованию ремонтных ЗНП: изолятор отдаёт ячейку полным
+     * номером (код + серия), а провести операцию можно только по
+     * экземпляру из реестра — и не всякий номер изолятора в реестре
+     * есть (в брак попадают номера партий прихода, ещё не внесённые в
+     * product_serials), поэтому результат опциональный по смыслу.
+     *
+     * Отдельный запрос, а не {@link #findByNumberingKeyAndSerial}:
+     * numbering_key — GENERATED-колонка, и для ячейки она равна
+     * «C<классификатор>», но вычислять её в приложении значило бы
+     * второй раз продублировать формулу из V27.
+     */
+    @Query("""
+            select serial
+            from ProductSerial serial
+            join fetch serial.productClassifier classifier
+            where classifier.code = :code
+              and serial.serial = :serial
+            """)
+    Optional<ProductSerial> findCellByClassifierCodeAndSerial(
+            @Param("code") int code,
+            @Param("serial") int serial
+    );
+
+    /**
      * Статус всех серийников заказа одним запросом.
      *
      * Заказ на производство содержит по строке на каждый экземпляр
@@ -519,6 +545,30 @@ public interface ProductSerialRepository
     List<ProductSerial> findAcceptanceDetailsByReceivingBatchId(
             @Param("batchId") Long batchId
     );
+
+    /**
+     * Ячейки, принятые на склад полуфабрикатов — список для
+     * комплектования подсборок.
+     *
+     * Ячейка считается принятой на склад, когда отмечена приёмкой
+     * (acceptedAt IS NOT NULL). Эти номера кладовщик вводит в ЗНП:
+     * склад подтверждает, что нужные подсборки физически лежат на
+     * полках и готовы к выдаче.
+     *
+     * Классификатор подтянут fetch-join'ом: шаблон печатает полный
+     * номер и наименование изделия, а open-in-view выключен — без
+     * fetch обращение к наименованию упало бы на ленивой связи.
+     */
+    @Query("""
+            select serial
+            from ProductSerial serial
+            left join fetch serial.productClassifier classifier
+            left join fetch classifier.sensorCatalog
+            where serial.acceptedAt is not null
+            order by serial.productClassifier.code asc,
+                     serial.serial asc
+            """)
+    List<ProductSerial> findAcceptedOnWarehouse();
 
     /**
      * Приёмка на склад сразу для перечня ячеек.

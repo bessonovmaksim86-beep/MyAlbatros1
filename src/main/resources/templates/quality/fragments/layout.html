@@ -89,46 +89,25 @@
             </a>
 
             <a class="sk-navigation__item"
-               th:classappend="${activePage == 'distribution'} ? ' is-active' : ''"
-               th:href="@{/workshop/distribution}"
-               title="Распределение работ по исполнителям подразделения">
+               th:if="${canViewUnit}"
+               th:classappend="${activePage == 'staff'} ? ' is-active' : ''"
+               th:href="@{/workshop/staff}"
+               title="Сотрудники подразделения и их привязки">
 
                 <span class="sk-navigation__icon">
                     <svg viewBox="0 0 24 24" aria-hidden="true">
-                        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 2c1.93 0 3.68.7 5.05 1.85L7.85 15.05A6.97 6.97 0 0 1 4 12c0-3.87 3.13-7 7-7zm0 2c-2.76 0-5 2.24-5 5s2.24 5 5 5 5-2.24 5-5-2.24-5-5-5zm0 2c1.66 0 3 1.34 3 3s-1.34 3-3 3-3-1.34-3-3 1.34-3 3-3z"/>
+                        <path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z"/>
                     </svg>
                 </span>
 
                 <span class="sk-navigation__text">
-                    Распределение работ
+                    Сотрудники
                 </span>
 
                 <span class="sk-navigation__counter"
-                      th:if="${assignableTotal != null and assignableTotal > 0}"
-                      th:text="${assignableTotal}">
-                    3
-                </span>
-            </a>
-
-            <a class="sk-navigation__item"
-               th:classappend="${activePage == 'my-operations'} ? ' is-active' : ''"
-               th:href="@{/my-operations}"
-               title="Мои операции: работы, закреплённые за мной и моей группой">
-
-                <span class="sk-navigation__icon">
-                    <svg viewBox="0 0 24 24" aria-hidden="true">
-                        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 2c1.93 0 3.68.7 5.05 1.85L7.85 15.05A6.97 6.97 0 0 1 4 12c0-3.87 3.13-7 7-7zm0 2c-2.76 0-5 2.24-5 5s2.24 5 5 5 5-2.24 5-5-2.24-5-5-5zm0 2c1.66 0 3 1.34 3 3s-1.34 3-3 3-3-1.34-3-3 1.34-3 3-3z"/>
-                    </svg>
-                </span>
-
-                <span class="sk-navigation__text">
-                    Мои операции
-                </span>
-
-                <span class="sk-navigation__counter"
-                      th:if="${myOperationsCount != null and myOperationsCount > 0}"
-                      th:text="${myOperationsCount}">
-                    2
+                      th:if="${staffCount != null and staffCount > 0}"
+                      th:text="${staffCount}">
+                    1
                 </span>
             </a>
 
@@ -159,11 +138,15 @@
 
     <header class="topbar sk-topbar">
 
-        <div class="sk-topbar__left">
+        <div class="sk-topbar__left gs-host">
 
-            <span class="sk-topbar__section">
+            <span class="gs-host__section">
                 Модуль службы качества
             </span>
+
+            <div th:replace="~{fragments/global-search
+                    :: field('Поиск по техпроцессам, изделиям, операциям и рабочим местам; заказ — по номеру (ЗП-2026-005 или 57)')}">
+            </div>
         </div>
 
         <div class="sk-topbar__right">

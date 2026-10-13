@@ -79,4 +79,47 @@ public interface TechProcessOperationRepository
             @Param("typeCode") String typeCode
     );
 
+    /**
+     * Комплектовочные операции указанного подразделения в перечне
+     * маршрутов.
+     *
+     * Нужен комплектованию ремонтных ЗНП: заказ ведётся по своему
+     * техпроцессу, и проводить ячейку надо по той операции этого
+     * маршрута, которая принадлежит бюро входного контроля, — а не по
+     * первой попавшейся комплектовочной операции склада.
+     *
+     * Выборка по перечню техпроцессов, а не по одному: меню «Моих
+     * операций» рисует сразу несколько заказов, и запрос на каждый
+     * заказ дал бы столько же обращений к базе, сколько заказов в
+     * списке.
+     *
+     * Подразделение и тип задаются параметрами, а не вшиты в запрос:
+     * коды справочников знает сервис (они заведены миграциями V15 и
+     * V30), а репозиторий остаётся переиспользуемым для прочих
+     * подразделений.
+     */
+    @EntityGraph(attributePaths = {
+            "operation",
+            "operation.operationName",
+            "operation.operationType",
+            "operation.organizationUnit"
+    })
+    @Query("""
+            select node
+            from TechProcessOperation node
+            join node.techProcess techProcess
+            join node.operation operation
+            join operation.operationType operationType
+            join operation.organizationUnit unit
+            where techProcess.id in :processIds
+              and operationType.code = :typeCode
+              and unit.code = :unitCode
+            order by techProcess.id asc, node.position asc
+            """)
+    List<TechProcessOperation> findUnitKittingNodesForProcesses(
+            @Param("processIds") Collection<Long> processIds,
+            @Param("typeCode") String typeCode,
+            @Param("unitCode") String unitCode
+    );
+
 }

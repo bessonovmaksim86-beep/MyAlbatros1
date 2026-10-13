@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="ru"
+      xmlns:th="http://www.thymeleaf.org">
+
+<body>
+
+<!-- =========================================================
+     ОБЩИЙ ВЫПАДАЮЩИЙ ПОИСК
+
+     Виджет целиком: стили, поле, панель результатов и скрипт.
+     Вставляется одной строкой в левую часть верхней панели
+     каждого модуля:
+
+         <div th:replace="~{fragments/global-search
+                 :: field('свой текст подсказки')}"></div>
+
+     Так поиск не приходится настраивать постранично: подключение
+     ассетов живёт рядом с разметкой, и раздел, вставивший поле,
+     автоматически получает и оформление, и поведение.
+
+     Поведение и выдача повторяют поиск технологического отдела:
+     тот же адрес API, те же группы результатов, и найденное
+     открывается в новой вкладке — страница модуля, где набран
+     запрос, не теряется.
+     ========================================================= -->
+<th:block th:fragment="field(placeholder)">
+
+    <link rel="stylesheet"
+          th:href="@{/css/global-search.css}">
+
+    <div class="gs">
+
+        <label class="gs__field"
+               for="globalSearchInput">
+
+            <span class="visually-hidden">
+                Поиск по производственной системе
+            </span>
+
+            <input id="globalSearchInput"
+                   class="gs__input"
+                   name="query"
+                   type="search"
+                   autocomplete="off"
+                   th:placeholder="${placeholder}">
+        </label>
+
+        <!--
+            Панель результатов пустая и скрытая: её наполняет
+            js/global-search.js ответом того же API, что питает
+            поиск отдела технологий, поэтому выдача везде одинаковая.
+
+            Адрес подставляет Thymeleaf: зашивать путь в скрипте
+            нельзя, иначе поиск развалится при выкладке приложения
+            не на корень сервера.
+        -->
+        <div id="globalSearchResults"
+             class="gs__results"
+             role="listbox"
+             aria-label="Результаты поиска"
+             th:attr="data-search-url=@{/technology/search}"
+             hidden>
+        </div>
+    </div>
+
+    <script th:src="@{/js/global-search.js}"></script>
+</th:block>
+
+</body>
+</html>

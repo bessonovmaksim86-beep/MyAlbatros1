@@ -98,6 +98,54 @@ public class ProductClassifier {
         return name;
     }
 
+    /*
+     * Наименование для списков классификатора: к названию датчика
+     * через пробел добавляется строка product_name.
+     *
+     * Отдельный метод, а не изменение getDisplayName(): то читается
+     * этикетками, складом, планом производства и матчингом датчиков,
+     * где product_name сравнивается с наименованием каталога —
+     * дописка строки в базовое наименование исказила бы эти данные.
+     *
+     * Для прибора, ячейки и системы product_name и есть наименование,
+     * поэтому там дописывать нечего.
+     */
+    @Transient
+    public String getFullDisplayName() {
+        String display = trimToNull(getDisplayName());
+        String extra = productType == ProductType.SENSOR
+                ? trimToNull(name)
+                : null;
+
+        if (extra == null) {
+            return display;
+        }
+
+        if (display == null) {
+            return extra;
+        }
+
+        /*
+         * Строка product_name могла уже попасть в наименование
+         * каталога: дублировать её в списке не нужно.
+         */
+        if (display.contains(extra)) {
+            return display;
+        }
+
+        return display + " " + extra;
+    }
+
+    private static String trimToNull(String value) {
+        if (value == null) {
+            return null;
+        }
+
+        String trimmed = value.trim();
+
+        return trimmed.isEmpty() ? null : trimmed;
+    }
+
     /**
      * Название в терминах склада: «Подсборка …» вместо «Ячейка …».
      * Нужно формам прихода, где позиция до оприходования является

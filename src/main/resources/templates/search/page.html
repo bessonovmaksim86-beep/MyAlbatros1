@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="ru"
+      xmlns:th="http://www.thymeleaf.org">
+
+<head>
+    <meta charset="UTF-8">
+
+    <meta name="viewport"
+          content="width=device-width, initial-scale=1">
+
+    <title>Поиск</title>
+
+    <link rel="stylesheet"
+          th:href="@{/technology/css/technology.css}">
+
+    <link rel="stylesheet"
+          th:href="@{/technology/css/common.css}">
+
+    <link rel="stylesheet"
+          th:href="@{/css/search-summary.css}">
+</head>
+
+<body>
+
+<!--
+    Поиск в общем интерфейсе.
+
+    Тот же вне-ролевой каркас, что и сводка. Выдача остаётся здесь и
+    никуда не уводит: строка результата ведёт в сводку по объекту
+    (/search/object/...), а не в чужой раздел.
+-->
+<div class="app">
+
+    <aside class="sidebar">
+
+        <div class="brand">
+            <span class="brand-mark"></span>
+
+            <div>
+                <b>Альбатрос</b>
+                <small>Производственная система</small>
+            </div>
+        </div>
+
+        <div class="nav-title">
+            Раздел
+        </div>
+
+        <div class="nav">
+            <a class="nav-btn active"
+               th:href="@{/search}">
+                <span class="ico">
+                    <svg viewBox="0 0 24 24" width="14" height="14"
+                         fill="currentColor" aria-hidden="true">
+                        <path d="M10 2a8 8 0 1 0 4.9 14.3l5.4 5.4 1.4-1.4-5.4-5.4A8 8 0 0 0 10 2Zm0 2a6 6 0 1 1 0 12 6 6 0 0 1 0-12Z"/>
+                    </svg>
+                </span>
+                <span>Поиск</span>
+            </a>
+        </div>
+
+        <div class="sidebar-foot">
+            Поиск по производственной системе
+        </div>
+    </aside>
+
+    <main class="main">
+
+        <header class="topbar">
+
+            <span class="clock">
+                <strong>Поиск</strong>
+                <small>Техпроцессы, изделия, операции, места и заказы</small>
+            </span>
+
+            <div class="topbar-spacer"></div>
+
+            <a class="btn secondary"
+               th:href="@{/home}">
+                На рабочий стол
+            </a>
+        </header>
+
+        <div class="content">
+
+            <div class="search-page">
+
+                <form class="search-page__form"
+                      th:action="@{/search}"
+                      method="get"
+                      onsubmit="return false;">
+
+                    <input id="searchPageInput"
+                           class="search-page__input"
+                           name="q"
+                           type="search"
+                           autocomplete="off"
+                           autofocus
+                           placeholder="Наименование, код или номер заказа (ЗП-2026-005 или 57)">
+
+                    <button type="submit" class="btn">
+                        Найти
+                    </button>
+                </form>
+
+                <!--
+                    Контейнер выдачи. Адрес API подставляет Thymeleaf,
+                    чтобы поиск работал и при выкладке не на корень
+                    сервера. Содержимое наполняет js/search-page.js.
+                -->
+                <div id="searchPageResults"
+                     class="search-page__results"
+                     th:attr="data-search-url=@{/technology/search}"
+                     aria-live="polite">
+                </div>
+            </div>
+        </div>
+    </main>
+</div>
+
+<script th:src="@{/js/search-page.js}"></script>
+<script th:src="@{/js/float-scroll.js}"></script>
+</body>
+</html>

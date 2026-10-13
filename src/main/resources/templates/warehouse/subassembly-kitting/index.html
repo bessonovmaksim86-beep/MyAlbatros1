@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="ru"
+      xmlns:th="http://www.thymeleaf.org">
+
+<head>
+    <meta charset="UTF-8">
+
+    <meta name="viewport"
+          content="width=device-width, initial-scale=1">
+
+    <title>Комплектование подсборок в ЗНП</title>
+
+    <link rel="stylesheet"
+          th:href="@{/technology/css/technology.css}">
+
+    <link rel="stylesheet"
+          th:href="@{/technology/css/common.css}">
+
+    <link rel="stylesheet"
+          th:href="@{/warehouse/css/warehouse.css}">
+</head>
+
+<body>
+
+<div class="app-shell">
+
+    <aside th:replace="~{warehouse/fragments/layout
+            :: sidebar('subassembly-kitting')}">
+    </aside>
+
+    <main class="main">
+
+        <header th:replace="~{warehouse/fragments/layout
+                :: topbar}">
+        </header>
+
+        <div class="page-content warehouse-page">
+
+            <div class="page-head">
+
+                <div class="page-title">
+
+                    <h1>Комплектование подсборок в ЗНП</h1>
+
+                    <p>
+                        Заказы-комплектующие, в которых закреплена операция
+                        приёмки на склад полуфабрикатов: кладовщик вносит
+                        номера ячеек, принятых на склад, и проводки
+                        записываются в состав заказа
+                    </p>
+
+                </div>
+
+                <div class="page-head-actions">
+
+                    <a class="btn secondary"
+                       th:href="@{/warehouse/kitting-znp}">
+                        Комплектование ЗНП
+                    </a>
+
+                    <a class="btn secondary"
+                       th:href="@{/warehouse/general}">
+                        Обзор склада
+                    </a>
+
+                </div>
+            </div>
+
+            <div class="alert success"
+                 th:if="${successMessage}"
+                 th:text="${successMessage}">
+            </div>
+
+            <div class="alert danger"
+                 th:if="${errorMessage}"
+                 th:text="${errorMessage}">
+            </div>
+
+            <section class="card">
+
+                <div class="card-head">
+
+                    <div>
+
+                        <h2>Заказы-комплектующие к комплектованию</h2>
+
+                        <small>
+                            В список попадают ЗНП в работе, у которых
+                            операция приёмки относится к подразделению
+                            «Склад полуфабрикатов»
+                        </small>
+
+                    </div>
+
+                </div>
+
+                <div class="card-body">
+
+                    <div class="alert danger"
+                         th:if="${orders == null or #lists.isEmpty(orders)}">
+
+                        <p>
+                            Заказов к комплектованию пока нет: список
+                            формируется из ЗНП в работе с операцией приёмки
+                            на склад полуфабрикатов
+                        </p>
+
+                    </div>
+
+                    <div class="table-wrap"
+                         th:unless="${orders == null or #lists.isEmpty(orders)}">
+
+                        <table class="data-table warehouse-batch-table">
+
+                            <thead>
+
+                            <tr>
+                                <th>Заказ-комплектующий</th>
+                                <th>Вид</th>
+                                <th>Родитель (ЗП)</th>
+                                <th>Дата заказа</th>
+                                <th>Срок</th>
+                                <th>Готовность</th>
+                                <th></th>
+                            </tr>
+
+                            </thead>
+
+                            <tbody>
+
+                            <tr th:each="order : ${orders}">
+
+                                <td class="warehouse-number-cell">
+                                    <a class="mono"
+                                       th:href="@{/warehouse/subassembly-kitting/{id}(id=${order.id})}"
+                                       th:text="${order.number}">
+                                        ЗНП-2026-114
+                                    </a>
+                                </td>
+
+                                <td th:text="${order.znpKindDisplayName}">
+                                    ЗНП на комплектование
+                                </td>
+
+                                <td class="mono"
+                                    th:text="${order.parentOrderNumber}">
+                                    ЗП-2026-031
+                                </td>
+
+                                <td th:text="${order.formattedOrderDate}">
+                                    18.09.2026
+                                </td>
+
+                                <td th:text="${order.formattedDueDate}">
+                                    30.09.2026
+                                </td>
+
+                                <td>
+                                    <span th:text="${order.readinessLabel()}">
+                                        Взято 3 из 10
+                                    </span>
+                                </td>
+
+                                <td class="table-actions">
+
+                                    <a class="btn primary compact"
+                                       th:href="@{/warehouse/subassembly-kitting/{id}(id=${order.id})}">
+                                        Внести ячейки
+                                    </a>
+
+                                </td>
+
+                            </tr>
+
+                            </tbody>
+                        </table>
+
+                    </div>
+
+                </div>
+            </section>
+
+        </div>
+    </main>
+</div>
+
+<th:block th:replace="~{warehouse/fragments/layout
+        :: commonScripts}">
+</th:block>
+
+</body>
+</html>

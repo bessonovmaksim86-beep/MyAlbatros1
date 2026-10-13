@@ -185,21 +185,11 @@
 
     <header class="topbar dispatcher-topbar">
 
-        <div class="dispatcher-topbar__left">
+        <div class="dispatcher-topbar__left gs-host">
 
-            <label class="dispatcher-search"
-                   for="dispatcherGlobalSearch">
-
-                <span class="visually-hidden">
-                    Поиск по производственной системе
-                </span>
-
-                <input id="dispatcherGlobalSearch"
-                       name="query"
-                       type="search"
-                       autocomplete="off"
-                       placeholder="Поиск по заказам покупателя и заказам на производство">
-            </label>
+            <div th:replace="~{fragments/global-search
+                    :: field('Поиск по техпроцессам, изделиям, операциям и рабочим местам; заказ — по номеру (ЗП-2026-005 или 57)')}">
+            </div>
         </div>
 
         <div class="dispatcher-topbar__right">

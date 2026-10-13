@@ -69,12 +69,34 @@ public class WorkshopUnitOperationsController {
         /*
          * Форма добавления рабочего места всегда пустая: после
          * сохранения идёт redirect.
+         *
+         * Право на форму даёт canManage: раздел нужен и мастерам
+         * цехов, и руководителю службы качества — справочник операций
+         * у них общий, и контролёры службы работают своими операциями.
+         * Роли без права записи форму не получают вовсе: строить её
+         * нечем, а кнопка звала бы на 403.
          */
-        if (!model.containsAttribute("workPlaceForm")) {
+        boolean canManage = unitOperationsService.canManage(supervisor);
+
+        model.addAttribute("canManage", canManage);
+
+        if (canManage) {
+            /*
+             * Подразделения формы: мастеру сервис отдаёт своё единственное,
+             * службе качества — БТК и БВК, чтобы рабочее место можно было
+             * завести каждому из них.
+             */
             model.addAttribute(
-                    "workPlaceForm",
-                    unitOperationsService.newWorkPlaceForm(supervisor)
+                    "formUnits",
+                    unitOperationsService.formUnits(supervisor)
             );
+
+            if (!model.containsAttribute("workPlaceForm")) {
+                model.addAttribute(
+                        "workPlaceForm",
+                        unitOperationsService.newWorkPlaceForm(supervisor)
+                );
+            }
         }
 
         addFormData(model);
@@ -227,11 +249,22 @@ public class WorkshopUnitOperationsController {
         model.addAttribute("operationCount", operations.size());
         model.addAttribute("workPlaceCount", workPlaces.size());
 
-        if (!model.containsAttribute("workPlaceForm")) {
+        boolean canManage = unitOperationsService.canManage(supervisor);
+
+        model.addAttribute("canManage", canManage);
+
+        if (canManage) {
             model.addAttribute(
-                    "workPlaceForm",
-                    unitOperationsService.newWorkPlaceForm(supervisor)
+                    "formUnits",
+                    unitOperationsService.formUnits(supervisor)
             );
+
+            if (!model.containsAttribute("workPlaceForm")) {
+                model.addAttribute(
+                        "workPlaceForm",
+                        unitOperationsService.newWorkPlaceForm(supervisor)
+                );
+            }
         }
 
         addFormData(model);

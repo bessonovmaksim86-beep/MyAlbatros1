@@ -19,20 +19,28 @@
           th:href="@{/workshop/css/distribution.css}">
     <link rel="stylesheet"
           th:href="@{/workshop/css/distribution-groups.css}">
+    <link rel="stylesheet"
+          th:href="@{/workshop/css/repair-kitting.css}">
+
+    <link rel="stylesheet"
+          th:if="${isSKGeneral}"
+          th:href="@{/quality/css/quality.css}">
 </head>
 
 <body>
 
 <div class="app-shell">
 
-    <aside th:replace="~{workshop/fragments/layout
-            :: sidebar('my-operations')}">
+    <aside th:replace="${isSKGeneral}
+            ? ~{quality/fragments/layout :: sidebar('my-operations')}
+            : ~{workshop/fragments/layout :: sidebar('my-operations')}">
     </aside>
 
     <main class="main">
 
-        <header th:replace="~{workshop/fragments/layout
-                :: topbar}">
+        <header th:replace="${isSKGeneral}
+                ? ~{quality/fragments/layout :: topbar}
+                : ~{workshop/fragments/layout :: topbar}">
         </header>
 
         <div class="page-content workshop-page">
@@ -374,9 +382,25 @@
 
             </section>
 
-            <!-- Пусто -->
+            <!--
+                Ремонтные ЗНП в работе: группы по комплектовочной
+                операции бюро. Стоят после закреплённых работ, потому
+                что заказ бюро — не работа из графика: его планировщик
+                не назначал, его завёл диспетчер, и человеку сначала
+                нужно увидеть свою очередь, а уже затем состав ремонта.
+            -->
+            <th:block th:replace="~{my-operations/fragments/repair-kitting :: groups}">
+            </th:block>
+
+            <!--
+                Пусто — только когда пусто по обоим спискам: у
+                исполнителя бюро закреплённых работ может и не быть, но
+                заказы на ремонт при этом есть, и «назначьте работу»
+                противоречило бы видимому под ним списку.
+            -->
             <div class="alert success"
-                 th:if="${#lists.isEmpty(operations)}">
+                 th:if="${#lists.isEmpty(operations)
+                         and (kittingGroups == null or #lists.isEmpty(kittingGroups))}">
 
                 <p>
                     Закреплённых операций на ближайшие две недели нет:
@@ -392,8 +416,9 @@
 
 </div>
 
-<th:block th:replace="~{workshop/fragments/layout
-        :: commonScripts}">
+<th:block th:replace="${isSKGeneral}
+        ? ~{quality/fragments/layout :: commonScripts}
+        : ~{workshop/fragments/layout :: commonScripts}">
 </th:block>
 
 <script>
@@ -427,6 +452,40 @@ function toggleGroup(index) {
 (function collapseGroups() {
     document
         .querySelectorAll('.distribution-group-panel')
+        .forEach(panel => {
+            panel.style.display = 'none';
+        });
+})();
+
+/*
+ * Ремонтные ЗНП сворачиваются так же, но панелью служит весь блок
+ * таблицы карточки, а не строка: заказов у операции немного, и
+ * перечислять их в строке заголовка нечего — счётчик уже виден.
+ */
+function toggleKittingGroup(index) {
+    const panel = document.getElementById('kitting-panel-' + index);
+    const caret = document.getElementById('kitting-caret-' + index);
+
+    if (!panel) {
+        return;
+    }
+
+    const hidden = panel.style.display === 'none';
+
+    panel.style.display = hidden ? '' : 'none';
+    if (caret) {
+        caret.textContent = hidden ? '▲' : '▼';
+    }
+}
+
+/*
+ * Группы комплектования тоже свёрнуты: исполнителю важно сначала
+ * увидеть, сколько заказов и сколько ячеек осталось, а состав читать
+ * только по той операции, по которой он работает сейчас.
+ */
+(function collapseKittingGroups() {
+    document
+        .querySelectorAll('[id^="kitting-panel-"]')
         .forEach(panel => {
             panel.style.display = 'none';
         });

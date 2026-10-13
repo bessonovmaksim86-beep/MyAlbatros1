@@ -23,6 +23,8 @@
         document.querySelector('[data-tp-workplace-required-message]');
     const workplaceTemplate =
         document.querySelector('[data-tp-workplace-template]');
+    const collapseAllButton =
+        document.querySelector('[data-tp-collapse-all]');
 
     const operationNames = new Map();
 
@@ -89,10 +91,18 @@
             !enabled
         );
 
-        row.querySelector('[data-tp-remove]')?.toggleAttribute(
-            'hidden',
-            !enabled
-        );
+        /*
+         * Кнопки строки (свернуть / удалить) нужны только
+         * заполненной операции: пустую строку сворачивать нечего.
+         */
+        (row.querySelector('.tp-row-actions')
+            || row.querySelector('[data-tp-remove]'))
+            ?.toggleAttribute('hidden', !enabled);
+
+        /*
+         * Пустая строка всегда развёрнута, иначе её нельзя заполнить.
+         */
+        setCollapsed(row, isCollapsed(row) && enabled);
 
         row.classList.toggle('is-empty', !enabled);
     }
@@ -261,6 +271,102 @@
         });
     }
 
+    /*
+     * Сворачивание строки операции.
+     *
+     * В свёрнутом состоянии остаётся только верхняя строка: номер,
+     * выбранная операция и нормы времени. Блоки зависимостей, рабочих
+     * мест и описания скрыты стилями, но поля остаются в DOM и в
+     * names, поэтому значения сохраняются и уходят в форму.
+     */
+    function collapseButton(row) {
+        return row.querySelector('[data-tp-collapse]');
+    }
+
+    function isCollapsed(row) {
+        return row.classList.contains('is-collapsed');
+    }
+
+    function setCollapsed(row, collapsed) {
+        row.classList.toggle('is-collapsed', collapsed);
+
+        const button = collapseButton(row);
+
+        if (!button) {
+            return;
+        }
+
+        /*
+         * Подписи берутся из data-атрибутов кнопки: человекочитаемый
+         * текст живёт в HTML, а не в этом файле.
+         */
+        button.textContent = collapsed
+            ? (button.dataset.expandLabel || '')
+            : (button.dataset.collapseLabel || '');
+
+        button.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+    }
+
+    /*
+     * Сводка свёрнутой операции в подсказку строки: наименование,
+     * нормы и рабочие места, чтобы при сворачивании не терять контроль
+     * над уже заполненными значениями.
+     */
+    function summarize(row) {
+        const select = operationSelect(row);
+        const chosen = select.options[select.selectedIndex];
+
+        const name = chosen && chosen.value
+            ? chosen.textContent.trim()
+            : '';
+
+        const norms = normFields(row)
+            .map(field => field.value)
+            .filter(Boolean)
+            .join(' / ');
+
+        const places = workplaceSelects(row)
+            .filter(place => place.value)
+            .map(place => place.options[place.selectedIndex].textContent.trim())
+            .join(', ');
+
+        return [name, norms, places].filter(Boolean).join('  |  ');
+    }
+
+    function syncSummaries() {
+        rows().forEach(row => {
+            if (isCollapsed(row)) {
+                row.title = summarize(row);
+            } else {
+                row.removeAttribute('title');
+            }
+        });
+    }
+
+    function syncCollapseAll() {
+        if (!collapseAllButton) {
+            return;
+        }
+
+        const filled = rows().filter(row => operationSelect(row).value);
+
+        const everyCollapsed = filled.length > 0
+            && filled.every(isCollapsed);
+
+        collapseAllButton.textContent = everyCollapsed
+            ? (collapseAllButton.dataset.expandAllLabel || '')
+            : (collapseAllButton.dataset.collapseAllLabel || '');
+    }
+
+    function collapseAll(collapsed) {
+        rows()
+            .filter(row => operationSelect(row).value)
+            .forEach(row => setCollapsed(row, collapsed));
+
+        syncCollapseAll();
+        syncSummaries();
+    }
+
     function bindRow(row) {
         if (row.dataset.bound === '1') {
             return;
@@ -277,6 +383,12 @@
                 normalize();
             }
         );
+
+        collapseButton(row)?.addEventListener('click', () => {
+            setCollapsed(row, !isCollapsed(row));
+            syncCollapseAll();
+            syncSummaries();
+        });
 
         row.querySelectorAll('[data-tp-deps]').forEach(box => {
             box.addEventListener('change', renumber);
@@ -363,6 +475,8 @@
 
         rebuildDependencies();
         renumber();
+        syncCollapseAll();
+        syncSummaries();
     }
 
     /*
@@ -371,7 +485,7 @@
      * Текст сообщения берётся из <template> в HTML.
      */
     function validateWorkPlaces() {
-        const missing = rows().some(row => {
+        const missing = rows().find(row => {
             if (!operationSelect(row).value) {
                 return false;
             }
@@ -382,6 +496,15 @@
         if (!missing) {
             return true;
         }
+
+        /*
+         * Свёрнутую операцию с незаполненным рабочим местом
+         * разворачиваем, чтобы было видно, где именно ошибка.
+         */
+        setCollapsed(missing, false);
+        syncCollapseAll();
+        syncSummaries();
+        missing.querySelector('[data-tp-workplace]')?.focus();
 
         window.alert(
             workplaceRequiredTemplate
@@ -437,6 +560,18 @@
         addButton?.addEventListener('click', () => {
             addRow();
             normalize();
+        });
+
+        /*
+         * Одна кнопка на два действия: свёрнуты не все заполненные
+         * операции — сворачиваем их, иначе — разворачиваем обратно.
+         */
+        collapseAllButton?.addEventListener('click', () => {
+            const filled = rows().filter(
+                row => operationSelect(row).value
+            );
+
+            collapseAll(!filled.every(isCollapsed));
         });
 
         form.addEventListener('submit', event => {

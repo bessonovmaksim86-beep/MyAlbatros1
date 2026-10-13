@@ -18,20 +18,26 @@
 
     <link rel="stylesheet"
           th:href="@{/workshop/css/workshop.css}">
+
+    <link rel="stylesheet"
+          th:if="${isSKGeneral}"
+          th:href="@{/quality/css/quality.css}">
 </head>
 
 <body>
 
 <div class="app-shell">
 
-    <aside th:replace="~{workshop/fragments/layout
-            :: sidebar('staff')}">
+    <aside th:replace="${isSKGeneral}
+            ? ~{quality/fragments/layout :: sidebar(${activePage})}
+            : ~{workshop/fragments/layout :: sidebar('staff')}">
     </aside>
 
     <main class="main">
 
-        <header th:replace="~{workshop/fragments/layout
-                :: topbar}">
+        <header th:replace="${isSKGeneral}
+                ? ~{quality/fragments/layout :: topbar}
+                : ~{workshop/fragments/layout :: topbar}">
         </header>
 
         <div class="page-content workshop-page">
@@ -104,7 +110,16 @@
 
             </div>
 
-            <section class="card">
+            <!--
+                Форма закрепления — всем, кому подразделение не только
+                видно, но и подотчётно (WorkshopStaffService#canViewUnit).
+                Справочник операций общий с технологическим отделом, и
+                без закрепления в очереди распределения не появилось бы
+                ни одного исполнителя — поэтому служба качества ведёт
+                закрепления своих контролёров сама.
+            -->
+            <section class="card"
+                     th:if="${canViewUnit}">
 
                 <div class="card-head">
 
@@ -407,6 +422,7 @@
 
                                             <form th:action="@{/workshop/staff/unbind}"
                                                   method="post"
+                                                  th:if="${canViewUnit}"
                                                   class="workshop-chip__remove">
 
                                                 <input th:if="${_csrf != null}"
@@ -465,8 +481,9 @@
 
 </div>
 
-<th:block th:replace="~{workshop/fragments/layout
-        :: commonScripts}">
+<th:block th:replace="${isSKGeneral}
+        ? ~{quality/fragments/layout :: commonScripts}
+        : ~{workshop/fragments/layout :: commonScripts}">
 </th:block>
 
 <script th:src="@{/workshop/js/staff.js}"></script>

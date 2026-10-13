@@ -18,20 +18,26 @@
 
     <link rel="stylesheet"
           th:href="@{/workshop/css/workshop.css}">
+
+    <link rel="stylesheet"
+          th:if="${isSKGeneral}"
+          th:href="@{/quality/css/quality.css}">
 </head>
 
 <body>
 
 <div class="app-shell">
 
-    <aside th:replace="~{workshop/fragments/layout
-            :: sidebar('calendar')}">
+    <aside th:replace="${isSKGeneral}
+            ? ~{quality/fragments/layout :: sidebar(${activePage})}
+            : ~{workshop/fragments/layout :: sidebar('calendar')}">
     </aside>
 
     <main class="main">
 
-        <header th:replace="~{workshop/fragments/layout
-                :: topbar}">
+        <header th:replace="${isSKGeneral}
+                ? ~{quality/fragments/layout :: topbar}
+                : ~{workshop/fragments/layout :: topbar}">
         </header>
 
         <div class="page-content workshop-page">
@@ -170,13 +176,20 @@
 
                     </div>
 
+                    <!--
+                        Форма отметки — только полному модулю. Служба
+                        качества читает календарь своего подразделения:
+                        POST /workshop/calendar/mark перед её ролью закрыт.
+                        Без формы calendar.js выходит на своей же проверке
+                        «нет формы», поэтому ячейки остаются показательными
+                        и перестают откликаться на щелчок — ровно как на
+                        странице с пустым списком сотрудников.
+                    -->
                     <form method="post"
                           th:action="@{/workshop/calendar/mark}"
                           th:object="${absenceForm}"
                           id="absenceForm"
-                          class="workshop-absence-form"
-                          th:attr="data-unit-genitive=${unitGenitive}"
-                          th:if="${not #lists.isEmpty(rows)}">
+                          th:if="${canViewUnit and not #lists.isEmpty(rows)}">
 
                         <input th:if="${_csrf != null}"
                                type="hidden"
@@ -495,8 +508,9 @@
 
 </div>
 
-<th:block th:replace="~{workshop/fragments/layout
-        :: commonScripts}">
+<th:block th:replace="${isSKGeneral}
+        ? ~{quality/fragments/layout :: commonScripts}
+        : ~{workshop/fragments/layout :: commonScripts}">
 </th:block>
 
 <script th:src="@{/workshop/js/calendar.js}"></script>

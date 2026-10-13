@@ -100,6 +100,46 @@
                     </a>
 
                     
+                    <!--
+                        Запуск в работу из карточки. Кнопку показывают у
+                        незакрытого заказа; при причине блокировки она
+                        неактивна, а причина — в подсказке (planBlockReason в
+                        модели повторяет проверку plan(), поэтому карточка не
+                        предлагает того, что сервис отвергнет). Отдельная
+                        кнопка здесь нужна потому, что в карточку попадают и
+                        групповые заказы: в списке «Групповые ЗНП» их раньше
+                        запускали только через сам список.
+                    -->
+                    <form method="post"
+                          th:if="${
+                              order != null
+                              and order.status != null
+                              and order.status.name() != 'DONE'
+                              and order.status.name() != 'CANCELLED'
+                          }"
+                          th:action="@{/dispatcher/production-order/{id}/plan(id=${order.id})}"
+                          class="inline-action"
+                          th:attr="data-confirm=${
+                              'Взять заказ «' + order.number + '» в работу?'
+                          }"
+                          onsubmit="return this.querySelector('button').disabled
+                              ? false
+                              : confirm(this.getAttribute('data-confirm'));">
+
+                        <input th:if="${_csrf != null}"
+                               type="hidden"
+                               th:name="${_csrf.parameterName}"
+                               th:value="${_csrf.token}">
+
+                        <button class="btn primary page-action--start"
+                                type="submit"
+                                th:disabled="${planBlockReason != null}"
+                                th:title="${planBlockReason}">
+                            В работу
+                        </button>
+
+                    </form>
+
                     <form method="post"
                           th:if="${
                               order != null

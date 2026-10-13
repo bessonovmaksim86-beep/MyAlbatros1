@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="ru"
+      xmlns:th="http://www.thymeleaf.org">
+
+<head>
+    <meta charset="UTF-8">
+
+    <meta name="viewport"
+          content="width=device-width, initial-scale=1">
+
+    <title th:text="${
+        summary != null
+            ? summary.title + ' — поиск'
+            : 'Объект не найден'
+    }">Объект — поиск</title>
+
+    <link rel="stylesheet"
+          th:href="@{/technology/css/technology.css}">
+
+    <link rel="stylesheet"
+          th:href="@{/technology/css/common.css}">
+
+    <link rel="stylesheet"
+          th:href="@{/css/search-summary.css}">
+</head>
+
+<body>
+
+<!--
+    Единый вне-ролевой интерфейс сводки по найденному объекту.
+
+    Разметка повторяет рабочий стол (home.html): та же сетка .app,
+    тёмный бокс .sidebar и белая .topbar из technology.css. Интерфейс
+    намеренно НЕ берётся из раздела, куда ведёт объект: сводка
+    надмодульная и должна выглядеть одинаково, каким бы ни был объект.
+-->
+<div class="app">
+
+    <aside class="sidebar">
+
+        <div class="brand">
+            <span class="brand-mark"></span>
+
+            <div>
+                <b>Альбатрос</b>
+                <small>Производственная система</small>
+            </div>
+        </div>
+
+        <div class="nav-title">
+            Раздел
+        </div>
+
+        <div class="nav">
+            <a class="nav-btn"
+               th:href="@{/search}">
+                <span class="ico">
+                    <svg viewBox="0 0 24 24" width="14" height="14"
+                         fill="currentColor" aria-hidden="true">
+                        <path d="M10 2a8 8 0 1 0 4.9 14.3l5.4 5.4 1.4-1.4-5.4-5.4A8 8 0 0 0 10 2Zm0 2a6 6 0 1 1 0 12 6 6 0 0 1 0-12Z"/>
+                    </svg>
+                </span>
+                <span>Поиск</span>
+            </a>
+        </div>
+
+        <div class="sidebar-foot">
+            Общая информация по объекту
+        </div>
+    </aside>
+
+    <main class="main">
+
+        <header class="topbar">
+
+            <span class="clock">
+                <strong>Результат поиска</strong>
+                <small
+                      th:text="${
+                          summary != null
+                              ? summary.categoryLabel
+                              : 'Объект недоступен'
+                      }">
+                    Категория
+                </small>
+            </span>
+
+            <div class="topbar-spacer"></div>
+
+            <!--
+                Возврат — на рабочий стол, а не в какой-то один отдел:
+                сводка надмодульная, и ссылка в её шапке не должна
+                зависеть от того, чей это объект и кто его открыл.
+            -->
+            <a class="btn secondary"
+               th:href="@{/home}">
+                На рабочий стол
+            </a>
+        </header>
+
+        <div class="content">
+
+            <!-- Объект найден -->
+            <div th:if="${summary != null}"
+                 class="search-summary">
+
+                <div class="search-summary__head">
+
+                    <div>
+
+                        <h1 class="search-summary__title"
+                            th:text="${summary.title}">
+                            Объект
+                        </h1>
+
+                        <p class="search-summary__kind"
+                           th:text="${summary.categoryLabel}">
+                            Категория
+                        </p>
+                    </div>
+
+                    <span class="search-summary__status"
+                          th:if="${summary.statusLabel != null
+                                  and !#strings.isEmpty(summary.statusLabel)}"
+                          th:text="${summary.statusLabel}">
+                        Статус
+                    </span>
+                </div>
+
+                <section class="card">
+
+                    <div class="card-head">
+
+                        <div>
+
+                            <h2>Общая информация</h2>
+
+                            <p>
+                                Свойства найденного объекта. Полную
+                                карточку со всеми действиями открывает
+                                ссылка под перечнем.
+                            </p>
+                        </div>
+                    </div>
+
+                    <div class="card-body">
+
+                        <dl class="search-summary__fields"
+                            th:if="${!summary.fields.isEmpty()}">
+
+                            <div class="search-summary__field"
+                                 th:each="field : ${summary.fields}">
+
+                                <dt th:text="${field.label}">
+                                    Свойство
+                                </dt>
+
+                                <dd th:text="${field.value}">
+                                    Значение
+                                </dd>
+                            </div>
+                        </dl>
+
+                        <p class="empty"
+                           th:if="${summary.fields.isEmpty()}">
+                            Дополнительных свойств у объекта нет.
+                        </p>
+
+                        <div class="search-summary__actions">
+
+                            <a class="btn"
+                               th:href="@{${summary.moduleUrl}}">
+                                Открыть в разделе
+                            </a>
+
+                            <a class="btn secondary"
+                               th:href="@{/search}">
+                                Искать ещё
+                            </a>
+                        </div>
+                    </div>
+                </section>
+            </div>
+
+            <!-- Объект не найден или категория неизвестна -->
+            <div th:if="${summary == null}"
+                 class="search-summary">
+
+                <section class="card">
+
+                    <div class="card-head">
+
+                        <div>
+
+                            <h2>Объект не найден</h2>
+
+                            <p>
+                                Запись удалена или ссылка устарела.
+                                Попробуйте найти объект заново.
+                            </p>
+                        </div>
+                    </div>
+
+                    <div class="card-body">
+
+                        <div class="search-summary__actions">
+
+                            <a class="btn"
+                               th:href="@{/search}">
+                                Перейти к поиску
+                            </a>
+                        </div>
+                    </div>
+                </section>
+            </div>
+        </div>
+    </main>
+</div>
+
+<script th:src="@{/js/float-scroll.js}"></script>
+</body>
+</html>

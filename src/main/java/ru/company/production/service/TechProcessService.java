@@ -633,7 +633,9 @@ public class TechProcessService {
      * производство — прямоугольник, передача — параллелограмм,
      * возврат — шестиугольник, распределение работ — ромб,
      * получение комплектации — овал,
-     * комплектовочная — пятиугольник.
+     * комплектовочная — пятиугольник,
+     * контрольная — восьмиугольник,
+     * приёмка на склад — капсула.
      */
     private static String nodeShape(String typeCode) {
         if (typeCode == null) {
@@ -646,6 +648,8 @@ public class TechProcessService {
             case "WORK_DISTRIBUTION" -> "diamond";
             case "KIT_RECEIPT" -> "oval";
             case "KITTING" -> "pentagon";
+            case "CONTROL" -> "octagon";
+            case "RECEIVING" -> "stadium";
             default -> "rect";
         };
     }

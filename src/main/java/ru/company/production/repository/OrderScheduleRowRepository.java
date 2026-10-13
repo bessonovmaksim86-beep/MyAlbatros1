@@ -243,6 +243,43 @@ public interface OrderScheduleRowRepository
     );
 
     /*
+     * Очередь распределения по списку подразделений.
+     *
+     * Нужна руководителю службы качества: в его карточке учётной
+     * записи подразделение не указано (он отвечает сразу за БТК и БВК),
+     * и запрос одного подразделения не вернул бы ему ничего — раздел
+     * выглядел бы сломанным. Границу задаёт
+     * WorkshopStaffService#unitScope.
+     */
+    @EntityGraph(attributePaths = {
+            "operation",
+            "operation.operationName",
+            "operation.operationType",
+            "customerOrder",
+            "techProcess"
+    })
+    @Query("""
+            select row
+            from OrderScheduleRow row
+            where row.status = :status
+              and row.customerOrder.active = true
+              and row.organizationUnit.id in :unitIds
+              and row.executor is null
+              and row.operation.operationType.code <> :excludedTypeCode
+              and row.plannedDate between :from and :to
+            order by row.plannedDate asc,
+                     row.operation.operationName.name asc,
+                     row.itemPosition asc, row.instanceIndex asc
+            """)
+    List<OrderScheduleRow> findAssignableForUnitIds(
+            @Param("status") ScheduleRowStatus status,
+            @Param("unitIds") java.util.Collection<Long> unitIds,
+            @Param("excludedTypeCode") String excludedTypeCode,
+            @Param("from") LocalDate from,
+            @Param("to") LocalDate to
+    );
+
+    /*
      * Операции получения комплектации подразделения: они же личные
      * работы руководителя. В очередь распределения не попадают —
      * такую операцию нельзя переложить на исполнителя.
@@ -303,6 +340,31 @@ public interface OrderScheduleRowRepository
     );
 
     /*
+     * Строки группы по списку подразделений — та же граница службы.
+     */
+    @EntityGraph(attributePaths = {
+            "operation",
+            "operation.operationName",
+            "customerOrder"
+    })
+    @Query("""
+            select row
+            from OrderScheduleRow row
+            where row.status = :status
+              and row.customerOrder.active = true
+              and row.organizationUnit.id in :unitIds
+              and row.operation.id = :operationId
+              and row.plannedDate = :plannedDate
+            order by row.itemPosition asc, row.instanceIndex asc
+            """)
+    List<OrderScheduleRow> findGroupRowsForUnitIds(
+            @Param("status") ScheduleRowStatus status,
+            @Param("unitIds") java.util.Collection<Long> unitIds,
+            @Param("operationId") Long operationId,
+            @Param("plannedDate") LocalDate plannedDate
+    );
+
+    /*
      * Строки одной операции одного изделия — карточка операции внутри
      * раскрытой строки-изделия.
      *
@@ -332,6 +394,36 @@ public interface OrderScheduleRowRepository
     List<OrderScheduleRow> findProductOperationRows(
             @Param("status") ScheduleRowStatus status,
             @Param("unitId") Long unitId,
+            @Param("operationId") Long operationId,
+            @Param("plannedDate") LocalDate plannedDate,
+            @Param("orderId") Long orderId,
+            @Param("itemPosition") Integer itemPosition
+    );
+
+    /*
+     * Строки операции изделия по списку подразделений — та же
+     * граница службы.
+     */
+    @EntityGraph(attributePaths = {
+            "operation",
+            "operation.operationName",
+            "customerOrder"
+    })
+    @Query("""
+            select row
+            from OrderScheduleRow row
+            where row.status = :status
+              and row.customerOrder.active = true
+              and row.organizationUnit.id in :unitIds
+              and row.operation.id = :operationId
+              and row.plannedDate = :plannedDate
+              and row.customerOrder.id = :orderId
+              and row.itemPosition = :itemPosition
+            order by row.instanceIndex asc
+            """)
+    List<OrderScheduleRow> findProductOperationRowsForUnitIds(
+            @Param("status") ScheduleRowStatus status,
+            @Param("unitIds") java.util.Collection<Long> unitIds,
             @Param("operationId") Long operationId,
             @Param("plannedDate") LocalDate plannedDate,
             @Param("orderId") Long orderId,
@@ -521,6 +613,36 @@ public interface OrderScheduleRowRepository
             @Param("to") LocalDate to
     );
 
+    /*
+     * Уже распределённые строки по списку подразделений — та же
+     * граница службы, что у очереди распределения.
+     */
+    @EntityGraph(attributePaths = {
+            "operation",
+            "operation.operationName",
+            "operation.operationType",
+            "customerOrder",
+            "executor"
+    })
+    @Query("""
+            select row
+            from OrderScheduleRow row
+            where row.status = :status
+              and row.customerOrder.active = true
+              and row.organizationUnit.id in :unitIds
+              and row.executor is not null
+              and row.plannedDate between :from and :to
+            order by row.plannedDate asc,
+                     row.operation.operationName.name asc,
+                     row.itemPosition asc, row.instanceIndex asc
+            """)
+    List<OrderScheduleRow> findAssignedForUnitIds(
+            @Param("status") ScheduleRowStatus status,
+            @Param("unitIds") java.util.Collection<Long> unitIds,
+            @Param("from") LocalDate from,
+            @Param("to") LocalDate to
+    );
+
     /** Уже распределённые строки подразделения — счётчик в меню. */
     @Query("""
             select count(row.id)
@@ -534,6 +656,23 @@ public interface OrderScheduleRowRepository
     long countAssignedForUnit(
             @Param("status") ScheduleRowStatus status,
             @Param("unitId") Long unitId,
+            @Param("from") LocalDate from,
+            @Param("to") LocalDate to
+    );
+
+    /** Уже распределённые по списку подразделений — счётчик меню службы. */
+    @Query("""
+            select count(row.id)
+            from OrderScheduleRow row
+            where row.status = :status
+              and row.customerOrder.active = true
+              and row.organizationUnit.id in :unitIds
+              and row.executor is not null
+              and row.plannedDate between :from and :to
+            """)
+    long countAssignedForUnitIds(
+            @Param("status") ScheduleRowStatus status,
+            @Param("unitIds") java.util.Collection<Long> unitIds,
             @Param("from") LocalDate from,
             @Param("to") LocalDate to
     );
@@ -552,6 +691,25 @@ public interface OrderScheduleRowRepository
     long countAssignableForUnit(
             @Param("status") ScheduleRowStatus status,
             @Param("unitId") Long unitId,
+            @Param("excludedTypeCode") String excludedTypeCode,
+            @Param("from") LocalDate from,
+            @Param("to") LocalDate to
+    );
+
+    /** Нераспределённое по списку подразделений — счётчик меню службы. */
+    @Query("""
+            select count(row.id)
+            from OrderScheduleRow row
+            where row.status = :status
+              and row.customerOrder.active = true
+              and row.organizationUnit.id in :unitIds
+              and row.executor is null
+              and row.operation.operationType.code <> :excludedTypeCode
+              and row.plannedDate between :from and :to
+            """)
+    long countAssignableForUnitIds(
+            @Param("status") ScheduleRowStatus status,
+            @Param("unitIds") java.util.Collection<Long> unitIds,
             @Param("excludedTypeCode") String excludedTypeCode,
             @Param("from") LocalDate from,
             @Param("to") LocalDate to
@@ -592,6 +750,59 @@ public interface OrderScheduleRowRepository
             @Param("status") ScheduleRowStatus status,
             @Param("unitIds") java.util.Collection<Long> unitIds,
             @Param("typeCode") String typeCode,
+            @Param("from") LocalDate from,
+            @Param("to") LocalDate to
+    );
+
+    /*
+     * Все строки плана подразделения — «Мои операции» бюро входного
+     * контроля.
+     *
+     * В бюро работы не распределяются: контролёр берёт любую работу из
+     * перечня бюро, поэтому его меню строится не по executor_id, а по
+     * подразделению. Статус не фильтруется по исполнителю — как и в
+     * findForExecutor, плановые строки нужны, по ним человек видит
+     * начало смены.
+     */
+    @EntityGraph(attributePaths = {
+            "operation",
+            "operation.operationName",
+            "operation.operationType",
+            "customerOrder",
+            "techProcess",
+            "workPlace",
+            "executor"
+    })
+    @Query("""
+            select row
+            from OrderScheduleRow row
+            where row.status = :status
+              and row.customerOrder.active = true
+              and row.organizationUnit.id in :unitIds
+              and row.plannedDate between :from and :to
+            order by row.plannedDate asc,
+                     row.operation.operationName.name asc,
+                     row.itemPosition asc, row.instanceIndex asc
+            """)
+    List<OrderScheduleRow> findAllForUnits(
+            @Param("status") ScheduleRowStatus status,
+            @Param("unitIds") java.util.Collection<Long> unitIds,
+            @Param("from") LocalDate from,
+            @Param("to") LocalDate to
+    );
+
+    /** Счётчик того же перечня — цифра пункта «Мои операции» в меню. */
+    @Query("""
+            select count(row.id)
+            from OrderScheduleRow row
+            where row.status = :status
+              and row.customerOrder.active = true
+              and row.organizationUnit.id in :unitIds
+              and row.plannedDate between :from and :to
+            """)
+    long countAllForUnits(
+            @Param("status") ScheduleRowStatus status,
+            @Param("unitIds") java.util.Collection<Long> unitIds,
             @Param("from") LocalDate from,
             @Param("to") LocalDate to
     );

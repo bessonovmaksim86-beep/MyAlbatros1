@@ -1,0 +1,382 @@
+<!DOCTYPE html>
+<html lang="ru"
+      xmlns:th="http://www.thymeleaf.org">
+
+<head>
+    <meta charset="UTF-8">
+
+    <meta name="viewport"
+          content="width=device-width, initial-scale=1">
+
+    <title>Комплектование подсборок в ЗНП</title>
+
+    <link rel="stylesheet"
+          th:href="@{/technology/css/technology.css}">
+
+    <link rel="stylesheet"
+          th:href="@{/technology/css/common.css}">
+
+    <link rel="stylesheet"
+          th:href="@{/warehouse/css/warehouse.css}">
+</head>
+
+<body>
+
+<div class="app-shell">
+
+    <aside th:replace="~{warehouse/fragments/layout
+            :: sidebar('subassembly-kitting')}">
+    </aside>
+
+    <main class="main">
+
+        <header th:replace="~{warehouse/fragments/layout
+                :: topbar}">
+        </header>
+
+        <div class="page-content warehouse-page">
+
+            <div class="page-head">
+
+                <div class="page-title">
+
+                    <h1>
+                        Внесение ячеек
+                        <span class="mono"
+                              th:text="${view.order.number}">
+                            ЗНП-2026-114
+                        </span>
+                    </h1>
+
+                    <p th:text="${
+                        'Операция: ' + view.operationName
+                    }">
+                        Операция: Приёмка на склад
+                    </p>
+
+                </div>
+
+                <div class="page-head-actions">
+
+                    <a class="btn secondary"
+                       th:href="@{/warehouse/subassembly-kitting}">
+                        К списку заказов
+                    </a>
+
+                </div>
+            </div>
+
+            <div class="alert success"
+                 th:if="${successMessage}"
+                 th:text="${successMessage}">
+            </div>
+
+            <div class="alert danger"
+                 th:if="${errorMessage}"
+                 th:text="${errorMessage}">
+            </div>
+
+            <!-- =====================================================
+                 ЗАКАЗ-КОМПЛЕКТУЮЩИЙ
+
+                 Реквизиты заказа: номер, вид, родитель, операция, срок.
+                 ===================================================== -->
+            <section class="card">
+
+                <div class="card-head">
+
+                    <div>
+
+                        <h2>Заказ-комплектующий</h2>
+
+                        <small>
+                            Реквизиты заказа, в который вносятся ячейки
+                        </small>
+
+                    </div>
+
+                </div>
+
+                <div class="card-body">
+
+                    <dl class="warehouse-summary">
+
+                        <div class="warehouse-summary__row">
+
+                            <dt>Номер заказа</dt>
+
+                            <dd class="mono"
+                                th:text="${view.order.number}">
+                                ЗНП-2026-114
+                            </dd>
+                        </div>
+
+                        <div class="warehouse-summary__row">
+
+                            <dt>Вид заказа</dt>
+
+                            <dd th:text="${view.order.znpKindDisplayName}">
+                                ЗНП на комплектование
+                            </dd>
+                        </div>
+
+                        <div class="warehouse-summary__row">
+
+                            <dt>Родитель (ЗП)</dt>
+
+                            <dd class="mono"
+                                th:text="${view.order.parentOrderNumber}">
+                                ЗП-2026-031
+                            </dd>
+                        </div>
+
+                        <div class="warehouse-summary__row">
+
+                            <dt>Операция</dt>
+
+                            <dd th:text="${view.operationName}">
+                                Приёмка на склад
+                            </dd>
+                        </div>
+
+                        <div class="warehouse-summary__row">
+
+                            <dt>Заказ покупателя</dt>
+
+                            <dd class="mono"
+                                th:text="${view.order.customerOrderNumber}">
+                                ЗП-44/2026
+                            </dd>
+                        </div>
+
+                        <div class="warehouse-summary__row">
+
+                            <dt>Статус заказа</dt>
+
+                            <dd>
+                                <span class="status"
+                                      th:classappend="' ' + ${view.order.statusBadgeClass}"
+                                      th:text="${view.order.statusDisplayName}">
+                                    В работе
+                                </span>
+                            </dd>
+                        </div>
+
+                        <div class="warehouse-summary__row">
+
+                            <dt>Дата заказа</dt>
+
+                            <dd th:text="${view.order.formattedOrderDate}">
+                                18.09.2026
+                            </dd>
+                        </div>
+
+                        <div class="warehouse-summary__row">
+
+                            <dt>Срок выполнения</dt>
+
+                            <dd th:text="${view.order.formattedDueDate}">
+                                30.09.2026
+                            </dd>
+                        </div>
+
+                        <div class="warehouse-summary__row span-2"
+                             th:if="${view.order.note != null and !#strings.isEmpty(view.order.note)}">
+
+                            <dt>Примечание</dt>
+
+                            <dd th:text="${view.order.note}">
+                                Комплект по спецификации 14-К
+                            </dd>
+                        </div>
+
+                    </dl>
+
+                </div>
+            </section>
+
+
+            <!-- =====================================================
+                 ВНЕСЕНИЕ ЯЧЕЕК
+
+                 Поле ввода номеров ячеек, принятых на склад полуфабрикатов.
+                 Номера можно вводить вручную или сканировать штрихкодами.
+                 Разрешены только те номера, которые есть на складе.
+                 ===================================================== -->
+            <form method="post"
+                  th:action="@{/warehouse/subassembly-kitting/{id}(id=${view.order.id})}">
+
+                <input th:if="${_csrf != null}"
+                       type="hidden"
+                       th:name="${_csrf.parameterName}"
+                       th:value="${_csrf.token}">
+
+                <section class="card">
+
+                    <div class="card-head">
+
+                        <div>
+
+                            <h2>Внести ячейки в заказ</h2>
+
+                            <small>
+                                Внесите номера ячеек, принятых на склад
+                                полуфабрикатов. Номера можно вводить
+                                вручную или сканировать штрихкодами.
+                                Разрешены только номера ячеек,
+                                принятых на склад.
+                            </small>
+
+                        </div>
+
+                        <span class="warehouse-counter"
+                              th:text="${view.takenCount()} + ' из ' + ${view.availableCount()} + ' яч.'">
+                            3 из 10 яч.
+                        </span>
+                    </div>
+
+                    <div class="card-body">
+
+                        <div class="field">
+
+                            <label for="cellNumbers">
+                                Номера ячеек
+                            </label>
+
+                            <textarea id="cellNumbers"
+                                      name="cellNumbers"
+                                      rows="4"
+                                      class="mono"
+                                      placeholder="Введите номера ячеек, например:&#10;121200022&#10;121200025&#10;121200031"
+                                      th:text="${param.cellNumbers != null ? param.cellNumbers[0] : ''}">
+                            </textarea>
+
+                            <span class="field-hint">
+                                Номера разделяются переводом строки,
+                                запятой или точкой с запятой.
+                                Полный номер: 4 цифры кода + 5 цифр серии.
+                            </span>
+
+                        </div>
+
+                        <div class="warehouse-actions">
+
+                            <a class="btn secondary"
+                               th:href="@{/warehouse/subassembly-kitting}">
+                                К списку заказов
+                            </a>
+
+                            <button type="submit"
+                                    class="btn primary">
+                                Внести в заказ
+                            </button>
+
+                        </div>
+
+                    </div>
+                </section>
+            </form>
+
+
+            <!-- =====================================================
+                 ПЕРЕЧЕНЬ ЯЧЕЕК НА СКЛАДЕ
+
+                 Показывает все ячейки, принятые на склад полуфабрикатов,
+                 и статус каждой — внесена или нет.
+                 ===================================================== -->
+            <section class="card"
+                     th:if="${view.cells != null and not #lists.isEmpty(view.cells)}">
+
+                <div class="card-head">
+
+                    <div>
+
+                        <h2>Ячейки на складе полуфабрикатов</h2>
+
+                        <small>
+                            Все ячейки, принятые на склад.
+                            Зелёная отметка — ячейка уже внесена в заказ
+                        </small>
+
+                    </div>
+
+                    <span class="warehouse-counter"
+                          th:text="${#lists.size(view.cells)} + ' шт.'">
+                        10 шт.
+                    </span>
+                </div>
+
+                <div class="card-body">
+
+                    <div class="table-wrap">
+
+                        <table class="data-table warehouse-batch-table">
+
+                            <thead>
+
+                            <tr>
+                                <th>№</th>
+                                <th>Номер ячейки</th>
+                                <th>Наименование</th>
+                                <th>Статус</th>
+                            </tr>
+
+                            </thead>
+
+                            <tbody>
+
+                            <tr th:each="cell, iteration : ${view.cells}"
+                                th:classappend="${cell.taken()} ? ' is-done' : ''">
+
+                                <td class="warehouse-number-cell"
+                                    th:text="${iteration.count}">
+                                    1
+                                </td>
+
+                                <td class="warehouse-number-cell">
+                                    <span class="mono"
+                                          th:text="${cell.fullNumber()}">
+                                        121200022
+                                    </span>
+                                </td>
+
+                                <td th:text="${cell.displayName()}">
+                                    Подсборка ЯПР56
+                                </td>
+
+                                <td>
+                                    <span class="status"
+                                          th:classappend="${
+                                              cell.taken()
+                                                  ? ' status--ok'
+                                                  : ' status--attention'
+                                          }"
+                                          th:text="${
+                                              cell.taken()
+                                                  ? 'внесена в заказ'
+                                                  : 'ожидает внесения'
+                                          }">
+                                        ожидает внесения
+                                    </span>
+                                </td>
+
+                            </tr>
+
+                            </tbody>
+                        </table>
+
+                    </div>
+
+                </div>
+            </section>
+
+        </div>
+    </main>
+</div>
+
+<th:block th:replace="~{warehouse/fragments/layout
+        :: commonScripts}">
+</th:block>
+
+</body>
+</html>

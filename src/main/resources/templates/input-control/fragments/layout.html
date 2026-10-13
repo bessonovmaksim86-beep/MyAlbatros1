@@ -143,38 +143,11 @@
             </a>
 
             <!--
-                Комплектование ремонтных ячеек/подсборок — раздел,
-                которого раньше в меню не было: ЗНП на ремонт заводил
-                диспетчер, а забирать их из изолятора было негде.
+                Комплектование ремонтных ЗНП в меню не вынесено: состав
+                заказу набирает исполнитель из своего перечня работ
+                («Мои операции»), и отдельный вход в раздел только
+                множил бы адреса одной и той же задачи.
 
-                Счётчик — заказы, а не ячейки: в меню нужно видеть,
-                скольким ЗНП ещё чего-то недокомплектуют, а не сколько
-                ячеек для них потребуется.
-            -->
-            <a class="bvk-navigation__item"
-               th:classappend="${activePage == 'repair-kitting'} ? ' is-active' : ''"
-               th:href="@{/input-control/repair-kitting}"
-               title="Комплектование заказов на ремонт из изолятора брака">
-
-                <span class="bvk-navigation__icon">
-                    <svg viewBox="0 0 24 24" aria-hidden="true">
-                        <path d="M20 7H4V5h16v2Zm0 4H4V9h16v2Zm0 4H4v-2h16v2Zm-2 4H6v-2h12v2Z"/>
-                    </svg>
-                </span>
-
-                <span class="bvk-navigation__text">
-                    Комплектование ремонтных ячеек/подсборок
-                </span>
-
-                <span class="bvk-navigation__counter"
-                      th:if="${repairKittingCount != null and repairKittingCount > 0}"
-                      th:text="${repairKittingCount}">
-                    2
-                </span>
-            </a>
-
-
-            <!--
                 Работы, закреплённые планировщиком и мастером бюро за
                 самим контролёром. Раздел вынесен за /input-control/**
                 (см. MyOperationsController), но вход логичен именно
@@ -223,11 +196,15 @@
 
     <header class="topbar bvk-topbar">
 
-        <div class="bvk-topbar__left">
+        <div class="bvk-topbar__left gs-host">
 
-            <span class="bvk-topbar__section">
+            <span class="gs-host__section">
                 Модуль бюро входного контроля
             </span>
+
+            <div th:replace="~{fragments/global-search
+                    :: field('Поиск по техпроцессам, изделиям, операциям и рабочим местам; заказ — по номеру (ЗП-2026-005 или 57)')}">
+            </div>
         </div>
 
         <div class="bvk-topbar__right">

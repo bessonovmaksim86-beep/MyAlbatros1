@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="ru"
+      xmlns:th="http://www.thymeleaf.org">
+
+<body>
+
+<!-- =========================================================
+     РЕМОНТНЫЕ ЗНП В РАБОТЕ: ОПЕРАЦИЯ → ЕГО ЗАКАЗЫ
+
+     Меню построено по имени комплектовочной операции, закреплённой за
+     исполнителем: человек ищет свою работу по её названию, а номер
+     заказа ему нужен уже внутри — у одной операции заказов несколько.
+
+     Заказы на ремонт ячеек и на ремонт подсборок разделены, хотя
+     операция у них одна: форма комплектования отфильтровывает перечень
+     изолятора по разновидности, и смешанный список обещал бы при клике
+     не то, что откроется.
+
+     Клик по строке ЗНП ведёт на форму комплектования — перечень ячеек
+     того же типа, что на странице «Изолятор брака», но с выбором
+     строк (см. my-operations/repair-kitting).
+     ========================================================= -->
+<th:block th:fragment="groups">
+
+    <th:block th:if="${kittingGroups != null and !#lists.isEmpty(kittingGroups)}">
+
+        <section class="card repair-kitting-card"
+                 th:each="group, gstat : ${kittingGroups}">
+
+            <div class="repair-kitting-head"
+                 th:onclick="|toggleKittingGroup(${gstat.index})|">
+
+                <div class="repair-kitting-head__title">
+
+                    <span th:text="${group.operationName()}">
+                        Комплектование ячеек
+                    </span>
+
+                    <small>
+                        <span th:text="${group.cellKindLabel()}">Ячейка</span>
+                        из ремонта — ЗНП в работе
+                    </small>
+
+                </div>
+
+                <div class="repair-kitting-head__aside">
+
+                    <span class="badge badge--success"
+                          th:if="${group.completed()}">
+                        все укомплектованы
+                    </span>
+
+                    <span class="badge badge--attention"
+                          th:unless="${group.completed()}"
+                          th:text="'осталось ' + ${group.remainingCount()} + ' яч.'">
+                        осталось 8 яч.
+                    </span>
+
+                    <span class="badge"
+                          th:text="${group.orderCount()} + ' ЗНП'">
+                        3 ЗНП
+                    </span>
+
+                    <small class="repair-kitting-caret"
+                           th:id="'kitting-caret-' + ${gstat.index}">
+                        ▼
+                    </small>
+
+                </div>
+
+            </div>
+
+            <div class="card-body"
+                 th:id="'kitting-panel-' + ${gstat.index}">
+
+                <div class="table-wrap">
+
+                    <table class="repair-kitting-table">
+
+                        <colgroup>
+                            <col class="col-znp">
+                            <col class="col-plan">
+                            <col class="col-item">
+                            <col class="col-qty">
+                            <col class="col-tp">
+                            <col class="col-readied">
+                            <col class="col-open">
+                        </colgroup>
+
+                        <thead>
+                        <tr>
+                            <th>Номер ЗНП</th>
+                            <th>Дата плана</th>
+                            <th>Изделие заказа</th>
+                            <th>Кол-во</th>
+                            <th>Техпроцесс</th>
+                            <th>Готово</th>
+                            <th></th>
+                        </tr>
+                        </thead>
+
+                        <tbody>
+
+                        <tr th:each="znp : ${group.orders()}"
+                            th:classappend="${znp.completed()} ? ' is-completed' : ''">
+
+                            <td class="repair-kitting-table__znp"
+                                th:text="${znp.number()}">
+                                ЗК-2026-014
+                            </td>
+
+                            <td th:text="${znp.plannedDateLabel()}">
+                                15.10.2026
+                            </td>
+
+                            <td th:text="${znp.classifierLabel()}">
+                                1212 — Подсборка ЯПР56
+                            </td>
+
+                            <td th:text="${znp.quantityLabel()}">10</td>
+
+                            <td th:text="${znp.techProcessLabel()}">ТП-014</td>
+
+                            <td>
+
+                                <div class="readiness"
+                                     th:classappend="${znp.readinessStateClass()}">
+
+                                    <span class="readiness__label"
+                                          th:text="${znp.readinessLabel()}">
+                                        Готово 4 из 10
+                                    </span>
+
+                                    <span class="readiness__track">
+
+                                        <span class="readiness__fill"
+                                              th:style="'width:' + ${znp.readinessPercent()} + '%'">
+                                        </span>
+
+                                    </span>
+
+                                </div>
+
+                            </td>
+
+                            <td>
+
+                                <a class="btn primary compact"
+                                   th:if="${!znp.completed()}"
+                                   th:href="@{/my-operations/repair-kitting/{id}(id=${znp.orderId()})}">
+                                    Открыть
+                                </a>
+
+                                <a class="btn secondary compact"
+                                   th:if="${znp.completed()}"
+                                   th:href="@{/my-operations/repair-kitting/{id}(id=${znp.orderId()})}">
+                                    Состав
+                                </a>
+
+                            </td>
+
+                        </tr>
+
+                        </tbody>
+
+                    </table>
+
+                </div>
+
+            </div>
+
+        </section>
+
+    </th:block>
+
+</th:block>
+
+</body>
+</html>

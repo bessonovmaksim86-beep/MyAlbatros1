@@ -41,8 +41,17 @@
                 <div class="page-title">
                     <h1>Создание операции</h1>
 
-                    <p>
+                    <p th:if="${basedOnOperation == null}">
                         Заполните параметры новой операции
+                    </p>
+
+                    <p th:if="${basedOnOperation != null}">
+                        Параметры скопированы из операции
+                        <strong th:text="${basedOnOperation.operationName.name}">
+                            Операция
+                        </strong>
+                        — измените хотя бы одно поле, иначе операция
+                        с такими параметрами уже существует
                     </p>
                 </div>
 

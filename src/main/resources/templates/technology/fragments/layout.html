@@ -174,8 +174,23 @@
                        name="query"
                        type="search"
                        autocomplete="off"
-                       placeholder="Поиск по техпроцессам, классификаторам, датчикам и приборам">
+                       placeholder="Поиск по техпроцессам, классификаторам, датчикам и приборам; заказ — по номеру (ЗП-2026-005 или 57)">
             </label>
+
+            <!--
+                Выпадающий список результатов.
+
+                Адрес API вычисляет Thymeleaf, чтобы поиск работал
+                и при выкладке приложения не на корень сервера.
+                Содержимое наполняет technology/js/common.js.
+            -->
+            <div id="technologySearchResults"
+                 class="technology-search__results"
+                 role="listbox"
+                 aria-label="Результаты поиска"
+                 th:attr="data-search-url=@{/technology/search}"
+                 hidden>
+            </div>
         </div>
 
         <!-- Дата, время и пользователь -->

@@ -148,6 +148,60 @@ public class OperationController {
         return "technology/operation/create";
     }
 
+    /**
+     * Форма новой операции, предзаполненная параметрами выбранной.
+     * Совпадение всех параметров отсекается проверкой дубликатов
+     * при сохранении.
+     */
+    @GetMapping("/create-based")
+    public String createBasedPage(
+            @RequestParam(
+                    name = "id",
+                    required = false
+            )
+            Long id,
+            Model model,
+            RedirectAttributes redirectAttributes
+    ) {
+        model.addAttribute("activePage", "operation");
+
+        if (id == null) {
+            redirectAttributes.addFlashAttribute(
+                    "errorMessage",
+                    "Не указана операция, на основе которой "
+                            + "нужно создать новую"
+            );
+
+            return "redirect:/technology/operation";
+        }
+
+        try {
+            model.addAttribute(
+                    "basedOnOperation",
+                    operationService.get(id)
+            );
+
+            model.addAttribute(
+                    "operationForm",
+                    operationService.getForm(id)
+            );
+        } catch (
+                EntityNotFoundException |
+                IllegalArgumentException exception
+        ) {
+            redirectAttributes.addFlashAttribute(
+                    "errorMessage",
+                    exception.getMessage()
+            );
+
+            return "redirect:/technology/operation";
+        }
+
+        addOperationFormData(model);
+
+        return "technology/operation/create";
+    }
+
     @PostMapping("/create")
     public String create(
             @Valid

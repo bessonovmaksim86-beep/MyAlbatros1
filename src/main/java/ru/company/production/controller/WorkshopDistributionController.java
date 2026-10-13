@@ -167,17 +167,22 @@ public class WorkshopDistributionController {
     ) {
         AppUser supervisor = currentUser(authentication);
 
-        Long unitId = staffService.workshopUnitId(supervisor);
+        /*
+         * Граница — список подразделений службы, а не одно: у
+         * руководителя службы качества карточка подразделения пуста,
+         * и запрос одного подразделения вернул бы пустой список.
+         */
+        var scope = staffService.unitScope(supervisor);
 
         List<ProductOperationsView> operations =
                 distributionService.findProductOperations(
-                        unitId, supervisor, weeks
+                        scope, supervisor, weeks
                 );
 
         model.addAttribute("operations", operations);
         model.addAttribute(
                 "assignedOperations",
-                distributionService.findAssignedProductOperations(unitId, weeks)
+                distributionService.findAssignedProductOperations(scope, weeks)
         );
 
         /*
@@ -189,7 +194,7 @@ public class WorkshopDistributionController {
          */
         model.addAttribute(
                 "workshopName",
-                staffService.workshopName(supervisor)
+                staffService.scopeName(supervisor)
         );
 
         /* Панель срока: значение, варианты и показанный период. */

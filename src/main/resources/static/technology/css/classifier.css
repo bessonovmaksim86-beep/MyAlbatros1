@@ -67,7 +67,11 @@
 }
 
 .classifier-action-menu .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
     min-height: 40px;
+    margin: 0;
     padding: 10px 16px;
     border: 1px solid transparent;
     border-radius: 10px;

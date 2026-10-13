@@ -1,0 +1,336 @@
+/*
+ * КОМПЛЕКТОВАНИЕ РЕМОНТНЫХ ЗНП В «МОИХ ОПЕРАЦИЯХ»
+ *
+ * Две вещи: сворачиваемые группы «операция → ЗНП в работе» в списке
+ * работ и форма комплектования (фильтр изолятора + перечень ячеек с
+ * выбором).
+ *
+ * Отдельный файл, а не правка distribution-groups.css: карточки,
+ * таблицы, кнопки и бейджи приходят из technology.css и common.css, а
+ * здесь только специфика комплектования — полоса готовности заказа и
+ * колонка чекбоксов. Те же правила, что у групп распределения,
+ * переписывать незачем: классы групп переиспользуются как есть.
+ *
+ * Колонки задаются через colgroup и table-layout: fixed — при
+ * автоматической раскладке браузер раздал бы ширину по содержимому, и
+ * длинное наименование изделия сдвинуло бы счётчик готовности и кнопку
+ * «Открыть» в разных строках.
+ */
+
+/* ------------------------------------------------------------
+   ГРУППА «ОПЕРАЦИЯ → ЗНП В РАБОТЕ»
+
+   Заголовок группы — название комплектовочной операции, закреплённой
+   за исполнителем: человек ищет свою работу по её имени, а не по
+   номеру заказа.
+   ------------------------------------------------------------ */
+
+.repair-kitting-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 12px 16px;
+    border-bottom: 1px solid #e3e9f2;
+    background: #f7f9fd;
+    cursor: pointer;
+}
+
+.repair-kitting-head:hover {
+    background: #eef3fb;
+}
+
+.repair-kitting-head__title {
+    font-size: 14px;
+    font-weight: 700;
+    color: #1d2738;
+}
+
+.repair-kitting-head__title small {
+    display: block;
+    margin-top: 2px;
+    color: #6b7a93;
+    font-size: 12px;
+    font-weight: 500;
+}
+
+.repair-kitting-head__aside {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-shrink: 0;
+}
+
+.repair-kitting-caret {
+    color: #6b7a93;
+    font-size: 12px;
+}
+
+.repair-kitting-table {
+    width: 100%;
+    table-layout: fixed;
+    border-collapse: collapse;
+    font-size: 13px;
+}
+
+/* Номера ЗНП читают целиком: перенос по цифрам ломает сверку. */
+.repair-kitting-table .repair-kitting-table__znp {
+    font-family: "Consolas", "Menlo", monospace;
+    font-weight: 600;
+    color: #1d2738;
+    white-space: nowrap;
+}
+
+/* Сумма колонок — 100 %: иначе fixed-раскладка делит остаток сама. */
+.repair-kitting-table col.col-znp     { width: 14%; }
+.repair-kitting-table col.col-plan    { width: 10%; }
+.repair-kitting-table col.col-item    { width: 26%; }
+.repair-kitting-table col.col-qty     { width: 8%; }
+.repair-kitting-table col.col-tp      { width: 12%; }
+.repair-kitting-table col.col-readied { width: 18%; }
+.repair-kitting-table col.col-open    { width: 12%; }
+
+.repair-kitting-table th,
+.repair-kitting-table td {
+    padding: 9px 12px;
+    border-bottom: 1px solid #eef2f8;
+    text-align: left;
+    vertical-align: middle;
+    word-break: break-word;
+}
+
+.repair-kitting-table th {
+    background: #f4f7fb;
+    color: #5a6a85;
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: .02em;
+}
+
+/* Заказ закрыт: строка гаснет, но остаётся видимой — факт работы. */
+.repair-kitting-table tr.is-completed td {
+    background: #f3faf5;
+    color: #6b7a93;
+}
+
+/* ------------------------------------------------------------
+   ПОЛОСА ГОТОВНОСТИ «Готово X из Y»
+
+   Цифры без полосы читались бы как две несвязанные величины, а
+   отношение «взято к заказано» — единственное, что решает, идти ли за
+   ячейками.
+   ------------------------------------------------------------ */
+
+.readiness {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.readiness__label {
+    font-size: 12px;
+    color: #46566f;
+}
+
+.readiness__track {
+    height: 6px;
+    border-radius: 999px;
+    background: #e3e9f2;
+    overflow: hidden;
+}
+
+.readiness__fill {
+    height: 100%;
+    border-radius: 999px;
+    background: #1f9d55;
+}
+
+.readiness--partial .readiness__fill {
+    background: #d98324;
+}
+
+.readiness--empty .readiness__fill {
+    background: transparent;
+}
+
+/* ------------------------------------------------------------
+   ФИЛЬТР И ПЕРЕЧЕНЬ ФОРМЫ КОМПЛЕКТОВАНИЯ
+
+   Внешне повторяет bvk-filter изолятора брака: тот же отбор читают два
+   кабинета, и выглядеть он обязан одинаково.
+   ------------------------------------------------------------ */
+
+.kitting-summary {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px 26px;
+    padding: 14px 16px;
+    border-bottom: 1px solid #e3e9f2;
+    background: #f7f9fd;
+}
+
+/*
+ * Поля растягиваются на всю ширину карточки: реквизитов пять, и при
+ * плотной упаковке они сбивались бы в левый угол, оставляя правую
+ * половину строки пустой.
+ */
+.kitting-summary__item {
+    display: flex;
+    flex: 1 1 150px;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.kitting-summary__item small {
+    color: #6b7a93;
+    font-size: 12px;
+}
+
+.kitting-summary__item strong {
+    color: #1d2738;
+    font-size: 14px;
+}
+
+/* Строка выбрана — подсветка: отмеченных ячеек в перечне десятки. */
+.kitting-cell-table tbody tr.is-picked {
+    background: #f0f6ff;
+}
+
+/* Ячейка уже взята: строка читается, но чекбокс снят. */
+.kitting-cell-table tbody tr.is-taken {
+    color: #8b98ad;
+    background: #fafbfd;
+}
+
+.kitting-cell-table .kitting-cell-table__number {
+    font-family: "Consolas", "Menlo", monospace;
+    font-weight: 600;
+    color: #1d2738;
+    white-space: nowrap;
+}
+
+.kitting-cell-table .kitting-cell-table__stack {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+}
+
+.kitting-cell-table .kitting-cell-table__stack small {
+    color: #6b7a93;
+    font-size: 12px;
+}
+
+.kitting-cell-table col.col-pick   { width: 5%; }
+.kitting-cell-table col.col-number { width: 13%; }
+.kitting-cell-table col.col-kind   { width: 10%; }
+.kitting-cell-table col.col-cell   { width: 20%; }
+.kitting-cell-table col.col-supply { width: 17%; }
+.kitting-cell-table col.col-reason { width: 20%; }
+.kitting-cell-table col.col-state  { width: 15%; }
+
+.kitting-cell-table th,
+.kitting-cell-table td {
+    padding: 9px 10px;
+    border-bottom: 1px solid #eef2f8;
+    text-align: left;
+    vertical-align: top;
+    word-break: break-word;
+}
+
+.kitting-cell-table th {
+    background: #f4f7fb;
+    color: #5a6a85;
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: .02em;
+}
+
+.kitting-cell-table th.col-pick,
+.kitting-cell-table td.col-pick {
+    text-align: center;
+}
+
+.kitting-cell-table input[type="checkbox"] {
+    width: 16px;
+    height: 16px;
+    cursor: pointer;
+}
+
+.kitting-cell-table input[type="checkbox"]:disabled {
+    cursor: not-allowed;
+}
+
+/*
+ * Панель проведения прижата к низу карточки и остаётся видимой при
+ * прокрутке перечня: отмечать ячейки приходится внизу длинного списка,
+ * а кнопку «Скомплектовать» — на его же уровне, иначе каждое проведение
+ * заканчивалось бы поездкой через весь перечень.
+ */
+.kitting-actions {
+    position: sticky;
+    bottom: 0;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 14px;
+    padding: 14px 16px;
+    border-top: 1px solid #e3e9f2;
+    background: #fff;
+    box-shadow: 0 -6px 14px rgba(29, 39, 56, .06);
+}
+
+.kitting-actions__counter {
+    color: #46566f;
+    font-size: 13px;
+}
+
+.kitting-actions__counter strong {
+    color: #1d2738;
+}
+
+.kitting-actions__buttons {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+}
+
+/* Состав заказа: уже проведённые ячейки — справка, а не объект работы. */
+.kitting-items-table {
+    width: 100%;
+    table-layout: fixed;
+    border-collapse: collapse;
+    font-size: 13px;
+}
+
+.kitting-items-table col.col-number { width: 18%; }
+.kitting-items-table col.col-kind   { width: 14%; }
+.kitting-items-table col.col-cls    { width: 34%; }
+.kitting-items-table col.col-by     { width: 20%; }
+.kitting-items-table col.col-at     { width: 14%; }
+
+.kitting-items-table th,
+.kitting-items-table td {
+    padding: 8px 10px;
+    border-bottom: 1px solid #eef2f8;
+    text-align: left;
+    word-break: break-word;
+}
+
+.kitting-items-table th {
+    background: #f4f7fb;
+    color: #5a6a85;
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: .02em;
+}
+
+.kitting-items-table .kitting-items-table__number {
+    font-family: "Consolas", "Menlo", monospace;
+    font-weight: 600;
+    color: #1d2738;
+    white-space: nowrap;
+}

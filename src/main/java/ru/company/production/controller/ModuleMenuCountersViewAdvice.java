@@ -143,13 +143,18 @@ public class ModuleMenuCountersViewAdvice {
          * Раздел «Распределение работ» открыт тем же ролям, что и
          * расчёт его счётчика, — пункт в меню и право войти задаются
          * одним условием, иначе меню звало бы в 403.
+         *
+         * Счётчик считается по границе подразделений, а не по одному:
+         * руководитель службы качества отвечает за БТК и БВК сразу, и
+         * цифра по одному подразделению не сошлась бы с очередью,
+         * которую он увидит в разделе.
          */
         model.addAttribute("canDistribute", true);
 
         model.addAttribute(
                 "assignableTotal",
                 distributionService.countAssignable(
-                        staffService.workshopUnitId(user)
+                        staffService.unitScope(user)
                 )
         );
     }
