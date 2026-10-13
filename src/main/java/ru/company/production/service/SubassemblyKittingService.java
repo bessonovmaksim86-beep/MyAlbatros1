@@ -9,11 +9,14 @@ import ru.company.production.dto.SubassemblyKittingZnpRow;
 import ru.company.production.entity.AppUser;
 import ru.company.production.entity.Operation;
 import ru.company.production.entity.ProductSerial;
+import ru.company.production.entity.ProductSerialOperation;
+import ru.company.production.entity.ProductSerialOperationStatus;
 import ru.company.production.entity.ProductionOrder;
 import ru.company.production.entity.ProductionOrderStatus;
 import ru.company.production.entity.SerialProductionOrder;
 import ru.company.production.entity.TechProcess;
 import ru.company.production.entity.TechProcessOperation;
+import ru.company.production.repository.ProductSerialOperationRepository;
 import ru.company.production.repository.ProductSerialRepository;
 import ru.company.production.repository.ProductionOrderRepository;
 import ru.company.production.repository.SerialProductionOrderRepository;
@@ -21,12 +24,14 @@ import ru.company.production.repository.TechProcessOperationRepository;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 
 /**
@@ -78,6 +83,7 @@ public class SubassemblyKittingService {
     private final TechProcessOperationRepository techProcessOpRepository;
     private final SerialMovementJournalService journal;
     private final InputControlService inputControlService;
+    private final ProductSerialOperationRepository serialOperationRepository;
 
     /**
      * ЗНП с операцией приёмки на склад полуфабрикатов — список раздела.
@@ -442,6 +448,8 @@ public class SubassemblyKittingService {
             link.setNote("Комплектование подсборок на складе");
 
             linkRepository.save(link);
+
+            performSerialOperation(serial, order, operation, executor);
         }
 
         journal.recordInProduction(attached, order, executor);
@@ -453,6 +461,72 @@ public class SubassemblyKittingService {
                                 ? "; уже вошло ранее " + already + " яч."
                                 : "")
         );
+    }
+
+    /**
+     * Проведение операции изделия: создаёт или закрывает строку
+     * product_serial_operations в рамках этого заказа.
+     *
+     * Без этой записи факт работы повис бы только в журнале
+     * перемещений и не попал ни в матрицу изделия, ни в загрузку
+     * исполнителя, а операция в маршруте осталась бы незакрытой —
+     * следующая по зависимостям не разблокировалась бы.
+     *
+     * Если по этой же операции уже есть незакрытая попытка —
+     * проводится она, а не создаётся новая.
+     */
+    private void performSerialOperation(
+            ProductSerial serial,
+            ProductionOrder order,
+            Operation operation,
+            AppUser user) {
+
+        /*
+         * Уже закрытая попытка этой же операции — закрываем её,
+         * а не создаём дубликат.
+         */
+        Optional<ProductSerialOperation> last =
+                serialOperationRepository
+                        .findFirstBySerialIdAndOperationIdOrderByAttemptDesc(
+                                serial.getId(), operation.getId());
+
+        Optional<ProductSerialOperation> open = last
+                .filter(existing -> existing.getActualDate() == null
+                        && !existing.isReworked());
+
+        if (open.isPresent()) {
+
+            ProductSerialOperation row = open.get();
+
+            row.setProductionOrder(order);
+            row.setStatus(ProductSerialOperationStatus.DONE);
+            row.setActualDate(java.time.LocalDate.now());
+            row.setExecutor(user);
+            row.setPerformedBy(user);
+
+            serialOperationRepository.save(row);
+
+            return;
+        }
+
+        /*
+         * Новой попытки нет — создаём строку со статусом DONE:
+         * операция выполнена при внесении ячейки в заказ.
+         */
+        ProductSerialOperation row = new ProductSerialOperation();
+
+        row.setSerial(serial);
+        row.setOperation(operation);
+        row.setProductionOrder(order);
+        row.setAttempt(last.map(e -> e.getAttempt() + 1).orElse(1));
+        row.setStatus(ProductSerialOperationStatus.DONE);
+        row.setActualDate(java.time.LocalDate.now());
+        row.setExecutor(user);
+        row.setPerformedBy(user);
+        row.setSeq(1);
+        row.setNote("Комплектование подсборок на складе");
+
+        serialOperationRepository.save(row);
     }
 
     /*
