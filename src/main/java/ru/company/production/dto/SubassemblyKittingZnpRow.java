@@ -29,14 +29,19 @@ public record SubassemblyKittingZnpRow(
         String statusBadgeClass,
         String note,
         BigDecimal requiredQuantity,
-        List<SubassemblyKittingCellRow> cells
+        List<SubassemblyKittingCellRow> cells,
+        List<SubassemblyKittingCellRow> attached
 ) {
 
-    /** Сколько ячеек взято — для карточки готовности. */
+    /*
+     * Сколько ячеек уже оформлено в заказ.
+     *
+     * Считается по внесённому составу, а не по складскому перечню:
+     * проведённая в ЗНП ячейка со склада снята и в свободном остатке
+     * не числится, поэтому «взято» меряется матрицей заказа.
+     */
     public long doneCount() {
-        return cells == null ? 0L : cells.stream()
-                .filter(SubassemblyKittingCellRow::taken)
-                .count();
+        return attached == null ? 0L : attached.size();
     }
 
     /*
@@ -46,18 +51,19 @@ public record SubassemblyKittingZnpRow(
      * лежит тридцать подсборок, а в заказ их входит пять, и «взято 2 из
      * 30» кладовщик прочёл бы как недоукомплектованный заказ.
      *
-     * Количество задают только групповым и ремонтным видам; у заказа на
-     * комплектование состава нет, и знаменателем остаётся складской
-     * перечень.
+     * Количество задают только групповым и ремонтным видам. У заказа на
+     * комплектования количества нет — там знаменателем остаётся всё,
+     * что по этому изделию побывало на складе: свободный остаток плюс
+     * уже оформленное в заказ (проведённую ячейку склад уже не показывает).
      */
     public long requiredCount() {
         return requiredQuantity == null
-                ? availableCount()
+                ? doneCount() + availableCount()
                 : requiredQuantity.setScale(0, java.math.RoundingMode.CEILING)
                 .longValue();
     }
 
-    /** Сколько всего ячеек на складе. */
+    /** Сколько свободных ячеек лежит на складе. */
     public long availableCount() {
         return cells == null ? 0L : cells.size();
     }

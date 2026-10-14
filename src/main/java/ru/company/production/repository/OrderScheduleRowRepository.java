@@ -23,14 +23,22 @@ import java.util.List;
  * людей и отклонил бы следующий заказ.
  *
  * СОБЛЮДЕНИЕ ПО ЗАКАЗУ, СНЯТОМУ С РАБОТЫ.
- * Все запросы цеха и загрузки держат условие по active заказа. Заказ
- * снимается с работы без удаления строки (status = DELETED,
- * active = false), и снятый заказ обязан забрать с собой свой план:
- * иначе руководитель видел бы работу без основания, а планировщик
- * считал бы её занятой. Условие выражено навигацией
- * row.customerOrder.active = true — неявный join отбрасывает и строки,
- * у которых заказа в базе уже нет (физическое удаление). Разовую
- * чистку накопленного делает V47; фильтр нужен, чтобы план не
+ * Все запросы цеха и загрузки держат условие по active основания
+ * строки. Заказ снимается с работы без удаления строки (status =
+ * DELETED, active = false), и снятый заказ обязан забрать с собой свой
+ * план: иначе руководитель видел бы работу без основания, а
+ * планировщик считал бы её занятой.
+ *
+ * Оснований у строки два (V56): заказ покупателя и заказ на
+ * производство. Условие записано парой EXISTS, а не навигацией
+ * row.customerOrder.active — навигация порождает неявный inner join и
+ * отбросила бы строки группового ЗНП, у которых заказа покупателя нет
+ * вовсе; та же навигация внутри OR отбросила бы и строки плана, для
+ * которых не задано второе основание. EXISTS join не строит, а
+ * «ровно одно основание» гарантирует chk_osr_base_exactly_one, поэтому
+ * пара EXISTS и читается, и работает как «основание активно».
+ *
+ * Разовую чистку накопленного делает V47; фильтр нужен, чтобы план не
  * возвращался.
  *
  * Исключения осознанны: findByOrderId, findByCustomerOrderIdAndStatus и
@@ -95,7 +103,12 @@ public interface OrderScheduleRowRepository
             select row
             from OrderScheduleRow row
             where row.status = :status
-              and row.customerOrder.active = true
+              and (exists (select 1 from CustomerOrder co
+                           where co.id = row.customerOrder.id
+                             and co.active = true)
+                or exists (select 1 from ProductionOrder po
+                           where po.id = row.productionOrder.id
+                             and po.active = true))
               and row.plannedDate between :from and :to
             """)
     List<OrderScheduleRow> findConfirmedInRange(
@@ -108,13 +121,24 @@ public interface OrderScheduleRowRepository
      * Занятость этапов чужими заказами: строки перепланируемого заказа
      * исключаются, иначе его же прошлый план удвоил бы загрузку и
      * следующий расчёт уехал бы в бесконечный сдвиг дат.
+     *
+     * Исключение пишется через «is null или не совпало» (V56): для строки
+     * группового ЗНП наивное «row.customerOrder.id <> :excludeOrderId»
+     * даёт NULL, а не «истина», и чужой план ЗНП исчез бы из загрузки —
+     * реальный этап оказался бы свободнее, чем он есть на самом деле.
      */
     @Query("""
             select row
             from OrderScheduleRow row
             where row.status = :status
-              and row.customerOrder.active = true
-              and row.customerOrder.id <> :excludeOrderId
+              and (exists (select 1 from CustomerOrder co
+                           where co.id = row.customerOrder.id
+                             and co.active = true)
+                or exists (select 1 from ProductionOrder po
+                           where po.id = row.productionOrder.id
+                             and po.active = true))
+              and (row.customerOrder.id is null
+                   or row.customerOrder.id <> :excludeOrderId)
               and row.plannedDate between :from and :to
             """)
     List<OrderScheduleRow> findConfirmedExcludingOrder(
@@ -122,6 +146,36 @@ public interface OrderScheduleRowRepository
             @Param("from") LocalDate from,
             @Param("to") LocalDate to,
             @Param("excludeOrderId") Long excludeOrderId
+    );
+
+    /*
+     * Тот же снимок занятого времени для расчёта плана заказа на
+     * производство (V56): исключаются его собственные строки, а план
+     * заказов покупателя и прочих групповых заказов остаётся в загрузке.
+     *
+     * Метод отдельный, а не второй параметр в предыдущем: JPQL-сравнение
+     * с пустым параметром вернуло бы NULL и молча выбросило из загрузки
+     * все строки другой ветви.
+     */
+    @Query("""
+            select row
+            from OrderScheduleRow row
+            where row.status = :status
+              and (exists (select 1 from CustomerOrder co
+                           where co.id = row.customerOrder.id
+                             and co.active = true)
+                or exists (select 1 from ProductionOrder po
+                           where po.id = row.productionOrder.id
+                             and po.active = true))
+              and (row.productionOrder.id is null
+                   or row.productionOrder.id <> :excludeProductionOrderId)
+              and row.plannedDate between :from and :to
+            """)
+    List<OrderScheduleRow> findConfirmedExcludingProductionOrder(
+            @Param("status") ScheduleRowStatus status,
+            @Param("from") LocalDate from,
+            @Param("to") LocalDate to,
+            @Param("excludeProductionOrderId") Long excludeProductionOrderId
     );
 
     /*
@@ -140,6 +194,117 @@ public interface OrderScheduleRowRepository
             @Param("status") ScheduleRowStatus status
     );
 
+    /*
+     * Внесённые в план строки заказа на производство — тот же признак
+     * «поставлен в планирование», что и для плана заказа покупателя,
+     * но по второй ветви основания (V56).
+     *
+     * Нужен стражу при взятии в работу: у группового ЗНП заказа
+     * покупателя нет, и по старой ветви он остался бы «не спланирован»
+     * навсегда, заблокировав взятие в работу родителя. Работа по такому
+     * заказу ведётся техпроцессом, поэтому требуется не конкретная
+     * операция, а любой внесённый в план маршрут.
+     */
+    long countByProductionOrder_IdAndStatus(
+            Long productionOrderId,
+            ScheduleRowStatus status
+    );
+
+    /*
+     * Внесённые в план строки заказа на производство по конкретной
+     * операции — для заказов, привязанных к выпуску.
+     */
+    @Query("""
+            select count(row.id)
+            from OrderScheduleRow row
+            where row.productionOrder.id = :productionOrderId
+              and row.operation.id = :operationId
+              and row.status = :status
+            """)
+    long countConfirmedByProductionOrderAndOperation(
+            @Param("productionOrderId") Long productionOrderId,
+            @Param("operationId") Long operationId,
+            @Param("status") ScheduleRowStatus status
+    );
+
+    /** План заказа на производство в порядке расчёта. */
+    @Query("""
+            select row
+            from OrderScheduleRow row
+            where row.productionOrder.id = :productionOrderId
+            order by row.instanceIndex asc,
+                     row.seq asc
+            """)
+    List<OrderScheduleRow> findByProductionOrderId(
+            @Param("productionOrderId") Long productionOrderId
+    );
+
+    List<OrderScheduleRow> findByProductionOrderIdAndStatus(
+            Long productionOrderId,
+            ScheduleRowStatus status
+    );
+
+    /*
+     * Первая непроведённая строка операции заказа на производство —
+     * тот экземпляр, который склад закрывает очередной внесённой ячейкой.
+     *
+     * Порядок по номеру экземпляра важен: ячейки вносятся последовательно,
+     * и проведение всегда идёт по ближайшему незакрытому, иначе строки
+     * проводились бы вразнобой и «следующая операция» разблокировалась бы
+     * не для того изделия.
+     *
+     * Строк может не оказаться вовсе (заказ взят в работу до V56 либо
+     * техпроцесс пуст) — вызывающий код считает это нормой и ничего не
+     * проводит.
+     */
+    @Query("""
+            select row
+            from OrderScheduleRow row
+            where row.productionOrder.id = :productionOrderId
+              and row.operation.id = :operationId
+              and row.completedAt is null
+            order by row.instanceIndex asc, row.id asc
+            """)
+    List<OrderScheduleRow> findOpenRowsOfProductionOrder(
+            @Param("productionOrderId") Long productionOrderId,
+            @Param("operationId") Long operationId
+    );
+
+    /*
+     * Пересборка плана заказа на производство: старый расчёт снимается
+     * целиком, иначе уникальный индекс uk_osr_prod_order_instance_operation
+     * отклонил бы вставку второй строки той же операции того же изделия.
+     */
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("""
+            delete from OrderScheduleRow row
+            where row.productionOrder.id = :productionOrderId
+              and row.status = :status
+            """)
+    int deleteByProductionOrderIdAndStatus(
+            @Param("productionOrderId") Long productionOrderId,
+            @Param("status") ScheduleRowStatus status
+    );
+
+    /*
+     * Снятие плана с отменённого заказа на производство.
+     *
+     * Проведённые строки остаются: completed_at — единственный факт,
+     * что экземпляр операции действительно закрыт, и потерять его при
+     * отмене заказа значит лишить цех истории выполненной работы.
+     * Непроведённые строки, наоборот, обязаны уйти — иначе снятый заказ
+     * держал бы занятое время этапа.
+     */
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("""
+            delete from OrderScheduleRow row
+            where row.productionOrder.id = :productionOrderId
+              and row.completedAt is null
+            """)
+    int deleteUncompletedByProductionOrderId(
+            @Param("productionOrderId") Long productionOrderId
+    );
+
     /**
      * Нераспределённые операции подразделения мастера — по датам.
      *
@@ -150,7 +315,12 @@ public interface OrderScheduleRowRepository
             select row
             from OrderScheduleRow row
             where row.status = :status
-              and row.customerOrder.active = true
+              and (exists (select 1 from CustomerOrder co
+                           where co.id = row.customerOrder.id
+                             and co.active = true)
+                or exists (select 1 from ProductionOrder po
+                           where po.id = row.productionOrder.id
+                             and po.active = true))
               and row.organizationUnit.id = :unitId
               and row.workPlace is null
               and row.executor is null
@@ -173,7 +343,12 @@ public interface OrderScheduleRowRepository
             select row
             from OrderScheduleRow row
             where row.status = :status
-              and row.customerOrder.active = true
+              and (exists (select 1 from CustomerOrder co
+                           where co.id = row.customerOrder.id
+                             and co.active = true)
+                or exists (select 1 from ProductionOrder po
+                           where po.id = row.productionOrder.id
+                             and po.active = true))
               and row.organizationUnit.id = :unitId
               and row.plannedDate between :from and :to
             order by row.plannedDate asc, row.itemPosition asc,
@@ -190,7 +365,12 @@ public interface OrderScheduleRowRepository
             select count(row.id)
             from OrderScheduleRow row
             where row.status = :status
-              and row.customerOrder.active = true
+              and (exists (select 1 from CustomerOrder co
+                           where co.id = row.customerOrder.id
+                             and co.active = true)
+                or exists (select 1 from ProductionOrder po
+                           where po.id = row.productionOrder.id
+                             and po.active = true))
               and row.organizationUnit.id = :unitId
               and row.workPlace is null
               and row.executor is null
@@ -212,6 +392,29 @@ public interface OrderScheduleRowRepository
      * Единица распределения — пара «операция + дата плана»: позиция
      * на десять изделий даёт десять строк одной операции в один день,
      * и раскладывать их по людям мастер должен одним решением.
+     *
+     * ГРУППОВЫЕ ЗНП ИЗ ЭТИХ ЗАПРОСОВ ИСКЛЮЧЕНЫ. У группового заказа
+     * заказа покупателя нет, изделие ему задают количеством, а
+     * серийники появляются только когда склад вносит в заказ ячейки
+     * (матрица комплектования, V20). В общем списке такие строки
+     * печатали бы «серийный номер не выпущен» и теряли номера заказов,
+     * поэтому у групповых ЗНП свой разрез — «Групповые ЗНП»
+     * (см. GroupZnpDistributionRepository), куда ведёт переключатель
+     * над таблицей. Отбор держится одного признака — вид основания не
+     * KITTING (см. ZnpKind#isGroupKind), — чтобы новый групповой вид
+     * ушёл из общего списка сам.
+     *
+     * Форма — условие внутри EXISTS по основанию, а не навигация
+     * row.productionOrder.znpKind: навигация внутри OR порождает join и
+     * отбросила бы строки плана, у которых заказа на производство нет.
+     * Плановая ветвь (основание — заказ покупателя) условием не
+     * задевается: она закрывается первой ветвью пары EXISTS, куда
+     * групповые заказы физически попасть не могут.
+     *
+     * В «Моих операциях» и в расчёте загрузки фильтр не ставится:
+     * работа группового заказа от того, что у неё свой экран
+     * распределения, чужой не становится — исполнитель обязан видеть
+     * свою работу там же, где и всю остальную.
      */
 
     @EntityGraph(attributePaths = {
@@ -219,13 +422,21 @@ public interface OrderScheduleRowRepository
             "operation.operationName",
             "operation.operationType",
             "customerOrder",
+            "productionOrder",
             "techProcess"
     })
     @Query("""
             select row
             from OrderScheduleRow row
             where row.status = :status
-              and row.customerOrder.active = true
+              and (exists (select 1 from CustomerOrder co
+                           where co.id = row.customerOrder.id
+                             and co.active = true)
+                or exists (select 1 from ProductionOrder po
+                           where po.id = row.productionOrder.id
+                             and po.active = true
+                             and po.znpKind
+                                     = ru.company.production.entity.ZnpKind.KITTING))
               and row.organizationUnit.id = :unitId
               and row.executor is null
               and row.operation.operationType.code <> :excludedTypeCode
@@ -256,13 +467,21 @@ public interface OrderScheduleRowRepository
             "operation.operationName",
             "operation.operationType",
             "customerOrder",
+            "productionOrder",
             "techProcess"
     })
     @Query("""
             select row
             from OrderScheduleRow row
             where row.status = :status
-              and row.customerOrder.active = true
+              and (exists (select 1 from CustomerOrder co
+                           where co.id = row.customerOrder.id
+                             and co.active = true)
+                or exists (select 1 from ProductionOrder po
+                           where po.id = row.productionOrder.id
+                             and po.active = true
+                             and po.znpKind
+                                     = ru.company.production.entity.ZnpKind.KITTING))
               and row.organizationUnit.id in :unitIds
               and row.executor is null
               and row.operation.operationType.code <> :excludedTypeCode
@@ -289,13 +508,19 @@ public interface OrderScheduleRowRepository
             "operation.operationName",
             "operation.operationType",
             "customerOrder",
+            "productionOrder",
             "techProcess"
     })
     @Query("""
             select row
             from OrderScheduleRow row
             where row.status = :status
-              and row.customerOrder.active = true
+              and (exists (select 1 from CustomerOrder co
+                           where co.id = row.customerOrder.id
+                             and co.active = true)
+                or exists (select 1 from ProductionOrder po
+                           where po.id = row.productionOrder.id
+                             and po.active = true))
               and row.organizationUnit.id = :unitId
               and row.operation.operationType.code = :typeCode
               and row.plannedDate between :from and :to
@@ -320,13 +545,19 @@ public interface OrderScheduleRowRepository
     @EntityGraph(attributePaths = {
             "operation",
             "operation.operationName",
-            "customerOrder"
+            "customerOrder",
+            "productionOrder"
     })
     @Query("""
             select row
             from OrderScheduleRow row
             where row.status = :status
-              and row.customerOrder.active = true
+              and (exists (select 1 from CustomerOrder co
+                           where co.id = row.customerOrder.id
+                             and co.active = true)
+                or exists (select 1 from ProductionOrder po
+                           where po.id = row.productionOrder.id
+                             and po.active = true))
               and row.organizationUnit.id = :unitId
               and row.operation.id = :operationId
               and row.plannedDate = :plannedDate
@@ -345,13 +576,21 @@ public interface OrderScheduleRowRepository
     @EntityGraph(attributePaths = {
             "operation",
             "operation.operationName",
-            "customerOrder"
+            "customerOrder",
+            "productionOrder"
     })
     @Query("""
             select row
             from OrderScheduleRow row
             where row.status = :status
-              and row.customerOrder.active = true
+              and (exists (select 1 from CustomerOrder co
+                           where co.id = row.customerOrder.id
+                             and co.active = true)
+                or exists (select 1 from ProductionOrder po
+                           where po.id = row.productionOrder.id
+                             and po.active = true
+                             and po.znpKind
+                                     = ru.company.production.entity.ZnpKind.KITTING))
               and row.organizationUnit.id in :unitIds
               and row.operation.id = :operationId
               and row.plannedDate = :plannedDate
@@ -377,13 +616,19 @@ public interface OrderScheduleRowRepository
     @EntityGraph(attributePaths = {
             "operation",
             "operation.operationName",
-            "customerOrder"
+            "customerOrder",
+            "productionOrder"
     })
     @Query("""
             select row
             from OrderScheduleRow row
             where row.status = :status
-              and row.customerOrder.active = true
+              and (exists (select 1 from CustomerOrder co
+                           where co.id = row.customerOrder.id
+                             and co.active = true)
+                or exists (select 1 from ProductionOrder po
+                           where po.id = row.productionOrder.id
+                             and po.active = true))
               and row.organizationUnit.id = :unitId
               and row.operation.id = :operationId
               and row.plannedDate = :plannedDate
@@ -407,13 +652,19 @@ public interface OrderScheduleRowRepository
     @EntityGraph(attributePaths = {
             "operation",
             "operation.operationName",
-            "customerOrder"
+            "customerOrder",
+            "productionOrder"
     })
     @Query("""
             select row
             from OrderScheduleRow row
             where row.status = :status
-              and row.customerOrder.active = true
+              and (exists (select 1 from CustomerOrder co
+                           where co.id = row.customerOrder.id
+                             and co.active = true)
+                or exists (select 1 from ProductionOrder po
+                           where po.id = row.productionOrder.id
+                             and po.active = true))
               and row.organizationUnit.id in :unitIds
               and row.operation.id = :operationId
               and row.plannedDate = :plannedDate
@@ -431,6 +682,46 @@ public interface OrderScheduleRowRepository
     );
 
     /*
+     * То же для строк, основанием которых служит заказ на производство
+     * (V56).
+     *
+     * Позиция здесь не участвует: у заказа на производство позиций нет,
+     * и она у всех его строк нулевая. Изделием для этой ветви выступает
+     * сам заказ — заказанные пять ячеек одного наименования, поэтому
+     * карточка операции в распределении одна на заказ, а экземпляры
+     * (instanceIndex) живут внутри неё.
+     */
+    @EntityGraph(attributePaths = {
+            "operation",
+            "operation.operationName",
+            "customerOrder",
+            "productionOrder"
+    })
+    @Query("""
+            select row
+            from OrderScheduleRow row
+            where row.status = :status
+              and (exists (select 1 from CustomerOrder co
+                           where co.id = row.customerOrder.id
+                             and co.active = true)
+                or exists (select 1 from ProductionOrder po
+                           where po.id = row.productionOrder.id
+                             and po.active = true))
+              and row.organizationUnit.id in :unitIds
+              and row.operation.id = :operationId
+              and row.plannedDate = :plannedDate
+              and row.productionOrder.id = :productionOrderId
+            order by row.instanceIndex asc
+            """)
+    List<OrderScheduleRow> findProductOperationRowsOfProductionOrders(
+            @Param("status") ScheduleRowStatus status,
+            @Param("unitIds") java.util.Collection<Long> unitIds,
+            @Param("operationId") Long operationId,
+            @Param("plannedDate") LocalDate plannedDate,
+            @Param("productionOrderId") Long productionOrderId
+    );
+
+    /*
      * Работы, закреплённые за сотрудником — меню «Мои операции».
      *
      * Статус не фильтруется: исполнителю нужны и плановые строки, и
@@ -442,6 +733,7 @@ public interface OrderScheduleRowRepository
             "operation.operationName",
             "operation.operationType",
             "customerOrder",
+            "productionOrder",
             "techProcess",
             "workPlace"
     })
@@ -449,7 +741,12 @@ public interface OrderScheduleRowRepository
             select row
             from OrderScheduleRow row
             where row.executor.id = :executorId
-              and row.customerOrder.active = true
+              and (exists (select 1 from CustomerOrder co
+                           where co.id = row.customerOrder.id
+                             and co.active = true)
+                or exists (select 1 from ProductionOrder po
+                           where po.id = row.productionOrder.id
+                             and po.active = true))
               and row.plannedDate between :from and :to
             order by row.plannedDate asc, row.itemPosition asc,
                      row.instanceIndex asc, row.seq asc
@@ -469,13 +766,19 @@ public interface OrderScheduleRowRepository
             "operation.operationName",
             "operation.operationType",
             "customerOrder",
+            "productionOrder",
             "techProcess"
     })
     @Query("""
             select row
             from OrderScheduleRow row
             where row.status = :status
-              and row.customerOrder.active = true
+              and (exists (select 1 from CustomerOrder co
+                           where co.id = row.customerOrder.id
+                             and co.active = true)
+                or exists (select 1 from ProductionOrder po
+                           where po.id = row.productionOrder.id
+                             and po.active = true))
               and row.organizationUnit.id in :unitIds
               and row.operation.operationType.code = :typeCode
               and row.plannedDate between :from and :to
@@ -514,6 +817,7 @@ public interface OrderScheduleRowRepository
             "operation.operationName",
             "operation.operationType",
             "customerOrder",
+            "productionOrder",
             "techProcess",
             "workPlace"
     })
@@ -521,7 +825,12 @@ public interface OrderScheduleRowRepository
             select row
             from OrderScheduleRow row
             where row.status = :status
-              and row.customerOrder.active = true
+              and (exists (select 1 from CustomerOrder co
+                           where co.id = row.customerOrder.id
+                             and co.active = true)
+                or exists (select 1 from ProductionOrder po
+                           where po.id = row.productionOrder.id
+                             and po.active = true))
               and row.organizationUnit.id in :unitIds
               and row.operation.operationType.code in :typeCodes
               and row.plannedDate between :from and :to
@@ -542,7 +851,12 @@ public interface OrderScheduleRowRepository
             select count(row.id)
             from OrderScheduleRow row
             where row.status = :status
-              and row.customerOrder.active = true
+              and (exists (select 1 from CustomerOrder co
+                           where co.id = row.customerOrder.id
+                             and co.active = true)
+                or exists (select 1 from ProductionOrder po
+                           where po.id = row.productionOrder.id
+                             and po.active = true))
               and row.organizationUnit.id in :unitIds
               and row.operation.operationType.code in :typeCodes
               and row.plannedDate between :from and :to
@@ -570,7 +884,12 @@ public interface OrderScheduleRowRepository
                    sum(row.laborHours) as hours
             from OrderScheduleRow row
             where row.status = :status
-              and row.customerOrder.active = true
+              and (exists (select 1 from CustomerOrder co
+                           where co.id = row.customerOrder.id
+                             and co.active = true)
+                or exists (select 1 from ProductionOrder po
+                           where po.id = row.productionOrder.id
+                             and po.active = true))
               and row.executor.id in :executorIds
               and row.plannedDate between :from and :to
             group by row.executor.id, row.plannedDate
@@ -592,13 +911,21 @@ public interface OrderScheduleRowRepository
             "operation.operationName",
             "operation.operationType",
             "customerOrder",
+            "productionOrder",
             "executor"
     })
     @Query("""
             select row
             from OrderScheduleRow row
             where row.status = :status
-              and row.customerOrder.active = true
+              and (exists (select 1 from CustomerOrder co
+                           where co.id = row.customerOrder.id
+                             and co.active = true)
+                or exists (select 1 from ProductionOrder po
+                           where po.id = row.productionOrder.id
+                             and po.active = true
+                             and po.znpKind
+                                     = ru.company.production.entity.ZnpKind.KITTING))
               and row.organizationUnit.id = :unitId
               and row.executor is not null
               and row.plannedDate between :from and :to
@@ -622,13 +949,21 @@ public interface OrderScheduleRowRepository
             "operation.operationName",
             "operation.operationType",
             "customerOrder",
+            "productionOrder",
             "executor"
     })
     @Query("""
             select row
             from OrderScheduleRow row
             where row.status = :status
-              and row.customerOrder.active = true
+              and (exists (select 1 from CustomerOrder co
+                           where co.id = row.customerOrder.id
+                             and co.active = true)
+                or exists (select 1 from ProductionOrder po
+                           where po.id = row.productionOrder.id
+                             and po.active = true
+                             and po.znpKind
+                                     = ru.company.production.entity.ZnpKind.KITTING))
               and row.organizationUnit.id in :unitIds
               and row.executor is not null
               and row.plannedDate between :from and :to
@@ -648,7 +983,14 @@ public interface OrderScheduleRowRepository
             select count(row.id)
             from OrderScheduleRow row
             where row.status = :status
-              and row.customerOrder.active = true
+              and (exists (select 1 from CustomerOrder co
+                           where co.id = row.customerOrder.id
+                             and co.active = true)
+                or exists (select 1 from ProductionOrder po
+                           where po.id = row.productionOrder.id
+                             and po.active = true
+                             and po.znpKind
+                                     = ru.company.production.entity.ZnpKind.KITTING))
               and row.organizationUnit.id = :unitId
               and row.executor is not null
               and row.plannedDate between :from and :to
@@ -665,7 +1007,14 @@ public interface OrderScheduleRowRepository
             select count(row.id)
             from OrderScheduleRow row
             where row.status = :status
-              and row.customerOrder.active = true
+              and (exists (select 1 from CustomerOrder co
+                           where co.id = row.customerOrder.id
+                             and co.active = true)
+                or exists (select 1 from ProductionOrder po
+                           where po.id = row.productionOrder.id
+                             and po.active = true
+                             and po.znpKind
+                                     = ru.company.production.entity.ZnpKind.KITTING))
               and row.organizationUnit.id in :unitIds
               and row.executor is not null
               and row.plannedDate between :from and :to
@@ -682,7 +1031,14 @@ public interface OrderScheduleRowRepository
             select count(row.id)
             from OrderScheduleRow row
             where row.status = :status
-              and row.customerOrder.active = true
+              and (exists (select 1 from CustomerOrder co
+                           where co.id = row.customerOrder.id
+                             and co.active = true)
+                or exists (select 1 from ProductionOrder po
+                           where po.id = row.productionOrder.id
+                             and po.active = true
+                             and po.znpKind
+                                     = ru.company.production.entity.ZnpKind.KITTING))
               and row.organizationUnit.id = :unitId
               and row.executor is null
               and row.operation.operationType.code <> :excludedTypeCode
@@ -701,7 +1057,14 @@ public interface OrderScheduleRowRepository
             select count(row.id)
             from OrderScheduleRow row
             where row.status = :status
-              and row.customerOrder.active = true
+              and (exists (select 1 from CustomerOrder co
+                           where co.id = row.customerOrder.id
+                             and co.active = true)
+                or exists (select 1 from ProductionOrder po
+                           where po.id = row.productionOrder.id
+                             and po.active = true
+                             and po.znpKind
+                                     = ru.company.production.entity.ZnpKind.KITTING))
               and row.organizationUnit.id in :unitIds
               and row.executor is null
               and row.operation.operationType.code <> :excludedTypeCode
@@ -727,7 +1090,12 @@ public interface OrderScheduleRowRepository
             select count(row.id)
             from OrderScheduleRow row
             where row.executor.id = :executorId
-              and row.customerOrder.active = true
+              and (exists (select 1 from CustomerOrder co
+                           where co.id = row.customerOrder.id
+                             and co.active = true)
+                or exists (select 1 from ProductionOrder po
+                           where po.id = row.productionOrder.id
+                             and po.active = true))
               and row.plannedDate between :from and :to
             """)
     long countForExecutor(
@@ -741,7 +1109,12 @@ public interface OrderScheduleRowRepository
             select count(row.id)
             from OrderScheduleRow row
             where row.status = :status
-              and row.customerOrder.active = true
+              and (exists (select 1 from CustomerOrder co
+                           where co.id = row.customerOrder.id
+                             and co.active = true)
+                or exists (select 1 from ProductionOrder po
+                           where po.id = row.productionOrder.id
+                             and po.active = true))
               and row.organizationUnit.id in :unitIds
               and row.operation.operationType.code = :typeCode
               and row.plannedDate between :from and :to
@@ -769,6 +1142,7 @@ public interface OrderScheduleRowRepository
             "operation.operationName",
             "operation.operationType",
             "customerOrder",
+            "productionOrder",
             "techProcess",
             "workPlace",
             "executor"
@@ -777,7 +1151,12 @@ public interface OrderScheduleRowRepository
             select row
             from OrderScheduleRow row
             where row.status = :status
-              and row.customerOrder.active = true
+              and (exists (select 1 from CustomerOrder co
+                           where co.id = row.customerOrder.id
+                             and co.active = true)
+                or exists (select 1 from ProductionOrder po
+                           where po.id = row.productionOrder.id
+                             and po.active = true))
               and row.organizationUnit.id in :unitIds
               and row.plannedDate between :from and :to
             order by row.plannedDate asc,
@@ -796,7 +1175,12 @@ public interface OrderScheduleRowRepository
             select count(row.id)
             from OrderScheduleRow row
             where row.status = :status
-              and row.customerOrder.active = true
+              and (exists (select 1 from CustomerOrder co
+                           where co.id = row.customerOrder.id
+                             and co.active = true)
+                or exists (select 1 from ProductionOrder po
+                           where po.id = row.productionOrder.id
+                             and po.active = true))
               and row.organizationUnit.id in :unitIds
               and row.plannedDate between :from and :to
             """)
@@ -835,6 +1219,7 @@ public interface OrderScheduleRowRepository
             select row.techProcess.id       as techProcessId,
                    row.operation.id         as operationId,
                    row.customerOrder.number as orderNumber,
+                   'CO'                     as baseKind,
                    row.itemPosition         as itemPosition,
                    row.instanceIndex        as instanceIndex,
                    row.completedAt          as completedAt
@@ -843,6 +1228,36 @@ public interface OrderScheduleRowRepository
             """)
     List<OpenInstanceRowView> findRouteRowsOfOrders(
             @Param("orderIds") java.util.Collection<Long> orderIds
+    );
+
+    /*
+     * То же для строк, основанием которых служит заказ на производство
+     * (V56).
+     *
+     * Отдельный запрос, а не OR внутри одного: `in :collection` с
+     * пустой коллекцией Hibernate отвергает, а у списка работ цеха
+     * одна из ветвей пуста почти всегда — в цехе план заказа покупателя
+     * и в цехе план группового ЗНП редко пересекаются. Два вызова
+     * стоят дешевле, чем подстановка заведомо пустого идентификатора
+     * ради одного SQL.
+     *
+     * Номер основания берётся из заказа на производство: у группового
+     * ЗНП заказа покупателя нет, и без номера ключ экземпляра
+     * схлопнул бы все заказы в одну работу.
+     */
+    @Query("""
+            select row.techProcess.id            as techProcessId,
+                   row.operation.id              as operationId,
+                   row.productionOrder.number    as orderNumber,
+                   'PO'                          as baseKind,
+                   row.itemPosition              as itemPosition,
+                   row.instanceIndex             as instanceIndex,
+                   row.completedAt               as completedAt
+            from OrderScheduleRow row
+            where row.productionOrder.id in :productionOrderIds
+            """)
+    List<OpenInstanceRowView> findRouteRowsOfProductionOrders(
+            @Param("productionOrderIds") java.util.Collection<Long> productionOrderIds
     );
 
     /*
@@ -864,6 +1279,12 @@ public interface OrderScheduleRowRepository
      *
      * Активный заказ фильтруется наравне с прочими запросами: снятый с
      * работы заказ не должен своим прошлым планом влиять на закрытие.
+     *
+     * Здесь ветвь основания задана самим параметром (row.customerOrder
+     * = :customerOrderId), поэтому пару EXISTS из общего правила
+     * ставить не для чего: вторая ветвь при невыполненном первом
+     * условии заведомо пуста, а лишний подзапрос только удорожал бы
+     * запрос.
      */
     @Query("""
             select row
@@ -876,5 +1297,41 @@ public interface OrderScheduleRowRepository
     List<OrderScheduleRow> findCompletedSgpByCustomerOrder(
             @Param("customerOrderId") Long customerOrderId,
             @Param("sgpUnitCode") String sgpUnitCode
+    );
+
+    /*
+     * ============================================================
+     * Распределение работ по групповым ЗНП
+     * ============================================================
+     */
+
+    /**
+     * Нераспределённые работы групповых заказов — счётчик пункта меню.
+     *
+     * Отбор совпадает с разделом (см. GroupZnpDistributionRepository
+     * .findGroupZnpOfUnits): вид основания — групповой, работы внесены
+     * в план и ещё не закреплены. EXISTS по матрице комплектования
+     * здесь не ставится сознательно: у заказа есть работы маршрута до
+     * того, как склад внесёт номера, и счётчик, который их не считает,
+     * расходился бы с тем, что мастер увидит в разделе.
+     */
+    @Query("""
+            select count(row.id)
+            from OrderScheduleRow row
+            where row.status = :status
+              and row.executor is null
+              and row.completedAt is null
+              and row.organizationUnit.id in :unitIds
+              and row.productionOrder.id is not null
+              and row.productionOrder.active = true
+              and row.productionOrder.znpKind in :groupKinds
+              and row.plannedDate between :from and :to
+            """)
+    long countGroupZnpUnassigned(
+            @Param("status") ScheduleRowStatus status,
+            @Param("unitIds") java.util.Collection<Long> unitIds,
+            @Param("groupKinds") java.util.Collection<ru.company.production.entity.ZnpKind> groupKinds,
+            @Param("from") LocalDate from,
+            @Param("to") LocalDate to
     );
 }

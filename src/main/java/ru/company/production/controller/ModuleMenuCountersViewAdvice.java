@@ -9,11 +9,12 @@ import org.springframework.web.bind.annotation.ModelAttribute;
 import ru.company.production.entity.AppUser;
 import ru.company.production.repository.UserRepository;
 import ru.company.production.service.ModuleRoutes;
+import ru.company.production.service.GroupZnpDistributionService;
 import ru.company.production.service.WorkshopDistributionService;
 import ru.company.production.service.WorkshopStaffService;
 
 /**
- * Счётчики двух разделов — «Распределение работ» и «Мои операции» —
+ * Счётчики разделов распределения и «Мои операции» —
  * для боковых меню всех интерфейсов.
  *
  * Оба пункта живут не в одном модуле, а сразу в нескольких: у мастеров
@@ -45,6 +46,9 @@ import ru.company.production.service.WorkshopStaffService;
                 WorkshopCalendarController.class,
                 WorkshopUnitOperationsController.class,
                 WorkshopDistributionController.class,
+                /* Раздел распределения групповых заказов рисует те же
+                 * пункты меню, поэтому и счётчики берутся отсюда. */
+                GroupZnpDistributionController.class,
                 /* Интерфейсы, чьё меню содержит эти же пункты. */
                 DispatcherController.class,
                 DispatcherPriorityController.class,
@@ -72,6 +76,7 @@ public class ModuleMenuCountersViewAdvice {
     private final UserRepository userRepository;
     private final WorkshopStaffService staffService;
     private final WorkshopDistributionService distributionService;
+    private final GroupZnpDistributionService groupZnpService;
 
     @ModelAttribute
     public void addMenuCounters(
@@ -84,6 +89,7 @@ public class ModuleMenuCountersViewAdvice {
          * анонимном запросе обернулось бы ошибкой Thymeleaf.
          */
         model.addAttribute("assignableTotal", 0L);
+        model.addAttribute("groupZnpTotal", 0L);
         model.addAttribute("myOperationsCount", 0L);
 
         /*
@@ -154,6 +160,19 @@ public class ModuleMenuCountersViewAdvice {
         model.addAttribute(
                 "assignableTotal",
                 distributionService.countAssignable(
+                        staffService.unitScope(user)
+                )
+        );
+
+        /*
+         * Счётчик групповых заказов — по той же границе подразделений.
+         * Раздел открыт тем же canDistribute, поэтому и цифра считается
+         * для тех же ролей: иначе пункт меню показал бы работу, в
+         * которую вход закрыт.
+         */
+        model.addAttribute(
+                "groupZnpTotal",
+                groupZnpService.countUnassigned(
                         staffService.unitScope(user)
                 )
         );

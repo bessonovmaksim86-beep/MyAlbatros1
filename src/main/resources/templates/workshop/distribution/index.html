@@ -21,6 +21,8 @@
           th:href="@{/workshop/css/distribution-groups.css}">
     <link rel="stylesheet"
           th:href="@{/workshop/css/distribution-ops.css}">
+    <link rel="stylesheet"
+          th:href="@{/workshop/css/distribution-mode.css}">
 
     <link rel="stylesheet"
           th:if="${isSKGeneral}"
@@ -62,6 +64,18 @@
                 </div>
 
             </div>
+
+            <!--
+                Переключатель режимов распределения: обычные работы
+                подразделения и групповые ЗНП. Разрез у них разный —
+                обычное распределение группирует строки по изделию
+                выпуска и печатает серийный номер, а групповой заказ
+                задан количеством, и изделие у него появляется только
+                когда склад внесёт ячейки. Общая таблица либо потеряла
+                бы номера заказов, либо показала бы «серийный номер не
+                выпущен» там, где серийника не бывает вовсе.
+            -->
+            <div th:replace="~{workshop/fragments/distribution-mode-switch :: modeSwitch('regular')}"></div>
 
             <!--
                 Срок показа работ. Значение живёт в адресной строке, а
@@ -345,6 +359,18 @@
                                                         <input type="hidden"
                                                                name="orderId"
                                                                th:value="${op.customerOrderId()}">
+
+                                                        <!--
+                                                            Основание строки (V56): у работ
+                                                            группового ЗНП заказа покупателя
+                                                            нет, и без этого поля форма
+                                                            прислала бы пустой заказ —
+                                                            назначение не нашло бы строк.
+                                                        -->
+                                                        <input type="hidden"
+                                                               th:if="${op.productionOrderId() != null}"
+                                                               name="productionOrderId"
+                                                               th:value="${op.productionOrderId()}">
 
                                                         <input type="hidden"
                                                                name="itemPosition"
@@ -686,6 +712,11 @@
                                                             <input type="hidden"
                                                                    name="orderId"
                                                                    th:value="${op.customerOrderId()}">
+
+                                                            <input type="hidden"
+                                                                   th:if="${op.productionOrderId() != null}"
+                                                                   name="productionOrderId"
+                                                                   th:value="${op.productionOrderId()}">
 
                                                             <input type="hidden"
                                                                    name="itemPosition"

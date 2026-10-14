@@ -1,0 +1,1073 @@
+<!DOCTYPE html>
+<html lang="ru"
+      xmlns:th="http://www.thymeleaf.org">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport"
+          content="width=device-width, initial-scale=1">
+
+    <title>Распределение работ — групповые ЗНП</title>
+
+    <link rel="stylesheet"
+          th:href="@{/technology/css/technology.css}">
+    <link rel="stylesheet"
+          th:href="@{/technology/css/common.css}">
+    <link rel="stylesheet"
+          th:href="@{/workshop/css/workshop.css}">
+    <link rel="stylesheet"
+          th:href="@{/workshop/css/distribution.css}">
+    <link rel="stylesheet"
+          th:href="@{/workshop/css/distribution-groups.css}">
+    <link rel="stylesheet"
+          th:href="@{/workshop/css/distribution-ops.css}">
+    <link rel="stylesheet"
+          th:href="@{/workshop/css/group-znp.css}">
+    <link rel="stylesheet"
+          th:href="@{/workshop/css/distribution-mode.css}">
+
+    <link rel="stylesheet"
+          th:if="${isSKGeneral}"
+          th:href="@{/quality/css/quality.css}">
+</head>
+
+<body>
+
+<div class="app-shell">
+
+    <aside th:replace="${isSKGeneral}
+            ? ~{quality/fragments/layout :: sidebar('group-znp')}
+            : ~{workshop/fragments/layout :: sidebar('group-znp')}">
+    </aside>
+
+    <main class="main">
+
+        <header th:replace="${isSKGeneral}
+                ? ~{quality/fragments/layout :: topbar}
+                : ~{workshop/fragments/layout :: topbar}">
+        </header>
+
+        <div class="page-content workshop-page">
+
+            <div class="page-head">
+
+                <div class="page-title">
+
+                    <h1>Распределение работ — групповые ЗНП</h1>
+
+                    <p th:text="${
+                        workshopName != null
+                            ? 'Подразделение: ' + workshopName
+                            : 'Распределение работ групповых заказов подразделения'
+                    }">
+                        Подразделение: Цех подготовки производства
+                    </p>
+
+                </div>
+
+            </div>
+
+            <!--
+                Переключатель режимов распределения: обычные работы
+                подразделения и групповые ЗНП. Разрез у них разный —
+                обычное распределение группирует строки по изделию
+                выпуска и печатает серийный номер, а групповой заказ
+                задан количеством, и изделие у него появляется только
+                когда склад внесёт ячейки. Общая таблица либо потеряла
+                бы номера заказов, либо показала бы «серийный номер не
+                выпущен» там, где серийника не бывает вовсе.
+            -->
+            <div th:replace="~{workshop/fragments/distribution-mode-switch :: modeSwitch('group')}"></div>
+
+            <!--
+                Срок показа работ. Значение живёт в адресной строке, а
+                не в сессии: ссылку на «шесть недель» можно передать
+                коллеге, и назначение не должно сбрасывать выбор.
+            -->
+            <form class="filter-bar"
+                  method="get"
+                  th:if="${workshopUnitId != null}"
+                  th:action="@{/workshop/distribution/group-znp}">
+
+                <label class="filter-bar__field">
+
+                    <span class="filter-bar__caption">Срок работ</span>
+
+                    <select name="weeks"
+                            class="filter-bar__select"
+                            onchange="this.form.submit()">
+
+                        <option th:each="opt : ${weekChoices}"
+                                th:value="${opt.key}"
+                                th:text="${opt.value}"
+                                th:selected="${opt.key == weeks}">
+                            2 недели
+                        </option>
+
+                    </select>
+
+                </label>
+
+                <noscript>
+                    <button type="submit" class="btn primary compact">
+                        Применить
+                    </button>
+                </noscript>
+
+                <span class="filter-bar__period"
+                      th:text="${periodLabel}">
+                    Период: 01.10.2026 — 15.10.2026
+                </span>
+
+            </form>
+
+            <div class="alert success"
+                 th:if="${successMessage}"
+                 th:text="${successMessage}">
+            </div>
+
+            <div class="alert danger"
+                 th:if="${errorMessage}"
+                 th:text="${errorMessage}">
+            </div>
+
+            <div class="alert attention"
+                 th:if="${workshopUnitId == null}">
+
+                <p>
+                    Ваша учётная запись не привязана к подразделению,
+                    поэтому работы подразделения не определены.
+                    Привязку создаёт администратор в разделе
+                    «Пользователи».
+                </p>
+
+            </div>
+
+            <!--
+                Разрез три уровня:
+
+                  1. строка — групповой ЗНП: номер, изделие, количество
+                     заказанных ячеек и маршрут;
+                  2. раскрытие заказа — строки привязанных ячеек:
+                     серийный номер, текущая операция, трудоёмкость и
+                     исполнитель;
+                  3. раскрытие ячейки — операции её маршрута, и под
+                     операцией — перечень сотрудников подразделения для
+                     привязки.
+
+                Порядок обратен общему распределению, потому что работа
+                заявлена группой ячеек одного наименования: мастер
+                начинает с заказа и спускается к ячейке, а не выбирает
+                изделие из общего потока.
+            -->
+            <section class="card"
+                     th:if="${!#lists.isEmpty(orders)}">
+
+                <div class="card-head">
+
+                    <div>
+
+                        <h2>Групповые заказы на производство</h2>
+
+                        <small>
+                            Строка — групповой ЗНП: его номер, изделие,
+                            заказанное количество ячеек и маршрут.
+                            Нажмите на строку — раскроются привязанные к
+                            заказу ячейки с их текущей операцией,
+                            трудоёмкостью и исполнителем. Нажмите на
+                            ячейку — раскроются операции маршрута этой
+                            ячейки и сотрудники, способные их выполнить.
+                        </small>
+
+                    </div>
+
+                </div>
+
+                <div class="card-body">
+
+                    <div class="table-wrap">
+
+                        <table class="data-table group-znp-table">
+
+                            <colgroup>
+                                <col class="col-znp-number">
+                                <col class="col-znp-item">
+                                <col class="col-znp-qty">
+                                <col class="col-znp-tp">
+                                <col class="col-znp-toggle">
+                            </colgroup>
+
+                            <thead>
+                            <tr>
+                                <th>Номер ЗНП</th>
+                                <th>Наименование изделия</th>
+                                <th>Количество изделий</th>
+                                <th>ТП</th>
+                                <th>Ячейки</th>
+                            </tr>
+                            </thead>
+
+                            <tbody>
+
+                            <th:block th:each="order, orderStat : ${orders}">
+
+                                <!--
+                                    Уровень 1: заказ
+                                -->
+                                <tr class="group-znp-row"
+                                    th:onclick="|toggleGroup('znp-panel-${orderStat.index}', 'znp-caret-${orderStat.index}')|">
+
+                                    <td class="cell-znp-number"
+                                        th:text="${order.number()}">
+                                        ЗНП-2026-014
+                                    </td>
+
+                                    <td class="cell-znp-item"
+                                        th:text="${order.itemLabel()}">
+                                        ДУУ2М.1.1.00.00 датчик указательный уровня
+                                    </td>
+
+                                    <td class="cell-znp-qty"
+                                        th:text="${order.quantityLabel()}">
+                                        10
+                                    </td>
+
+                                    <td class="cell-znp-tp"
+                                        th:text="${
+                                            order.techProcessCode() != null
+                                            and !#strings.isEmpty(order.techProcessCode())
+                                                ? order.techProcessCode()
+                                                : '—'
+                                        }">
+                                        ТП-001
+                                    </td>
+
+                                    <td class="cell-znp-toggle">
+
+                                        <span class="group-znp-status"
+                                              th:classappend="' ' + ${order.distributionBadgeClass()}"
+                                              th:text="${order.distributionLabel()}">
+                                            распределить
+                                        </span>
+
+                                        <small class="group-znp-composition"
+                                               th:text="${order.compositionLabel()}">
+                                            8 из 10
+                                        </small>
+
+                                        <small class="instance-toggle__caret"
+                                               th:id="'znp-caret-' + ${orderStat.index}">
+                                            ▼
+                                        </small>
+
+                                    </td>
+
+                                </tr>
+
+                                <!--
+                                    Уровень 2: привязанные ячейки заказа
+                                -->
+                                <tr class="group-znp-panel"
+                                    th:id="'znp-panel-' + ${orderStat.index}">
+
+                                    <td colspan="5">
+
+                                        <div class="group-znp-panel-body">
+
+                                            <!--
+                                                Работы заказа существуют до
+                                                того, как склад внесёт номера:
+                                                экземпляры маршрута заводит
+                                                планировщик по заказанному
+                                                количеству. Поэтому перечень
+                                                пуст бывает только когда у
+                                                заказа нет работ данного
+                                                подразделения.
+                                            -->
+                                            <div class="alert attention"
+                                                 th:if="${#lists.isEmpty(order.serials())}">
+
+                                                <p>
+                                                    У заказа нет работ вашего
+                                                    подразделения за выбранный
+                                                    срок: маршрут появится после
+                                                    того, как диспетчер внесёт
+                                                    заказ в план.
+                                                </p>
+
+                                            </div>
+
+                                            <table class="group-znp-cells-table"
+                                                   th:unless="${#lists.isEmpty(order.serials())}">
+
+                                                <colgroup>
+                                                    <col class="col-cell-serial">
+                                                    <col class="col-cell-op">
+                                                    <col class="col-cell-hours">
+                                                    <col class="col-cell-executor">
+                                                    <col class="col-cell-toggle">
+                                                </colgroup>
+
+                                                <thead>
+                                                <tr>
+                                                    <th>Номер ячейки</th>
+                                                    <th>Операция</th>
+                                                    <th>Трудоёмкость</th>
+                                                    <th>Исполнитель</th>
+                                                    <th>Операции</th>
+                                                </tr>
+                                                </thead>
+
+                                                <tbody>
+
+                                                <th:block th:each="serial, serialStat : ${order.serials()}">
+
+                                                    <tr class="group-znp-cell-row"
+                                                        th:classappend="${serial.isClosed() ? ' is-closed' : ''}"
+                                                        th:onclick="|event.stopPropagation(); toggleCell('cell-panel-${orderStat.index}-${serialStat.index}', 'cell-caret-${orderStat.index}-${serialStat.index}')|">
+
+                                                        <td class="cell-znp-serial">
+
+                                                            <span class="cell-serial__value"
+                                                                  th:text="${serial.cellLabel()}">
+                                                                Ячейка 3
+                                                            </span>
+
+                                                            <!--
+                                                                Серийник — подпись под
+                                                                номером ячейки: склад
+                                                                вносит его позже, и до
+                                                                внесения строка обязана
+                                                                оставаться читаемой.
+                                                            -->
+                                                            <small class="field-hint"
+                                                                   th:if="${serial.attached()}"
+                                                                   th:text="${serial.serialLabel()}">
+                                                                121200022
+                                                            </small>
+
+                                                            <small class="field-hint"
+                                                                   th:unless="${serial.attached()}">
+                                                                номер не присвоен
+                                                            </small>
+
+                                                        </td>
+
+                                                        <td class="cell-znp-op"
+                                                            th:text="${serial.currentOperationLabel()}">
+                                                            Монтаж подсборок
+                                                        </td>
+
+                                                        <td class="cell-znp-hours"
+                                                            th:text="${serial.currentHoursLabel()}">
+                                                            1 ч.
+                                                        </td>
+
+                                                        <td class="cell-znp-executor">
+
+                                                            <span th:if="${serial.isClosed()}"
+                                                                  class="group-znp-status group-znp-status--done">
+                                                                закрыта
+                                                            </span>
+
+                                                            <span th:unless="${serial.isClosed()}"
+                                                                  th:text="${serial.currentExecutorLabel()}">
+                                                                Иванов И. И.
+                                                            </span>
+
+                                                        </td>
+
+                                                        <td class="cell-znp-toggle">
+
+                                                            <span class="instance-toggle__badge"
+                                                                  th:text="${serial.progressLabel()}">
+                                                                2 / 5
+                                                            </span>
+
+                                                            <span class="instance-toggle__caret"
+                                                                  th:id="'cell-caret-' + ${orderStat.index} + '-' + ${serialStat.index}">
+                                                                ▼
+                                                            </span>
+
+                                                        </td>
+
+                                                    </tr>
+
+                                                    <!--
+                                                        Уровень 3: операции ячейки и
+                                                        перечень сотрудников под каждой
+                                                    -->
+                                                    <tr class="group-znp-cell-panel-row"
+                                                        th:id="'cell-panel-' + ${orderStat.index} + '-' + ${serialStat.index}">
+
+                                                        <td colspan="5">
+
+                                                            <div class="group-znp-cell-body">
+
+                                                                <div class="group-znp-cell-body__caption">
+                                                                    Операции маршрута ячейки
+                                                                    <strong th:text="${serial.cellLabel()}">
+                                                                        Ячейка 3
+                                                                    </strong>
+                                                                    <small th:if="${serial.attached()}"
+                                                                           th:text="${serial.serialLabel()}">
+                                                                        121200022
+                                                                    </small>
+                                                                </div>
+
+                                                                <div class="alert attention"
+                                                                     th:if="${#lists.isEmpty(serial.operations())}">
+
+                                                                    <p>
+                                                                        У ячейки нет работ
+                                                                        маршрута вашего
+                                                                        подразделения.
+                                                                    </p>
+
+                                                                </div>
+
+                                                                <th:block th:each="op : ${serial.operations()}">
+
+                                                                    <div class="group-znp-op"
+                                                                         th:classappend="${op.completed() ? ' is-done' : ''}">
+
+                                                                        <div class="group-znp-op__head">
+
+                                                                            <span class="group-znp-op__title"
+                                                                                  th:text="${op.title()}">
+                                                                                Монтаж подсборок
+                                                                            </span>
+
+                                                                            <span class="group-znp-op__meta">
+                                                                                Трудоёмкость:
+                                                                                <strong th:text="${op.hoursLabel()} + ' ч.'">
+                                                                                    1 ч.
+                                                                                </strong>
+                                                                            </span>
+
+                                                                            <span class="group-znp-op__meta">
+                                                                                Дата плана:
+                                                                                <strong th:text="${op.plannedDateFormatted()}">
+                                                                                    23.10.2026
+                                                                                </strong>
+                                                                            </span>
+
+                                                                            <span class="group-znp-op__badge">
+
+                                                                                <span class="group-znp-status group-znp-status--done"
+                                                                                      th:if="${op.completed()}"
+                                                                                      th:text="'проведена ' + ${op.completedLabel()}">
+                                                                                    проведена 23.10.2026 14:30
+                                                                                </span>
+
+                                                                                <span class="group-znp-status group-znp-status--part"
+                                                                                      th:if="${op.assigned() and !op.completed()}"
+                                                                                      th:text="${op.executorName()}">
+                                                                                    Иванов И. И.
+                                                                                </span>
+
+                                                                                <span class="group-znp-status group-znp-status--todo"
+                                                                                      th:if="${!op.assigned() and !op.completed()}">
+                                                                                    не назначена
+                                                                                </span>
+
+                                                                            </span>
+
+                                                                        </div>
+
+                                                                        <div class="alert attention"
+                                                                             th:if="${op.hasNoExecutor()}">
+
+                                                                            <p>
+                                                                                Ни один сотрудник подразделения
+                                                                                не закреплён за этой операцией
+                                                                                и за её рабочими местами.
+                                                                                Привязку ведёт руководитель
+                                                                                в разделе «Сотрудники».
+                                                                            </p>
+
+                                                                        </div>
+
+                                                                        <!--
+                                                                            Перечень сотрудников для
+                                                                            привязки к операции
+                                                                        -->
+                                                                        <form th:unless="${op.hasNoExecutor() or op.completed()}"
+                                                                              th:action="@{/workshop/distribution/group-znp/assign}"
+                                                                              method="post"
+                                                                              class="group-assign-form">
+
+                                                                            <input th:if="${_csrf != null}"
+                                                                                   type="hidden"
+                                                                                   th:name="${_csrf.parameterName}"
+                                                                                   th:value="${_csrf.token}">
+
+                                                                            <input type="hidden"
+                                                                                   name="rowId"
+                                                                                   th:value="${op.rowId()}">
+
+                                                                            <input type="hidden"
+                                                                                   name="weeks"
+                                                                                   th:value="${weeks}">
+
+                                                                            <div class="group-panel__head">
+
+                                                                                <strong>
+                                                                                    Сотрудники для привязки
+                                                                                </strong>
+
+                                                                                <small class="field-hint">
+                                                                                    Загрузка — на дату плана
+                                                                                    этой операции
+                                                                                </small>
+
+                                                                            </div>
+
+                                                                            <div class="executor-list">
+
+                                                                                <label class="executor-option"
+                                                                                       th:each="e : ${op.executors()}"
+                                                                                       th:classappend="${e.absent()
+                                                                                           ? ' is-absent'
+                                                                                           : (${e.overloaded()
+                                                                                                ? ' is-overloaded'
+                                                                                                : ''})}">
+
+                                                                                    <input type="radio"
+                                                                                           name="executorId"
+                                                                                           th:value="${e.id()}">
+
+                                                                                    <span class="executor-option__name">
+
+                                                                                        <strong th:text="${e.label()}">
+                                                                                            Иванов Иван Иванович
+                                                                                        </strong>
+
+                                                                                        <small class="field-hint"
+                                                                                               th:if="${
+                                                                                                   e.specialty() != null
+                                                                                                   and !#strings.isEmpty(e.specialty())
+                                                                                               }"
+                                                                                               th:text="${e.specialty()}">
+                                                                                            Слесарь
+                                                                                        </small>
+
+                                                                                    </span>
+
+                                                                                    <span class="executor-option__load">
+
+                                                                                        <span th:text="'занято ' + ${e.busyLabel()} + ' ч.'">
+                                                                                            занято 2 ч.
+                                                                                        </span>
+
+                                                                                        <span th:if="${e.overloaded()}"
+                                                                                              class="badge badge--attention">
+                                                                                            перегруз
+                                                                                        </span>
+
+                                                                                        <span th:unless="${e.overloaded()}"
+                                                                                              th:text="'свободно ' + ${e.freeLabel()} + ' ч.'">
+                                                                                            свободно 6 ч.
+                                                                                        </span>
+
+                                                                                    </span>
+
+                                                                                    <span class="executor-option__absence"
+                                                                                          th:if="${e.absent()}">
+
+                                                                                        <span class="badge badge--attention">
+                                                                                            отсутствует
+                                                                                        </span>
+
+                                                                                    </span>
+
+                                                                                </label>
+
+                                                                            </div>
+
+                                                                            <div class="group-panel__actions">
+
+                                                                                <button type="submit"
+                                                                                        class="btn primary compact"
+                                                                                        th:onclick="'return validateAssign(this.form)'">
+                                                                                    Назначить
+                                                                                </button>
+
+                                                                            </div>
+
+                                                                        </form>
+
+                                                                        <form th:if="${op.assigned() and !op.completed()}"
+                                                                              th:action="@{/workshop/distribution/group-znp/unassign}"
+                                                                              method="post"
+                                                                              class="inline-form">
+
+                                                                            <input th:if="${_csrf != null}"
+                                                                                   type="hidden"
+                                                                                   th:name="${_csrf.parameterName}"
+                                                                                   th:value="${_csrf.token}">
+
+                                                                            <input type="hidden"
+                                                                                   name="rowId"
+                                                                                   th:value="${op.rowId()}">
+
+                                                                            <input type="hidden"
+                                                                                   name="weeks"
+                                                                                   th:value="${weeks}">
+
+                                                                            <button type="submit"
+                                                                                    class="btn danger compact">
+                                                                                Снять назначение
+                                                                            </button>
+
+                                                                        </form>
+
+                                                                    </div>
+
+                                                                </th:block>
+
+                                                            </div>
+
+                                                        </td>
+
+                                                    </tr>
+
+                                                </th:block>
+
+                                                </tbody>
+
+                                            </table>
+
+                                        </div>
+
+                                    </td>
+
+                                </tr>
+
+                            </th:block>
+
+                            </tbody>
+
+                        </table>
+
+                    </div>
+
+                </div>
+
+            </section>
+
+            <!--
+                Пакетное назначение. Когда всю операцию ведёт один
+                человек, мастер не хочет нажимать «Назначить» в каждой
+                ячейке: он отмечает нужные ячейки — или все сразу — и
+                закрепляет операцию одним решением. Уже закреплённые
+                ячейки сняты с отметки быть не могут: их перекладывают
+                только через «Снять назначение».
+            -->
+            <section class="card"
+                     th:if="${!#lists.isEmpty(orders)}">
+
+                <div class="card-head">
+
+                    <div>
+
+                        <h2>Пакетное назначение по операциям</h2>
+
+                        <small>
+                            Отметьте ячейки операции — или все сразу — и
+                            выберите исполнителя: работа закрепится ровно
+                            за отмеченными ячейками.
+                        </small>
+
+                    </div>
+
+                </div>
+
+                <div class="card-body">
+
+                    <th:block th:each="order, orderStat : ${orders}">
+
+                        <th:block th:if="${!#lists.isEmpty(order.batchRows())}">
+
+                            <div class="group-znp-order">
+
+                                <div class="group-znp-order__head">
+
+                                    <strong th:text="${order.number()}">
+                                        ЗНП-2026-014
+                                    </strong>
+
+                                    <span class="group-znp-order__item"
+                                          th:text="${order.itemLabel()}">
+                                        ДУУ2М.1.1.00.00 датчик указательный уровня
+                                    </span>
+
+                                    <span class="group-znp-status"
+                                          th:classappend="' ' + ${order.distributionBadgeClass()}"
+                                          th:text="${order.distributionLabel()}">
+                                        частично
+                                    </span>
+
+                                    <small class="field-hint"
+                                           th:text="'ячеек: ' + ${order.compositionLabel()}">
+                                        ячеек: 8 из 10
+                                    </small>
+
+                                </div>
+
+                                <th:block th:each="batch : ${order.batchRows()}">
+
+                                    <div class="group-znp-batch__op">
+
+                                        <div class="group-znp-batch__head">
+
+                                            <strong class="group-znp-batch__title"
+                                                    th:text="${batch.title()}">
+                                                Монтаж подсборок
+                                            </strong>
+
+                                            <span class="group-znp-batch__meta">
+                                                Дата плана:
+                                                <strong th:text="${batch.formattedDate()}">
+                                                    23.10.2026
+                                                </strong>
+                                            </span>
+
+                                            <span class="group-znp-batch__meta">
+                                                На ячейку:
+                                                <strong th:text="${batch.hoursLabel()} + ' ч.'">
+                                                    1 ч.
+                                                </strong>
+                                            </span>
+
+                                            <span class="group-znp-batch__meta">
+                                                На группу:
+                                                <strong th:text="${batch.totalHoursLabel()} + ' ч.'">
+                                                    10 ч.
+                                                </strong>
+                                            </span>
+
+                                            <span class="group-znp-batch__spacer"></span>
+
+                                            <span class="group-znp-status"
+                                                  th:classappend="' ' + ${batch.distributionBadgeClass()}"
+                                                  th:text="${batch.distributionLabel()}">
+                                                частично
+                                            </span>
+
+                                        </div>
+
+                                        <div class="alert attention"
+                                             th:if="${batch.hasNoExecutor()}">
+
+                                            <p>
+                                                Ни один сотрудник подразделения
+                                                не закреплён за этой операцией
+                                                и за её рабочими местами.
+                                                Привязку ведёт руководитель
+                                                в разделе «Сотрудники».
+                                            </p>
+
+                                        </div>
+
+                                        <form th:unless="${batch.hasNoExecutor()}"
+                                              th:action="@{/workshop/distribution/group-znp/assign}"
+                                              method="post"
+                                              class="group-assign-form">
+
+                                            <input th:if="${_csrf != null}"
+                                                   type="hidden"
+                                                   th:name="${_csrf.parameterName}"
+                                                   th:value="${_csrf.token}">
+
+                                            <input type="hidden"
+                                                   name="weeks"
+                                                   th:value="${weeks}">
+
+                                            <div class="group-znp-checks"
+                                                 th:id="'znp-checks-' + ${orderStat.index} + '-' + ${batch.operationId}">
+
+                                                <label class="group-znp-check group-znp-check--all">
+
+                                                    <input type="checkbox"
+                                                           th:attr="data-target=${orderStat.index} + '-' + ${batch.operationId}"
+                                                           onchange="toggleAllForBatch(this)">
+
+                                                    <span>Выделить все</span>
+
+                                                </label>
+
+                                                <label class="group-znp-check"
+                                                       th:each="assign : ${batch.assignRows()}">
+
+                                                    <input type="checkbox"
+                                                           name="rowId"
+                                                           th:value="${assign.rowId()}"
+                                                           th:disabled="${assign.assigned()}">
+
+                                                    <span class="group-znp-check__serial"
+                                                          th:text="${assign.cellLabel()}">
+                                                        Ячейка 3
+                                                    </span>
+
+                                                    <span class="group-znp-check__name"
+                                                          th:if="${assign.attached()}"
+                                                          th:text="${assign.serialLabel()}">
+                                                        121200022
+                                                    </span>
+
+                                                    <span class="group-znp-check__name"
+                                                          th:unless="${assign.attached()}"
+                                                          th:text="${assign.nameLabel()}">
+                                                        Датчик ДУУ2М
+                                                    </span>
+
+                                                    <span class="group-znp-check__executor"
+                                                          th:if="${assign.assigned()}"
+                                                          th:text="${assign.executorName()}">
+                                                        Иванов И. И.
+                                                    </span>
+
+                                                </label>
+
+                                            </div>
+
+                                            <div class="group-panel__head">
+
+                                                <strong>
+                                                    Сотрудники для привязки
+                                                </strong>
+
+                                                <small class="field-hint">
+                                                    Загрузка — на дату плана этой операции
+                                                </small>
+
+                                            </div>
+
+                                            <div class="executor-list">
+
+                                                <label class="executor-option"
+                                                       th:each="e : ${batch.executors()}"
+                                                       th:classappend="${e.absent()
+                                                           ? ' is-absent'
+                                                           : (${e.overloaded()
+                                                                ? ' is-overloaded'
+                                                                : ''})}">
+
+                                                    <input type="radio"
+                                                           name="executorId"
+                                                           th:value="${e.id()}">
+
+                                                    <span class="executor-option__name">
+
+                                                        <strong th:text="${e.label()}">
+                                                            Иванов Иван Иванович
+                                                        </strong>
+
+                                                        <small class="field-hint"
+                                                               th:if="${
+                                                                   e.specialty() != null
+                                                                   and !#strings.isEmpty(e.specialty())
+                                                               }"
+                                                               th:text="${e.specialty()}">
+                                                            Слесарь
+                                                        </small>
+
+                                                    </span>
+
+                                                    <span class="executor-option__load">
+
+                                                        <span th:text="'занято ' + ${e.busyLabel()} + ' ч.'">
+                                                            занято 2 ч.
+                                                        </span>
+
+                                                        <span th:if="${e.overloaded()}"
+                                                              class="badge badge--attention">
+                                                            перегруз
+                                                        </span>
+
+                                                        <span th:unless="${e.overloaded()}"
+                                                              th:text="'свободно ' + ${e.freeLabel()} + ' ч.'">
+                                                            свободно 6 ч.
+                                                        </span>
+
+                                                    </span>
+
+                                                    <span class="executor-option__absence"
+                                                          th:if="${e.absent()}">
+
+                                                        <span class="badge badge--attention">
+                                                            отсутствует
+                                                        </span>
+
+                                                    </span>
+
+                                                </label>
+
+                                            </div>
+
+                                            <div class="group-panel__actions">
+
+                                                <button type="submit"
+                                                        class="btn primary compact"
+                                                        th:attr="data-target=${orderStat.index} + '-' + ${batch.operationId}"
+                                                        th:onclick="|return validateBatchAssign(this)|">
+                                                    Назначить
+                                                </button>
+
+                                            </div>
+
+                                        </form>
+
+                                    </div>
+
+                                </th:block>
+
+                            </div>
+
+                        </th:block>
+
+                    </th:block>
+
+                </div>
+
+            </section>
+
+            <div class="alert success"
+                 th:if="${
+                     #lists.isEmpty(orders)
+                     and workshopUnitId != null
+                 }">
+
+                <p>
+                    Групповых ЗНП за выбранный срок нет: они появятся после того,
+                    как диспетчер создаст групповой заказ и внесёт его в план.
+                    Увеличьте срок работ в панели выше, чтобы увидеть более
+                    поздние даты плана.
+                </p>
+
+            </div>
+
+        </div>
+
+    </main>
+
+</div>
+
+<th:block th:replace="${isSKGeneral}
+        ? ~{quality/fragments/layout :: commonScripts}
+        : ~{workshop/fragments/layout :: commonScripts}">
+</th:block>
+
+<script>
+/*
+ * Раскрытие списка ячеек заказа.
+ */
+function toggleGroup(panelId, caretId) {
+    var panel = document.getElementById(panelId);
+    var caret = document.getElementById(caretId);
+
+    if (!panel) {
+        return;
+    }
+
+    var hidden = panel.style.display === 'none';
+
+    panel.style.display = hidden ? '' : 'none';
+    if (caret) {
+        caret.textContent = hidden ? '▲' : '▼';
+    }
+}
+
+/*
+ * Раскрытие операций ячейки. Клик останавливается на строке ячейки:
+ * иначе он всплыл бы до строки заказа и свернул бы весь заказ.
+ */
+function toggleCell(panelId, caretId) {
+    var panel = document.getElementById(panelId);
+    var caret = document.getElementById(caretId);
+
+    if (!panel) {
+        return;
+    }
+
+    var hidden = panel.style.display === 'none';
+
+    panel.style.display = hidden ? '' : 'none';
+    if (caret) {
+        caret.textContent = hidden ? '▲' : '▼';
+    }
+}
+
+/*
+ * «Выделить все» блока пакетного назначения. Уже закреплённые ячейки
+ * недоступны и остаются неотмеченными: их перекладывают только через
+ * «Снять назначение».
+ */
+function toggleAllForBatch(master) {
+    var container = document.getElementById('znp-checks-' + master.dataset.target);
+
+    if (!container) {
+        return;
+    }
+
+    var boxes = container.querySelectorAll(
+        'input[type="checkbox"][name="rowId"]:not(:disabled)');
+
+    for (var i = 0; i < boxes.length; i++) {
+        boxes[i].checked = master.checked;
+    }
+}
+
+/*
+ * Пустой список строк сервер отвергает, поэтому отметка проверяется
+ * до отправки формы.
+ */
+function validateBatchAssign(button) {
+    var container = document.getElementById('znp-checks-' + button.dataset.target);
+
+    if (!container) {
+        return false;
+    }
+
+    if (container.querySelectorAll(
+            'input[type="checkbox"][name="rowId"]:checked').length === 0) {
+        alert('Отметьте хотя бы одну ячейку');
+        return false;
+    }
+
+    return validateAssign(button.form);
+}
+
+/*
+ * Поле executorId отдаётся только радиовыбором: без отметки форма
+ * прислала бы пустое значение, и мастер получил бы ошибку уже после
+ * перехода.
+ */
+function validateAssign(form) {
+    if (form.querySelectorAll(
+            'input[type="radio"][name="executorId"]:checked').length === 0) {
+        alert('Выберите исполнителя');
+        return false;
+    }
+
+    return true;
+}
+
+/*
+ * Раскрытия свёрнуты по умолчанию: заказ даёт строку на каждую
+ * ячейку, и десятки раскрытых панелей означали бы прокручивать экран
+ * вместо выбора нужной строки.
+ */
+(function collapsePanels() {
+    var panels = document.querySelectorAll(
+        '.group-znp-panel, .group-znp-cell-panel-row');
+
+    for (var i = 0; i < panels.length; i++) {
+        panels[i].style.display = 'none';
+    }
+})();
+</script>
+
+</body>
+</html>

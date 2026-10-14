@@ -1,13 +1,16 @@
 package ru.company.production.dto;
 
 /**
- * Строка ячейки (подсборки) на складе полуфабрикатов в разделе
+ * Строка ячейки (подсборки) склада полуфабрикатов в разделе
  * комплектования в ЗНП.
  *
- * Перечень складского остатка один для всех заказов страницы, а
- * признак «уже внесена в этот ЗНП» у каждого заказа свой, поэтому
- * строка переиспользуется через {@link #mark(boolean)} — копия с
- * отметкой вместо пересборки всего перечня на каждый заказ.
+ * Перечень склада и внесённый в заказ состав печатаются одними и теми
+ * же строками: различие между ними — не отметка на ячейке, а сам факт
+ * принадлежности. Проведённая в ЗНП ячейка со свободных полок снята,
+ * поэтому она физически не может попасть в складской перечень, и
+ * признак «уже внесена» был бы второй правдой о том же факте — при
+ * расхождении перечней кладовщик получил бы номер одновременно
+ * «свободным» и «внесённым».
  *
  * Ячейка держится полным номером, а не ссылкой на сущность: перечень
  * печатается при выключенном {@code open-in-view}, и обращение
@@ -18,27 +21,8 @@ public record SubassemblyKittingCellRow(
         String fullNumber,
         String displayName,
         String classifierCode,
-        Long classifierId,
-        boolean taken
+        Long classifierId
 ) {
-
-    /** Строка складского остатка: к заказу ещё не привязана. */
-    public SubassemblyKittingCellRow(Long serialId,
-                                     String fullNumber,
-                                     String displayName,
-                                     String classifierCode,
-                                     Long classifierId) {
-        this(serialId, fullNumber, displayName, classifierCode,
-                classifierId, false);
-    }
-
-    /** Та же строка с отметкой «внесена в заказ». */
-    public SubassemblyKittingCellRow mark(boolean takenFlag) {
-        return new SubassemblyKittingCellRow(
-                serialId, fullNumber, displayName, classifierCode,
-                classifierId, takenFlag
-        );
-    }
 
     /** Изделие короткой подписью: «1212 — Подсборка ЯПР56». */
     public String getCellLabel() {
@@ -53,16 +37,6 @@ public record SubassemblyKittingCellRow(
                 : classifierCode + " — " + displayName;
     }
 
-    /** Подпись состояния в колонке «Статус». */
-    public String stateLabel() {
-        return taken ? "внесена в заказ" : "можно внести";
-    }
-
-    /** Модификатор CSS-метки состояния — цвета прочего склада. */
-    public String stateBadgeClass() {
-        return taken ? "badge badge--success" : "badge";
-    }
-
     /*
      * Двойники вида getX() держат рядом с аксессорами record
      * намеренно: Thymeleaf читает свойства по JavaBeans-соглашению
@@ -75,9 +49,5 @@ public record SubassemblyKittingCellRow(
 
     public String getDisplayName() {
         return displayName;
-    }
-
-    public boolean isTaken() {
-        return taken;
     }
 }

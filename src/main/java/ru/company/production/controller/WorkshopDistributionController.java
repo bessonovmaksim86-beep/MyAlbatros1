@@ -79,17 +79,19 @@ public class WorkshopDistributionController {
     /**
      * Закрепление операции изделия за исполнителем.
      *
-     * Форма операции отправляет пару «операция + дата плана» плюс заказ
-     * и позицию: мастер закрепляет работу над конкретным датчиком, а не
-     * над всей группой дня, поэтому соседние изделия той же операции
-     * остаются чужими решениями.
+     * Форма отдаёт пару «операция + дата плана» плюс основание строки:
+     * заказ покупателя с позицией либо заказ на производство (V56).
+     * Мастер закрепляет работу над конкретным изделием, а не над всей
+     * группой дней, поэтому операции смежных изделий остаются чужими
+     * решениями мастера.
      */
     @PostMapping("/assign")
     public String assign(
             @RequestParam Long operationId,
             @RequestParam LocalDate plannedDate,
-            @RequestParam Long orderId,
-            @RequestParam Integer itemPosition,
+            @RequestParam(required = false) Long orderId,
+            @RequestParam(required = false) Integer itemPosition,
+            @RequestParam(required = false) Long productionOrderId,
             @RequestParam Long executorId,
             @RequestParam(name = "weeks", required = false) Integer weeks,
             Authentication authentication,
@@ -103,6 +105,7 @@ public class WorkshopDistributionController {
                     plannedDate,
                     orderId,
                     itemPosition,
+                    productionOrderId,
                     executorId,
                     currentUser(authentication)
             );
@@ -129,8 +132,9 @@ public class WorkshopDistributionController {
     public String unassign(
             @RequestParam Long operationId,
             @RequestParam LocalDate plannedDate,
-            @RequestParam Long orderId,
-            @RequestParam Integer itemPosition,
+            @RequestParam(required = false) Long orderId,
+            @RequestParam(required = false) Integer itemPosition,
+            @RequestParam(required = false) Long productionOrderId,
             @RequestParam(name = "weeks", required = false) Integer weeks,
             Authentication authentication,
             RedirectAttributes redirectAttributes
@@ -143,6 +147,7 @@ public class WorkshopDistributionController {
                     plannedDate,
                     orderId,
                     itemPosition,
+                    productionOrderId,
                     currentUser(authentication)
             );
 

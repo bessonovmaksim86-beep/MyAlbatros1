@@ -86,6 +86,37 @@ public interface SerialProductionOrderRepository
     );
 
     /**
+     * Ячейки, оформленные в набор заказов, — внесённый состав списка
+     * комплектования.
+     *
+     * Нужен складу: проведённая в ЗНП ячейка со свободных полок снята и
+     * в складской остаток не возвращается, поэтому «что уже внесено»
+     * читается матрицей, а не перечнем склада.
+     *
+     * Пакетность та же, что у {@link #findSerialsByOrderIds}: список
+     * раздела перечисляет десятки заказов, и запрос на строку дал бы
+     * N+1 на экране, который кладовщик открывает за смену много раз.
+     *
+     * Снятые с работы заказы исключены: отменённый заказ обязан вернуть
+     * ячейку на склад, иначе он держал бы номер занятым.
+     */
+    @Query("""
+            select link
+            from SerialProductionOrder link
+            join fetch link.serial serial
+            left join fetch serial.productClassifier classifier
+            left join fetch classifier.sensorCatalog
+            where link.productionOrder.id in :orderIds
+              and link.productionOrder.active = true
+            order by link.productionOrder.id asc,
+                     link.createdAt asc,
+                     serial.serial asc
+            """)
+    List<SerialProductionOrder> findAttachedByOrderIds(
+            @Param("orderIds") Collection<Long> orderIds
+    );
+
+    /**
      * Датчики набора заказов — колонка «Серийник(и)» списка заказов.
      *
      * Это второй из двух источников колонки. У выпуска (ЗП) номера

@@ -547,13 +547,27 @@ public interface ProductSerialRepository
     );
 
     /**
-     * Ячейки, принятые на склад полуфабрикатов — список для
+     * Свободный остаток склада полуфабрикатов — список для
      * комплектования подсборок.
      *
-     * Ячейка считается принятой на склад, когда отмечена приёмкой
-     * (acceptedAt IS NOT NULL). Эти номера кладовщик вводит в ЗНП:
-     * склад подтверждает, что нужные подсборки физически лежат на
-     * полках и готовы к выдаче.
+     * Ячейка считается лежащей на складе, когда отмечена приёмкой
+     * (acceptedAt IS NOT NULL) и ещё не оформлена ни в один заказ.
+     * Эти номера кладовщик вводит в ЗНП: склад подтверждает, что нужные
+     * подсборки физически лежат на полках и готовы к выдаче.
+     *
+     * NOT EXISTS по матрице комплектования (V20) обязателен: внесённая
+     * в ЗНП ячейка проведена в производство и с полок снята, поэтому
+     * второй раз она выдана быть не может. Без этого условия кладовщик
+     * видел бы в доступных те же номера, что уже оформлены в другом
+     * заказе, и провёл бы одну подсборку дважды.
+     *
+     * Связь считается только по активным заказам: снятый с работы или
+     * отменённый заказ деактивируется и обязан вернуть ячейку на склад,
+     * иначе заказ, которого больше нет, держал бы номер занятым.
+     *
+     * Внесённые в конкретный ЗНП ячейки читаются не отсюда, а прямо из
+     * матрицы этого заказа (см. SerialProductionOrderRepository
+     * .findByProductionOrderId): перечню склада они уже не принадлежат.
      *
      * Классификатор подтянут fetch-join'ом: шаблон печатает полный
      * номер и наименование изделия, а open-in-view выключен — без
@@ -565,10 +579,17 @@ public interface ProductSerialRepository
             left join fetch serial.productClassifier classifier
             left join fetch classifier.sensorCatalog
             where serial.acceptedAt is not null
+              and not exists (
+                    select 1
+                    from SerialProductionOrder link
+                    join link.productionOrder ord
+                    where link.serial.id = serial.id
+                      and ord.active = true
+              )
             order by serial.productClassifier.code asc,
                      serial.serial asc
             """)
-    List<ProductSerial> findAcceptedOnWarehouse();
+    List<ProductSerial> findFreeOnWarehouse();
 
     /**
      * Приёмка на склад сразу для перечня ячеек.

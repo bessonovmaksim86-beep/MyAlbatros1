@@ -8,6 +8,7 @@ import ru.company.production.dto.SubassemblyKittingCellRow;
 import ru.company.production.dto.SubassemblyKittingZnpRow;
 import ru.company.production.entity.AppUser;
 import ru.company.production.entity.Operation;
+import ru.company.production.entity.OrderScheduleRow;
 import ru.company.production.entity.ProductSerial;
 import ru.company.production.entity.ProductSerialOperation;
 import ru.company.production.entity.ProductSerialOperationStatus;
@@ -16,6 +17,7 @@ import ru.company.production.entity.ProductionOrderStatus;
 import ru.company.production.entity.SerialProductionOrder;
 import ru.company.production.entity.TechProcess;
 import ru.company.production.entity.TechProcessOperation;
+import ru.company.production.repository.OrderScheduleRowRepository;
 import ru.company.production.repository.ProductSerialOperationRepository;
 import ru.company.production.repository.ProductSerialRepository;
 import ru.company.production.repository.ProductionOrderRepository;
@@ -85,16 +87,26 @@ public class SubassemblyKittingService {
     private final InputControlService inputControlService;
     private final ProductSerialOperationRepository serialOperationRepository;
 
+    /*
+     * План заказа (V56): строки графика второй ветви — то, что читает
+     * цех. Склад обязан проводить свою строку сам, иначе «Комплектование
+     * подсборок» осталось бы незакрытым в плане и следующая по маршруту
+     * операция («Монтаж подсборок») не разблокировалась бы, даже когда
+     * все ячейки внесены.
+     */
+    private final OrderScheduleRowRepository scheduleRowRepository;
+
     /**
      * ЗНП с операцией приёмки на склад полуфабрикатов — список раздела.
      *
-     * Принятые на склад ячейки читаются ОДНИМ запросом на всю страницу:
-     * перечень общий для всех заказов, и запрос на каждую строку списка
-     * дал бы N+1 на экране, где строк десятки.
+     * Оба перечня читаются пакетами на всю страницу: свободный остаток
+     * общий для всех заказов, а внесённый состав — свой у каждого
+     * заказа, но и он выбирается одним запросом по идентификаторам
+     * страницы. Выборка на каждую строку дала бы два N+1 на экране, где
+     * строк десятки.
      *
-     * Попадание ячейки в заказ определяется матрицей комплектования,
-     * поэтому строка знает и весь складской перечень, и то, что уже
-     * внесено в этот ЗНП, — кладовщик видит остаток, а не гадает.
+     * Строка знает и свободный склад, и свой состав: кладовщик видит,
+     * что уже оформлено в этот ЗНП и что ещё можно взять.
      */
     @Transactional(readOnly = true)
     public List<SubassemblyKittingZnpRow> findOrders() {
@@ -112,8 +124,6 @@ public class SubassemblyKittingService {
 
         List<SubassemblyKittingCellRow> stockRows = stockRows();
 
-        List<SubassemblyKittingZnpRow> result = new ArrayList<>();
-
         /*
          * Операции маршрутов читаются одним запросом на всю страницу:
          * у групповых ЗНП приёмка живёт в техпроцессе, и запрос на
@@ -122,9 +132,17 @@ public class SubassemblyKittingService {
         Map<Long, Operation> routeOperations =
                 routeOperationsByProcess(orders);
 
-        for (ProductionOrder order : orders) {
+        List<Long> orderIds = orders.stream()
+                .map(ProductionOrder::getId)
+                .filter(Objects::nonNull)
+                .toList();
 
-            Set<String> taken = takenNumbers(order.getId());
+        Map<Long, List<SubassemblyKittingCellRow>> attachedByOrder =
+            attachedRowsByOrder(orderIds);
+
+        List<SubassemblyKittingZnpRow> result = new ArrayList<>();
+
+        for (ProductionOrder order : orders) {
 
             result.add(new SubassemblyKittingZnpRow(
                     order.getId(),
@@ -139,7 +157,8 @@ public class SubassemblyKittingService {
                     order.getStatusBadgeClass(),
                     order.getNote(),
                     order.getQuantity(),
-                    orderCells(order, stockRows, taken)
+                    freeCells(order, stockRows),
+                    attachedByOrder.getOrDefault(order.getId(), List.of())
             ));
         }
 
@@ -147,7 +166,8 @@ public class SubassemblyKittingService {
     }
 
     /**
-     * Экран внесения ячеек: заказ, его реквизиты и складской перечень.
+     * Экран внесения ячеек: заказ, его реквизиты, свободный склад и
+     * уже внесённый состав.
      *
      * Заказ читается детальным запросом: карточка печатает номер
      * родителя, вид заказа и наименование операции, а связи ленивые
@@ -158,14 +178,10 @@ public class SubassemblyKittingService {
 
         ProductionOrder order = requireKittingOrder(orderId);
 
-        Set<String> taken = takenNumbers(orderId);
-
-        List<SubassemblyKittingCellRow> cells =
-                orderCells(order, stockRows(), taken);
-
         return new SubassemblyKittingView(
                 order,
-                cells,
+                freeCells(order, stockRows()),
+                attachedRows(orderId),
                 quarantineCells(order),
                 operationName(order, routeOperationsByProcess(List.of(order)))
         );
@@ -198,49 +214,100 @@ public class SubassemblyKittingService {
     }
 
     /**
-     * Список ячеек, принятых на склад полуфабрикатов.
+     * Свободный складской остаток: принятые складом ячейки, ещё не
+     * оформленные ни в один заказ.
      *
      * Отдельный метод, чтобы не дублировать отобра в {@code findOrders}
      * и {@code loadView}.
      */
     private List<SubassemblyKittingCellRow> stockRows() {
 
-        List<ProductSerial> stock = serialRepository
-                .findAcceptedOnWarehouse();
+        List<ProductSerial> stock = serialRepository.findFreeOnWarehouse();
 
         return stock.stream()
-                .map(serial -> new SubassemblyKittingCellRow(
-                        serial.getId(),
-                        serial.getFullNumber(),
-                        serial.getDisplayName(),
-                        serial.getProductClassifier() == null
-                                ? null
-                                : String.valueOf(
-                                        serial.getProductClassifier().getCode()
-                                ),
-                        serial.getProductClassifier() == null
-                                ? null
-                                : serial.getProductClassifier().getId()
-                ))
+                .map(SubassemblyKittingService::toCellRow)
                 .toList();
     }
 
     /**
-     * Номера ячеек, уже внесённых в заказ.
+     * Ячейки, уже оформленные в заказ.
+     *
+     * Читаются матрицей комплектования (V20), а не складским перечнем:
+     * проведённая в ЗНП подсборка со свободных полок снята и в остатке
+     * не показывается. Кладовщик обязан видеть внесённый состав —
+     * иначе не поймёт, сколько ещё осталось взять.
      */
-    private Set<String> takenNumbers(Long orderId) {
-        return linkRepository
-                .findByProductionOrderId(orderId).stream()
+    private List<SubassemblyKittingCellRow> attachedRows(Long orderId) {
+
+        return linkRepository.findByProductionOrderId(orderId).stream()
                 .filter(link -> link.getSerial() != null)
-                .map(link -> link.getSerial().getFullNumber())
-                .collect(java.util.stream.Collectors.toCollection(
-                        LinkedHashSet::new
-                ));
+                .map(link -> toCellRow(link.getSerial()))
+                .toList();
     }
 
     /**
-     * Складской остаток, допустимый для заказа: принятые складом ячейки
-     * того же изделия, что заказано.
+     * Внесённый состав набора заказов — одним запросом на страницу.
+     *
+     * Ключ карты — идентификатор заказа; порядок внесения сохраняется,
+     * он же задаёт сопоставление с экземплярами плана (см.
+     * {@code GroupZnpDistributionService}).
+     */
+    private Map<Long, List<SubassemblyKittingCellRow>> attachedRowsByOrder(
+            List<Long> orderIds) {
+
+        if (orderIds.isEmpty()) {
+            return Map.of();
+        }
+
+        Map<Long, List<SubassemblyKittingCellRow>> result =
+                new LinkedHashMap<>();
+
+        for (SerialProductionOrder link
+                : linkRepository.findAttachedByOrderIds(orderIds)) {
+
+            if (link.getSerial() == null
+                    || link.getProductionOrder() == null
+                    || link.getProductionOrder().getId() == null) {
+                continue;
+            }
+
+            result.computeIfAbsent(
+                            link.getProductionOrder().getId(),
+                            k -> new ArrayList<>()
+                    )
+                    .add(toCellRow(link.getSerial()));
+        }
+
+        return result;
+    }
+
+    /*
+     * Ячейка → строка перечня.
+     *
+     * Один конструктор на складской остаток и на внесённый состав:
+     * иначе два отобра разъехались бы по составу печатаемых полей, и
+     * один и тот же номер выглядел бы на экране по-разному.
+     */
+    private static SubassemblyKittingCellRow toCellRow(ProductSerial serial) {
+
+        return new SubassemblyKittingCellRow(
+                serial.getId(),
+                serial.getFullNumber(),
+                serial.getDisplayName(),
+                serial.getProductClassifier() == null
+                        ? null
+                        : String.valueOf(
+                                serial.getProductClassifier().getCode()
+                        ),
+                serial.getProductClassifier() == null
+                        ? null
+                        : serial.getProductClassifier().getId()
+        );
+    }
+
+    /**
+     * Складской остаток, допустимый для заказа: свободные ячейки того
+     * же изделия, что заказано.
      *
      * Тот же отбор, что печатает экран: проверка проведения и перечень
      * на экране обязаны совпадать, иначе кладовщику показали бы ячейку,
@@ -253,10 +320,10 @@ public class SubassemblyKittingService {
                 : order.getProductClassifier().getId();
 
         if (classifierId == null) {
-            return serialRepository.findAcceptedOnWarehouse();
+            return serialRepository.findFreeOnWarehouse();
         }
 
-        return serialRepository.findAcceptedOnWarehouse().stream()
+        return serialRepository.findFreeOnWarehouse().stream()
                 .filter(serial -> serial.getProductClassifier() != null
                         && classifierId.equals(
                                 serial.getProductClassifier().getId()))
@@ -264,16 +331,16 @@ public class SubassemblyKittingService {
     }
 
     /**
-     * Перечень ячеек для заказа: склад, отфильтрованный по изделию
-     * заказа.
+     * Свободные ячейки заказа: склад, отфильтрованный по изделию заказа.
      *
      * Кладовщик должен видеть только то, что входит в заказ, — иначе
-     * среди «подсборок» он может пропустить чужие ячейки.
+     * среди «подсборок» он может пропустить чужие ячейки. Отметка
+     * «внесена» здесь не ставится: внесённые ячейки в этот перечень уже
+     * не попадают, они читаются матрицей заказа.
      */
-    private List<SubassemblyKittingCellRow> orderCells(
+    private List<SubassemblyKittingCellRow> freeCells(
             ProductionOrder order,
-            List<SubassemblyKittingCellRow> allStock,
-            Set<String> taken) {
+            List<SubassemblyKittingCellRow> allStock) {
 
         Long classifierId = order.getProductClassifier() == null
                 ? null
@@ -282,7 +349,6 @@ public class SubassemblyKittingService {
         return allStock.stream()
                 .filter(row -> classifierId == null
                         || classifierId.equals(row.classifierId()))
-                .map(row -> row.mark(taken.contains(row.fullNumber())))
                 .toList();
     }
 
@@ -450,6 +516,7 @@ public class SubassemblyKittingService {
             linkRepository.save(link);
 
             performSerialOperation(serial, order, operation, executor);
+            completeScheduleRow(order, operation, executor);
         }
 
         journal.recordInProduction(attached, order, executor);
@@ -527,6 +594,44 @@ public class SubassemblyKittingService {
         row.setNote("Комплектование подсборок на складе");
 
         serialOperationRepository.save(row);
+    }
+
+    /**
+     * Проведение строки плана заказа по внесённой ячейке (V56).
+     *
+     * Цех живёт планом: пока строка «Комплектование подсборок» не
+     * проведена, зависимость маршрута держит «Монтаж подсборок» закрытой
+     * и мастер не увидит следующую работу. Экземпляров в плане столько,
+     * сколько заказано изделий, поэтому каждая внесённая ячейка закрывает
+     * ближайший непроведённый — порядок задан номером экземпляра, и
+     * разблокировка следует за фактическим составом заказа.
+     *
+     * У заказа-комплектующего, вложенного в выпуск, строк этой ветви нет:
+     * его работа планируется по заказу покупателя и проводится мастером в
+     * «Мои операции», поэтому пустой результат здесь — норма, а не ошибка.
+     */
+    private void completeScheduleRow(
+            ProductionOrder order,
+            Operation operation,
+            AppUser executor) {
+
+        if (order.getId() == null || operation == null
+                || operation.getId() == null) {
+            return;
+        }
+
+        List<OrderScheduleRow> open = scheduleRowRepository
+                .findOpenRowsOfProductionOrder(order.getId(), operation.getId());
+
+        if (open.isEmpty()) {
+            return;
+        }
+
+        OrderScheduleRow row = open.get(0);
+
+        row.setCompletedAt(java.time.LocalDateTime.now());
+        row.setCompletedBy(executor);
+        scheduleRowRepository.save(row);
     }
 
     /*
@@ -714,26 +819,30 @@ public class SubassemblyKittingService {
     }
 
     /**
-     * Экран комплектования: заказ, складской перечень и подпись
-     * операции приёмки.
+     * Экран комплектования: заказ, свободный склад, внесённый состав и
+     * подпись операции приёмки.
+     *
+     * Два перечня держатся раздельно, а не одним списком с отметкой:
+     * оформленная в ЗНП ячейка со склада снята, и показывать её в
+     * доступных значило бы предлагать кладовщику провести её повторно.
+     *
+     * @param cells     свободный остаток склада по изделию заказа
+     * @param attached  ячейки, уже оформленные в этот заказ (матрица V20)
      */
     public record SubassemblyKittingView(
             ProductionOrder order,
             List<SubassemblyKittingCellRow> cells,
+            List<SubassemblyKittingCellRow> attached,
             List<QuarantineCellView> quarantine,
             String operationName
     ) {
 
         /** Ячеек уже внесено в заказ. */
         public long takenCount() {
-            return cells == null
-                    ? 0L
-                    : cells.stream()
-                    .filter(SubassemblyKittingCellRow::taken)
-                    .count();
+            return attached == null ? 0L : attached.size();
         }
 
-        /** Ячеек доступно на складе всего. */
+        /** Ячеек свободно на складе. */
         public long availableCount() {
             return cells == null ? 0L : cells.size();
         }
@@ -745,7 +854,8 @@ public class SubassemblyKittingService {
          * групповой и ремонтный заказ задан количеством, и считать его
          * укомплектованным нужно по заказанному, а не по складскому
          * остатку. У заказа на комплектование количества нет — там
-         * знаменатель остаётся складской перечень.
+         * знаменателем остаётся всё, что побывало по этому изделию на
+         * складе: свободный остаток плюс уже оформленное в заказ.
          */
         public long requiredCount() {
             BigDecimal quantity = order == null
@@ -753,7 +863,7 @@ public class SubassemblyKittingService {
                     : order.getQuantity();
 
             return quantity == null
-                    ? availableCount()
+                    ? takenCount() + availableCount()
                     : quantity.setScale(0, RoundingMode.CEILING).longValue();
         }
 
