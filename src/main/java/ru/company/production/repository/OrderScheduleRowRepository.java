@@ -8,6 +8,7 @@ import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 import ru.company.production.entity.OrderScheduleRow;
 import ru.company.production.entity.ScheduleRowStatus;
+import ru.company.production.entity.ZnpKind;
 
 import java.time.LocalDate;
 import java.util.Collection;
@@ -439,7 +440,10 @@ public interface OrderScheduleRowRepository
                                      = ru.company.production.entity.ZnpKind.KITTING))
               and row.organizationUnit.id = :unitId
               and row.executor is null
-              and row.operation.operationType.code <> :excludedTypeCode
+              and row.operation.operationType.code
+                      not in :excludedTypeCodes
+              and row.operation.executorRole.code
+                      not in :supervisorRoleCodes
               and row.plannedDate between :from and :to
             order by row.plannedDate asc,
                      row.operation.operationName.name asc,
@@ -448,7 +452,8 @@ public interface OrderScheduleRowRepository
     List<OrderScheduleRow> findAssignableForUnit(
             @Param("status") ScheduleRowStatus status,
             @Param("unitId") Long unitId,
-            @Param("excludedTypeCode") String excludedTypeCode,
+            @Param("excludedTypeCodes") java.util.Collection<String> excludedTypeCodes,
+            @Param("supervisorRoleCodes") java.util.Collection<String> supervisorRoleCodes,
             @Param("from") LocalDate from,
             @Param("to") LocalDate to
     );
@@ -484,7 +489,10 @@ public interface OrderScheduleRowRepository
                                      = ru.company.production.entity.ZnpKind.KITTING))
               and row.organizationUnit.id in :unitIds
               and row.executor is null
-              and row.operation.operationType.code <> :excludedTypeCode
+              and row.operation.operationType.code
+                      not in :excludedTypeCodes
+              and row.operation.executorRole.code
+                      not in :supervisorRoleCodes
               and row.plannedDate between :from and :to
             order by row.plannedDate asc,
                      row.operation.operationName.name asc,
@@ -493,7 +501,8 @@ public interface OrderScheduleRowRepository
     List<OrderScheduleRow> findAssignableForUnitIds(
             @Param("status") ScheduleRowStatus status,
             @Param("unitIds") java.util.Collection<Long> unitIds,
-            @Param("excludedTypeCode") String excludedTypeCode,
+            @Param("excludedTypeCodes") java.util.Collection<String> excludedTypeCodes,
+            @Param("supervisorRoleCodes") java.util.Collection<String> supervisorRoleCodes,
             @Param("from") LocalDate from,
             @Param("to") LocalDate to
     );
@@ -502,6 +511,13 @@ public interface OrderScheduleRowRepository
      * Операции получения комплектации подразделения: они же личные
      * работы руководителя. В очередь распределения не попадают —
      * такую операцию нельзя переложить на исполнителя.
+     *
+     * Личной считается и операция, чья роль исполнителя в справочнике —
+     * руководящая («Начальник цеха/отдела», «Руководитель службы»): она
+     * по смыслу действие руководителя, а не работа участка, и
+     * распределять её некому. Признак читается через EXISTS по роли, а
+     * не через две отдельные выборки, чтобы один экран не показал одну
+     * работу дважды.
      */
     @EntityGraph(attributePaths = {
             "operation",
@@ -522,7 +538,8 @@ public interface OrderScheduleRowRepository
                            where po.id = row.productionOrder.id
                              and po.active = true))
               and row.organizationUnit.id = :unitId
-              and row.operation.operationType.code = :typeCode
+              and (row.operation.operationType.code in :typeCodes
+                   or row.operation.executorRole.code in :supervisorRoleCodes)
               and row.plannedDate between :from and :to
             order by row.plannedDate asc, row.itemPosition asc,
                      row.instanceIndex asc
@@ -530,7 +547,8 @@ public interface OrderScheduleRowRepository
     List<OrderScheduleRow> findKitReceiptForUnit(
             @Param("status") ScheduleRowStatus status,
             @Param("unitId") Long unitId,
-            @Param("typeCode") String typeCode,
+            @Param("typeCodes") java.util.Collection<String> typeCodes,
+            @Param("supervisorRoleCodes") java.util.Collection<String> supervisorRoleCodes,
             @Param("from") LocalDate from,
             @Param("to") LocalDate to
     );
@@ -727,6 +745,13 @@ public interface OrderScheduleRowRepository
      * Статус не фильтруется: исполнителю нужны и плановые строки, и
      * уже взятые в работу, иначе начало смены исчезает из вида, а
      * именно по нему человек и идёт в цех.
+     *
+     * Групповые ЗНП здесь отсечены тем же признаком, что и в очереди
+     * распределения: у них другой разрез показа (номер ячейки вместо
+     * серийного номера выпуска), и в этой таблице они показаны быть не
+     * могут. Для них есть второй список — {@link #findGroupForExecutor},
+     * который рисует та же страница под переключателем режима. Работа от
+     * этого не теряется: она видна целиком, только в своей половине.
      */
     @EntityGraph(attributePaths = {
             "operation",
@@ -746,7 +771,9 @@ public interface OrderScheduleRowRepository
                              and co.active = true)
                 or exists (select 1 from ProductionOrder po
                            where po.id = row.productionOrder.id
-                             and po.active = true))
+                             and po.active = true
+                             and po.znpKind
+                                     = ru.company.production.entity.ZnpKind.KITTING))
               and row.plannedDate between :from and :to
             order by row.plannedDate asc, row.itemPosition asc,
                      row.instanceIndex asc, row.seq asc
@@ -758,8 +785,57 @@ public interface OrderScheduleRowRepository
     );
 
     /*
+     * Работы групповых ЗНП, закреплённые за сотрудником — вторая
+     * половина того же меню «Мои операции».
+     *
+     * Отличие от {@link #findForExecutor} ровно одно: вид основания —
+     * групповой. Всё остальное (горизонт, порядок, отсутствие фильтра по
+     * статусу) совпадает намеренно: переключатель обязан показывать ту же
+     * работу в том же порядке, иначе две половины списка читались бы как
+     * два разных раздела, а не как один.
+     */
+    @EntityGraph(attributePaths = {
+            "operation",
+            "operation.operationName",
+            "operation.operationType",
+            "customerOrder",
+            "productionOrder",
+            "techProcess",
+            "workPlace"
+    })
+    @Query("""
+            select row
+            from OrderScheduleRow row
+            where row.executor.id = :executorId
+              and exists (select 1 from ProductionOrder po
+                          where po.id = row.productionOrder.id
+                            and po.active = true
+                            and po.znpKind in :groupKinds)
+              and row.plannedDate between :from and :to
+            order by row.plannedDate asc, row.itemPosition asc,
+                     row.instanceIndex asc, row.seq asc
+            """)
+    List<OrderScheduleRow> findGroupForExecutor(
+            @Param("executorId") Long executorId,
+            @Param("groupKinds") java.util.Collection<ZnpKind> groupKinds,
+            @Param("from") LocalDate from,
+            @Param("to") LocalDate to
+    );
+
+    /*
      * Строки личных операций руководителя (получение комплектации его
-     * подразделения) — вторая половина того же меню «Мои операции».
+     * подразделения и операции с руководящей ролью исполнителя) —
+     * вторая половина того же меню «Мои операции».
+     *
+     * Отбор совпадает с findKitReceiptForUnit: очередь распределения и
+     * личный список обязаны расходиться ровно на этот набор, иначе
+     * работа либо пропала бы, либо показалась бы дважды.
+     *
+     * Вид основания отсекается так же, как в findForExecutor: в обычной
+     * половине остаются строки заказа покупателя и выпуска (KITTING), а
+     * получение подсборок группового ЗНП уходит в групповую половину —
+     * у той работы есть номер ячейки, и в обычном списке он затерялся
+     * бы без подписи.
      */
     @EntityGraph(attributePaths = {
             "operation",
@@ -778,9 +854,12 @@ public interface OrderScheduleRowRepository
                              and co.active = true)
                 or exists (select 1 from ProductionOrder po
                            where po.id = row.productionOrder.id
-                             and po.active = true))
+                             and po.active = true
+                             and po.znpKind
+                                     = ru.company.production.entity.ZnpKind.KITTING))
               and row.organizationUnit.id in :unitIds
-              and row.operation.operationType.code = :typeCode
+              and (row.operation.operationType.code in :typeCodes
+                   or row.operation.executorRole.code in :supervisorRoleCodes)
               and row.plannedDate between :from and :to
             order by row.plannedDate asc, row.itemPosition asc,
                      row.instanceIndex asc
@@ -788,7 +867,51 @@ public interface OrderScheduleRowRepository
     List<OrderScheduleRow> findOwnKitReceipt(
             @Param("status") ScheduleRowStatus status,
             @Param("unitIds") java.util.Collection<Long> unitIds,
-            @Param("typeCode") String typeCode,
+            @Param("typeCodes") java.util.Collection<String> typeCodes,
+            @Param("supervisorRoleCodes") java.util.Collection<String> supervisorRoleCodes,
+            @Param("from") LocalDate from,
+            @Param("to") LocalDate to
+    );
+
+    /*
+     * Личные работы руководителя по групповым ЗНП — та же природа
+     * строки (тип операции либо руководящая роль исполнителя), но
+     * основание группового вида.
+     *
+     * Основание у строки ровно одно (chk_osr_base_exactly_one), поэтому
+     * здесь достаточно одного EXISTS по производственному заказу: заказ
+     * покупателя групповому ЗНП не принадлежит, а значит пересечения с
+     * {@link #findOwnKitReceipt} нет по построению.
+     */
+    @EntityGraph(attributePaths = {
+            "operation",
+            "operation.operationName",
+            "operation.operationType",
+            "customerOrder",
+            "productionOrder",
+            "techProcess"
+    })
+    @Query("""
+            select row
+            from OrderScheduleRow row
+            where row.status = :status
+              and exists (select 1 from ProductionOrder po
+                          where po.id = row.productionOrder.id
+                            and po.active = true
+                            and po.znpKind in :groupKinds)
+              and row.organizationUnit.id in :unitIds
+              and (row.operation.operationType.code in :typeCodes
+                   or row.operation.executorRole.code in :supervisorRoleCodes)
+              and row.plannedDate between :from and :to
+            order by row.plannedDate asc, row.itemPosition asc,
+                     row.instanceIndex asc
+            """)
+    List<OrderScheduleRow> findOwnGroupKitReceipt(
+            @Param("status") ScheduleRowStatus status,
+            @Param("unitIds") java.util.Collection<Long> unitIds,
+            @Param("typeCodes") java.util.Collection<String> typeCodes,
+            @Param("supervisorRoleCodes") java.util.Collection<String> supervisorRoleCodes,
+            @Param("groupKinds") java.util.Collection<ZnpKind> groupKinds,
             @Param("from") LocalDate from,
             @Param("to") LocalDate to
     );
@@ -1041,13 +1164,17 @@ public interface OrderScheduleRowRepository
                                      = ru.company.production.entity.ZnpKind.KITTING))
               and row.organizationUnit.id = :unitId
               and row.executor is null
-              and row.operation.operationType.code <> :excludedTypeCode
+              and row.operation.operationType.code
+                      not in :excludedTypeCodes
+              and row.operation.executorRole.code
+                      not in :supervisorRoleCodes
               and row.plannedDate between :from and :to
             """)
     long countAssignableForUnit(
             @Param("status") ScheduleRowStatus status,
             @Param("unitId") Long unitId,
-            @Param("excludedTypeCode") String excludedTypeCode,
+            @Param("excludedTypeCodes") java.util.Collection<String> excludedTypeCodes,
+            @Param("supervisorRoleCodes") java.util.Collection<String> supervisorRoleCodes,
             @Param("from") LocalDate from,
             @Param("to") LocalDate to
     );
@@ -1067,13 +1194,17 @@ public interface OrderScheduleRowRepository
                                      = ru.company.production.entity.ZnpKind.KITTING))
               and row.organizationUnit.id in :unitIds
               and row.executor is null
-              and row.operation.operationType.code <> :excludedTypeCode
+              and row.operation.operationType.code
+                      not in :excludedTypeCodes
+              and row.operation.executorRole.code
+                      not in :supervisorRoleCodes
               and row.plannedDate between :from and :to
             """)
     long countAssignableForUnitIds(
             @Param("status") ScheduleRowStatus status,
             @Param("unitIds") java.util.Collection<Long> unitIds,
-            @Param("excludedTypeCode") String excludedTypeCode,
+            @Param("excludedTypeCodes") java.util.Collection<String> excludedTypeCodes,
+            @Param("supervisorRoleCodes") java.util.Collection<String> supervisorRoleCodes,
             @Param("from") LocalDate from,
             @Param("to") LocalDate to
     );
@@ -1085,7 +1216,18 @@ public interface OrderScheduleRowRepository
      * платить двумя десятками запросов за каждую загрузку экрана.
      */
 
-    /** Работы, закреплённые за сотрудником — счётчик «Мои операции». */
+    /**
+     * Невыполненные работы, закреплённые за сотрудником — счётчик
+     * «Мои операции».
+     *
+     * Вид основания отсекается тем же условием, что у
+     * {@link #findForExecutor}; сверх списка добавляется отсечка
+     * проведённых строк: цифра в меню отвечает на вопрос «сколько
+     * ещё сделать», и закрытая работа в ней не участвует, хотя и
+     * остаётся видимой в списке до конца дня. Работы групповых
+     * заказов считает {@link #countGroupForExecutor} — под своей
+     * кнопкой переключателя.
+     */
     @Query("""
             select count(row.id)
             from OrderScheduleRow row
@@ -1095,7 +1237,10 @@ public interface OrderScheduleRowRepository
                              and co.active = true)
                 or exists (select 1 from ProductionOrder po
                            where po.id = row.productionOrder.id
-                             and po.active = true))
+                             and po.active = true
+                             and po.znpKind
+                                     = ru.company.production.entity.ZnpKind.KITTING))
+              and row.completedAt is null
               and row.plannedDate between :from and :to
             """)
     long countForExecutor(
@@ -1104,7 +1249,34 @@ public interface OrderScheduleRowRepository
             @Param("to") LocalDate to
     );
 
-    /** Личные работы руководителя — вторая половина того же счётчика. */
+    /**
+     * Невыполненные работы групповых ЗНП сотрудника — счётчик его
+     * половины списка (проведённые не считаются — см.
+     * {@link #countForExecutor}).
+     */
+    @Query("""
+            select count(row.id)
+            from OrderScheduleRow row
+            where row.executor.id = :executorId
+              and exists (select 1 from ProductionOrder po
+                          where po.id = row.productionOrder.id
+                            and po.active = true
+                            and po.znpKind in :groupKinds)
+              and row.completedAt is null
+              and row.plannedDate between :from and :to
+            """)
+    long countGroupForExecutor(
+            @Param("executorId") Long executorId,
+            @Param("groupKinds") java.util.Collection<ZnpKind> groupKinds,
+            @Param("from") LocalDate from,
+            @Param("to") LocalDate to
+    );
+
+    /**
+     * Невыполненные личные работы руководителя — вторая половина того
+     * же счётчика (проведённые не считаются — см.
+     * {@link #countForExecutor}).
+     */
     @Query("""
             select count(row.id)
             from OrderScheduleRow row
@@ -1114,15 +1286,49 @@ public interface OrderScheduleRowRepository
                              and co.active = true)
                 or exists (select 1 from ProductionOrder po
                            where po.id = row.productionOrder.id
-                             and po.active = true))
+                             and po.active = true
+                             and po.znpKind
+                                     = ru.company.production.entity.ZnpKind.KITTING))
               and row.organizationUnit.id in :unitIds
-              and row.operation.operationType.code = :typeCode
+              and (row.operation.operationType.code in :typeCodes
+                   or row.operation.executorRole.code in :supervisorRoleCodes)
+              and row.completedAt is null
               and row.plannedDate between :from and :to
             """)
     long countOwnKitReceipt(
             @Param("status") ScheduleRowStatus status,
             @Param("unitIds") java.util.Collection<Long> unitIds,
-            @Param("typeCode") String typeCode,
+            @Param("typeCodes") java.util.Collection<String> typeCodes,
+            @Param("supervisorRoleCodes") java.util.Collection<String> supervisorRoleCodes,
+            @Param("from") LocalDate from,
+            @Param("to") LocalDate to
+    );
+
+    /**
+     * Невыполненные личные работы руководителя по групповым ЗНП —
+     * цифра групповой половины счётчика. Граница повторяет
+     * {@link #findOwnGroupKitReceipt}.
+     */
+    @Query("""
+            select count(row.id)
+            from OrderScheduleRow row
+            where row.status = :status
+              and exists (select 1 from ProductionOrder po
+                          where po.id = row.productionOrder.id
+                            and po.active = true
+                            and po.znpKind in :groupKinds)
+              and row.organizationUnit.id in :unitIds
+              and (row.operation.operationType.code in :typeCodes
+                   or row.operation.executorRole.code in :supervisorRoleCodes)
+              and row.completedAt is null
+              and row.plannedDate between :from and :to
+            """)
+    long countOwnGroupKitReceipt(
+            @Param("status") ScheduleRowStatus status,
+            @Param("unitIds") java.util.Collection<Long> unitIds,
+            @Param("typeCodes") java.util.Collection<String> typeCodes,
+            @Param("supervisorRoleCodes") java.util.Collection<String> supervisorRoleCodes,
+            @Param("groupKinds") java.util.Collection<ZnpKind> groupKinds,
             @Param("from") LocalDate from,
             @Param("to") LocalDate to
     );
@@ -1136,6 +1342,12 @@ public interface OrderScheduleRowRepository
      * подразделению. Статус не фильтруется по исполнителю — как и в
      * findForExecutor, плановые строки нужны, по ним человек видит
      * начало смены.
+     *
+     * Групповые ЗНП отсечены тем же признаком, что и в
+     * {@link #findForExecutor}: у бюро они есть (приёмка и контроль
+     * ячеек идут по групповым заказам), и в этой таблице им не место —
+     * серийного номера изделия там нет. Своя половина — у
+     * {@link #findGroupAllForUnits}.
      */
     @EntityGraph(attributePaths = {
             "operation",
@@ -1156,7 +1368,9 @@ public interface OrderScheduleRowRepository
                              and co.active = true)
                 or exists (select 1 from ProductionOrder po
                            where po.id = row.productionOrder.id
-                             and po.active = true))
+                             and po.active = true
+                             and po.znpKind
+                                     = ru.company.production.entity.ZnpKind.KITTING))
               and row.organizationUnit.id in :unitIds
               and row.plannedDate between :from and :to
             order by row.plannedDate asc,
@@ -1170,7 +1384,48 @@ public interface OrderScheduleRowRepository
             @Param("to") LocalDate to
     );
 
-    /** Счётчик того же перечня — цифра пункта «Мои операции» в меню. */
+    /*
+     * Строки плана подразделения по групповым ЗНП — вторая половина
+     * перечня бюро. Пара к {@link #findAllForUnits} с точностью до вида
+     * основания.
+     */
+    @EntityGraph(attributePaths = {
+            "operation",
+            "operation.operationName",
+            "operation.operationType",
+            "customerOrder",
+            "productionOrder",
+            "techProcess",
+            "workPlace",
+            "executor"
+    })
+    @Query("""
+            select row
+            from OrderScheduleRow row
+            where row.status = :status
+              and exists (select 1 from ProductionOrder po
+                          where po.id = row.productionOrder.id
+                            and po.active = true
+                            and po.znpKind in :groupKinds)
+              and row.organizationUnit.id in :unitIds
+              and row.plannedDate between :from and :to
+            order by row.plannedDate asc,
+                     row.operation.operationName.name asc,
+                     row.itemPosition asc, row.instanceIndex asc
+            """)
+    List<OrderScheduleRow> findGroupAllForUnits(
+            @Param("status") ScheduleRowStatus status,
+            @Param("unitIds") java.util.Collection<Long> unitIds,
+            @Param("groupKinds") java.util.Collection<ZnpKind> groupKinds,
+            @Param("from") LocalDate from,
+            @Param("to") LocalDate to
+    );
+
+    /**
+     * Счётчик того же перечня — цифра пункта «Мои операции» в меню.
+     * Проведённые строки не считаются: цифра отвечает на вопрос
+     * «сколько ещё сделать» (см. {@link #countForExecutor}).
+     */
     @Query("""
             select count(row.id)
             from OrderScheduleRow row
@@ -1180,13 +1435,40 @@ public interface OrderScheduleRowRepository
                              and co.active = true)
                 or exists (select 1 from ProductionOrder po
                            where po.id = row.productionOrder.id
-                             and po.active = true))
+                             and po.active = true
+                             and po.znpKind
+                                     = ru.company.production.entity.ZnpKind.KITTING))
               and row.organizationUnit.id in :unitIds
+              and row.completedAt is null
               and row.plannedDate between :from and :to
             """)
     long countAllForUnits(
             @Param("status") ScheduleRowStatus status,
             @Param("unitIds") java.util.Collection<Long> unitIds,
+            @Param("from") LocalDate from,
+            @Param("to") LocalDate to
+    );
+
+    /**
+     * Счётчик групповой половины того же перечня (проведённые строки
+     * не считаются — см. {@link #countAllForUnits}).
+     */
+    @Query("""
+            select count(row.id)
+            from OrderScheduleRow row
+            where row.status = :status
+              and exists (select 1 from ProductionOrder po
+                          where po.id = row.productionOrder.id
+                            and po.active = true
+                            and po.znpKind in :groupKinds)
+              and row.organizationUnit.id in :unitIds
+              and row.completedAt is null
+              and row.plannedDate between :from and :to
+            """)
+    long countGroupAllForUnits(
+            @Param("status") ScheduleRowStatus status,
+            @Param("unitIds") java.util.Collection<Long> unitIds,
+            @Param("groupKinds") java.util.Collection<ZnpKind> groupKinds,
             @Param("from") LocalDate from,
             @Param("to") LocalDate to
     );
@@ -1325,12 +1607,18 @@ public interface OrderScheduleRowRepository
               and row.productionOrder.id is not null
               and row.productionOrder.active = true
               and row.productionOrder.znpKind in :groupKinds
+              and row.operation.operationType.code
+                      not in :excludedTypeCodes
+              and row.operation.executorRole.code
+                      not in :supervisorRoleCodes
               and row.plannedDate between :from and :to
             """)
     long countGroupZnpUnassigned(
             @Param("status") ScheduleRowStatus status,
             @Param("unitIds") java.util.Collection<Long> unitIds,
             @Param("groupKinds") java.util.Collection<ru.company.production.entity.ZnpKind> groupKinds,
+            @Param("excludedTypeCodes") java.util.Collection<String> excludedTypeCodes,
+            @Param("supervisorRoleCodes") java.util.Collection<String> supervisorRoleCodes,
             @Param("from") LocalDate from,
             @Param("to") LocalDate to
     );

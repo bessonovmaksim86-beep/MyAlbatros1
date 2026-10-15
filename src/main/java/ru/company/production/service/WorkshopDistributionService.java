@@ -6,19 +6,25 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import ru.company.production.dto.AssignableExecutor;
 import ru.company.production.dto.AssignedOperationView;
+import ru.company.production.dto.DistributionItemCard;
 import ru.company.production.dto.DistributionOperation;
 import ru.company.production.dto.DistributionRow;
+import ru.company.production.dto.OperationDistributionView;
 import ru.company.production.dto.OperationInstance;
 import ru.company.production.dto.ProductOperationCard;
 import ru.company.production.dto.ProductOperationsView;
 import ru.company.production.entity.AppUser;
 import ru.company.production.entity.CustomerOrder;
+import ru.company.production.entity.Operation;
 import ru.company.production.entity.OperationTypeCode;
 import ru.company.production.entity.OrderScheduleRow;
+import ru.company.production.entity.ProductionOrder;
 import ru.company.production.entity.Role;
 import ru.company.production.entity.ScheduleRowStatus;
 import ru.company.production.entity.TechProcess;
 import ru.company.production.entity.TechProcessOperation;
+import ru.company.production.entity.ZnpKind;
+import ru.company.production.repository.AttachedCellView;
 import ru.company.production.repository.EmployeeAbsenceRepository;
 import ru.company.production.repository.ExecutorDayLoadView;
 import ru.company.production.repository.OpenInstanceRowView;
@@ -110,6 +116,39 @@ public class WorkshopDistributionService {
     );
 
     /*
+     * Роли-исполнители справочника операций, которые носит сам
+     * руководитель: «Начальник цеха/отдела» и «Руководитель службы».
+     *
+     * Операция с такой ролью исполнителя по смыслу не работа участка,
+     * а действие руководителя своего подразделения — распределить её
+     * некому, поэтому она идёт тем же путём, что получение комплектации:
+     * мимо очереди сразу в «Мои операции» руководителя того
+     * подразделения, к которому отнесена операция.
+     */
+    public static final Set<String> SUPERVISOR_EXECUTOR_ROLE_CODES =
+            Set.of("HEAD_OF_WORKSHOP_OR_DEPARTMENT", "SERVICE_HEAD");
+
+    /*
+     * Виды заказов, попадающие в групповую половину «Моих операций».
+     *
+     * Список берётся у {@link ZnpKind}, а не переписывается константами:
+     * новый групповой вид должен оказаться в списке сам, иначе его
+     * работы исчезли бы из обеих половин — из обычной их отсекает
+     * признак вида, а в групповую они бы не попали.
+     */
+    private static final List<ZnpKind> GROUP_KINDS = ZnpKind.groupKinds();
+
+    /*
+     * Типы операций, которые не распределяют: получение комплектации
+     * закрепляется за подразделением, а работы по распределению работ
+     * — это и есть действие руководителя.
+     */
+    public static final Set<String> NON_DISTRIBUTION_TYPE_CODES = Set.of(
+            OperationTypeCode.KIT_RECEIPT.name(),
+            OperationTypeCode.WORK_DISTRIBUTION.name()
+    );
+
+    /*
      * Подразделения, где работу не распределяют: бюро входного контроля.
      *
      * Контролёр бюро берёт любую работу из перечня бюро, а планировщик
@@ -173,7 +212,8 @@ public class WorkshopDistributionService {
                 scheduleRowRepo.findAssignableForUnitIds(
                         ScheduleRowStatus.CONFIRMED,
                         scope,
-                        OperationTypeCode.KIT_RECEIPT.name(),
+                        NON_DISTRIBUTION_TYPE_CODES,
+                        SUPERVISOR_EXECUTOR_ROLE_CODES,
                         from,
                         to
                 ),
@@ -218,12 +258,10 @@ public class WorkshopDistributionService {
         );
     }
 
-    /**
-     * Строки графика → изделия с их операциями.
-     *
-     * Флаг {@code withExecutors} различает очередь и распределённые:
-     * подбор кандидатов с загрузкой и отсутствиями нужен только там,
-     * где мастер ещё выбирает человека.
+    /*
+     * Строки графика → изделия с их операциями. Прежний разрез «строка =
+     * изделие» уступил месту разрезу «строка = операция»: см.
+     * {@link #groupByOperation}.
      */
     private List<ProductOperationsView> groupByProduct(
             List<OrderScheduleRow> rows,
@@ -349,10 +387,10 @@ public class WorkshopDistributionService {
             for (OrderScheduleRow row : group) {
                 hours = hours.add(row.getLaborHours());
 
-                CustomerOrder rowOrder = row.getCustomerOrder();
+                String baseNumber = baseNumberOrNull(row);
 
-                if (rowOrder != null && rowOrder.getNumber() != null) {
-                    orderNumbers.add(rowOrder.getNumber());
+                if (baseNumber != null) {
+                    orderNumbers.add(baseNumber);
                 }
 
                 if (row.getExecutor() == null) {
@@ -382,7 +420,8 @@ public class WorkshopDistributionService {
                     group.size(),
                     assigned,
                     executors,
-                    buildInstances(group, serialMap, blockers, List.of()),
+                    buildInstances(group, serialMap, blockers, List.of(),
+                            false),
                     serialsOf(group, serialMap),
                     executor
             ));
@@ -397,10 +436,13 @@ public class WorkshopDistributionService {
 
         return new ProductOperationsView(
                 order == null ? null : order.getId(),
+                first.getProductionOrder() == null
+                        ? null
+                        : first.getProductionOrder().getId(),
                 first.getItemPosition(),
                 serialsOf(product, serialMap),
                 serialService.itemNameOf(first, itemNames),
-                order == null ? null : order.getNumber(),
+                baseNumberOrNull(first),
                 cards,
                 totalHours,
                 rowCount,
@@ -408,12 +450,270 @@ public class WorkshopDistributionService {
         );
     }
 
-    /* Ключ изделия: заказ покупателя и позиция в нём. */
+    /*
+     * ============================================================
+     * Распределение: строка таблицы = операция одного дня
+     * ============================================================
+     */
+
+    /**
+     * Очередь распределения, собранная по операциям.
+     *
+     * Строка — пара «операция + дата плана», раскрытие перечисляет
+     * изделия этой операции. Мастер видит работу списком, как в «Мои
+     * операции», а решение о человеке по-прежнему принимается над
+     * конкретным изделием: форма назначения живёт внутри раскрытия.
+     *
+     * Выборка та же, что у прежнегоproduct-разреза
+     * ({@link #findProductOperations}), поэтому набор работ, границы
+     * подразделения и счётчик меню не меняются — меняется только то,
+     * как строки сгруппированы на экране.
+     */
+    @Transactional(readOnly = true)
+    public List<OperationDistributionView> findDistributionOperations(
+            Collection<Long> unitIds,
+            AppUser supervisor,
+            int weeks
+    ) {
+        List<Long> scope = cleanIds(unitIds);
+
+        if (scope.isEmpty()) {
+            return List.of();
+        }
+
+        LocalDate from = LocalDate.now();
+        LocalDate to = from.plusDays(7L * normalizeWeeks(weeks));
+
+        return groupByOperation(
+                scheduleRowRepo.findAssignableForUnitIds(
+                        ScheduleRowStatus.CONFIRMED,
+                        scope,
+                        NON_DISTRIBUTION_TYPE_CODES,
+                        SUPERVISOR_EXECUTOR_ROLE_CODES,
+                        from,
+                        to
+                ),
+                from,
+                to,
+                true
+        );
+    }
+
+    /**
+     * Уже закреплённые работы тем же разрезом «операция → изделия».
+     *
+     * Снятие назначения идёт по тому же изделию, что и назначение, —
+     * поэтому оба блока обязаны показывать одну и ту же структуру, иначе
+     * мастер искал бы кнопку в другом разрезе.
+     */
+    @Transactional(readOnly = true)
+    public List<OperationDistributionView> findAssignedDistributionOperations(
+            Collection<Long> unitIds,
+            int weeks
+    ) {
+        List<Long> scope = cleanIds(unitIds);
+
+        if (scope.isEmpty()) {
+            return List.of();
+        }
+
+        LocalDate from = LocalDate.now();
+        LocalDate to = from.plusDays(7L * normalizeWeeks(weeks));
+
+        return groupByOperation(
+                scheduleRowRepo.findAssignedForUnitIds(
+                        ScheduleRowStatus.CONFIRMED,
+                        scope,
+                        from,
+                        to
+                ),
+                from,
+                to,
+                false
+        );
+    }
+
+    /**
+     * Строки графика → операции, внутри которых перечислены изделия.
+     *
+     * Флаг {@code withExecutors} различает очередь и распределённые:
+     * подбор кандидатов с загрузкой нужен лишь там, где мастер ещё
+     * выбирает человека.
+     *
+     * Порядок строк задаёт запрос (дата плана, затем наименование
+     * операции), поэтому LinkedHashMap достаточно для стабильного
+     * экрана: мастер читает список сверху вниз по датам.
+     */
+    private List<OperationDistributionView> groupByOperation(
+            List<OrderScheduleRow> rows,
+            LocalDate from,
+            LocalDate to,
+            boolean withExecutors
+    ) {
+        if (rows == null || rows.isEmpty()) {
+            return List.of();
+        }
+
+        Map<Long, ProductionOrderSerialProjection> serialMap =
+                serialService.resolve(rows);
+
+        Map<String, String> itemNames =
+                serialService.resolveItemNames(rows);
+
+        /*
+         * Кандидаты считаются один раз на пару «операция + дата» на весь
+         * экран: десять изделий одной операции в один день обязаны дать
+         * один запрос с загрузкой, а не десять одинаковых.
+         */
+        Map<String, List<AssignableExecutor>> capableCache =
+                new HashMap<>();
+
+        Map<String, List<OrderScheduleRow>> byOperation =
+                new LinkedHashMap<>();
+
+        for (OrderScheduleRow row : rows) {
+            byOperation
+                    .computeIfAbsent(
+                            row.getOperation().getId() + "|"
+                                    + row.getPlannedDate(),
+                            k -> new ArrayList<>()
+                    )
+                    .add(row);
+        }
+
+        List<OperationDistributionView> result =
+                new ArrayList<>(byOperation.size());
+
+        for (List<OrderScheduleRow> group : byOperation.values()) {
+            result.add(toOperationView(
+                    group,
+                    serialMap,
+                    itemNames,
+                    from,
+                    to,
+                    withExecutors,
+                    capableCache
+            ));
+        }
+
+        return result;
+    }
+
+    /**
+     * Строки одной операции → карточка строки таблицы распределения.
+     *
+     * Внутри операции блокируются поштучно: блок = одна строка графика =
+     * один датчик. Назначение идёт по идентификатору строки
+     * ({@link #assignRow}), поэтому подпись блока и граница назначения
+     * совпадают по построению — мастер закрепляет ровно тот датчик,
+     * который видит.
+     */
+    private OperationDistributionView toOperationView(
+            List<OrderScheduleRow> group,
+            Map<Long, ProductionOrderSerialProjection> serialMap,
+            Map<String, String> itemNames,
+            LocalDate from,
+            LocalDate to,
+            boolean withExecutors,
+            Map<String, List<AssignableExecutor>> capableCache
+    ) {
+        OrderScheduleRow head = group.get(0);
+
+        List<DistributionItemCard> items =
+                new ArrayList<>(group.size());
+
+        BigDecimal totalHours = BigDecimal.ZERO;
+        long assignedCount = 0L;
+
+        for (OrderScheduleRow row : group) {
+            ProductionOrderSerialProjection serial = serialMap == null
+                    ? null
+                    : serialMap.get(row.getId());
+
+            totalHours = totalHours.add(row.getLaborHours());
+
+            if (row.getExecutor() != null) {
+                assignedCount++;
+            }
+
+            items.add(new DistributionItemCard(
+                    row.getId(),
+                    row.getItemPosition(),
+                    row.getInstanceIndex(),
+                    row.getPlannedDate(),
+                    serial == null ? null : serial.getFullNumber(),
+                    serialService.itemNameOf(row, itemNames),
+                    baseNumberOrNull(row),
+                    row.getLaborHours(),
+                    row.getExecutor() != null,
+                    row.getExecutor() == null
+                            ? null
+                            : WorkshopStaffService.displayName(
+                                    row.getExecutor()
+                            )
+            ));
+        }
+
+        List<AssignableExecutor> executors = withExecutors
+                ? capableCache.computeIfAbsent(
+                        capableKey(group),
+                        k -> capableExecutors(
+                                group, head.getPlannedDate(), from, to
+                        )
+                )
+                : List.of();
+
+        return new OperationDistributionView(
+                head.getOperation().getId(),
+                getOperationName(head),
+                head.getPlannedDate(),
+                group.size(),
+                totalHours,
+                executors,
+                items,
+                assignedCount
+        );
+    }
+
+    /*
+     * Основание строки для подписи группы.
+     *
+     * Ветка основания может быть любой (V56), а подпись печатает
+     * просто номер: перечень заказов в строке таблицы не различает
+     * реестры, и различать их мастеру незачем. Пустое основание
+     * возвращает null — прочерк рядом с назначенными номерами читался
+     * бы как сломанная строка.
+     */
+    private static String baseNumberOrNull(OrderScheduleRow row) {
+        if (row.getProductionOrder() != null) {
+            return row.getProductionOrder().getNumber();
+        }
+
+        return row.getCustomerOrder() == null
+                ? null
+                : row.getCustomerOrder().getNumber();
+    }
+
+    /*
+     * Ключ изделия: основание строки и позиция в нём.
+     *
+     * Ветвь основания входит в ключ (V56): у строк группового ЗНП
+     * заказа покупателя нет, и ключ по одному только заказу покупателя
+     * схлопнул бы изделия всех заказов-комплектующих в одно — мастер
+     * увидел бы одну карточку вместо работы по каждому заказу.
+     */
     private static String productKey(OrderScheduleRow row) {
         CustomerOrder order = row.getCustomerOrder();
 
-        return (order == null ? "0" : order.getId())
-                + "|" + row.getItemPosition();
+        if (order != null) {
+            return "CO" + order.getId() + "|" + row.getItemPosition();
+        }
+
+        ProductionOrder productionOrder = row.getProductionOrder();
+
+        return "PO" + (productionOrder == null ? "0"
+                : productionOrder.getId())
+                + "|" + row.getInstanceIndex();
     }
 
     /*
@@ -488,7 +788,8 @@ public class WorkshopDistributionService {
                 .findAssignableForUnit(
                         ScheduleRowStatus.CONFIRMED,
                         unitId,
-                        OperationTypeCode.KIT_RECEIPT.name(),
+                        NON_DISTRIBUTION_TYPE_CODES,
+                        SUPERVISOR_EXECUTOR_ROLE_CODES,
                         from,
                         to
                 );
@@ -714,7 +1015,8 @@ public class WorkshopDistributionService {
                 .findAssignableForUnit(
                         ScheduleRowStatus.CONFIRMED,
                         unitId,
-                        OperationTypeCode.KIT_RECEIPT.name(),
+                        NON_DISTRIBUTION_TYPE_CODES,
+                        SUPERVISOR_EXECUTOR_ROLE_CODES,
                         from,
                         to
                 );
@@ -755,9 +1057,9 @@ public class WorkshopDistributionService {
 
             for (OrderScheduleRow row : group) {
                 totalHours = totalHours.add(row.getLaborHours());
-                CustomerOrder order = row.getCustomerOrder();
-                if (order != null && order.getNumber() != null) {
-                    orderNumbers.add(order.getNumber());
+                String baseNumber = baseNumberOrNull(row);
+                if (baseNumber != null) {
+                    orderNumbers.add(baseNumber);
                 }
             }
 
@@ -770,7 +1072,8 @@ public class WorkshopDistributionService {
                     totalHours,
                     new ArrayList<>(orderNumbers),
                     executors,
-                    buildInstances(group, serialMap, blockers, List.of()),
+                    buildInstances(group, serialMap, blockers, List.of(),
+                            false),
                     serialsOf(group, serialMap),
                     itemNamesOf(group, itemNames)
             ));
@@ -780,8 +1083,8 @@ public class WorkshopDistributionService {
     }
 
     /**
-     * Операции получения комплектации подразделения — личные работы
-     * руководителя.
+     * Личные работы руководителя подразделения — получение комплектации
+     * и операции с руководящей ролью исполнителя.
      *
      * В общий список распределения не попадают, но выводятся в меню
      * «Мои операции» вместе с обычными работами, назначенными
@@ -803,7 +1106,8 @@ public class WorkshopDistributionService {
                 .findKitReceiptForUnit(
                         ScheduleRowStatus.CONFIRMED,
                         unitId,
-                        OperationTypeCode.KIT_RECEIPT.name(),
+                        NON_DISTRIBUTION_TYPE_CODES,
+                        SUPERVISOR_EXECUTOR_ROLE_CODES,
                         from,
                         to
                 );
@@ -837,9 +1141,9 @@ public class WorkshopDistributionService {
 
             for (OrderScheduleRow row : group) {
                 totalHours = totalHours.add(row.getLaborHours());
-                CustomerOrder order = row.getCustomerOrder();
-                if (order != null && order.getNumber() != null) {
-                    orderNumbers.add(order.getNumber());
+                String baseNumber = baseNumberOrNull(row);
+                if (baseNumber != null) {
+                    orderNumbers.add(baseNumber);
                 }
             }
 
@@ -852,7 +1156,8 @@ public class WorkshopDistributionService {
                     totalHours,
                     new ArrayList<>(orderNumbers),
                     List.of(),
-                    buildInstances(group, serialMap, blockers, List.of()),
+                    buildInstances(group, serialMap, blockers, List.of(),
+                            false),
                     serialsOf(group, serialMap),
                     itemNamesOf(group, itemNames)
             ));
@@ -994,17 +1299,61 @@ public class WorkshopDistributionService {
      * существовать, принадлежать подразделению руководителя, не быть
      * получением комплектации и ещё не иметь исполнителя.
      */
+    /**
+     * Строки одной операции одного изделия — та же граница, что у
+     * карточки в распределении.
+     *
+     * Основание строки выбирает ветвь (V56): у плана заказа покупателя
+     * изделие задано парой «заказ + позиция», у заказа на производство
+     * позиций нет и изделием служит сам заказ. Передана обычно только
+     * одна из ветвей; если не передана ни одна, группа пуста — запрос с
+     * пустым идентификатором вернул бы работы чужого изделия.
+     */
+    private List<OrderScheduleRow> productOperationRows(
+            Long operationId,
+            LocalDate plannedDate,
+            Long orderId,
+            Integer itemPosition,
+            Long productionOrderId,
+            List<Long> unitIds
+    ) {
+        if (productionOrderId != null) {
+            return scheduleRowRepo.findProductOperationRowsOfProductionOrders(
+                    ScheduleRowStatus.CONFIRMED,
+                    unitIds,
+                    operationId,
+                    plannedDate,
+                    productionOrderId
+            );
+        }
+
+        if (orderId == null || itemPosition == null) {
+            return List.of();
+        }
+
+        return scheduleRowRepo.findProductOperationRowsForUnitIds(
+                ScheduleRowStatus.CONFIRMED,
+                unitIds,
+                operationId,
+                plannedDate,
+                orderId,
+                itemPosition
+        );
+    }
+
     @Transactional
     public void assignProductOperation(
             Long operationId,
             LocalDate plannedDate,
             Long orderId,
             Integer itemPosition,
+            Long productionOrderId,
             Long executorId,
             AppUser supervisor
     ) {
-        if (operationId == null || orderId == null
-                || itemPosition == null) {
+        if (operationId == null || plannedDate == null
+                || (productionOrderId == null
+                    && (orderId == null || itemPosition == null))) {
             throw new IllegalArgumentException(
                     "Операция изделия не указана"
             );
@@ -1016,15 +1365,9 @@ public class WorkshopDistributionService {
 
         List<Long> unitIds = staffService.unitScope(supervisor);
 
-        List<OrderScheduleRow> group = scheduleRowRepo
-                .findProductOperationRowsForUnitIds(
-                        ScheduleRowStatus.CONFIRMED,
-                        unitIds,
-                        operationId,
-                        plannedDate,
-                        orderId,
-                        itemPosition
-                );
+        List<OrderScheduleRow> group = productOperationRows(
+                operationId, plannedDate, orderId, itemPosition,
+                productionOrderId, unitIds);
 
         if (group.isEmpty()) {
             throw new IllegalArgumentException(
@@ -1071,10 +1414,12 @@ public class WorkshopDistributionService {
             LocalDate plannedDate,
             Long orderId,
             Integer itemPosition,
+            Long productionOrderId,
             AppUser supervisor
     ) {
-        if (operationId == null || orderId == null
-                || itemPosition == null) {
+        if (operationId == null || plannedDate == null
+                || (productionOrderId == null
+                    && (orderId == null || itemPosition == null))) {
             throw new IllegalArgumentException(
                     "Операция изделия не указана"
             );
@@ -1082,15 +1427,9 @@ public class WorkshopDistributionService {
 
         List<Long> unitIds = staffService.unitScope(supervisor);
 
-        List<OrderScheduleRow> group = scheduleRowRepo
-                .findProductOperationRowsForUnitIds(
-                        ScheduleRowStatus.CONFIRMED,
-                        unitIds,
-                        operationId,
-                        plannedDate,
-                        orderId,
-                        itemPosition
-                );
+        List<OrderScheduleRow> group = productOperationRows(
+                operationId, plannedDate, orderId, itemPosition,
+                productionOrderId, unitIds);
 
         if (group.isEmpty()) {
             throw new IllegalArgumentException(
@@ -1160,6 +1499,7 @@ public class WorkshopDistributionService {
                         to
                 ),
                 "Распределено",
+                false,
                 List.of()
         );
     }
@@ -1205,6 +1545,7 @@ public class WorkshopDistributionService {
                         to
                 ),
                 null,
+                false,
                 List.of()
         );
     }
@@ -1272,6 +1613,105 @@ public class WorkshopDistributionService {
     }
 
     /**
+     * Работы групповых ЗНП, закреплённые за пользователем, — вторая
+     * половина «Моих операций».
+     *
+     * Разрез тот же, что у {@link #findMyOperations}, но изделие
+     * подписывается номером ячейки, внесённой складом в заказ (V20), а
+     * не серийным номером выпуска: у группового заказа состава выпуска
+     * нет вовсе, и в обычном списке его работы читались бы как «номер не
+     * выпущен». Разделение на два списка держит каждая половина свою
+     * колонку честной — ровно как в распределении, где для этого
+     * поставлен переключатель режимов.
+     *
+     * Личные работы руководителя (получение комплектации, распределение
+     * работ) здесь не дублируются: они закреплены планом, а не
+     * исполнителем, подписываются своей природой и не нуждаются в номере
+     * ячейки — поэтому остаются в обычной половине.
+     */
+    @Transactional(readOnly = true)
+    public List<AssignedOperationView> findMyGroupOperations(AppUser user) {
+        if (user == null || user.getId() == null) {
+            return List.of();
+        }
+
+        LocalDate from = LocalDate.now();
+        LocalDate to = from.plusDays(HORIZON_DAYS);
+
+        List<OrderScheduleRow> rows;
+        List<Long> poolUnitIds;
+
+        if (isUnitPool(user)) {
+            List<Long> poolScope = staffService.unitScope(user);
+
+            if (poolScope.isEmpty()) {
+                return List.of();
+            }
+
+            rows = scheduleRowRepo.findGroupAllForUnits(
+                    ScheduleRowStatus.CONFIRMED, poolScope,
+                    GROUP_KINDS, from, to
+            );
+            poolUnitIds = poolScope;
+        } else {
+            rows = scheduleRowRepo.findGroupForExecutor(
+                    user.getId(), GROUP_KINDS, from, to
+            );
+            poolUnitIds = List.of();
+        }
+
+        List<AssignedOperationView> result = new ArrayList<>(
+                groupAssigned(
+                        rows,
+                        null,
+                        false,
+                        poolUnitIds,
+                        serialService.resolveAttachedCells(rows)
+                )
+        );
+
+        /*
+         * Личные работы руководителя по групповым ЗНП («Получение
+         * подсборок для группового ЗНП», передача ячеек в БТК) — те же
+         * строки, что в обычной половине у руководителя, но с групповым
+         * основанием. Здесь они не дубликат: обычная половина отсекает
+         * их по виду основания, поэтому без этого шага работа пропала
+         * бы из обоих списков.
+         */
+        if (!isUnitPool(user) && isSupervisor(user)) {
+            List<Long> scope = staffService.unitScope(user);
+
+            if (!scope.isEmpty()) {
+                List<OrderScheduleRow> ownRows =
+                        scheduleRowRepo.findOwnGroupKitReceipt(
+                                ScheduleRowStatus.CONFIRMED,
+                                scope,
+                                NON_DISTRIBUTION_TYPE_CODES,
+                                SUPERVISOR_EXECUTOR_ROLE_CODES,
+                                GROUP_KINDS,
+                                from,
+                                to
+                        );
+
+                result.addAll(groupAssigned(
+                        ownRows,
+                        null,
+                        true,
+                        scope,
+                        serialService.resolveAttachedCells(ownRows)
+                ));
+            }
+        }
+
+        result.sort((a, b) -> {
+            int date = a.plannedDate().compareTo(b.plannedDate());
+            return date != 0 ? date : a.title().compareTo(b.title());
+        });
+
+        return result;
+    }
+
+    /**
      * Работы, закреплённые за конкретным пользователем.
      *
      * Исполнитель видит только строки, где он записан в
@@ -1314,6 +1754,7 @@ public class WorkshopDistributionService {
                                 to
                         ),
                         null,
+                        false,
                         poolScope
                 );
             }
@@ -1327,6 +1768,7 @@ public class WorkshopDistributionService {
                                 to
                         ),
                         null,
+                        false,
                         List.of()
                 )
         );
@@ -1351,12 +1793,14 @@ public class WorkshopDistributionService {
                 scheduleRowRepo.findOwnKitReceipt(
                         ScheduleRowStatus.CONFIRMED,
                         scope,
-                        OperationTypeCode.KIT_RECEIPT.name(),
+                        NON_DISTRIBUTION_TYPE_CODES,
+                        SUPERVISOR_EXECUTOR_ROLE_CODES,
                         from,
                         to
                 ),
-                "Получение комплектации",
-                List.of()
+                null,
+                true,
+                scope
         ));
 
         result.sort((a, b) -> {
@@ -1412,7 +1856,9 @@ public class WorkshopDistributionService {
          * работу из перечня бюро. Граница — подразделение учётной
          * записи, поэтому чужую работу так не провести.
          */
-        if (!isWarehouseKitting(row) && !isPoolPerformable(row, performer)) {
+        if (!isWarehouseKitting(row)
+                && !isPoolPerformable(row, performer)
+                && !isOwnSupervisorPerformable(row, performer)) {
             if (row.getExecutor() == null
                     || !row.getExecutor().getId().equals(performer.getId())) {
                 throw new IllegalStateException(
@@ -1465,8 +1911,8 @@ public class WorkshopDistributionService {
     }
 
     /**
-     * Закреплённые работы пользователя — счётчик пункта «Мои
-     * операции» в боковом меню.
+     * Невыполненные закреплённые работы пользователя — счётчик пункта
+     * «Мои операции» в боковом меню.
      *
      * Считается запросом, а не размером списка {@link #findMyOperations}:
      * меню рисуется на каждой странице модуля, а подбор кандидатов с
@@ -1475,8 +1921,82 @@ public class WorkshopDistributionService {
      *
      * Граница та же, что у самого списка: строки, закреплённые за
      * человеком напрямую, плюс получение комплектации своего
-     * подразделения — только для руководящей роли.
+     * подразделения — только для руководящей роли. Сверх списка
+     * отсекаются проведённые строки: цифра в меню означает объём
+     * оставшейся работы, а не число строк плана на неделю, поэтому
+     * закрытая сегодня операция в неё уже не входит, хотя и остаётся
+     * в списке до конца дня.
      */
+    /**
+     * Работы групповых ЗНП пользователя — цифра его половины списка.
+     *
+     * Граница повторяет {@link #findMyGroupOperations} буквально: для
+     * бюро входного контроля по подразделению, для прочих ролей по
+     * закреплённому исполнителю. Личные работы руководителя здесь не
+     * считаются — они остаются в обычной половине, и их цифра живёт в
+     * {@link #countMyOperations}.
+     */
+    @Transactional(readOnly = true)
+    public long countMyGroupOperations(AppUser user) {
+        if (user == null || user.getId() == null) {
+            return 0L;
+        }
+
+        LocalDate from = LocalDate.now();
+        LocalDate to = from.plusDays(HORIZON_DAYS);
+
+        if (isUnitPool(user)) {
+            List<Long> poolScope = staffService.unitScope(user);
+
+            if (poolScope.isEmpty()) {
+                return 0L;
+            }
+
+            return scheduleRowRepo.countGroupAllForUnits(
+                    ScheduleRowStatus.CONFIRMED,
+                    poolScope,
+                    GROUP_KINDS,
+                    from,
+                    to
+            );
+        }
+
+        return scheduleRowRepo.countGroupForExecutor(
+                user.getId(), GROUP_KINDS, from, to
+        ) + ownGroupCount(user, from, to);
+    }
+
+    /*
+     * Цифра личных групповых работ руководителя — добавка к счётчику
+     * групповой половины.
+     *
+     * Повторяет условие списка буквально: руководящая роль и непустой
+     * scope подразделений. Для бюро входного контроля личные работы не
+     * считаются — там весь объём уже взят счётчиком по подразделению, и
+     * сложение дало бы двойную цифру.
+     */
+    private long ownGroupCount(AppUser user, LocalDate from, LocalDate to) {
+        if (isUnitPool(user) || !isSupervisor(user)) {
+            return 0L;
+        }
+
+        List<Long> scope = staffService.unitScope(user);
+
+        if (scope.isEmpty()) {
+            return 0L;
+        }
+
+        return scheduleRowRepo.countOwnGroupKitReceipt(
+                ScheduleRowStatus.CONFIRMED,
+                scope,
+                NON_DISTRIBUTION_TYPE_CODES,
+                SUPERVISOR_EXECUTOR_ROLE_CODES,
+                GROUP_KINDS,
+                from,
+                to
+        );
+    }
+
     @Transactional(readOnly = true)
     public long countMyOperations(AppUser user) {
         if (user == null || user.getId() == null) {
@@ -1512,16 +2032,23 @@ public class WorkshopDistributionService {
             return total;
         }
 
-        Long unitId = staffService.workshopUnitId(user);
+        /*
+         * Граница — список подразделений службы, а не одно: у
+         * руководителя службы качества карточка подразделения пуста, и
+         * проверка одиночного идентификатора отняла бы у него личные
+         * работы целиком. Тот же scope, что у самого списка.
+         */
+        List<Long> scope = staffService.unitScope(user);
 
-        if (unitId == null) {
+        if (scope.isEmpty()) {
             return total;
         }
 
         return total + scheduleRowRepo.countOwnKitReceipt(
                 ScheduleRowStatus.CONFIRMED,
-                staffService.unitScope(user),
-                OperationTypeCode.KIT_RECEIPT.name(),
+                scope,
+                NON_DISTRIBUTION_TYPE_CODES,
+                SUPERVISOR_EXECUTOR_ROLE_CODES,
                 from,
                 to
         );
@@ -1548,7 +2075,8 @@ public class WorkshopDistributionService {
         return scheduleRowRepo.countAssignableForUnitIds(
                 ScheduleRowStatus.CONFIRMED,
                 scope,
-                OperationTypeCode.KIT_RECEIPT.name(),
+                NON_DISTRIBUTION_TYPE_CODES,
+                SUPERVISOR_EXECUTOR_ROLE_CODES,
                 from,
                 from.plusDays(HORIZON_DAYS)
         );
@@ -1565,13 +2093,37 @@ public class WorkshopDistributionService {
      * {@code poolUnitIds} — подразделения, где работу не распределяют
      * (бюро входного контроля): для них кнопка проведения полагается на
      * любую строку своего подразделения, а не только на строку, где
-     * человек вписан исполнителем. Для прочих разделов передаётся пустым
+     * человек вписан исполнителем. Для прочих разделов передаётся пустой
      * — там работа всегда закреплена за конкретным человеком.
+     *
+     * {@code ownWork} помечает группы, закреплённые планом, а не
+     * решением мастера: получение комплектации и операции с руководящей
+     * ролью исполнителя. Таким группам полагается своя подпись и своё
+     * право проведения — по подразделению, потому что исполнителя у них
+     * нет.
      */
     private List<AssignedOperationView> groupAssigned(
             List<OrderScheduleRow> rows,
             String source,
+            boolean ownWork,
             List<Long> poolUnitIds
+    ) {
+        return groupAssigned(rows, source, ownWork, poolUnitIds, Map.of());
+    }
+
+    /*
+     * Тот же группировщик с картой внесённых ячеек.
+     *
+     * {@code cellMap} передаётся только групповому списку: у серийного
+     * ЗНП матрица комплектования хранит датчики выпуска, и подставить её
+     * в обычную половину было бы подписать работу чужим номером.
+     */
+    private List<AssignedOperationView> groupAssigned(
+            List<OrderScheduleRow> rows,
+            String source,
+            boolean ownWork,
+            List<Long> poolUnitIds,
+            Map<Long, AttachedCellView> cellMap
     ) {
         if (rows == null || rows.isEmpty()) {
             return List.of();
@@ -1604,9 +2156,9 @@ public class WorkshopDistributionService {
             for (OrderScheduleRow row : group) {
                 totalHours = totalHours.add(row.getLaborHours());
 
-                CustomerOrder order = row.getCustomerOrder();
-                if (order != null && order.getNumber() != null) {
-                    orderNumbers.add(order.getNumber());
+                String baseNumber = baseNumberOrNull(row);
+                if (baseNumber != null) {
+                    orderNumbers.add(baseNumber);
                 }
             }
 
@@ -1623,9 +2175,23 @@ public class WorkshopDistributionService {
                             : WorkshopStaffService.displayName(
                                     first.getExecutor()
                             ),
-                    source,
-                    buildInstances(group, serialMap, blockers, poolUnitIds),
-                    serialsOf(group, serialMap),
+                    ownWork ? ownOperationSource(first) : source,
+                    ownWork,
+                    buildInstances(
+                            group, serialMap, blockers, poolUnitIds, ownWork,
+                            cellMap
+                    ),
+                    /*
+                     * Главная подпись группы. Пока карта ячеек не
+                     * задана — прежний серийный номер выпуска; для
+                     * группового списка, наоборот, номер ячейки: у
+                     * такого заказа состава выпуска нет вовсе, и
+                     * серийник подписывал бы пустую клетку там, где у
+                     * изделия уже есть внесённый складом номер.
+                     */
+                    cellMap == null || cellMap.isEmpty()
+                            ? serialsOf(group, serialMap)
+                            : cellNumbersOf(group, cellMap),
                     itemNamesOf(group, itemNames)
             ));
         }
@@ -1640,13 +2206,18 @@ public class WorkshopDistributionService {
      */
 
     /**
-     * Способные исполнители для группы строк одной операции и даты.
+     * Способные исполнители для группы — с загрузкой и отсутствиями.
      *
      * Метод поднят из тела группировщика, чтобы его переиспользовали и
      * групповой, и плоский режимы распределения: расчёт привязок,
      * загрузки и отсутствий в них идентичен.
+     *
+     * Видимость — package-private: раздел распределения групповых ЗНП
+     * обязан подбирать людей ровно тем же правилом, что и общее
+     * распределение, иначе два экрана одного руководителя показали бы
+     * разные списки кандидатов и разную загрузку.
      */
-    private List<AssignableExecutor> capableExecutors(
+    List<AssignableExecutor> capableExecutors(
             List<OrderScheduleRow> group,
             LocalDate plannedDate,
             LocalDate from,
@@ -1701,12 +2272,10 @@ public class WorkshopDistributionService {
             boolean kitReceipt,
             ProductionOrderSerialProjection serial
     ) {
-        CustomerOrder order = row.getCustomerOrder();
-
         return new DistributionRow(
                 row.getId(),
                 instanceLabel(row),
-                order == null ? null : order.getNumber(),
+                baseNumberOrNull(row),
                 getOperationCode(row),
                 getOperationName(row),
                 row.getPlannedDate(),
@@ -1742,14 +2311,70 @@ public class WorkshopDistributionService {
     }
 
     /**
-     * Экземпляр относится к получению комплектации — распределению не
-     * подлежит, это личная работа руководителя.
+     * Экземпляр относится к личной работе руководителя — получение
+     * комплектации своего подразделения либо операция с руководящей
+     * ролью исполнителя. Распределению такая работа не подлежит.
      */
     private boolean isKitReceipt(OrderScheduleRow row) {
-        return row.getOperation() != null
+        return isNonDistributableOperation(row);
+    }
+
+    /**
+     * Строка не распределяется: тип операции из перечня нераспределяемых
+     * либо роль её исполнителя — руководящая.
+     *
+     * Признак держится рядом с константами, а не переписывается в каждом
+     * запросе: экран очереди и личный список руководителя обязаны
+     * расходиться ровно на этот набор, и расхождение допустили бы в двух
+     * местах сразу.
+     */
+    public static boolean isNonDistributableOperation(
+            OrderScheduleRow row
+    ) {
+        if (row == null || row.getOperation() == null) {
+            return false;
+        }
+
+        Operation operation = row.getOperation();
+
+        if (operation.getOperationType() != null
+                && NON_DISTRIBUTION_TYPE_CODES.contains(
+                        operation.getOperationType().getCode())) {
+            return true;
+        }
+
+        return operation.getExecutorRole() != null
+                && SUPERVISOR_EXECUTOR_ROLE_CODES.contains(
+                        operation.getExecutorRole().getCode());
+    }
+
+    /**
+     * Строка — личная работа руководителя по руководящей роли
+     * исполнителя: провести её вправе сам руководитель, а не
+     * подчинённый, потому что исполнителя план у неё не заполняет.
+     */
+    private static boolean isSupervisorOwnRow(OrderScheduleRow row) {
+        return row != null
+                && row.getOperation() != null
+                && row.getOperation().getExecutorRole() != null
+                && SUPERVISOR_EXECUTOR_ROLE_CODES.contains(
+                        row.getOperation().getExecutorRole().getCode());
+    }
+
+    /**
+     * Подпись природы личной работы: получение комплектации подписано
+     * по-своему, потому что так её называет план; остальным работам
+     * руководителя даётся общая подпись.
+     */
+    private static String ownOperationSource(OrderScheduleRow row) {
+        if (row.getOperation() != null
                 && row.getOperation().getOperationType() != null
                 && OperationTypeCode.KIT_RECEIPT.name().equals(
-                        row.getOperation().getOperationType().getCode());
+                        row.getOperation().getOperationType().getCode())) {
+            return "Получение комплектации";
+        }
+
+        return "Личная работа руководителя";
     }
 
     private static boolean isKitReceiptType(String code) {
@@ -1804,8 +2429,29 @@ public class WorkshopDistributionService {
     }
 
     /**
+     * Проводит ли сотрудник свою руководящую работу.
+     *
+     * Операцию с руководящей ролью исполнителя план закрепляет за
+     * подразделением, а не за человеком, поэтому право считается так же,
+     * как у комплектования: по границе подразделения авторизованного
+     * руководителя, и чужую работу так не закрыть.
+     */
+    private boolean isOwnSupervisorPerformable(
+            OrderScheduleRow row,
+            AppUser performer
+    ) {
+        if (!isSupervisor(performer) || row.getOrganizationUnit() == null) {
+            return false;
+        }
+
+        return isSupervisorOwnRow(row)
+                && staffService.unitScope(performer)
+                        .contains(row.getOrganizationUnit().getId());
+    }
+
+    /**
      * Ведёт ли пользователь работу по подразделению, а не по личной
-     * закрепке: в бюро входного контроля работы не распределяются.
+     * закреплённости: в бюро входного контроля работы не распределяются.
      */
     public boolean isUnitPool(AppUser user) {
         return user != null
@@ -1856,9 +2502,9 @@ public class WorkshopDistributionService {
             );
         }
 
-        if (isKitReceipt(row)) {
+        if (isNonDistributableOperation(row)) {
             throw new IllegalArgumentException(
-                    "Операция получения комплектации не распределяется"
+                    "Личная работа руководителя не распределяется"
             );
         }
     }
@@ -1881,17 +2527,45 @@ public class WorkshopDistributionService {
      * входного контроля): там строка принадлежит подразделению, а не
      * человеку, и провести её может любой контролёр этого бюро, поэтому
      * признак строится по подразделению строки.
+     *
+     * {@code ownWork} — те же личные работы руководителя, что и в
+     * подписи группы: у них нет исполнителя, и право проведения тоже
+     * берётся по подразделению, иначе кнопка не появилась бы ни у кого.
      */
     private List<OperationInstance> buildInstances(
             List<OrderScheduleRow> group,
             Map<Long, ProductionOrderSerialProjection> serialMap,
             Map<Long, InstanceBlocker> blockers,
-            List<Long> poolUnitIds
+            List<Long> poolUnitIds,
+            boolean ownWork
+    ) {
+        return buildInstances(
+                group, serialMap, blockers, poolUnitIds, ownWork, Map.of()
+        );
+    }
+
+    /*
+     * Тот же сборщик экземпляров с картой внесённых ячеек.
+     *
+     * {@code cellMap} передаёт номер ячейки, внесённой складом в
+     * групповой ЗНП (V20): у таких заказов состава выпуска нет, и
+     * серийный номер их экземпляров не подписывает ничего. Карта
+     * приходит из
+     * {@link WorkshopDistributionSerialService#resolveAttachedCells} и
+     * пуста для всех прочих разделов — там работает
+     * {@code serialMap}.
+     */
+    private List<OperationInstance> buildInstances(
+            List<OrderScheduleRow> group,
+            Map<Long, ProductionOrderSerialProjection> serialMap,
+            Map<Long, InstanceBlocker> blockers,
+            List<Long> poolUnitIds,
+            boolean ownWork,
+            Map<Long, AttachedCellView> cellMap
     ) {
         List<OperationInstance> instances = new ArrayList<>();
 
         for (OrderScheduleRow row : group) {
-            CustomerOrder order = row.getCustomerOrder();
             ProductionOrderSerialProjection serial = serialMap == null
                     ? null
                     : serialMap.get(row.getId());
@@ -1899,6 +2573,9 @@ public class WorkshopDistributionService {
                     ? InstanceBlocker.FREE
                     : blockers.getOrDefault(row.getId(),
                             InstanceBlocker.FREE);
+            AttachedCellView cell = cellMap == null
+                    ? null
+                    : cellMap.get(row.getId());
 
             instances.add(new OperationInstance(
                     row.getId(),
@@ -1908,7 +2585,7 @@ public class WorkshopDistributionService {
                     row.getInstanceIndex() == null
                             ? 0
                             : row.getInstanceIndex(),
-                    order == null ? null : order.getNumber(),
+                    baseNumberOrNull(row),
                     row.getLaborHours(),
                     row.getCompletedAt() != null,
                     row.getCompletedAt() == null
@@ -1920,18 +2597,31 @@ public class WorkshopDistributionService {
                      * за подразделением, исполнителя у неё нет, и без
                      * этой оговорки кнопка закрытия у кладовщика не
                      * появилась бы никогда. Та же оговорка работает для
-                     * бюро входного контроля (poolUnitIds): его строки
-                     * закреплены за бюро, а не за человеком.
+                     * бюро входного контроля (poolUnitIds) и для личных
+                     * работ руководителя (ownWork): их план закрепляет за
+                     * подразделением, поэтому право считается по границе
+                     * подразделения, а не по фамилии исполнителя.
                      */
                     (row.getExecutor() != null
                             || isWarehouseKitting(row)
-                            || isPoolRow(row, poolUnitIds))
+                            || isPoolRow(row, poolUnitIds)
+                            || (ownWork && isSupervisorOwnRow(row)))
                             && row.getCompletedAt() == null
                             && !blocker.blocked(),
                     serial == null ? null : serial.getFullNumber(),
-                    serial == null ? null : serial.getDisplayName(),
+                    /*
+                     * Наименование изделия. Для строки выпуска — из
+                     * позиции выпуска; для строки группового ЗНП выпуска
+                     * нет, и наименованием служит классификатор внесённой
+                     * ячейки: иначе панель экземпляра показывала бы
+                     * прочерк там, где изделие названо.
+                     */
+                    serial != null
+                            ? serial.getDisplayName()
+                            : (cell == null ? null : cell.getDisplayName()),
                     blocker.blocked(),
-                    blocker.blockerLabel()
+                    blocker.blockerLabel(),
+                    cell == null ? null : cell.getFullNumber()
             ));
         }
 
@@ -2004,6 +2694,7 @@ public class WorkshopDistributionService {
 
         Set<Long> processIds = new HashSet<>();
         Set<Long> orderIds = new HashSet<>();
+        Set<Long> productionOrderIds = new HashSet<>();
 
         for (OrderScheduleRow row : rows) {
             TechProcess process = row.getTechProcess();
@@ -2017,9 +2708,23 @@ public class WorkshopDistributionService {
             if (order != null && order.getId() != null) {
                 orderIds.add(order.getId());
             }
+
+            ProductionOrder productionOrder = row.getProductionOrder();
+
+            if (productionOrder != null
+                    && productionOrder.getId() != null) {
+                productionOrderIds.add(productionOrder.getId());
+            }
         }
 
-        if (processIds.isEmpty() || orderIds.isEmpty()) {
+        /*
+         * Оснований у строки два (V56), и пустая одна ветвь — норма:
+         * в списке работ цеха план заказа покупателя и план группового
+         * ЗНП редко пересекаются. Выход только когда оснований нет
+         * вовсе — сравнивать состояние строк было бы не с чем.
+         */
+        if (processIds.isEmpty()
+                || (orderIds.isEmpty() && productionOrderIds.isEmpty())) {
             return Map.of();
         }
 
@@ -2073,28 +2778,25 @@ public class WorkshopDistributionService {
          * проведённая строка прежнего плана и непроведённая строка
          * черновика — работа сделана, и блокировать её по черновику
          * нельзя.
+         *
+         * Обе ветви основания (V56) читаются раздельно: `in` с пустой
+         * коллекцией Hibernate отвергает, а пустая ветвь в списке
+         * работ — обычное дело.
          */
         Set<String> closedKeys = new HashSet<>();
         Set<String> openKeys = new HashSet<>();
 
-        for (OpenInstanceRowView view
-                : scheduleRowRepo.findRouteRowsOfOrders(orderIds)) {
-            String key = instanceKey(
-                    view.getOrderNumber(),
-                    view.getItemPosition(),
-                    view.getInstanceIndex(),
-                    routePairKey(
-                            view.getTechProcessId(),
-                            view.getOperationId()
-                    )
-            );
+        collectInstanceKeys(closedKeys, openKeys,
+                orderIds.isEmpty()
+                        ? List.of()
+                        : scheduleRowRepo
+                                .findRouteRowsOfOrders(orderIds));
 
-            if (view.getCompletedAt() != null) {
-                closedKeys.add(key);
-            } else {
-                openKeys.add(key);
-            }
-        }
+        collectInstanceKeys(closedKeys, openKeys,
+                productionOrderIds.isEmpty()
+                        ? List.of()
+                        : scheduleRowRepo.findRouteRowsOfProductionOrders(
+                                productionOrderIds));
 
         if (openKeys.isEmpty() || pairsByNode.isEmpty()) {
             return Map.of();
@@ -2104,9 +2806,9 @@ public class WorkshopDistributionService {
 
         for (OrderScheduleRow row : rows) {
             TechProcess process = row.getTechProcess();
-            CustomerOrder order = row.getCustomerOrder();
+            String baseKey = baseKeyOf(row);
 
-            if (process == null || order == null
+            if (process == null || baseKey == null
                     || row.getOperation() == null
                     || row.getCompletedAt() != null) {
                 continue;
@@ -2123,7 +2825,7 @@ public class WorkshopDistributionService {
 
             for (String predecessor : predecessors) {
                 String key = instanceKey(
-                        order.getNumber(),
+                        baseKey,
                         row.getItemPosition(),
                         row.getInstanceIndex(),
                         predecessor
@@ -2151,24 +2853,6 @@ public class WorkshopDistributionService {
         return processId + ":" + operationId;
     }
 
-    /**
-     * Ключ экземпляра работы: заказ, позиция, номер внутри позиции
-     * и пара маршрута.
-     *
-     * Экземпляр в ключе обязателен: позиция на десять изделий
-     * закрывается десятью фактами, и разблокировать нужно только то
-     * изделие, по которому предшественник действительно проведён.
-     */
-    private static String instanceKey(
-            String orderNumber,
-            Integer itemPosition,
-            Integer instanceIndex,
-            String pairKey
-    ) {
-        return orderNumber + "|" + itemPosition + "|" + instanceIndex
-                + "|" + pairKey;
-    }
-
     /** Наименование операции узла — подпись причины блокировки. */
     private static String operationLabel(
             TechProcessOperation node
@@ -2179,6 +2863,75 @@ public class WorkshopDistributionService {
         }
 
         return node.getOperation().getOperationName().getName();
+    }
+
+    /**
+     * Ключ экземпляра работы: номер основания, позиция, номер внутри
+     * позиции и пара маршрута.
+     *
+     * Экземпляр в ключе обязателен: позиция на десять изделий
+     * закрывается десятью фактами, и разблокировать нужно только то
+     * изделие, по которому предшественник действительно проведён.
+     *
+     * Номер основания строится из признака ветви и номера заказа, чтобы
+     * номера обоих реестров (заказ покупателя и групповой ЗНП, V56) не
+     * схлопнулись в одну работу, если случайно совпадут.
+     */
+    private static String instanceKey(
+            String baseKey,
+            Integer itemPosition,
+            Integer instanceIndex,
+            String pairKey
+    ) {
+        return baseKey + "|" + itemPosition + "|" + instanceIndex
+                + "|" + pairKey;
+    }
+
+    /*
+     * Признак и номер основания строки графика.
+     *
+     * У строки ровно одно основание (chk_osr_base_exactly_one). Для
+     * плана заказа покупателя это его номер, для группового ЗНП —
+     * номер заказа на производство.
+     */
+    private String baseKeyOf(OrderScheduleRow row) {
+        if (row.getProductionOrder() != null) {
+            return "PO:" + row.getProductionOrder().getNumber();
+        }
+        if (row.getCustomerOrder() != null) {
+            return "CO:" + row.getCustomerOrder().getNumber();
+        }
+        return null;
+    }
+
+    /**
+     * Собирает ключи закрытых и открытых строк из проекции.
+     *
+     * Ключ экземпляра строится по признаку ветви, номеру основания и
+     * позиции в маршруте — так же, как при проверке блокировки.
+     */
+    private void collectInstanceKeys(
+            Set<String> closedKeys,
+            Set<String> openKeys,
+            List<OpenInstanceRowView> views
+    ) {
+        for (OpenInstanceRowView view : views) {
+            String key = instanceKey(
+                    view.getBaseKind() + ":" + view.getOrderNumber(),
+                    view.getItemPosition(),
+                    view.getInstanceIndex(),
+                    routePairKey(
+                            view.getTechProcessId(),
+                            view.getOperationId()
+                    )
+            );
+
+            if (view.getCompletedAt() != null) {
+                closedKeys.add(key);
+            } else {
+                openKeys.add(key);
+            }
+        }
     }
 
     /**
@@ -2306,6 +3059,37 @@ public class WorkshopDistributionService {
         }
 
         return serials;
+    }
+
+    /**
+     * Номера внесённых ячеек группы одной строкой.
+     *
+     * Двойник {@link #serialsOf} для групповых ЗНП: подписывает группу
+     * теми же номерами, что видит мастер в разделе распределения
+     * групповых заказов, — исполнитель и руководитель обязаны называть
+     * работу одинаково.
+     */
+    private List<String> cellNumbersOf(
+            List<OrderScheduleRow> group,
+            Map<Long, AttachedCellView> cellMap
+    ) {
+        if (cellMap == null || cellMap.isEmpty()) {
+            return List.of();
+        }
+
+        List<String> numbers = new ArrayList<>();
+
+        for (OrderScheduleRow row : group) {
+            AttachedCellView cell = cellMap.get(row.getId());
+            String number = cell == null ? null : cell.getFullNumber();
+
+            if (number != null && !number.isBlank()
+                    && !numbers.contains(number)) {
+                numbers.add(number);
+            }
+        }
+
+        return numbers;
     }
 
     /**

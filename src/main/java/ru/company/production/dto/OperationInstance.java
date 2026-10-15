@@ -31,6 +31,8 @@ import java.math.RoundingMode;
  * @param blocked       есть незакрытая предшествующая операция по
  *                      маршруту — проведение запрещено
  * @param blockerLabel  название блокирующей операции для подписи
+ * @param cellNumber    номер ячейки, внесённой складом в групповой ЗНП
+ *                      (V20); для строк выпуска — пусто
  */
 public record OperationInstance(
         Long rowId,
@@ -44,7 +46,8 @@ public record OperationInstance(
         String serialNumber,
         String itemFullName,
         boolean blocked,
-        String blockerLabel
+        String blockerLabel,
+        String cellNumber
 ) {
 
     /**
@@ -96,6 +99,21 @@ public record OperationInstance(
         return serialNumber == null || serialNumber.isBlank()
                 ? "—"
                 : serialNumber.trim();
+    }
+
+    /**
+     * Номер ячейки из состава группового ЗНП; прочерк, если ячейки нет.
+     *
+     * В групповом режиме «Моих операций» это основная подпись экземпляра:
+     * серийного номера выпуска у группового заказа не бывает вовсе, и
+     * исполнитель обязан видеть именно тот номер, который склад внёс в
+     * заказ. Прочерк честнее плановой подписи «поз. · экз.»: работы
+     * экземпляра существуют до того, как кладовщик внёс в заказ номер.
+     */
+    public String cellLabel() {
+        return cellNumber == null || cellNumber.isBlank()
+                ? "—"
+                : cellNumber.trim();
     }
 
     /** Полное наименование из позиции заказа («как в КД»). */

@@ -5,10 +5,13 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import ru.company.production.entity.CustomerOrder;
 import ru.company.production.entity.OrderScheduleRow;
+import ru.company.production.entity.ProductionOrder;
+import ru.company.production.repository.AttachedCellView;
 import ru.company.production.repository.CustomerOrderItemRepository;
 import ru.company.production.repository.OrderItemNameView;
 import ru.company.production.repository.ProductionOrderItemRepository;
 import ru.company.production.repository.ProductionOrderSerialProjection;
+import ru.company.production.repository.SerialProductionOrderRepository;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -46,6 +49,7 @@ public class WorkshopDistributionSerialService {
 
     private final ProductionOrderItemRepository productionItemRepo;
     private final CustomerOrderItemRepository customerItemRepo;
+    private final SerialProductionOrderRepository serialLinkRepo;
 
     /**
      * Серийник и полное наименование для каждого экземпляра графика.
@@ -134,6 +138,94 @@ public class WorkshopDistributionSerialService {
     /* Ключ группы экземпляров одной позиции одного заказа покупателя. */
     private static String key(Long orderId, Integer position) {
         return orderId + "|" + position;
+    }
+
+    /**
+     * Номер и наименование внесённой ячейки для каждого экземпляра
+     * графика по групповому ЗНП.
+     *
+     * Это второй источник подписи изделия — для строк, у которых
+     * основание есть групповой заказ (V38). У таких заказов состава
+     * выпуска нет вовсе: {@link #resolve} по заказу покупателя там
+     * возвращает пусто, и таблица осталась бы с прочерком в колонке
+     * номера. Состав задаёт склад, внося номера ячеек в матрицу
+     * комплектования (V20), — их и подставляет этот метод.
+     *
+     * Ключ результата — {@code rowId} строки графика, как у
+     * {@link #resolve}, чтобы сборщик списка читал обе карты одинаково.
+     *
+     * Сопоставление экземпляру — по порядку внесения: склад закрывает
+     * ближайший незакрытый экземпляр (см.
+     * {@code SubassemblyKittingService#completeScheduleRow}), поэтому
+     * i-я по внесению ячейка принадлежит экземпляру с номером i. Отдель
+     * колонки-связи в схеме нет, и тот же порядок использует раздел
+     * распределения групповых заказов — два экрана обязаны подписывать
+     * работу одним номером.
+     *
+     * Экземпляр без ячейки в карту не попадает: кладовщик вправе внести
+     * не все номера, а работы незакрытого экземпляра существуют до
+     * внесения. Прочерк честнее выдуманного номера.
+     *
+     * Один пакетный запрос на всю страницу: собираются идентификаторы
+     * заказов-оснований, по ним читаются внесённые номера.
+     */
+    @Transactional(readOnly = true)
+    public Map<Long, AttachedCellView> resolveAttachedCells(
+            List<OrderScheduleRow> rows
+    ) {
+        if (rows == null || rows.isEmpty()) {
+            return Map.of();
+        }
+
+        Set<Long> orderIds = rows.stream()
+                .map(OrderScheduleRow::getProductionOrder)
+                .filter(Objects::nonNull)
+                .map(ProductionOrder::getId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+
+        if (orderIds.isEmpty()) {
+            return Map.of();
+        }
+
+        Map<Long, List<AttachedCellView>> cellsByOrder = new LinkedHashMap<>();
+
+        for (AttachedCellView cell
+                : serialLinkRepo.findAttachedCellsByOrderIds(orderIds)) {
+            if (cell.getOrderId() == null) {
+                continue;
+            }
+
+            cellsByOrder
+                    .computeIfAbsent(cell.getOrderId(), k -> new ArrayList<>())
+                    .add(cell);
+        }
+
+        Map<Long, AttachedCellView> result = new HashMap<>();
+
+        for (OrderScheduleRow row : rows) {
+            ProductionOrder order = row.getProductionOrder();
+            Integer index = row.getInstanceIndex();
+
+            /*
+             * Строки плана заказа покупателя здесь пропускаются: у них
+             * свой серийник выпуска, и подпись ячейки их бы только
+             * переписала.
+             */
+            if (order == null || order.getId() == null || index == null) {
+                continue;
+            }
+
+            List<AttachedCellView> cells = cellsByOrder.get(order.getId());
+
+            if (cells == null || index < 0 || index >= cells.size()) {
+                continue;
+            }
+
+            result.put(row.getId(), cells.get(index));
+        }
+
+        return result;
     }
 
     /*

@@ -90,7 +90,10 @@ public class ModuleMenuCountersViewAdvice {
          */
         model.addAttribute("assignableTotal", 0L);
         model.addAttribute("groupZnpTotal", 0L);
+        model.addAttribute("distributionTotal", 0L);
         model.addAttribute("myOperationsCount", 0L);
+        model.addAttribute("myRegularOperationsCount", 0L);
+        model.addAttribute("myGroupOperationsCount", 0L);
 
         /*
          * Доступность «Распределения работ» и ссылка возврата в свой
@@ -136,9 +139,27 @@ public class ModuleMenuCountersViewAdvice {
                         ).url()
         );
 
+        /*
+         * «Мои операции» считаются двумя половинами: обычной и по
+         * групповым ЗНП. Пункт меню обязан показать весь объём
+         * невыполненной работы — иначе исполнитель увидел бы в меню
+         * цифру меньше, чем работ, и счёл бы групповые заказы
+         * потерявшимися; проведённые строки при этом из цифры
+         * исключаются (см. WorkshopDistributionService#countMyOperations).
+         * Тот же расчёт держит и цифры переключателя на странице
+         * раздела, поэтому считается здесь, а не в контроллере: две
+         * цифры из одного запроса не расходятся, а меню и страница
+         * всегда показывают один итог.
+         */
+        long regularOperations = distributionService.countMyOperations(user);
+        long groupOperations =
+                distributionService.countMyGroupOperations(user);
+
+        model.addAttribute("myRegularOperationsCount", regularOperations);
+        model.addAttribute("myGroupOperationsCount", groupOperations);
         model.addAttribute(
                 "myOperationsCount",
-                distributionService.countMyOperations(user)
+                regularOperations + groupOperations
         );
 
         if (!distributionService.isSupervisor(user)) {
@@ -157,12 +178,12 @@ public class ModuleMenuCountersViewAdvice {
          */
         model.addAttribute("canDistribute", true);
 
-        model.addAttribute(
-                "assignableTotal",
+        long assignable =
                 distributionService.countAssignable(
                         staffService.unitScope(user)
-                )
-        );
+                );
+
+        model.addAttribute("assignableTotal", assignable);
 
         /*
          * Счётчик групповых заказов — по той же границе подразделений.
@@ -170,11 +191,20 @@ public class ModuleMenuCountersViewAdvice {
          * для тех же ролей: иначе пункт меню показал бы работу, в
          * которую вход закрыт.
          */
-        model.addAttribute(
-                "groupZnpTotal",
-                groupZnpService.countUnassigned(
-                        staffService.unitScope(user)
-                )
+        long groupZnp = groupZnpService.countUnassigned(
+                staffService.unitScope(user)
         );
+
+        model.addAttribute("groupZnpTotal", groupZnp);
+
+        /*
+         * Пункт меню «Распределение работ» один, а очередь у него —
+         * из двух половин, разделённых переключателем (обычные работы и
+         * групповые ЗНП). Цифра над пунктом обязана складывать обе:
+         * иначе руководитель увидел бы в меню только обычную половину и
+         * счёл бы нераспределённые групповые заказы потерявшимися — ровно
+         * как с «Моими операциями», где пункт тоже показывает весь объём.
+         */
+        model.addAttribute("distributionTotal", assignable + groupZnp);
     }
 }

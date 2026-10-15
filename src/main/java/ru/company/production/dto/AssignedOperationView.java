@@ -31,6 +31,10 @@ import java.util.List;
  * @param source        природа группы: «Распределено» или «Получение
  *                      комплектации» — в «Мои операции» две природы
  *                      смешиваются в один список
+ * @param ownWork       группа закреплена планом, а не решением мастера:
+ *                      получение комплектации либо операция с
+ *                      руководящей ролью исполнителя. Такую работу нельзя
+ *                      снять и нельзя переложить на подчинённого
  * @param instances     экземпляры операции: номер изделия, часы и
  *                      признак, можно ли провести этот экземпляр
  * @param serialNumbers серийные номера группы без повторов — подпись
@@ -47,6 +51,7 @@ public record AssignedOperationView(
         List<String> orderNumbers,
         String executorName,
         String source,
+        boolean ownWork,
         List<OperationInstance> instances,
         List<String> serialNumbers,
         List<String> itemNames
@@ -106,7 +111,7 @@ public record AssignedOperationView(
             return 0L;
         }
 
-        if (kitReceipt()) {
+        if (ownWork) {
             return 0L;
         }
 
@@ -194,14 +199,5 @@ public record AssignedOperationView(
         }
 
         return instances.stream().filter(OperationInstance::completed).count();
-    }
-
-    /**
-     * Группа — получение комплектации: её нельзя снять кнопкой
-     * «Снять назначение», она закреплена планом, а не решением
-     * мастера.
-     */
-    public boolean kitReceipt() {
-        return source != null && source.contains("комплектац");
     }
 }

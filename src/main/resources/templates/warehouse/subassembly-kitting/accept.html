@@ -308,9 +308,10 @@
             <!-- =====================================================
                  ПЕРЕЧЕНЬ ЯЧЕЕК НА СКЛАДЕ
 
-                 Показывает ячейки изделия заказа, принятые на склад,
-                 и статус каждой — внесена или нет. Блок сворачиваемый:
-                 перечень длинный, а вносят номера по полю выше.
+                 Показывает свободные ячейки изделия заказа, принятые
+                 на склад. Блок сворачиваемый: перечень длинный, а вносят
+                 номера по полю выше. Внесённые в заказ ячейки показаны
+                 отдельным блоком ниже — они со склада сняты.
                  ===================================================== -->
             <details class="collapsible"
                      th:if="${view.cells != null and not #lists.isEmpty(view.cells)}">
@@ -328,8 +329,8 @@
 
                     <p class="field-hint"
                        style="margin-bottom: 12px;">
-                        Ячейки изделия заказа, принятые на склад.
-                        Зелёная отметка — ячейка уже внесена в заказ
+                        Свободные ячейки изделия заказа, принятые на склад.
+                        Эти ячейки ещё не оформлены в заказ.
                     </p>
 
                     <div class="table-wrap">
@@ -349,8 +350,7 @@
 
                             <tbody>
 
-                            <tr th:each="cell, iteration : ${view.cells}"
-                                th:classappend="${cell.taken()} ? ' is-done' : ''">
+                            <tr th:each="cell, iteration : ${view.cells}">
 
                                 <td class="warehouse-number-cell"
                                     th:text="${iteration.count}">
@@ -369,18 +369,85 @@
                                 </td>
 
                                 <td>
-                                    <span class="status"
-                                          th:classappend="${
-                                              cell.taken()
-                                                  ? ' status--ok'
-                                                  : ' status--attention'
-                                          }"
-                                          th:text="${
-                                              cell.taken()
-                                                  ? 'внесена в заказ'
-                                                  : 'ожидает внесения'
-                                          }">
-                                        ожидает внесения
+                                    <span class="status status--attention">
+                                        свободна
+                                    </span>
+                                </td>
+
+                            </tr>
+
+                            </tbody>
+                        </table>
+
+                    </div>
+
+                </div>
+            </details>
+
+            <!--
+                 Внесённые в заказ ячейки — для справки.
+                 Они со склада сняты и в свободном остатке не числятся,
+                 но кладовщику важно видеть, что уже оформлено.
+                 ===================================================== -->
+            <details class="collapsible"
+                     th:if="${view.attached != null and not #lists.isEmpty(view.attached)}">
+
+                <summary class="collapsible__summary">
+                    <span>Ячейки, внесённые в заказ</span>
+
+                    <span class="collapsible__counter"
+                          th:text="${#lists.size(view.attached)} + ' шт.'">
+                        3 шт.
+                    </span>
+                </summary>
+
+                <div class="collapsible__body">
+
+                    <p class="field-hint"
+                       style="margin-bottom: 12px;">
+                        Ячейки, уже оформленные в этот заказ.
+                        Они со склада сняты и принять повторно нельзя.
+                    </p>
+
+                    <div class="table-wrap">
+
+                        <table class="data-table warehouse-batch-table">
+
+                            <thead>
+
+                            <tr>
+                                <th>№</th>
+                                <th>Номер ячейки</th>
+                                <th>Наименование</th>
+                                <th>Статус</th>
+                            </tr>
+
+                            </thead>
+
+                            <tbody>
+
+                            <tr th:each="cell, iteration : ${view.attached}"
+                                th:classappend="' is-done'">
+
+                                <td class="warehouse-number-cell"
+                                    th:text="${iteration.count}">
+                                    1
+                                </td>
+
+                                <td class="warehouse-number-cell">
+                                    <span class="mono"
+                                          th:text="${cell.fullNumber()}">
+                                        121200022
+                                    </span>
+                                </td>
+
+                                <td th:text="${cell.displayName()}">
+                                    Подсборка ЯПР56
+                                </td>
+
+                                <td>
+                                    <span class="status status--ok">
+                                        внесена в заказ
                                     </span>
                                 </td>
 

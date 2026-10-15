@@ -48,6 +48,17 @@ import java.util.List;
 @RequiredArgsConstructor
 public class MyOperationsController {
 
+    /*
+     * Значение параметра режима, включающее половину групповых ЗНП.
+     *
+     * Имя совпадает с именем кнопки в переключателе распределения, чтобы
+     * два раздела одного руководителя читались одинаково.
+     */
+    private static final String GROUP_MODE = "group";
+
+    /** Режим обычной половины — значение по умолчанию и для пустого параметра. */
+    private static final String REGULAR_MODE = "regular";
+
     private final WorkshopDistributionService distributionService;
     private final WorkshopStaffService staffService;
     private final UserRepository userRepository;
@@ -81,15 +92,47 @@ public class MyOperationsController {
 
     /**
      * Список работ текущего пользователя.
+     *
+     * Режим задаётся адресом, а не сессией: {@code ?mode=group} отдаёт
+     * половину групповых ЗНП, пустой параметр — обычную. Работы обеих
+     * половин закреплены за одним человеком и проводятся одной кнопкой,
+     * но подписываются разными номерами: у обычного ЗНП это серийник
+     * выпуска, у группового — номер ячейки, внесённый складом. Держать
+     * их в одной таблице нельзя — колонка номера врёт либо там, либо
+     * там, — поэтому вверху стоит переключатель, а адрес каждого режима
+     * остаётся закладкой.
      */
     @GetMapping({"", "/"})
-    public String index(Authentication authentication, Model model) {
+    public String index(
+            @RequestParam(name = "mode", required = false) String mode,
+            Authentication authentication,
+            Model model
+    ) {
         AppUser user = currentUser(authentication);
+        boolean groupMode = GROUP_MODE.equalsIgnoreCase(safeMode(mode));
 
+        model.addAttribute("groupMode", groupMode);
+        /*
+         * Режим для переключателя отдельным атрибутом: фрагмент ждёт
+         * готовую строку 'regular' / 'group', и выбирать её в шаблоне
+         * тернарником значило бы держать условие режима в двух местах.
+         */
+        model.addAttribute(
+                "operationMode",
+                groupMode ? GROUP_MODE : REGULAR_MODE
+        );
         model.addAttribute(
                 "operations",
-                distributionService.findMyOperations(user)
+                groupMode
+                        ? distributionService.findMyGroupOperations(user)
+                        : distributionService.findMyOperations(user)
         );
+
+        /*
+         * Цифры обеих кнопок готовит ModuleMenuCountersViewAdvice: тот же
+         * расчёт держит пункт меню, и две цифры из одного запроса не
+         * расходятся — переключатель и меню всегда показывают один итог.
+         */
 
         /*
          * Ремонтные ЗНП в работе, сгруппированные по комплектовочной
@@ -464,6 +507,11 @@ public class MyOperationsController {
         } catch (IllegalArgumentException ignored) {
             return null;
         }
+    }
+
+    /** Режим из параметра; пустое или неизвестное значение — обычная половина. */
+    private static String safeMode(String mode) {
+        return mode == null ? "" : mode.trim();
     }
 
     /**

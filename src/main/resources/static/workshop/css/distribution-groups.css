@@ -37,23 +37,21 @@
    Доли колонок по умолчанию
    ------------------------------------------------------------ */
 
-/* Очередь распределения, 4 колонки: изделие — хозяйка строки, поэтому
-   серийник и наименование занимают большую часть ширины, а сведения об
-   операции (дата, трудоёмкость) ушли в панель раскрытия.
-   Сумма: 16 + 44 + 20 + 20 = 100 % */
-.distribution-group-table col.col-serial { width: 16%; }
-.distribution-group-table col.col-name   { width: 44%; }
-.distribution-group-table col.col-order  { width: 20%; }
-.distribution-group-table col.col-toggle { width: 20%; }
+/* Очередь распределения, 3 колонки: строка называет операцию и её
+   объём, а всё остальное (серийники, наименование, заказ, дата, часы)
+   мастер читает в блоках изделий под строкой — там, где принимает
+   решение. Поэтому ширину забирает наименование операции.
+   Сумма: 62 + 16 + 22 = 100 % */
+.distribution-group-table col.col-op     { width: 62%; }
+.distribution-group-table col.col-count  { width: 16%; }
+.distribution-group-table col.col-toggle { width: 22%; }
 
-/* Уже распределённые, те же 4 колонки: строка читается как строка
-   очереди, различается только четвёртая колонка — закреплённый
-   исполнитель вместо приглашения распределить.
-   Сумма: 16 + 42 + 18 + 24 = 100 % */
-.distribution-group-table--assigned col.col-serial { width: 16%; }
-.distribution-group-table--assigned col.col-name   { width: 42%; }
-.distribution-group-table--assigned col.col-order  { width: 18%; }
-.distribution-group-table--assigned col.col-toggle { width: 24%; }
+/* Уже распределённые, те же 3 колонки: последняя шире — под бейджем
+   закреплённого исполнителя.
+   Сумма: 50 + 16 + 34 = 100 % */
+.distribution-group-table--assigned col.col-op     { width: 50%; }
+.distribution-group-table--assigned col.col-count  { width: 16%; }
+.distribution-group-table--assigned col.col-toggle { width: 34%; }
 
 .distribution-group-table th,
 .distribution-group-table td {
@@ -348,6 +346,77 @@
     border-top: 1px dashed rgba(18, 58, 46, 0.18);
 }
 
+/*
+ * Блоки датчиков в раскрытой панели строки.
+ *
+ * Строка таблицы называет только операцию, а решение о человеке мастер
+ * принимает над конкретным датчиком: блок = один датчик, и блоков ровно
+ * столько, сколько датчиков в операции. Блок занимает всю ширину панели и
+ * идёт другим под первым — набор сотрудников и подпись датчика читаются
+ * на полную ширину, и мастер идёт по списку сверху вниз, не разрывая
+ * взгляд между колонками.
+ */
+.group-panel__items {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.item-card {
+    padding: 12px 14px;
+    background: #ffffff;
+    border: 1px solid rgba(18, 58, 46, 0.14);
+    border-radius: 10px;
+    min-width: 0;
+}
+
+.item-card.is-assigned {
+    border-color: rgba(31, 122, 90, 0.35);
+    background: #f4fbf7;
+}
+
+.item-card__head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin-bottom: 10px;
+}
+
+.item-card__title {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+}
+
+.item-card__serial {
+    font-size: 13px;
+    font-weight: 700;
+    color: #17322a;
+    font-variant-numeric: tabular-nums;
+    overflow-wrap: anywhere;
+}
+
+.item-card__name {
+    font-size: 12px;
+    color: #5b6f66;
+    line-height: 1.35;
+    overflow-wrap: anywhere;
+}
+
+.item-card__meta {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    font-size: 12px;
+    color: #5b6f66;
+    white-space: nowrap;
+}
+
+
 .group-panel__instances > strong {
     display: block;
     font-size: 12px;
@@ -371,24 +440,17 @@
         padding: 8px 8px;
     }
 
-    /* Очередь, 6 колонок (op, serial, date, order, hours, toggle).
-       Сумма: 30 + 11 + 11 + 13 + 10 + 25 = 100 % */
-    .distribution-group-table col.col-op     { width: 30%; }
-    .distribution-group-table col.col-serial { width: 11%; }
-    .distribution-group-table col.col-date   { width: 11%; }
-    .distribution-group-table col.col-order  { width: 13%; }
-    .distribution-group-table col.col-hours  { width: 10%; }
-    .distribution-group-table col.col-toggle { width: 25%; }
+    /* Очередь, 3 колонки (op, count, toggle).
+       Сумма: 60 + 16 + 24 = 100 % */
+    .distribution-group-table col.col-op     { width: 60%; }
+    .distribution-group-table col.col-count  { width: 16%; }
+    .distribution-group-table col.col-toggle { width: 24%; }
 
-    /* Распределённые, 7 колонок (op, serial, date, order, hours,
-       executor, action). Сумма: 24 + 11 + 10 + 12 + 10 + 20 + 13 = 100 % */
-    .distribution-group-table--assigned col.col-op       { width: 24%; }
-    .distribution-group-table--assigned col.col-serial   { width: 11%; }
-    .distribution-group-table--assigned col.col-date     { width: 10%; }
-    .distribution-group-table--assigned col.col-order    { width: 12%; }
-    .distribution-group-table--assigned col.col-hours    { width: 10%; }
-    .distribution-group-table--assigned col.col-executor { width: 20%; }
-    .distribution-group-table--assigned col.col-action   { width: 13%; }
+    /* Распределённые, те же 3 колонки: последняя шире — под бейджем
+       исполнителя. Сумма: 48 + 16 + 36 = 100 % */
+    .distribution-group-table--assigned col.col-op     { width: 48%; }
+    .distribution-group-table--assigned col.col-count  { width: 16%; }
+    .distribution-group-table--assigned col.col-toggle { width: 36%; }
 
     /* Мои операции, 7 колонок (op, serial, date, order, count, hours,
        toggle). Сумма: 24 + 11 + 10 + 11 + 9 + 9 + 26 = 100 % */
@@ -416,23 +478,17 @@
         padding: 7px 6px;
     }
 
-    /* Мобильный: заказ и часы «съедаемы», ширину отдаём операции.
-       Очередь, 6 колонок. Сумма: 35 + 11 + 11 + 11 + 10 + 22 = 100 % */
-    .distribution-group-table col.col-op     { width: 35%; }
-    .distribution-group-table col.col-serial { width: 11%; }
-    .distribution-group-table col.col-date   { width: 11%; }
-    .distribution-group-table col.col-order  { width: 11%; }
-    .distribution-group-table col.col-hours  { width: 10%; }
-    .distribution-group-table col.col-toggle { width: 22%; }
+    /* Мобильный: объём группы «съедаем», ширину отдаём операции.
+       Очередь, 3 колонки. Сумма: 58 + 16 + 26 = 100 % */
+    .distribution-group-table col.col-op     { width: 58%; }
+    .distribution-group-table col.col-count  { width: 16%; }
+    .distribution-group-table col.col-toggle { width: 26%; }
 
-    /* Распределённые, 7 колонок. Сумма: 24 + 11 + 10 + 11 + 10 + 20 + 14 = 100 % */
-    .distribution-group-table--assigned col.col-op       { width: 24%; }
-    .distribution-group-table--assigned col.col-serial   { width: 11%; }
-    .distribution-group-table--assigned col.col-date     { width: 10%; }
-    .distribution-group-table--assigned col.col-order    { width: 11%; }
-    .distribution-group-table--assigned col.col-hours    { width: 10%; }
-    .distribution-group-table--assigned col.col-executor { width: 20%; }
-    .distribution-group-table--assigned col.col-action   { width: 14%; }
+    /* Распределённые, те же 3 колонки с широкой последней под бейджем
+       исполнителя. Сумма: 44 + 16 + 40 = 100 % */
+    .distribution-group-table--assigned col.col-op     { width: 44%; }
+    .distribution-group-table--assigned col.col-count  { width: 16%; }
+    .distribution-group-table--assigned col.col-toggle { width: 40%; }
 
     /* Мои операции, 7 колонок. Сумма: 26 + 11 + 10 + 10 + 8 + 9 + 26 = 100 % */
     .distribution-group-table--mine col.col-op     { width: 26%; }

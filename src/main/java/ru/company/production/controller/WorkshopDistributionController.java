@@ -9,7 +9,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.servlet.mvc.support.RedirectAttributes;
-import ru.company.production.dto.ProductOperationsView;
+import ru.company.production.dto.OperationDistributionView;
 import ru.company.production.entity.AppUser;
 import ru.company.production.repository.UserRepository;
 import ru.company.production.service.WorkshopDistributionService;
@@ -77,21 +77,17 @@ public class WorkshopDistributionController {
     }
 
     /**
-     * Закрепление операции изделия за исполнителем.
+     * Закрепление одного датчика за исполнителем.
      *
-     * Форма отдаёт пару «операция + дата плана» плюс основание строки:
-     * заказ покупателя с позицией либо заказ на производство (V56).
-     * Мастер закрепляет работу над конкретным изделием, а не над всей
-     * группой дней, поэтому операции смежных изделий остаются чужими
-     * решениями мастера.
+     * Форма отдаёт идентификатор строки графика: блок раскрытия — один
+     * экземпляр одной операции, и мастер закрепляет ровно тот датчик,
+     * номер которого видит. Соседние датчики той же операции остаются
+     * чужими решениями мастера, поэтому пара «операция + дата» здесь
+     * была бы слишком широкой границей.
      */
     @PostMapping("/assign")
     public String assign(
-            @RequestParam Long operationId,
-            @RequestParam LocalDate plannedDate,
-            @RequestParam(required = false) Long orderId,
-            @RequestParam(required = false) Integer itemPosition,
-            @RequestParam(required = false) Long productionOrderId,
+            @RequestParam Long rowId,
             @RequestParam Long executorId,
             @RequestParam(name = "weeks", required = false) Integer weeks,
             Authentication authentication,
@@ -100,24 +96,20 @@ public class WorkshopDistributionController {
         int horizon = WorkshopDistributionService.normalizeWeeks(weeks);
 
         try {
-            distributionService.assignProductOperation(
-                    operationId,
-                    plannedDate,
-                    orderId,
-                    itemPosition,
-                    productionOrderId,
+            distributionService.assignRow(
+                    rowId,
                     executorId,
                     currentUser(authentication)
             );
 
             redirectAttributes.addFlashAttribute(
                     "successMessage",
-                    "Операция изделия назначена исполнителю"
+                    "Датчик назначен исполнителю"
             );
         } catch (RuntimeException exception) {
             redirectAttributes.addFlashAttribute(
                     "errorMessage",
-                    message(exception, "Не удалось назначить операцию изделия")
+                    message(exception, "Не удалось назначить датчик")
             );
         }
 
@@ -125,16 +117,12 @@ public class WorkshopDistributionController {
     }
 
     /**
-     * Снятие назначения с операции изделия: её экземпляры возвращаются
-     * в очередь распределения, другие изделия не затрагиваются.
+     * Снятие назначения с одного датчика: он возвращается в очередь,
+     * остальные датчики операции остаются за своими исполнителями.
      */
     @PostMapping("/unassign")
     public String unassign(
-            @RequestParam Long operationId,
-            @RequestParam LocalDate plannedDate,
-            @RequestParam(required = false) Long orderId,
-            @RequestParam(required = false) Integer itemPosition,
-            @RequestParam(required = false) Long productionOrderId,
+            @RequestParam Long rowId,
             @RequestParam(name = "weeks", required = false) Integer weeks,
             Authentication authentication,
             RedirectAttributes redirectAttributes
@@ -142,18 +130,14 @@ public class WorkshopDistributionController {
         int horizon = WorkshopDistributionService.normalizeWeeks(weeks);
 
         try {
-            distributionService.unassignProductOperation(
-                    operationId,
-                    plannedDate,
-                    orderId,
-                    itemPosition,
-                    productionOrderId,
+            distributionService.unassignRow(
+                    rowId,
                     currentUser(authentication)
             );
 
             redirectAttributes.addFlashAttribute(
                     "successMessage",
-                    "Назначение снято, операция вернулась в очередь"
+                    "Назначение снято, датчик вернулся в очередь"
             );
         } catch (RuntimeException exception) {
             redirectAttributes.addFlashAttribute(
@@ -179,15 +163,17 @@ public class WorkshopDistributionController {
          */
         var scope = staffService.unitScope(supervisor);
 
-        List<ProductOperationsView> operations =
-                distributionService.findProductOperations(
+        List<OperationDistributionView> operations =
+                distributionService.findDistributionOperations(
                         scope, supervisor, weeks
                 );
 
         model.addAttribute("operations", operations);
         model.addAttribute(
                 "assignedOperations",
-                distributionService.findAssignedProductOperations(scope, weeks)
+                distributionService.findAssignedDistributionOperations(
+                        scope, weeks
+                )
         );
 
         /*

@@ -58,16 +58,37 @@ public class OrderScheduleRow {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @ManyToOne(
-            fetch = FetchType.LAZY,
-            optional = false
-    )
+    /*
+     * Основание строки — заказ покупателя (V43).
+     *
+     * nullable = false снят миграцией V56: строка графика теперь
+     * планирует работу одного из двух оснований, и для группового
+     * заказа-комплектующего этого заказа нет вовсе. Обязательность
+     * «ровно одного из двух» держит chk_osr_base_exactly_one в базе,
+     * поэтому в сущности связь объявлена просто lazy, без optional.
+     */
+    @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(
             name = "order_id",
-            nullable = false,
             foreignKey = @ForeignKey(name = "fk_osr_customer_order")
     )
     private CustomerOrder customerOrder;
+
+    /*
+     * Основание строки — заказ на производство (V56).
+     *
+     * Нужен групповым заказам-комплектующим (V38): у них нет заказа
+     * покупателя, но есть свой техпроцесс (V40) и своё количество, и
+     * без строк плана операции их маршрута нигде не живут — цех не
+     * видит «Монтаж подсборок» в распределении, и следующая после
+     * комплектования операция не появляется.
+     */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(
+            name = "production_order_id",
+            foreignKey = @ForeignKey(name = "fk_osr_production_order")
+    )
+    private ProductionOrder productionOrder;
 
     /** Номер позиции заказа (customer_order_items.position). */
     @Column(
@@ -203,6 +224,39 @@ public class OrderScheduleRow {
         return plannedDate == null
                 ? "—"
                 : plannedDate.format(DATE_FORMATTER);
+    }
+
+    /**
+     * Строка планирует работу заказа на производство, а не позиции
+     * заказа покупателя (V56).
+     *
+     * Признак читается из связи, а не из пустоты instanceIndex: у
+     * строк ЗНП позиция остаётся нулевой, и проверка позиции
+     * перепутала бы одну ячейку группового заказа с первым экземпляром
+     * позиции плана.
+     */
+    @Transient
+    public boolean isProductionOrderBased() {
+        return productionOrder != null;
+    }
+
+    /*
+     * Номер основания строки — то, по которому работу ищут в реестре.
+     *
+     * Для плана заказа покупателя это его номер, для строки ЗНП —
+     * номер заказа на производство: у группового ЗНП своего заказа
+     * покупателя нет, и прочерк в этой колонке оставил бы кладовщика и
+     * мастера без ответа «ради чего эта работа».
+     */
+    @Transient
+    public String getBaseNumber() {
+        if (productionOrder != null) {
+            return productionOrder.getNumber();
+        }
+
+        return customerOrder == null
+                ? "—"
+                : customerOrder.getNumber();
     }
 
     @PrePersist

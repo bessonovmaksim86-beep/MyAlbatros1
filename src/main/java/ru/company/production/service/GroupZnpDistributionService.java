@@ -119,7 +119,10 @@ public class GroupZnpDistributionService {
         LocalDate to = from.plusDays(7L * normalizeWeeks(weeks));
 
         List<ProductionOrder> orders = groupZnpRepo.findGroupZnpOfUnits(
-                GROUP_KINDS, ScheduleRowStatus.CONFIRMED, scope, from, to
+                GROUP_KINDS, ScheduleRowStatus.CONFIRMED, scope,
+                WorkshopDistributionService.NON_DISTRIBUTION_TYPE_CODES,
+                WorkshopDistributionService.SUPERVISOR_EXECUTOR_ROLE_CODES,
+                from, to
         );
 
         if (orders.isEmpty()) {
@@ -148,7 +151,9 @@ public class GroupZnpDistributionService {
          */
         List<OrderScheduleRow> planRows =
                 groupZnpRepo.findPlanRowsOfGroupZnp(
-                        orderIds, ScheduleRowStatus.CONFIRMED, scope
+                        orderIds, ScheduleRowStatus.CONFIRMED, scope,
+                        WorkshopDistributionService.NON_DISTRIBUTION_TYPE_CODES,
+                        WorkshopDistributionService.SUPERVISOR_EXECUTOR_ROLE_CODES
                 );
 
         /*
@@ -297,6 +302,8 @@ public class GroupZnpDistributionService {
                 ScheduleRowStatus.CONFIRMED,
                 scope,
                 ZnpKind.groupKinds(),
+                WorkshopDistributionService.NON_DISTRIBUTION_TYPE_CODES,
+                WorkshopDistributionService.SUPERVISOR_EXECUTOR_ROLE_CODES,
                 from,
                 to
         );
@@ -758,6 +765,19 @@ public class GroupZnpDistributionService {
         }
 
         requireOwnUnit(row, unitIds);
+
+        /*
+         * Личные работы руководителя из этого раздела убраны и на
+         * выборке, и здесь: получение комплектации и операции с
+         * руководящей ролью исполнителя закрепляются планом за
+         * подразделением, и переложить их на подчинённого нельзя. Форма
+         * всё равно могла бы прислать их идентификатор.
+         */
+        if (WorkshopDistributionService.isNonDistributableOperation(row)) {
+            throw new IllegalArgumentException(
+                    "Личная работа руководителя не распределяется"
+            );
+        }
     }
 
     /**

@@ -13,6 +13,8 @@ import ru.company.production.entity.Operation;
 import ru.company.production.entity.OrderPriority;
 import ru.company.production.entity.OrderScheduleRow;
 import ru.company.production.entity.OrganizationUnit;
+import ru.company.production.entity.ProductClassifier;
+import ru.company.production.entity.ProductionOrder;
 import ru.company.production.entity.ScheduleRowStatus;
 import ru.company.production.entity.TechProcess;
 import ru.company.production.entity.TechProcessClassifier;
@@ -22,6 +24,7 @@ import ru.company.production.repository.CustomerOrderRepository;
 import ru.company.production.repository.EmployeeAbsenceRepository;
 import ru.company.production.repository.HolidayDayRepository;
 import ru.company.production.repository.OrderScheduleRowRepository;
+import ru.company.production.repository.ProductionOrderRepository;
 import ru.company.production.repository.TechProcessClassifierRepository;
 import ru.company.production.repository.TechProcessRepository;
 import ru.company.production.repository.WorkshopStaffBindingRepository;
@@ -96,13 +99,14 @@ public class OrderSchedulingService {
     private static final int MAX_SHIFT_DAYS = 400;
 
     private final CustomerOrderRepository customerOrderRepository;
+    private final ProductionOrderRepository productionOrderRepository;
     private final TechProcessClassifierRepository techProcessClassifierRepository;
     private final TechProcessRepository techProcessRepository;
     private final OrderScheduleRowRepository scheduleRowRepository;
     private final WorkshopStaffBindingRepository staffBindingRepository;
     private final EmployeeAbsenceRepository employeeAbsenceRepository;
     private final HolidayDayRepository holidayDayRepository;
-    private final ProductionOrderService productionOrderService;
+    private final OrderPriorityService orderPriorityService;
 
     /**
      * Предварительный график заказа без записи в базу.
@@ -148,6 +152,298 @@ public class OrderSchedulingService {
         }
 
         return result;
+    }
+
+    /**
+     * Расчёт и запись графика работ заказа на производство (V56).
+     *
+     * Нужен групповым заказам-комплектующим: у них нет заказа покупателя,
+     * поэтому план им не заводился вовсе, а цех читает именно план — без
+     * строк «Монтаж подсборок» не появляется ни в распределении, ни в
+     * «Мои операции», и следующая после комплектования операция остаётся
+     * невидимой даже после того, как склад внёс все ячейки.
+     *
+     * Правила те же, что у плана заказа покупателя (запуск, переходы,
+     * загрузка этапа), только основание другое: маршрут берётся из
+     * техпроцесса самого заказа, а экземплярами служат заказанные изделия.
+     */
+    @Transactional
+    public ScheduleResult confirmProductionOrder(Long productionOrderId) {
+        ProductionOrder order = productionOrderRepository
+                .findDetailedById(productionOrderId)
+                .orElseThrow(() -> new EntityNotFoundException(
+                        "Заказ на производство не найден: " + productionOrderId
+                ));
+
+        List<PlannedRow> planned = plannedRowsOf(order);
+
+        scheduleRowRepository.deleteByProductionOrderIdAndStatus(
+                productionOrderId,
+                ScheduleRowStatus.DRAFT
+        );
+        scheduleRowRepository.deleteByProductionOrderIdAndStatus(
+                productionOrderId,
+                ScheduleRowStatus.CONFIRMED
+        );
+
+        for (PlannedRow row : planned) {
+            scheduleRowRepository.save(row.toEntity(order));
+        }
+
+        return resultOf(order, planned);
+    }
+
+    /**
+     * Сколько строк графика заведено бы было для заказа сейчас.
+     *
+     * Нужен вызывающему коду, чтобы не пересобирать существующий план
+     * заказа, взятого в работу повторно.
+     */
+    @Transactional(readOnly = true)
+    public int plannedRowCount(ProductionOrder order) {
+        return plannedRowsOf(order).size();
+    }
+
+    /**
+     * Построение строк расчёта по техпроцессу заказа на производство.
+     *
+     * Отличий от плана заказа покупателя ровно два, и оба следуют из
+     * того, что у группового заказа нет позиций:
+     *
+     *   • маршрут берётся из техпроцесса самого заказа (V40), а не из
+     *     базового техпроцесса изделия позиции;
+     *   • экземплярами служат заказанные изделия: партия из пяти ячеек
+     *     даёт пять экземпляров, и загрузка этапа не оказывается заниженной
+     *     в пять раз — ровно та же причина, по которой экземпляр нужен
+     *     в плане заказа покупателя.
+     *
+     * Позиция у таких строк остаётся нулевой: позиций у заказа нет, а
+     * различает экземпляры instanceIndex, который для ветви ЗНП входит в
+     * уникальный индекс uk_osr_prod_order_instance_operation.
+     */
+    private List<PlannedRow> plannedRowsOf(ProductionOrder order) {
+        if (order.getTechProcess() == null) {
+            return List.of();
+        }
+
+        List<TechProcessOperation> route =
+                orderedRoute(order.getTechProcess().getId());
+
+        if (route.isEmpty()) {
+            return List.of();
+        }
+
+        OrderPriority priority = resolvePriority(order);
+        LocalDate today = LocalDate.now();
+        CalendarSnapshot calendar = loadCalendar(
+                today.minusMonths(1),
+                today.plusMonths(32)
+        );
+
+        LocalDate startDate = plusWorkingDays(
+                today,
+                nullToZero(priority.getStartDays()),
+                calendar
+        );
+        int maxLoadPercent = nullToZero(priority.getMaxLoadPercent());
+
+        Map<StageDay, BigDecimal> occupancy =
+                loadExistingOccupancyOfProductionOrder(
+                        order.getId(), startDate, calendar);
+
+        int instances = ProductionOrderService.instanceCount(order.getQuantity());
+        int transitions = nullToZero(priority.getTransitionDays());
+        List<PlannedRow> planned = new ArrayList<>();
+
+        for (int instance = 0; instance < instances; instance++) {
+            for (TechProcessOperation node : route) {
+                Operation base = node.getOperation();
+
+                if (base == null || base.getId() == null) {
+                    continue;
+                }
+
+                LocalDate earliest = startDate;
+
+                for (TechProcessOperation predecessor : node.getPredecessors()) {
+                    LocalDate predecessorEnd = finishOf(
+                            planned, instance, predecessor.getId());
+
+                    if (predecessorEnd == null) {
+                        continue;
+                    }
+
+                    LocalDate afterTransition = plusWorkingDays(
+                            predecessorEnd, transitions, calendar);
+
+                    if (afterTransition.isAfter(earliest)) {
+                        earliest = afterTransition;
+                    }
+                }
+
+                Placement placement = placeOperation(
+                        base.getId(),
+                        node,
+                        earliest,
+                        occupancy,
+                        maxLoadPercent,
+                        calendar
+                );
+
+                PlannedRow row = new PlannedRow(
+                        0,
+                        instance,
+                        node.getId(),
+                        order.getTechProcess(),
+                        base,
+                        base.getOrganizationUnit(),
+                        node.getPosition() == null ? 0 : node.getPosition(),
+                        placement.date,
+                        node.getLaborHours(),
+                        placement.loadPercent
+                );
+
+                planned.add(row);
+                occupancy.merge(
+                        new StageDay(base.getId(), placement.date),
+                        laborHours(node),
+                        BigDecimal::add
+                );
+            }
+        }
+
+        return planned;
+    }
+
+    /*
+     * Приоритет расчёта заказа на производство.
+     *
+     * Форма группового ЗНП приоритет не спрашивает, поэтому порядок
+     * берётся общий для всех: заказ идёт в общую очередь на правилах
+     * «обычного» приоритета, а не планируется «в никуда».
+     */
+    private OrderPriority resolvePriority(ProductionOrder order) {
+        OrderPriority priority = order.getPriority();
+
+        if (priority != null) {
+            return priority;
+        }
+
+        OrderPriority fallback = orderPriorityService.findDefault();
+
+        if (fallback == null) {
+            throw new IllegalStateException(
+                    "Заказу «" + order.getNumber() + "» не назначен приоритет, "
+                            + "а в справочнике нет действующего правила по умолчанию"
+            );
+        }
+
+        return fallback;
+    }
+
+    /* Дата окончания операции этого же экземпляра в текущем расчёте. */
+    private static LocalDate finishOf(
+            List<PlannedRow> planned,
+            int instance,
+            Long nodeId
+    ) {
+        for (PlannedRow row : planned) {
+            if (row.instanceIndex == instance
+                    && Objects.equals(row.nodeId, nodeId)) {
+                return row.plannedDate;
+            }
+        }
+
+        return null;
+    }
+
+    /*
+     * Занятость этапов для расчёта плана заказа на производство: свои
+     * строки исключены, чужие (и плана заказов покупателя, и прочих
+     * групповых заказов) остались.
+     */
+    private Map<StageDay, BigDecimal> loadExistingOccupancyOfProductionOrder(
+            Long productionOrderId,
+            LocalDate from,
+            CalendarSnapshot calendar
+    ) {
+        Map<StageDay, BigDecimal> occupancy = new HashMap<>();
+
+        for (OrderScheduleRow row :
+                scheduleRowRepository.findConfirmedExcludingProductionOrder(
+                        ScheduleRowStatus.CONFIRMED,
+                        from,
+                        calendar.windowTo(),
+                        productionOrderId)) {
+
+            occupancy.merge(
+                    new StageDay(row.getOperation().getId(),
+                            row.getPlannedDate()),
+                    row.getLaborHours(),
+                    BigDecimal::add
+            );
+        }
+
+        return occupancy;
+    }
+
+    /*
+     * Результат расчёта по заказу на производство — для сообщений
+     * вызывающему коду: табличного предпросмотра у этой ветви нет,
+     * план заводится сразу при взятии заказа в работу.
+     */
+    private ScheduleResult resultOf(
+            ProductionOrder order,
+            List<PlannedRow> planned
+    ) {
+        OrderPriority priority = resolvePriority(order);
+        LocalDate lastDate = null;
+
+        for (PlannedRow row : planned) {
+            if (lastDate == null || row.plannedDate.isAfter(lastDate)) {
+                lastDate = row.plannedDate;
+            }
+        }
+
+        List<ScheduleRowView> views = new ArrayList<>();
+        String itemName = itemLabelOf(order);
+
+        for (PlannedRow row : planned) {
+            views.add(row.toView(
+                    ProductionOrderService.instanceCount(order.getQuantity()),
+                    itemName,
+                    order.getTechProcess()
+            ));
+        }
+
+        return new ScheduleResult(
+                order.getNumber(),
+                priority.getName(),
+                planned.isEmpty() ? LocalDate.now() : planned.get(0).plannedDate,
+                order.getDueDate(),
+                null,
+                lastDate,
+                true,
+                planned.isEmpty()
+                        ? "Маршрут не построен: техпроцесс заказа пуст"
+                        : null,
+                planned,
+                views,
+                List.of()
+        );
+    }
+
+    /* Изделие заказа — подпись экземпляра в таблице предпросмотра. */
+    private static String itemLabelOf(ProductionOrder order) {
+        ProductClassifier classifier = order.getProductClassifier();
+
+        if (classifier == null) {
+            return "Изделие заказа";
+        }
+
+        String name = trimToNull(classifier.getDisplayName());
+
+        return name == null ? "Изделие заказа" : name;
     }
 
     /*
@@ -217,7 +513,7 @@ public class OrderSchedulingService {
         boolean feasible = true;
 
         for (CustomerOrderItem item : order.getItems()) {
-            int instances = productionOrderService.instanceCount(
+            int instances = ProductionOrderService.instanceCount(
                     item.getRemainingQuantity()
             );
 
@@ -908,6 +1204,31 @@ public class OrderSchedulingService {
             return row;
         }
 
+        /*
+         * Строка плана заказа на производство (V56).
+         *
+         * Основание другое — остальное те же колонки: цех различает
+         * ветви по связи, а не по набору полей, поэтому и распределение,
+         * и проведение работают с обеими одинаково.
+         */
+        OrderScheduleRow toEntity(ProductionOrder order) {
+            OrderScheduleRow row = new OrderScheduleRow();
+
+            row.setProductionOrder(order);
+            row.setItemPosition(itemPosition);
+            row.setInstanceIndex(instanceIndex);
+            row.setTechProcess(techProcess);
+            row.setOperation(operation);
+            row.setOrganizationUnit(organizationUnit);
+            row.setSeq(seq);
+            row.setPlannedDate(plannedDate);
+            row.setLaborHours(laborHours);
+            row.setLoadPercent(loadPercent);
+            row.setStatus(ScheduleRowStatus.CONFIRMED);
+
+            return row;
+        }
+
         ScheduleRowView toView(
                 int totalInstances,
                 CustomerOrderItem item,
@@ -918,6 +1239,41 @@ public class OrderSchedulingService {
                     : item.getProductClassifier().getCode();
 
             String itemName = itemLabel(item);
+
+            return new ScheduleRowView(
+                    itemPosition,
+                    instanceIndex,
+                    (instanceIndex + 1) + "/" + totalInstances,
+                    classifierCode,
+                    itemName,
+                    process.getCode(),
+                    seq,
+                    operation.getOperationName() == null
+                            ? "—"
+                            : operation.getOperationName().getCode(),
+                    operationName(operation),
+                    organizationUnit == null ? null : organizationUnit.getId(),
+                    organizationUnit == null
+                            ? "Подразделение не указано"
+                            : organizationUnit.getName(),
+                    laborHours,
+                    plannedDate,
+                    loadPercent,
+                    null
+            );
+        }
+
+        /*
+         * То же представление для строки плана заказа на производство:
+         * изделие берётся из заказа, а не из позиции, позиций у такого
+         * заказа нет.
+         */
+        ScheduleRowView toView(
+                int totalInstances,
+                String itemName,
+                TechProcess process
+        ) {
+            Integer classifierCode = null;
 
             return new ScheduleRowView(
                     itemPosition,

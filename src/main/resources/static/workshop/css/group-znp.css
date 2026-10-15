@@ -1,0 +1,465 @@
+/* ============================================================
+   РАЗДЕЛ «ГРУППОВЫЕ ЗНП» — РАСПРЕДЕЛЕНИЕ РАБОТ
+
+   Трёхуровневый разрез:
+     1. заказ — номер, изделие, количество, ТП;
+     2. ячейки заказа — серийный номер, операция, трудоёмкость,
+        исполнитель;
+     3. операции ячейки — перечень сотрудников для привязки.
+
+   Каркас (шапка таблицы, бейджи, кнопки, панель срока) приходит
+   из distribution-groups.css и workshop.css; здесь — размеры колонок,
+   отступы вложенных панелей и сетка чекбоксов пакетного назначения.
+   ============================================================ */
+
+/* ------------------------------------------------------------
+   Уровень 1: таблица групповых заказов
+   ------------------------------------------------------------ */
+
+.group-znp-table {
+    width: 100%;
+    table-layout: fixed;
+    border-collapse: collapse;
+    font-size: 13px;
+}
+
+.group-znp-table col.col-znp-number { width: 15%; }
+.group-znp-table col.col-znp-item   { width: 40%; }
+.group-znp-table col.col-znp-qty    { width: 10%; }
+.group-znp-table col.col-znp-tp     { width: 20%; }
+.group-znp-table col.col-znp-toggle { width: 15%; }
+
+.group-znp-table th,
+.group-znp-table td {
+    padding: 10px 12px;
+    text-align: left;
+    vertical-align: top;
+    word-break: break-word;
+}
+
+.group-znp-table th {
+    font-size: 11px;
+    letter-spacing: .04em;
+    text-transform: uppercase;
+    color: #6b7c74;
+    border-bottom: 2px solid #dfe7e3;
+}
+
+.group-znp-row {
+    cursor: pointer;
+    border-bottom: 1px solid #edf1ef;
+}
+
+.group-znp-row:hover {
+    background: #f4f8f6;
+}
+
+.group-znp-row .cell-znp-number {
+    font-weight: 600;
+    color: #1f3d33;
+}
+
+.group-znp-row .cell-znp-qty,
+.group-znp-row .cell-znp-tp {
+    color: #46564f;
+}
+
+.group-znp-row .cell-znp-tp:empty::before {
+    content: "—";
+    color: #98a8a1;
+}
+
+/* ------------------------------------------------------------
+   Уровень 2: привязанные ячейки заказа
+   ------------------------------------------------------------ */
+
+.group-znp-panel > td {
+    padding: 0;
+    background: #f7faf8;
+    border-bottom: 1px solid #dfe7e3;
+}
+
+.group-znp-panel-body {
+    padding: 12px 16px;
+}
+
+.group-znp-cells-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+}
+
+.group-znp-cells-table col.col-cell-serial { width: 20%; }
+.group-znp-cells-table col.col-cell-op     { width: 35%; }
+.group-znp-cells-table col.col-cell-hours  { width: 10%; }
+.group-znp-cells-table col.col-cell-executor { width: 25%; }
+.group-znp-cells-table col.col-cell-toggle { width: 10%; }
+
+.group-znp-cells-table th {
+    font-size: 11px;
+    letter-spacing: .04em;
+    text-transform: uppercase;
+    color: #6b7c74;
+    border-bottom: 2px solid #dfe7e3;
+    padding: 8px 10px;
+}
+
+.group-znp-cell-row {
+    cursor: pointer;
+    border-bottom: 1px solid #edf1ef;
+}
+
+.group-znp-cell-row:hover {
+    background: #f4f8f6;
+}
+
+.group-znp-cell-row .cell-znp-serial {
+    font-weight: 600;
+    color: #1f3d33;
+}
+
+.group-znp-cell-row .cell-znp-op {
+    color: #46564f;
+}
+
+.group-znp-cell-row.is-closed {
+    background: #f7faf8;
+    color: #98a8a1;
+}
+
+.group-znp-cell-row.is-closed .cell-znp-serial,
+.group-znp-cell-row.is-closed .cell-znp-op {
+    color: #6b7c74;
+    text-decoration: line-through;
+}
+
+/* ------------------------------------------------------------
+   Уровень 3: операции ячейки и сотрудники
+   ------------------------------------------------------------ */
+
+.group-znp-cell-panel-row > td {
+    padding: 0;
+    background: #f0f4f2;
+}
+
+.group-znp-cell-body {
+    padding: 12px 16px 16px 20px;
+    border-left: 3px solid #cfdad5;
+}
+
+.group-znp-cell-body__caption {
+    font-size: 11px;
+    letter-spacing: .05em;
+    text-transform: uppercase;
+    color: #6b7c74;
+    margin-bottom: 10px;
+    padding-bottom: 6px;
+    border-bottom: 1px solid #e2e9e6;
+}
+
+.group-znp-cell-body__caption strong {
+    font-size: 12px;
+    font-weight: 600;
+    color: #1f3d33;
+}
+
+/*
+   Операция ячейки: заголовок с метаданными и бейджем статуса,
+   под ним — форма назначения или предупреждение.
+*/
+.group-znp-op {
+    padding: 10px 0;
+    border-bottom: 1px dashed #e6ece9;
+}
+
+.group-znp-op:last-child {
+    border-bottom: none;
+    padding-bottom: 0;
+}
+
+.group-znp-op__head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 6px 18px;
+    margin-bottom: 8px;
+}
+
+.group-znp-op__title {
+    font-size: 13px;
+    font-weight: 600;
+    color: #1f3d33;
+    min-width: 180px;
+}
+
+.group-znp-op__meta {
+    font-size: 12px;
+    color: #6b7c74;
+}
+
+.group-znp-op__meta strong {
+    color: #33463e;
+    font-weight: 600;
+}
+
+.group-znp-op__badge {
+    margin-left: auto;
+}
+
+.group-znp-op.is-done .group-znp-op__title {
+    color: #6b7c74;
+    text-decoration: line-through;
+}
+
+/* ------------------------------------------------------------
+   Статусы и бейджи
+   ------------------------------------------------------------ */
+
+.group-znp-status {
+    display: inline-block;
+    padding: 3px 9px;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: .02em;
+    white-space: nowrap;
+    margin-right: 6px;
+}
+
+.group-znp-status--todo {
+    background: #fdf0dd;
+    color: #a8620a;
+}
+
+.group-znp-status--part {
+    background: #fff6e0;
+    color: #9a7a12;
+}
+
+.group-znp-status--done {
+    background: #e3f5ec;
+    color: #1f8f5f;
+}
+
+.group-znp-status--empty {
+    background: #eef2f0;
+    color: #6b7c74;
+}
+
+.group-znp-composition {
+    display: block;
+    font-size: 11px;
+    color: #6b7c74;
+    margin-top: 2px;
+}
+
+.instance-toggle__badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: .02em;
+    white-space: nowrap;
+    background: #eef2f0;
+    color: #46564f;
+    margin-right: 8px;
+}
+
+/* ------------------------------------------------------------
+   Пакетное назначение по заказу
+   ------------------------------------------------------------ */
+
+.group-znp-order {
+    background: #f7faf8;
+    border: 1px solid #e2e9e6;
+    border-radius: 6px;
+    padding: 14px 16px;
+    margin-bottom: 12px;
+}
+
+.group-znp-order:last-child {
+    margin-bottom: 0;
+}
+
+.group-znp-order__head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 8px 12px;
+    margin-bottom: 12px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid #e2e9e6;
+}
+
+.group-znp-order__head strong {
+    font-size: 14px;
+    font-weight: 600;
+    color: #1f3d33;
+}
+
+.group-znp-order__item {
+    font-size: 12px;
+    color: #46564f;
+    flex: 1 1 auto;
+    overflow-wrap: anywhere;
+}
+
+/*
+   Блок операции в пакетном назначении: шапка (название, даты,
+   трудоёмкость) над чекбоксами ячеек и формой назначения.
+*/
+.group-znp-batch__op {
+    background: #fff;
+    border: 1px solid #e2e9e6;
+    border-left: 3px solid #cfdad5;
+    border-radius: 6px;
+    padding: 12px 14px;
+    margin-bottom: 10px;
+}
+
+.group-znp-batch__op:last-child {
+    margin-bottom: 0;
+}
+
+.group-znp-batch__head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 8px 18px;
+    margin-bottom: 10px;
+}
+
+.group-znp-batch__title {
+    font-size: 14px;
+    font-weight: 600;
+    color: #1f3d33;
+}
+
+.group-znp-batch__meta {
+    font-size: 12px;
+    color: #6b7c74;
+}
+
+.group-znp-batch__meta strong {
+    color: #33463e;
+    font-weight: 600;
+}
+
+.group-znp-batch__spacer {
+    flex: 1 1 auto;
+}
+
+/* ------------------------------------------------------------
+   Чекбоксы ячеек: «выделить все» + перечень
+   ------------------------------------------------------------ */
+
+.group-znp-checks {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+    gap: 6px 12px;
+    margin-bottom: 12px;
+}
+
+.group-znp-check {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    padding: 6px 8px;
+    border-radius: 5px;
+    font-size: 12px;
+    color: #33463e;
+}
+
+.group-znp-check:hover {
+    background: #f2f6f4;
+}
+
+.group-znp-check input[type="checkbox"] {
+    flex: 0 0 auto;
+    width: 15px;
+    height: 15px;
+    accent-color: var(--workshop-accent, #ef7d00);
+    cursor: pointer;
+}
+
+.group-znp-check__serial {
+    font-weight: 600;
+    color: #1f3d33;
+}
+
+.group-znp-check__name {
+    color: #6b7c74;
+    overflow-wrap: anywhere;
+}
+
+.group-znp-check__executor {
+    margin-left: auto;
+    font-size: 11px;
+    color: #1f8f5f;
+    white-space: nowrap;
+}
+
+.group-znp-check--all {
+    grid-column: 1 / -1;
+    border-bottom: 1px dashed #dfe7e3;
+    border-radius: 0;
+    padding-bottom: 8px;
+    font-weight: 600;
+    color: #1f3d33;
+}
+
+.group-znp-check--all:hover {
+    background: none;
+}
+
+/* ------------------------------------------------------------
+   Форма назначения: выделяет себя фоном и отступами.
+   ------------------------------------------------------------ */
+
+.group-assign-form {
+    background: #f7faf8;
+    border: 1px solid #e2e9e6;
+    border-left: 3px solid var(--workshop-accent, #ef7d00);
+    border-radius: 6px;
+    padding: 12px 14px;
+    margin-top: 10px;
+}
+
+/* ------------------------------------------------------------
+   Адаптив
+   ------------------------------------------------------------ */
+
+@media (max-width: 1180px) {
+    .group-znp-table col.col-znp-number { width: 17%; }
+    .group-znp-table col.col-znp-item   { width: 35%; }
+    .group-znp-table col.col-znp-qty    { width: 10%; }
+    .group-znp-table col.col-znp-tp     { width: 23%; }
+    .group-znp-table col.col-znp-toggle { width: 15%; }
+
+    .group-znp-checks {
+        grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    }
+}
+
+@media (max-width: 820px) {
+    .group-znp-op__head,
+    .group-znp-batch__head {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 4px;
+    }
+
+    .group-znp-op__badge,
+    .group-znp-batch__spacer {
+        margin-left: 0;
+    }
+
+    .group-znp-checks {
+        grid-template-columns: 1fr;
+    }
+
+    .group-znp-cell-body {
+        padding-left: 14px;
+    }
+}

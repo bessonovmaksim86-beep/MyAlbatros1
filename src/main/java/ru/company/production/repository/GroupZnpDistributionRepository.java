@@ -76,6 +76,10 @@ public interface GroupZnpDistributionRepository
                       and base.active = true
                       and row.status = :status
                       and row.organizationUnit.id in :unitIds
+                      and row.operation.operationType.code
+                              not in :excludedTypeCodes
+                      and row.operation.executorRole.code
+                              not in :supervisorRoleCodes
                       and row.plannedDate between :from and :to
               )
             order by ord.orderDate asc, ord.number asc
@@ -84,6 +88,8 @@ public interface GroupZnpDistributionRepository
             @Param("groupKinds") Collection<ZnpKind> groupKinds,
             @Param("status") ScheduleRowStatus status,
             @Param("unitIds") Collection<Long> unitIds,
+            @Param("excludedTypeCodes") Collection<String> excludedTypeCodes,
+            @Param("supervisorRoleCodes") Collection<String> supervisorRoleCodes,
             @Param("from") LocalDate from,
             @Param("to") LocalDate to
     );
@@ -102,6 +108,10 @@ public interface GroupZnpDistributionRepository
                       and base.active = true
                       and row.status = :status
                       and row.organizationUnit.id in :unitIds
+                      and row.operation.operationType.code
+                              not in :excludedTypeCodes
+                      and row.operation.executorRole.code
+                              not in :supervisorRoleCodes
                       and row.plannedDate between :from and :to
               )
             """)
@@ -109,6 +119,8 @@ public interface GroupZnpDistributionRepository
             @Param("groupKinds") Collection<ZnpKind> groupKinds,
             @Param("status") ScheduleRowStatus status,
             @Param("unitIds") Collection<Long> unitIds,
+            @Param("excludedTypeCodes") Collection<String> excludedTypeCodes,
+            @Param("supervisorRoleCodes") Collection<String> supervisorRoleCodes,
             @Param("from") LocalDate from,
             @Param("to") LocalDate to
     );
@@ -124,24 +136,37 @@ public interface GroupZnpDistributionRepository
      * Подразделение фильтруется: мастер распределяет свою работу, а не
      * весь маршрут заказа. Чужие операции в раскрытии были бы
      * приглашением назначить то, до чего у него нет права.
+     *
+     * Руководящие работы из раскрытия убраны тем же правилом, что и из
+     * перечня заказов: получение комплектации и операции с руководящей
+     * ролью исполнителя не перекладываются на людей, они живут в «Мои
+     * операции». Оставить их здесь значило бы показать кнопку там, где
+     * она заведомо откажет.
+     *
+     * Развязаны lazy-связи {@code join fetch}, а не {@code EntityGraph}:
+     * доменный тип этого репозитория — заказ, а строку плана возвращает
+     * именно этот метод, и JPA-граф строился бы от {@code ProductionOrder},
+     * где атрибута {@code executor} нет (ошибка на старте запроса).
+     * Все связи — many-to-one, поэтому fetch join не размножает строки
+     * и {@code distinct} не нужен.
      */
-    @EntityGraph(attributePaths = {
-            "operation",
-            "operation.operationName",
-            "operation.operationType",
-            "productionOrder",
-            "techProcess",
-            "executor"
-    })
     @Query("""
             select row
             from OrderScheduleRow row
+            left join fetch row.operation operation
+            left join fetch operation.operationName operationName
+            left join fetch operation.operationType operationType
+            left join fetch row.productionOrder productionOrder
+            left join fetch row.techProcess techProcess
+            left join fetch row.executor executor
             where row.productionOrder.id in :orderIds
               and row.status = :status
               and row.organizationUnit.id in :unitIds
-              and exists (select 1 from ProductionOrder po
-                          where po.id = row.productionOrder.id
-                            and po.active = true)
+              and productionOrder.active = true
+              and operation.operationType.code
+                      not in :excludedTypeCodes
+              and operation.executorRole.code
+                      not in :supervisorRoleCodes
             order by row.productionOrder.id asc,
                      row.instanceIndex asc,
                      row.seq asc,
@@ -150,7 +175,9 @@ public interface GroupZnpDistributionRepository
     List<OrderScheduleRow> findPlanRowsOfGroupZnp(
             @Param("orderIds") Collection<Long> orderIds,
             @Param("status") ScheduleRowStatus status,
-            @Param("unitIds") Collection<Long> unitIds
+            @Param("unitIds") Collection<Long> unitIds,
+            @Param("excludedTypeCodes") Collection<String> excludedTypeCodes,
+            @Param("supervisorRoleCodes") Collection<String> supervisorRoleCodes
     );
 
     /**

@@ -15,6 +15,9 @@ import java.util.List;
  * должен выполнить над этим изделием, с сотрудниками и назначением.
  *
  * @param customerOrderId  заказ покупателя, которому принадлежит изделие
+ * @param productionOrderId заказ на производство — основание строки, если
+ *                          изделие планирует он, а не позиция заказа
+ *                          покупателя (V56); для плана заказа пустой
  * @param itemPosition     позиция заказа
  * @param serialNumbers    серийные номера изделия без повторов
  * @param itemFullName     полное наименование изделия («как в КД»)
@@ -26,6 +29,7 @@ import java.util.List;
  */
 public record ProductOperationsView(
         Long customerOrderId,
+        Long productionOrderId,
         Integer itemPosition,
         List<String> serialNumbers,
         String itemFullName,

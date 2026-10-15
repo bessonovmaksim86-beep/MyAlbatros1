@@ -117,6 +117,47 @@ public interface SerialProductionOrderRepository
     );
 
     /**
+     * Внесённые ячейки набора заказов — номера для подписи работ.
+     *
+     * Нужен «Мои операции» в групповом режиме: там работу подписывает
+     * номер ячейки, внесённый складом, а не серийный номер выпуска,
+     * которого у группового ЗНП не бывает вовсе.
+     *
+     * Скалярная проекция, а не сущности связи: список исполнителя
+     * перечисляет много заказов, и fetch join ради двух колонок тянул бы
+     * за собой классификатор и справочник целиком.
+     *
+     * Порядок — заказ, момент внесения, номер: он же задаёт
+     * сопоставление ячейки экземпляру плана (i-я по внесению ячейка
+     * принадлежит экземпляру с номером i), поэтому менять его нельзя без
+     * правки того же правила в сервисах.
+     *
+     * Снятые с работы заказы исключены: отменённый заказ обязан вернуть
+     * ячейку на склад, иначе он держал бы номер занятым и подписывал бы
+     * работу чужим номером.
+     */
+    @Query("""
+            select
+                ord.id as orderId,
+                serialRow.id as serialId,
+                classifier.code as classifierCode,
+                serialRow.serial as serial,
+                classifier.name as classifierName,
+                sensor.name as sensorName
+            from SerialProductionOrder link
+            join link.productionOrder ord
+            join link.serial serialRow
+            join serialRow.productClassifier classifier
+            left join classifier.sensorCatalog sensor
+            where ord.id in :orderIds
+              and ord.active = true
+            order by ord.id asc, link.createdAt asc, serialRow.serial asc
+            """)
+    List<AttachedCellView> findAttachedCellsByOrderIds(
+            @Param("orderIds") Collection<Long> orderIds
+    );
+
+    /**
      * Датчики набора заказов — колонка «Серийник(и)» списка заказов.
      *
      * Это второй из двух источников колонки. У выпуска (ЗП) номера
