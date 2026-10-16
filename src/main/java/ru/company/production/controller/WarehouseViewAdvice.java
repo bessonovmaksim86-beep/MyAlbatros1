@@ -11,6 +11,7 @@ import ru.company.production.repository.UserRepository;
 import ru.company.production.service.BvkAcceptanceService;
 import ru.company.production.service.CellReceivingService;
 import ru.company.production.service.ModuleRoutes;
+import ru.company.production.service.QuarantineTransferService;
 import ru.company.production.service.SubassemblyKittingService;
 import ru.company.production.service.WarehouseKittingService;
 import ru.company.production.service.ZnpAcceptanceService;
@@ -32,6 +33,7 @@ import java.util.Locale;
         WarehouseReceivingController.class,
         WarehouseAcceptanceController.class,
         WarehouseZnpAcceptanceController.class,
+        WarehouseQuarantineController.class,
         WarehouseSupplierController.class,
         WarehouseKittingController.class,
         SubassemblyKittingController.class
@@ -43,6 +45,7 @@ public class WarehouseViewAdvice {
     private final CellReceivingService receivingService;
     private final BvkAcceptanceService acceptanceService;
     private final ZnpAcceptanceService znpAcceptanceService;
+    private final QuarantineTransferService quarantineTransferService;
     private final WarehouseKittingService kittingService;
     private final SubassemblyKittingService subassemblyKittingService;
 
@@ -72,6 +75,16 @@ public class WarehouseViewAdvice {
         model.addAttribute(
                 "znpCellAcceptanceCount",
                 znpAcceptanceService.countPending()
+        );
+
+        /*
+         * Ячейки, перемещённые из изолятора брака: их тоже ждёт
+         * приёмка, и счётчик держат рядом со счётчиками прочей приёмки,
+         * чтобы кладовщик видел объём, не заходя в раздел.
+         */
+        model.addAttribute(
+                "quarantineTransferCount",
+                quarantineTransferService.countPending()
         );
 
         /*

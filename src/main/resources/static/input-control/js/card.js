@@ -7,8 +7,8 @@
      * Всё, что здесь происходит, — отправка формы в том виде, в каком
      * её видит контролёр. Сервис сверяет номера с партией и требует
      * причину с решением для каждой группы брака, но отказ после
-     * длинной выборки читается плохо: подсветка чужих и повторяющихся
-     * номеров показывает проблему до отправки, а не после.
+     * длинной выборки читается плохо: подсветка чужих номеров и
+     * номеров вне выборки показывает проблему до отправки, а не после.
      *
      * Группы брака живут в #bvkDefectGroups. Их индексы в именах полей
      * (defectGroups[N].*) обязан держать Spring: список связывается по
@@ -184,11 +184,9 @@
     /**
      * Подсветка номеров партии.
      *
-     * «is-defect» — номер в любой группе, «is-conflict» — в двух и
-     * более: ячейка физически не может лежать в двух изоляторах, и
-     * показать это лучше до отправки.
+     * «is-defect» — номер в любой группе брака.
      */
-    function markList(sampleNumbers, defectNumbers, conflictNumbers) {
+    function markList(sampleNumbers, defectNumbers) {
         if (!BATCH_NUMBERS) {
             return;
         }
@@ -198,10 +196,6 @@
 
             item.classList.toggle('is-sampled', sampleNumbers.includes(number));
             item.classList.toggle('is-defect', defectNumbers.includes(number));
-            item.classList.toggle(
-                'is-conflict',
-                conflictNumbers.includes(number)
-            );
         });
     }
 
@@ -219,20 +213,12 @@
         renderTotals(numbers);
     }
 
-    /** Общий счётчик брака и пометка номеров, попавших в две группы. */
+    /** Общий счётчик брака по всем группам. */
     function renderTotals(sampleNumbers) {
         const all = [];
-        const conflicts = [];
-        const seen = new Set();
 
         groups().forEach((group) => {
             readNumbers(parts(group).text).forEach((number) => {
-                if (seen.has(number) && !conflicts.includes(number)) {
-                    conflicts.push(number);
-                }
-
-                seen.add(number);
-
                 if (!all.includes(number)) {
                     all.push(number);
                 }
@@ -245,39 +231,65 @@
 
         markList(
             sampleNumbers === undefined ? readNumbers(SAMPLE_TEXT) : sampleNumbers,
-            all,
-            conflicts
+            all
         );
+    }
+
+    /** Выбранное решение группы; {@code null}, если ни одно не отмечено. */
+    function decisionOf(group) {
+        const checked = group.querySelector(
+            'input[name="defectGroups['
+            + group.getAttribute('data-index')
+            + '].decision"]:checked'
+        );
+
+        return checked ? checked.value : null;
     }
 
     /**
      * Проверка одной группы: чужие номера, номера вне выборки и
-     * номера, уже занятые другой группой.
+     * номера, у которых в другой группе выбрано другое решение.
      *
      * Сервис отклоняет карточку целиком, поэтому перечисляют все
      * проблемы сразу — исправлять их по одной после каждого отказа
-     * контролёр будет слишком долго.
+     * контролёр будет слишком долго. Один номер может быть в разных
+     * группах с разными причинами брака, но решение у ячейки может
+     * быть только одно: её нельзя и вернуть поставщику, и оставить
+     * в изоляторе.
      */
     function renderGroup(group) {
         const field = parts(group);
         const numbers = readNumbers(field.text);
         const sampleNumbers = readNumbers(SAMPLE_TEXT);
+        const decision = decisionOf(group);
 
         const foreign = numbers.filter(
             (number) => !batchNumbers.includes(number)
         );
 
-        const occupied = new Set();
+        const conflicting = new Set();
 
-        groups().forEach((other) => {
-            if (other !== group) {
-                readNumbers(parts(other).text).forEach((number) => {
-                    occupied.add(number);
+        if (decision) {
+            groups().forEach((other) => {
+                if (other === group) {
+                    return;
+                }
+
+                const otherDecision = decisionOf(other);
+
+                if (!otherDecision || otherDecision === decision) {
+                    return;
+                }
+
+                const otherNumbers = readNumbers(parts(other).text);
+
+                numbers.forEach((number) => {
+                    if (otherNumbers.includes(number)) {
+                        conflicting.add(number);
+                    }
                 });
-            }
-        });
-
-        const duplicated = numbers.filter((number) => occupied.has(number));
+            });
+        }
 
         const unchecked = field.all.checked
             ? []
@@ -289,8 +301,9 @@
             problems.push('не из партии: ' + foreign.join(', '));
         }
 
-        if (duplicated.length) {
-            problems.push('уже указаны в другой группе: ' + duplicated.join(', '));
+        if (conflicting.size) {
+            problems.push('в другой группе с другим решением: '
+                + Array.from(conflicting).join(', '));
         }
 
         if (unchecked.length) {

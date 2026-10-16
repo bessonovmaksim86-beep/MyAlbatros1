@@ -1,5 +1,6 @@
 package ru.company.production.repository;
 
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -161,4 +162,66 @@ public interface CellReceivingBatchRepository
             group by lower(trim(batch.supplierName))
             """)
     List<SupplierStatProjection> findSupplierStats();
+
+    /**
+     * Строка глобального поиска среди приходов склада.
+     *
+     * Ищут по номеру приходного ордера, а показать нужно и поставщика,
+     * и ячейку, и диапазон зарезервированных номеров: по одному ордеру
+     * партия опознаётся не всегда.
+     */
+    interface ReceivingSearchView {
+
+        Long getId();
+
+        String getIncomingOrderNumber();
+
+        String getSupplierName();
+
+        Integer getClassifierCode();
+
+        String getClassifierName();
+
+        String getSensorClassName();
+
+        Integer getQuantity();
+
+        Integer getFirstSerial();
+
+        Integer getLastSerial();
+    }
+
+    /**
+     * Приходы по номеру приходного ордера или поставщику.
+     *
+     * Отдельно от {@code ProductSerialRepository#search}: партия живёт
+     * до подтверждения сканированием, а её номера в реестр попадают
+     * только после него. Искать только по реестру значило бы не найти
+     * приход, который оператор оформил и ещё не закрыл, — то есть ровно
+     * тот, который ищут чаще всего.
+     */
+    @Query("""
+            select
+                batch.id              as id,
+                batch.incomingOrderNumber as incomingOrderNumber,
+                batch.supplierName    as supplierName,
+                classifier.code       as classifierCode,
+                classifier.name       as classifierName,
+                sensor.name           as sensorClassName,
+                batch.quantity        as quantity,
+                batch.firstSerial     as firstSerial,
+                batch.lastSerial      as lastSerial
+            from CellReceivingBatch batch
+            join batch.cellClassifier classifier
+            left join classifier.sensorCatalog sensor
+            where lower(batch.incomingOrderNumber)
+                      like lower(concat('%', :term, '%'))
+               or lower(batch.supplierName)
+                      like lower(concat('%', :term, '%'))
+            order by batch.createdAt desc, batch.id desc
+            """)
+    List<ReceivingSearchView> search(
+            @Param("term") String term,
+            Pageable pageable
+    );
 }

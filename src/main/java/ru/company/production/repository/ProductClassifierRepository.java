@@ -45,6 +45,35 @@ public interface ProductClassifierRepository extends JpaRepository<ProductClassi
     List<ProductClassifier> findInclusionOptionsDetailed(@Param("excludedId") Long excludedId);
 
     /**
+     * Ячейки, входящие в изделие (датчик) как составные части.
+     *
+     * Нужен блоку «Контролируемые параметры» формы техпроцесса: для
+     * параметра «…ячейки…» значение выбирают не из справочника
+     * вариантов, а из состава изделия — тех же ячеек, что перечислены
+     * в его классификаторе (classifier_inclusion, миграция V1).
+     *
+     * Тип CELL задан в запросе, а не берётся на стороне сервиса:
+     * в состав датчика могут входить и детали других видов, а
+     * контролируемый параметр обязан называть именно ячейку.
+     *
+     * Порядок — по коду, как во всех списках классификатора, чтобы
+     * технологу не пришлось искать нужную ячейку в произвольной
+     * последовательности.
+     */
+    @Query("""
+            select distinct target
+            from ClassifierInclusion inclusion
+            join inclusion.target target
+            where inclusion.owner.id = :ownerId
+              and target.productType =
+                  ru.company.production.entity.ProductType.CELL
+            order by target.code asc
+            """)
+    List<ProductClassifier> findCellOptionsByOwner(
+            @Param("ownerId") Long ownerId
+    );
+
+    /**
      * Приборы (DEVICE) для выбора в составе системы.
      */
     @Query("""

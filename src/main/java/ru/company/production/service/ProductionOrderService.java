@@ -39,6 +39,7 @@ import ru.company.production.repository.TechProcessOperationRepository;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
@@ -118,6 +119,13 @@ public class ProductionOrderService {
      * как нарушение целостности.
      */
     private final SerialIssueService serialIssueService;
+
+    /*
+     * Журнал перемещений: выпуск — начало пути номера, а его отмена —
+     * освобождение номера. Оба события обязаны остаться в истории,
+     * иначе паспорт показал бы выпуск, которого больше нет.
+     */
+    private final SerialMovementJournalService journal;
 
     /*
      * Нужен проверке отмеченного номера: свободный по выпуску серийник
@@ -898,6 +906,21 @@ public class ProductionOrderService {
                     productionOrderRepository.save(saved);
 
             /*
+             * Рождение номера фиксируют в журнале: без этой строки паспорт
+             * ячейки начинался бы с первой проверки или изоляции, а «кем и
+             * когда выпущена» оставалось бы неизвестным.
+             */
+            journal.recordIssued(
+                    persisted.getItems().stream()
+                            .map(ProductionOrderItem::getSerial)
+                            .filter(java.util.Objects::nonNull)
+                            .toList(),
+                    persisted,
+                    author,
+                    LocalDateTime.now()
+            );
+
+            /*
              * На этапе выпуска привязка к операциям НЕ делается:
              * на каждый серийник создаётся ЗНП комплектования
              * с ручным номером, привязанный к датчику без операции.
@@ -1673,6 +1696,17 @@ public class ProductionOrderService {
      */
     @Transactional
     public ProductionOrder delete(Long id) {
+        return delete(id, null);
+    }
+
+    /**
+     * Отмена выпуска с указанием исполнителя.
+     *
+     * Исполнитель нужен журналу перемещений: освобождение номера —
+     * действие конкретное, и паспорт обязан показать, кто его провёл.
+     */
+    @Transactional
+    public ProductionOrder delete(Long id, AppUser actor) {
 
         ProductionOrder order = requireActiveOrder(id);
 
@@ -1744,6 +1778,8 @@ public class ProductionOrderService {
          * номер вернулся в свободный резерв неотмеченным складом.
          */
         if (root) {
+            List<ProductSerial> released = new ArrayList<>();
+
             for (ProductSerial serial : productSerialRepository
                     .findByProductionOrderId(order.getId())) {
 
@@ -1756,7 +1792,17 @@ public class ProductionOrderService {
                 serial.setStatus(ProductSerialStatus.NEW);
                 serial.setIssuedProductionOrder(null);
                 productSerialRepository.saveAndFlush(serial);
+
+                released.add(serial);
             }
+
+            /*
+             * Освобождение номера обязано остаться в истории: без строки
+             * паспорт показал бы выпуск, которого больше нет, а возврат
+             * номера в свободный резерв выглядел бы как ошибка данных.
+             */
+            journal.recordReleaseCancelled(
+                    released, order, actor, LocalDateTime.now());
         }
 
         ProductionOrder fresh = requireActiveOrder(id);

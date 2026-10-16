@@ -539,6 +539,11 @@ public class TechProcessController {
         );
 
         model.addAttribute(
+                "controlParams",
+                techProcessService.findControlParams()
+        );
+
+        model.addAttribute(
                 "productTypes",
                 ProductType.values()
         );
@@ -563,9 +568,17 @@ public class TechProcessController {
 
     /**
      * Краткие данные выбранного изделия для шапки формы.
+     *
+     * Вместе с изделием в модель кладут входящие в него ячейки:
+     * блоку «Контролируемые параметры» они нужны как список значений
+     * для параметра «…ячейки…». Источник — состав изделия, а не
+     * справочник вариантов, поэтому список зависит от выбранного
+     * изделия и загружается здесь, где идентификатор уже известен.
      */
     private void fillClassifierSummary(Model model, Long classifierId) {
         if (classifierId == null) {
+            model.addAttribute("cellOptions", List.of());
+
             return;
         }
 
@@ -576,6 +589,11 @@ public class TechProcessController {
                                 classifierId.equals(option.getId()))
                         .findFirst()
                         .orElse(null)
+        );
+
+        model.addAttribute(
+                "cellOptions",
+                techProcessService.findCellOptions(classifierId)
         );
     }
 }

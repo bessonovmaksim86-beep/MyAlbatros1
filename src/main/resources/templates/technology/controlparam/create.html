@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="ru"
+      xmlns:th="http://www.thymeleaf.org">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Создание контролируемого параметра</title>
+
+    <link rel="stylesheet" th:href="@{/technology/css/technology.css}">
+    <link rel="stylesheet" th:href="@{/technology/css/common.css}">
+    <link rel="stylesheet" th:href="@{/technology/css/operation.css}">
+</head>
+
+<body>
+
+<div class="app-shell">
+
+    <aside th:replace="~{technology/fragments/layout :: sidebar('controlparam')}">
+    </aside>
+
+    <main class="main">
+
+        <header th:replace="~{technology/fragments/layout :: topbar}">
+        </header>
+
+        <div class="page-content operation-page">
+
+            <div class="page-head operation-create-head">
+
+                <div class="page-title">
+                    <h1>Создание контролируемого параметра</h1>
+                    <p>Укажите наименование и варианты выбора параметра</p>
+                </div>
+
+                <a class="btn secondary"
+                   th:href="@{/technology/controlparam}">
+                    Вернуться к параметрам
+                </a>
+
+            </div>
+
+            <section class="card operation-editor-card">
+
+                <div class="card-head operation-editor-head">
+
+                    <div>
+                        <h2>Новый параметр</h2>
+
+                        <small>
+                            Поля со знаком
+                            <span class="required">*</span>
+                            обязательны для заполнения
+                        </small>
+                    </div>
+
+                </div>
+
+                <div class="card-body operation-editor-body"
+                     th:insert="~{
+                        technology/controlparam/fragments/controlparam-form
+                        :: form(
+                            @{/technology/controlparam/create},
+                            'Создать параметр'
+                        )
+                     }">
+                </div>
+
+            </section>
+
+        </div>
+    </main>
+</div>
+
+<th:block th:replace="~{technology/fragments/layout :: commonScripts}">
+</th:block>
+
+<script th:src="@{/technology/js/controlparam.js}"></script>
+
+</body>
+</html>

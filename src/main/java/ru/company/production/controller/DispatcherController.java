@@ -1265,6 +1265,7 @@ public class DispatcherController {
     @PostMapping("/production-order/{id}/delete")
     public String deleteProduction(
             @PathVariable Long id,
+            Authentication authentication,
             RedirectAttributes redirectAttributes
     ) {
         /*
@@ -1278,7 +1279,11 @@ public class DispatcherController {
                 .orElse("/dispatcher/production-order");
 
         try {
-            productionOrderService.delete(id);
+            productionOrderService.delete(id, authentication == null
+                    ? null
+                    : userRepository.findByUsernameIgnoreCase(
+                            authentication.getName()
+                    ).orElse(null));
         } catch (
                 EntityNotFoundException
                 | IllegalArgumentException

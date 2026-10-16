@@ -143,6 +143,91 @@
             </a>
 
             <!--
+                Руководящие пункты: сотрудники, распределение работ и
+                календарь бюро. Ведущий бюро работает в двух адресах —
+                /workshop/** (свои люди, очередь работ, отсутствия) и
+                /input-control/** (партии), и до этого меню ломалось на
+                границе: из цехового меню с этими пунктами переход по
+                ссылке бюро попадал в меню исполнителя, где руководящих
+                ссылок не было, и возвращаться к сотрудникам приходилось
+                через адресную строку.
+
+                Пункты те же и по тем же адресам, что в меню
+                руководителя (workshop/fragments/layout), а рисуются
+                классами bvk-*: руководителю нужны его кнопки, а не
+                чужая палитра бюро поверх цеховой вёрстки. Право на
+                разделы задаёт SecurityConfig, поэтому распределение
+                показывается по canDistribute — тому же условию, что и
+                цифра очереди.
+            -->
+            <th:block th:if="${isBvkMaster}">
+
+                <div class="bvk-sidebar__divider"></div>
+
+                <a class="bvk-navigation__item"
+                   th:classappend="${activePage == 'staff'} ? ' is-active' : ''"
+                   th:href="@{/workshop/staff}"
+                   th:title="'Сотрудники ' + ${unitGenitive} + ' и их привязки'">
+
+                    <span class="bvk-navigation__icon">
+                        <svg viewBox="0 0 24 24" aria-hidden="true">
+                            <path d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8Zm0 2c-3.31 0-8 1.66-8 5v3h16v-3c0-3.34-4.69-5-8-5Zm-6 6v-1c0-1.96 3.03-3.5 6-3.5s6 1.54 6 3.5v1H6Z"/>
+                        </svg>
+                    </span>
+
+                    <span class="bvk-navigation__text">
+                        Сотрудники
+                    </span>
+
+                    <span class="bvk-navigation__counter"
+                          th:if="${staffCount != null and staffCount > 0}"
+                          th:text="${staffCount}">
+                        2
+                    </span>
+                </a>
+
+                <a class="bvk-navigation__item"
+                   th:if="${canDistribute}"
+                   th:classappend="${activePage == 'distribution'} ? ' is-active' : ''"
+                   th:href="@{/workshop/distribution}"
+                   title="Распределение работ по исполнителям бюро">
+
+                    <span class="bvk-navigation__icon">
+                        <svg viewBox="0 0 24 24" aria-hidden="true">
+                            <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 2c1.93 0 3.68.7 5.05 1.85L7.85 15.05A6.97 6.97 0 0 1 4 12c0-3.87 3.13-7 7-7zm0 2c-2.76 0-5 2.24-5 5s2.24 5 5 5 5-2.24 5-5-2.24-5-5-5zm0 2c1.66 0 3 1.34 3 3s-1.34 3-3 3-3-1.34-3-3 1.34-3 3-3z"/>
+                        </svg>
+                    </span>
+
+                    <span class="bvk-navigation__text">
+                        Распределение работ
+                    </span>
+
+                    <span class="bvk-navigation__counter"
+                          th:if="${distributionTotal != null and distributionTotal > 0}"
+                          th:text="${distributionTotal}">
+                        3
+                    </span>
+                </a>
+
+                <a class="bvk-navigation__item"
+                   th:classappend="${activePage == 'calendar'} ? ' is-active' : ''"
+                   th:href="@{/workshop/calendar}"
+                   title="Производственный календарь отсутствий">
+
+                    <span class="bvk-navigation__icon">
+                        <svg viewBox="0 0 24 24" aria-hidden="true">
+                            <path d="M7 2h2v2h6V2h2v2h3a1 1 0 0 1 1 1v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a1 1 0 0 1 1-1h3V2Zm12 8H5v9h14V10ZM7 12h2v2H7v-2Zm4 0h2v2h-2v-2Zm4 0h2v2h-2v-2Zm-8 4h2v2H7v-2Zm4 0h2v2h-2v-2Z"/>
+                        </svg>
+                    </span>
+
+                    <span class="bvk-navigation__text">
+                        Производственный календарь
+                    </span>
+                </a>
+
+            </th:block>
+
+            <!--
                 Комплектование ремонтных ЗНП в меню не вынесено: состав
                 заказу набирает исполнитель из своего перечня работ
                 («Мои операции»), и отдельный вход в раздел только
@@ -203,7 +288,7 @@
             </span>
 
             <div th:replace="~{fragments/global-search
-                    :: field('Поиск по техпроцессам, изделиям, операциям и рабочим местам; заказ — по номеру (ЗП-2026-005 или 57)')}">
+                    :: field('Поиск по изделиям, операциям и местам; заказ (ЗП-2026-005), серийный номер, ЗНП, приходный ордер')}">
             </div>
         </div>
 

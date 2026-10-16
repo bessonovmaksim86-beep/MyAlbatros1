@@ -119,12 +119,27 @@
                         </p>
                     </div>
 
-                    <span class="search-summary__status"
-                          th:if="${summary.statusLabel != null
-                                  and !#strings.isEmpty(summary.statusLabel)}"
-                          th:text="${summary.statusLabel}">
-                        Статус
-                    </span>
+                    <div class="search-summary__head-actions">
+
+                        <!--
+                            Паспорт — единственная ссылка наружу из сводки:
+                            хронология перемещений есть только в журнале, и
+                            в разделе, где ведут изделие, её никто не покажет.
+                        -->
+                        <a class="search-summary__passport"
+                           th:if="${summary.passportUrl != null
+                                   and !#strings.isEmpty(summary.passportUrl)}"
+                           th:href="@{${summary.passportUrl}}">
+                            Паспорт изделия
+                        </a>
+
+                        <span class="search-summary__status"
+                              th:if="${summary.statusLabel != null
+                                      and !#strings.isEmpty(summary.statusLabel)}"
+                              th:text="${summary.statusLabel}">
+                            Статус
+                        </span>
+                    </div>
                 </div>
 
                 <section class="card">
@@ -136,9 +151,11 @@
                             <h2>Общая информация</h2>
 
                             <p>
-                                Свойства найденного объекта. Полную
-                                карточку со всеми действиями открывает
-                                ссылка под перечнем.
+                                Свойства найденного объекта. Полная
+                                карточка со всеми действиями доступна
+                                в том разделе, где объект ведут, —
+                                переход туда выполняется по навигации
+                                раздела, а не из поиска.
                             </p>
                         </div>
                     </div>
@@ -169,11 +186,6 @@
                         <div class="search-summary__actions">
 
                             <a class="btn"
-                               th:href="@{${summary.moduleUrl}}">
-                                Открыть в разделе
-                            </a>
-
-                            <a class="btn secondary"
                                th:href="@{/search}">
                                 Искать ещё
                             </a>

@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html lang="ru"
+      xmlns:th="http://www.thymeleaf.org">
+
+<head>
+    <meta charset="UTF-8">
+
+    <meta name="viewport"
+          content="width=device-width, initial-scale=1">
+
+    <title th:text="${
+        passport != null
+            ? 'Паспорт ' + passport.fullNumber
+            : 'Паспорт не найден'
+    }">Паспорт изделия</title>
+
+    <link rel="stylesheet"
+          th:href="@{/technology/css/technology.css}">
+
+    <link rel="stylesheet"
+          th:href="@{/technology/css/common.css}">
+
+    <link rel="stylesheet"
+          th:href="@{/css/search-summary.css}">
+</head>
+
+<body>
+
+<!--
+    Паспорт изделия: полный путь ячейки или подсборки вокруг номера.
+
+    Интерфейс повторяет сводку поиска (search/object.html) — та же сетка
+    .app, тот же бокс .sidebar: паспорт открывают из той же выдачи, и
+    прыжок в чужой интерфейс сбивал бы с толку. При этом содержимое
+    принципиально другое: сводка показывает текущие свойства объекта,
+    паспорт — хронологию движений, где каждая строка несёт состояние
+    ячейки на МОМЕНТ события, а не нынешнее.
+-->
+<div class="app">
+
+    <aside class="sidebar">
+
+        <div class="brand">
+            <span class="brand-mark"></span>
+
+            <div>
+                <b>Альбатрос</b>
+                <small>Производственная система</small>
+            </div>
+        </div>
+
+        <div class="nav-title">
+            Раздел
+        </div>
+
+        <div class="nav">
+            <a class="nav-btn"
+               th:href="@{/search}">
+                <span class="ico">
+                    <svg viewBox="0 0 24 24" width="14" height="14"
+                         fill="currentColor" aria-hidden="true">
+                        <path d="M10 2a8 8 0 1 0 4.9 14.3l5.4 5.4 1.4-1.4-5.4-5.4A8 8 0 0 0 10 2Zm0 2a6 6 0 1 1 0 12 6 6 0 0 1 0-12Z"/>
+                    </svg>
+                </span>
+                <span>Поиск</span>
+            </a>
+        </div>
+
+        <div class="sidebar-foot">
+            История изделия по номеру
+        </div>
+    </aside>
+
+    <main class="main">
+
+        <header class="topbar">
+
+            <span class="clock">
+                <strong>Паспорт изделия</strong>
+                <small>Хронология перемещений</small>
+            </span>
+
+            <div class="topbar-spacer"></div>
+
+            <a class="btn secondary"
+               th:href="@{/home}">
+                На рабочий стол
+            </a>
+        </header>
+
+        <div class="content">
+
+            <!-- Паспорт найден -->
+            <div th:if="${passport != null}"
+                 class="passport">
+
+                <div class="search-summary__head">
+
+                    <div>
+
+                        <h1 class="search-summary__title"
+                            th:text="${passport.fullNumber}">
+                            121200022
+                        </h1>
+
+                        <p class="search-summary__kind"
+                           th:text="${passport.itemLabel}">
+                            Изделие
+                        </p>
+                    </div>
+
+                    <span class="search-summary__status"
+                          th:text="${passport.kindLabel
+                                  + ' · ' + passport.statusLabel}">
+                        Ячейка · В работе
+                    </span>
+                </div>
+
+                <section class="card">
+
+                    <div class="card-head">
+
+                        <div>
+
+                            <h2>Сведения о номере</h2>
+
+                            <p>
+                                Номер неизменен на всём пути изделия:
+                                изолятор брака, ремонт, производство,
+                                склад. Состояние в каждой строке
+                                хронологии — то, каким изделие было в
+                                момент события, а не нынешнее.
+                            </p>
+                        </div>
+                    </div>
+
+                    <div class="card-body">
+
+                        <dl class="search-summary__fields">
+
+                            <div class="search-summary__field">
+                                <dt>Разновидность сейчас</dt>
+                                <dd th:text="${passport.kindLabel}">
+                                    Ячейка
+                                </dd>
+                            </div>
+
+                            <div class="search-summary__field">
+                                <dt>Статус реестра</dt>
+                                <dd th:text="${passport.statusLabel}">
+                                    В работе
+                                </dd>
+                            </div>
+
+                            <div class="search-summary__field">
+                                <dt>Строка реестра</dt>
+                                <dd th:text="${
+                                    passport.registered
+                                        ? 'номер внесён в реестр'
+                                        : 'номера в реестре ещё нет'
+                                }">
+                                </dd>
+                            </div>
+
+                            <div class="search-summary__field">
+                                <dt>Первое событие</dt>
+                                <dd th:text="${passport.firstMomentLabel}">
+                                    01.09.2026 09:00
+                                </dd>
+                            </div>
+
+                            <div class="search-summary__field">
+                                <dt>Последнее событие</dt>
+                                <dd th:text="${passport.lastMomentLabel}">
+                                    15.10.2026 14:20
+                                </dd>
+                            </div>
+
+                            <div class="search-summary__field">
+                                <dt>Циклов брака</dt>
+                                <dd th:text="${passport.quarantineCycles}">
+                                    2
+                                </dd>
+                            </div>
+
+                            <div class="search-summary__field"
+                                 th:if="${passport.cancelledRepairs > 0}">
+                                <dt>Отменённых ремонтных ЗНП</dt>
+                                <dd th:text="${passport.cancelledRepairs}">
+                                    1
+                                </dd>
+                            </div>
+                        </dl>
+                    </div>
+                </section>
+
+                <section class="card">
+
+                    <div class="card-head">
+
+                        <div>
+
+                            <h2>Хронология</h2>
+
+                            <p>
+                                Каждое движение изделия: кто провёл,
+                                когда, по какому документу и в каком
+                                состоянии находилась ячейка.
+                            </p>
+                        </div>
+                    </div>
+
+                    <div class="card-body">
+
+                        <div class="table-wrap">
+
+                        <table>
+
+                            <thead>
+                            <tr>
+                                <th>Дата</th>
+                                <th>Событие</th>
+                                <th>Исполнитель</th>
+                                <th>Документ</th>
+                                <th>Состояние на момент события</th>
+                                <th>Причина</th>
+                            </tr>
+                            </thead>
+
+                            <tbody>
+                            <tr th:each="row : ${passport.events}">
+
+                                <td th:text="${row.momentLabel}">
+                                    22.09.2026 14:10
+                                </td>
+
+                                <td>
+                                    <span class="badge"
+                                          th:classappend="'badge--' + ${row.badgeClass}"
+                                          th:text="${row.title}">
+                                        Перемещена в изолятор брака
+                                    </span>
+                                </td>
+
+                                <td th:text="${row.actorLabel}">
+                                    Иванов И. И.
+                                </td>
+
+                                <td th:text="${row.documentLabel}">
+                                    ЗНР 2026-007
+                                </td>
+
+                                <td th:text="${row.stateLabel}">
+                                    Подсборка · ЯПР56
+                                </td>
+
+                                <td th:text="${row.reasonLabel}">
+                                    Механическое повреждение → Скол корпуса
+                                </td>
+                            </tr>
+                            </tbody>
+                        </table>
+
+                        </div>
+
+                        <div class="search-summary__actions">
+
+                            <a class="btn"
+                               th:href="@{/search}">
+                                Искать ещё
+                            </a>
+                        </div>
+                    </div>
+                </section>
+            </div>
+
+            <!-- Паспорт не найден -->
+            <div th:if="${passport == null}"
+                 class="search-summary">
+
+                <section class="card">
+
+                    <div class="card-head">
+
+                        <div>
+
+                            <h2>Движений по номеру
+                                <span th:text="${requestedNumber}">
+                                    121200022
+                                </span>
+                                нет
+                            </h2>
+
+                            <p>
+                                В журнале перемещений по этому номеру нет
+                                ни одной отметки: либо номер введён
+                                неверно, либо изделие ещё не проходило ни
+                                одного из учитываемых этапов — прихода,
+                                выпуска, контроля, изоляции, ремонта или
+                                приёмки.
+                            </p>
+                        </div>
+                    </div>
+
+                    <div class="card-body">
+
+                        <div class="search-summary__actions">
+
+                            <a class="btn"
+                               th:href="@{/search}">
+                                Перейти к поиску
+                            </a>
+                        </div>
+                    </div>
+                </section>
+            </div>
+        </div>
+    </main>
+</div>
+
+<script th:src="@{/js/float-scroll.js}"></script>
+</body>
+</html>

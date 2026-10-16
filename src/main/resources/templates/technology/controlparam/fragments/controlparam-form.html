@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="ru"
+      xmlns:th="http://www.thymeleaf.org">
+
+<body>
+
+<!--
+    Форма контролируемого параметра: наименование, тип и список
+    вариантов.
+
+    action      — адрес сохранения;
+    submitLabel — надпись кнопки сохранения.
+
+    Тип определяет состав формы: у параметра со списком вариантов
+    ("LIST") под списком всегда рисуют пустую строку — технолог
+    заполняет её, и скрипт добавляет следующую пустую. Сохранённые
+    варианты несут свой идентификатор в скрытом поле, поэтому при
+    сохранении сервис отличает изменение от добавления, а пустое
+    значение у сохранённого варианта означает удаление.
+
+    У параметра с полем ввода ("TEXT_INPUT") вариантов нет: значение
+    вписывает исполнитель при выполнении операции, поэтому справочник
+    его не перечисляет и блок вариантов скрипт скрывает.
+-->
+<form th:fragment="form(action, submitLabel)"
+      method="post"
+      th:action="${action}"
+      th:object="${controlParamForm}"
+      class="operation-form"
+      data-param-form>
+
+    <input th:if="${_csrf != null}"
+           type="hidden"
+           th:name="${_csrf.parameterName}"
+           th:value="${_csrf.token}">
+
+    <div class="alert danger"
+         th:if="${#fields.hasGlobalErrors()}">
+
+        <p th:each="error : ${#fields.globalErrors()}"
+           th:text="${error}">
+            Ошибка заполнения формы
+        </p>
+
+    </div>
+
+    <div class="operation-form-grid">
+
+        <div class="form-group operation-name-field">
+
+            <label for="controlParamName">
+                Наименование параметра
+                <span class="required">*</span>
+            </label>
+
+            <input id="controlParamName"
+                   type="text"
+                   th:field="*{name}"
+                   maxlength="255"
+                   autocomplete="off"
+                   placeholder="Например: Трубка"
+                   data-param-name
+                   required>
+
+            <small class="field-error"
+                   th:if="${#fields.hasErrors('name')}"
+                   th:errors="*{name}">
+                Ошибка наименования
+            </small>
+
+        </div>
+
+        <div class="form-group">
+
+            <label for="controlParamType">
+                Тип параметра
+                <span class="required">*</span>
+            </label>
+
+            <!--
+                Тип выбирают при создании: он определяет, как значение
+                параметра заполняют в операции — выбирают из списка
+                вариантов или вписывают текстом. th:field сам отметит
+                пункт, совпадающий со значением формы.
+            -->
+            <select id="controlParamType"
+                    class="form-control"
+                    th:field="*{type}"
+                    data-param-type
+                    required>
+
+                <option value="LIST">
+                    Список
+                </option>
+
+                <option value="TEXT_INPUT">
+                    Поле ввода
+                </option>
+
+            </select>
+
+            <small>
+                «Список» — варианты заводят в справочнике и выбирают
+                в операции. «Поле ввода» — значение вписывают при
+                выполнении операции, варианты не нужны.
+            </small>
+
+            <small class="field-error"
+                   th:if="${#fields.hasErrors('type')}"
+                   th:errors="*{type}">
+                Ошибка типа
+            </small>
+
+        </div>
+
+    </div>
+
+    <!--
+        data-param-cell-keyword — подстрока, по которой сервис
+        считает параметр «ячеечным» (значение берут из состава
+        изделия). Слово приходит из HTML, а не из скрипта: текст
+        статистики должен пережить смену кодировки и не дублировать
+        признак, который проверяет сервер.
+    -->
+    <div class="form-group"
+         data-param-values
+         data-param-cell-keyword="ячейк">
+
+        <label>
+            Варианты выбора
+            <span class="required" data-param-values-required>*</span>
+        </label>
+
+        <div class="param-value-rows"
+             data-param-value-rows>
+
+            <div class="param-value-row"
+                 th:each="item, stat : *{values}"
+                 data-param-value-row>
+
+                <input type="hidden"
+                       th:name="|values[${stat.index}].id|"
+                       th:value="${item.id}">
+
+                <input type="text"
+                       th:name="|values[${stat.index}].value|"
+                       th:value="${item.value}"
+                       maxlength="255"
+                       autocomplete="off"
+                       placeholder="Например: 1 слой (13 мм)"
+                       data-param-value-input>
+
+                <button type="button"
+                        class="btn secondary param-value-remove"
+                        data-param-value-remove
+                        title="Удалить вариант">
+                    &#10005;
+                </button>
+
+            </div>
+
+            <!--
+                Пустая строка для нового варианта. Её индекс считают
+                от размера списка: javascript перенумеровывает строки
+                после каждого добавления и удаления, иначе индексы
+                разошлись бы и Spring MVC собрал список с пропуском.
+            -->
+            <div class="param-value-row"
+                 data-param-value-row>
+
+                <input type="hidden"
+                       th:name="|values[${#lists.size(controlParamForm.values)}].id|">
+
+                <input type="text"
+                       th:name="|values[${#lists.size(controlParamForm.values)}].value|"
+                       maxlength="255"
+                       autocomplete="off"
+                       placeholder="Например: 1 слой (13 мм)"
+                       data-param-value-input>
+
+                <button type="button"
+                        class="btn secondary param-value-remove"
+                        data-param-value-remove
+                        title="Удалить вариант">
+                    &#10005;
+                </button>
+
+            </div>
+
+        </div>
+
+        <small>
+            Кресток удаляет строку варианта.
+            Пустая строка в конце списка предназначена для нового варианта.
+        </small>
+
+    </div>
+
+    <div class="operation-form-actions">
+
+        <a class="btn secondary"
+           th:href="@{/technology/controlparam}">
+            Отмена
+        </a>
+
+        <button type="submit"
+                class="btn primary"
+                th:text="${submitLabel}">
+            Сохранить
+        </button>
+
+    </div>
+
+</form>
+
+</body>
+</html>

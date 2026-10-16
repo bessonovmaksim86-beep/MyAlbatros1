@@ -345,6 +345,7 @@
  * оба блока растянуты на всю ширину сетки строки.
  */
 .techprocess-page .tp-row-places,
+.techprocess-page .tp-row-params,
 .techprocess-page .tp-row-note {
     grid-column: 1 / -1;
 }
@@ -393,6 +394,94 @@
 }
 
 .techprocess-page .tp-row-places small {
+    display: block;
+    margin-top: 6px;
+    color: var(--tp-muted);
+    font-size: 11.5px;
+}
+
+/*
+ * Контролируемые параметры операции: вид, значение и отметка
+ * обязательности в одну строку. Повторяет поведение рабочих мест —
+ * заполненная строка сразу тянет за собой пустую.
+ */
+.techprocess-page .tp-param-box {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 12px 14px;
+    background: #ffffff;
+    border: 1px dashed #c7d3e0;
+    border-radius: 10px;
+}
+
+.techprocess-page .tp-param-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.techprocess-page .tp-param-row .tp-param-kind {
+    flex: 1 1 34%;
+    min-width: 0;
+}
+
+.techprocess-page .tp-param-row .tp-param-value {
+    flex: 1 1 44%;
+    min-width: 0;
+}
+
+/*
+ * Список ячеек и поле свободного ввода заменяют список вариантов,
+ * когда параметр требует иного способа ввода (режим «ячейка» или
+ * TEXT_INPUT). Ширину оба берут ту же, что у tp-param-value: строка
+ * не «прыгает» при переключении режима, а показан всегда ровно один
+ * из трёх контролов.
+ */
+.techprocess-page .tp-param-row .tp-param-cell,
+.techprocess-page .tp-param-row .tp-param-text {
+    flex: 1 1 44%;
+    min-width: 0;
+}
+
+.techprocess-page .tp-param-mandatory {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    color: #33475b;
+    font-size: 12.5px;
+    font-weight: 600;
+    white-space: nowrap;
+    cursor: pointer;
+}
+
+.techprocess-page .tp-param-mandatory input {
+    width: 16px;
+    height: 16px;
+    accent-color: var(--tp-primary);
+    cursor: pointer;
+}
+
+.techprocess-page .tp-param-remove {
+    flex: 0 0 auto;
+    width: 38px;
+    height: 38px;
+    color: #b91c1c;
+    background: #fff7f7;
+    border: 1px solid #fecaca;
+    border-radius: 9px;
+    font-size: 18px;
+    line-height: 1;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.techprocess-page .tp-param-remove:hover {
+    background: #fff0f1;
+}
+
+.techprocess-page .tp-row-params small {
     display: block;
     margin-top: 6px;
     color: var(--tp-muted);
@@ -1025,6 +1114,7 @@
 
 .techprocess-page .tp-row.is-collapsed .tp-row-deps,
 .techprocess-page .tp-row.is-collapsed .tp-row-places,
+.techprocess-page .tp-row.is-collapsed .tp-row-params,
 .techprocess-page .tp-row.is-collapsed .tp-row-note {
     display: none;
 }

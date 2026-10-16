@@ -1248,9 +1248,7 @@ public class OrderSchedulingService {
                     itemName,
                     process.getCode(),
                     seq,
-                    operation.getOperationName() == null
-                            ? "—"
-                            : operation.getOperationName().getCode(),
+                    null,
                     operationName(operation),
                     organizationUnit == null ? null : organizationUnit.getId(),
                     organizationUnit == null
@@ -1283,9 +1281,7 @@ public class OrderSchedulingService {
                     itemName,
                     process.getCode(),
                     seq,
-                    operation.getOperationName() == null
-                            ? "—"
-                            : operation.getOperationName().getCode(),
+                    null,
                     operationName(operation),
                     organizationUnit == null ? null : organizationUnit.getId(),
                     organizationUnit == null

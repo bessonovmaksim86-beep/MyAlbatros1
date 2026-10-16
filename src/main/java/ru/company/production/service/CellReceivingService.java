@@ -58,6 +58,9 @@ public class CellReceivingService {
     private final ProductSerialRepository productSerialRepository;
     private final ProductClassifierRepository classifierRepository;
 
+    /* Журнал перемещений: приход — начало истории каждого номера. */
+    private final SerialMovementJournalService journal;
+
     /** Все партии, новые сверху. */
     @Transactional(readOnly = true)
     public List<CellReceivingBatch> findAll() {
@@ -269,6 +272,20 @@ public class CellReceivingService {
 
         batch.setConfirmedAt(LocalDateTime.now());
         batchRepository.save(batch);
+
+        /*
+         * Начало пути номера: приход — та точка, где ячейка появляется
+         * как изделие. Без неё паспорт начинался бы с первой проверки
+         * или изоляции, а «сколько ячеек оприходовано и когда» осталось
+         * бы неизвестным.
+         */
+        journal.recordReceived(
+                productSerialRepository
+                        .findDetailsByFullNumbers(batch.fullNumbers()),
+                batch,
+                batch.getCreatedBy(),
+                batch.getConfirmedAt()
+        );
 
         return CellScanningResult.acceptedResult();
     }

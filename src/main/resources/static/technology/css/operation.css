@@ -466,6 +466,47 @@
 }
 
 
+/*
+ * Список вариантов контролируемого параметра в таблице на главной.
+ */
+.operation-table .param-values-list {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+/*
+ * Строки вариантов в форме создания/изменения.
+ */
+.operation-page .param-value-rows {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.operation-page .param-value-row {
+    display: flex;
+    gap: 8px;
+    align-items: flex-start;
+}
+
+.operation-page .param-value-row input[type="text"] {
+    flex: 1;
+}
+
+.operation-page .param-value-row .param-value-remove {
+    flex-shrink: 0;
+    width: 32px;
+    height: 38px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    font-size: 18px;
+    line-height: 1;
+}
+
+
 @media (max-width: 760px) {
     .operation-page .operation-form-grid,
     .operation-page .operation-selection-list {

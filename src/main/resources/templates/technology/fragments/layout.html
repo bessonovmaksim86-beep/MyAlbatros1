@@ -116,6 +116,22 @@
             </a>
 
             <a class="technology-navigation__item"
+               th:classappend="${activePage == 'controlparam'} ? ' is-active' : ''"
+               th:href="@{/technology/controlparam}"
+               title="Контролируемые параметры">
+
+                <span class="technology-navigation__icon">
+                    <svg viewBox="0 0 24 24" aria-hidden="true">
+                        <path d="M3 5h18v2H3V5Zm0 6h12v2H3v-2Zm0 6h18v2H3v-2Zm14-6h4v2h-4v-2Z"/>
+                    </svg>
+                </span>
+
+                <span class="technology-navigation__text">
+                    Контролируемые параметры
+                </span>
+            </a>
+
+            <a class="technology-navigation__item"
                th:classappend="${activePage == 'approvals'} ? ' is-active' : ''"
                th:href="@{/technology/approvals}"
                title="Согласование">
@@ -174,7 +190,7 @@
                        name="query"
                        type="search"
                        autocomplete="off"
-                       placeholder="Поиск по техпроцессам, классификаторам, датчикам и приборам; заказ — по номеру (ЗП-2026-005 или 57)">
+                       placeholder="Поиск по изделиям, техпроцессам и местам; заказ (ЗП-2026-005), серийный номер, ЗНП, приходный ордер">
             </label>
 
             <!--

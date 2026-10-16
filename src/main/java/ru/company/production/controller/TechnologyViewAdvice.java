@@ -16,7 +16,8 @@ import java.util.Locale;
         TechnologyClassifierController.class,
         OperationController.class,
         TechProcessController.class,
-        WorkPlaceController.class
+        WorkPlaceController.class,
+        ControlParamController.class
 })
 @RequiredArgsConstructor
 public class TechnologyViewAdvice {

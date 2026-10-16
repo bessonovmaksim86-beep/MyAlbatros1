@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="ru"
+      xmlns:th="http://www.thymeleaf.org">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Удаление контролируемого параметра</title>
+
+    <link rel="stylesheet" th:href="@{/technology/css/technology.css}">
+    <link rel="stylesheet" th:href="@{/technology/css/common.css}">
+    <link rel="stylesheet" th:href="@{/technology/css/operation.css}">
+</head>
+
+<body>
+
+<div class="app-shell">
+
+    <aside th:replace="~{technology/fragments/layout :: sidebar('controlparam')}">
+    </aside>
+
+    <main class="main">
+
+        <header th:replace="~{technology/fragments/layout :: topbar}">
+        </header>
+
+        <div class="page-content operation-page">
+
+            <div class="page-head operation-page-head">
+
+                <div class="page-title">
+
+                    <h1>Удаление контролируемого параметра</h1>
+
+                    <p>
+                        Выберите параметр
+                        и подтвердите удаление
+                    </p>
+
+                </div>
+
+                <a class="btn secondary"
+                   th:href="@{/technology/controlparam}">
+                    Вернуться к параметрам
+                </a>
+
+            </div>
+
+            <div class="alert danger"
+                 th:if="${errorMessage}"
+                 th:text="${errorMessage}">
+            </div>
+
+            <section class="card operation-delete-selector">
+
+                <div class="card-head">
+
+                    <div>
+                        <h2>Выбор параметра</h2>
+
+                        <small>
+                            Выберите параметр из списка
+                        </small>
+                    </div>
+
+                </div>
+
+                <div class="card-body">
+
+                    <form method="get"
+                          class="operation-selector">
+
+                        <div class="form-group">
+
+                            <label for="controlParamId">
+                                Контролируемый параметр
+                            </label>
+
+                            <select id="controlParamId"
+                                    name="id"
+                                    data-auto-submit
+                                    required>
+
+                                <option value="">
+                                    Выберите параметр
+                                </option>
+
+                                <option th:each="cpItem : ${controlParams}"
+                                        th:value="${cpItem.id}"
+                                        th:selected="${
+                                            selectedParam != null
+                                            and selectedParam.id
+                                                == cpItem.id}"
+                                        th:text="${
+                                            cpItem.type.name() == 'TEXT_INPUT'
+                                                ? cpItem.name + ' — '
+                                                    + cpItem.type.displayName
+                                                : (cpItem.cellMode
+                                                    ? cpItem.name
+                                                        + ' — входящие ячейки'
+                                                    : cpItem.name + ' — '
+                                                        + #lists.size(cpItem.values)
+                                                        + ' вариантов')
+                                        }">
+                                    Параметр
+                                </option>
+
+                            </select>
+
+                        </div>
+
+                        <button type="submit"
+                                class="btn secondary">
+                            Выбрать
+                        </button>
+
+                    </form>
+
+                </div>
+            </section>
+
+            <section class="card operation-delete-card"
+                     th:if="${selectedParam != null}">
+
+                <div class="delete-warning">
+
+                    <div class="delete-warning-icon">
+                        !
+                    </div>
+
+                    <div>
+                        <h2>Удалить контролируемый параметр?</h2>
+
+                        <p>
+                            Вместе с параметром удалят все его варианты.
+                            Это действие нельзя отменить.
+                        </p>
+                    </div>
+
+                </div>
+
+                <dl class="operation-delete-details">
+
+                    <div>
+                        <dt>Наименование</dt>
+
+                        <dd th:text="${selectedParam.name}">
+                            Трубка
+                        </dd>
+                    </div>
+
+                    <div>
+                        <dt>Тип</dt>
+
+                        <dd th:text="${selectedParam.type.displayName}">
+                            Список
+                        </dd>
+                    </div>
+
+                    <div>
+                        <dt>Варианты</dt>
+
+                        <dd>
+                            <ul class="param-values-list"
+                                th:if="${
+                                    selectedParam.type.name() != 'TEXT_INPUT'
+                                    and !#lists.isEmpty(selectedParam.values)
+                                }">
+                                <li th:each="value : ${selectedParam.values}"
+                                    th:text="${value.value}">
+                                    1 слой (13 мм)
+                                </li>
+                            </ul>
+
+                            <span th:if="${
+                                selectedParam.type.name() == 'TEXT_INPUT'
+                            }">
+                                Значение вписывают при выполнении операции
+                            </span>
+                        </dd>
+                    </div>
+
+                </dl>
+
+                <form method="post"
+                      data-delete-form
+                      th:action="@{
+                        /technology/controlparam/{id}/delete(
+                        id=${selectedParam.id})}">
+
+                    <input th:if="${_csrf != null}"
+                           type="hidden"
+                           th:name="${_csrf.parameterName}"
+                           th:value="${_csrf.token}">
+
+                    <div class="operation-form-actions">
+
+                        <a class="btn secondary"
+                           th:href="@{/technology/controlparam}">
+                            Отмена
+                        </a>
+
+                        <button type="submit"
+                                class="btn danger">
+                            Удалить параметр
+                        </button>
+
+                    </div>
+
+                </form>
+
+            </section>
+
+        </div>
+    </main>
+</div>
+
+<th:block th:replace="~{technology/fragments/layout :: commonScripts}">
+</th:block>
+
+<script th:src="@{/technology/js/operation.js}"></script>
+
+</body>
+</html>

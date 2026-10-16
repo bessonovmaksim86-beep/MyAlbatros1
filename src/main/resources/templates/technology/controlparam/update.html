@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="ru"
+      xmlns:th="http://www.thymeleaf.org">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Изменение контролируемого параметра</title>
+
+    <link rel="stylesheet" th:href="@{/technology/css/technology.css}">
+    <link rel="stylesheet" th:href="@{/technology/css/common.css}">
+    <link rel="stylesheet" th:href="@{/technology/css/operation.css}">
+</head>
+
+<body>
+
+<div class="app-shell">
+
+    <aside th:replace="~{technology/fragments/layout :: sidebar('controlparam')}">
+    </aside>
+
+    <main class="main">
+
+        <header th:replace="~{technology/fragments/layout :: topbar}">
+        </header>
+
+        <div class="page-content operation-page">
+
+            <div class="page-head">
+
+                <div class="page-title">
+                    <h1>Изменение контролируемого параметра</h1>
+
+                    <p th:if="${selectedParam == null}">
+                        Выберите параметр для изменения
+                    </p>
+
+                    <p th:if="${selectedParam != null}">
+                        Измените наименование или варианты выбора
+                    </p>
+                </div>
+
+                <a class="btn secondary"
+                   th:href="@{/technology/controlparam}">
+                    Вернуться к параметрам
+                </a>
+
+            </div>
+
+            <div class="alert success"
+                 th:if="${successMessage}"
+                 th:text="${successMessage}">
+            </div>
+
+            <div class="alert danger"
+                 th:if="${errorMessage}"
+                 th:text="${errorMessage}">
+            </div>
+
+            <section class="card"
+                     th:if="${selectedParam == null}">
+
+                <div class="card-head">
+                    <div>
+                        <h2>Выбор параметра</h2>
+
+                        <small>
+                            Нажмите на параметр,
+                            который требуется изменить
+                        </small>
+                    </div>
+                </div>
+
+                <div class="card-body">
+
+                    <div class="operation-selection-list">
+
+                        <a class="operation-selection-item"
+                           th:each="cpItem : ${controlParams}"
+                           th:href="@{
+                              /technology/controlparam/update(
+                              id=${cpItem.id})}">
+
+                            <strong th:text="${cpItem.name}">
+                                Трубка
+                            </strong>
+
+                            <!--
+                                У текстового и «ячеечного» параметра
+                                вариантов нет по смыслу, и «Вариантов:
+                                0» читалось бы как незаполненная
+                                карточка.
+                            -->
+                            <span th:if="${
+                                cpItem.type.name() == 'TEXT_INPUT'
+                            }"
+                                  th:text="${cpItem.type.displayName}">
+                                Поле ввода
+                            </span>
+
+                            <span th:if="${
+                                cpItem.type.name() != 'TEXT_INPUT'
+                                and cpItem.cellMode
+                            }">
+                                Входящие ячейки
+                            </span>
+
+                            <span th:unless="${
+                                cpItem.type.name() == 'TEXT_INPUT'
+                                or cpItem.cellMode
+                            }"
+                                  th:text="|
+                                Вариантов: ${#lists.size(cpItem.values)}|">
+                                Вариантов: 3
+                            </span>
+
+                        </a>
+
+                        <div class="empty-table"
+                             th:if="${#lists.isEmpty(controlParams)}">
+                            Параметры пока не добавлены
+                        </div>
+
+                    </div>
+                </div>
+            </section>
+
+            <section class="card operation-editor-card"
+                     th:if="${selectedParam != null}">
+
+                <div class="card-head operation-editor-head">
+                    <div>
+                        <h2>Наименование и варианты</h2>
+
+                        <small>
+                            Поля со знаком
+                            <span class="required">*</span>
+                            обязательны для заполнения
+                        </small>
+                    </div>
+                </div>
+
+                <div class="card-body operation-editor-body"
+                     th:insert="~{
+                        technology/controlparam/fragments/controlparam-form
+                        :: form(
+                            @{
+                              /technology/controlparam/{id}/update(
+                              id=${selectedParam.id}
+                            )},
+                            'Сохранить изменения'
+                        )
+                     }">
+                </div>
+
+            </section>
+
+        </div>
+    </main>
+</div>
+
+<th:block th:replace="~{technology/fragments/layout :: commonScripts}">
+</th:block>
+
+<script th:src="@{/technology/js/controlparam.js}"></script>
+
+</body>
+</html>

@@ -24,7 +24,11 @@ import ru.company.production.entity.InputControlType;
 import ru.company.production.entity.QuarantineCellKind;
 import ru.company.production.repository.UserRepository;
 import ru.company.production.service.InputControlService;
+import ru.company.production.service.QuarantineTransferService;
 import ru.company.production.service.RepairKittingService;
+
+import java.util.List;
+import java.util.Set;
 
 /**
  * Бюро входного контроля: проверка оприходованных партий.
@@ -53,6 +57,7 @@ public class InputControlController {
 
     private final InputControlService inputControlService;
     private final RepairKittingService repairKittingService;
+    private final QuarantineTransferService quarantineTransferService;
     private final UserRepository userRepository;
 
     /** Главная страница модуля: сводка и переход к списку партий. */
@@ -219,9 +224,72 @@ public class InputControlController {
             return "input-control/quarantine/index";
         }
 
-        model.addAttribute("cells", inputControlService.findQuarantineCells(filter));
+        /*
+         * Ячейки, уже принятые складом, из перечня убирают целиком:
+         * лежать в изоляторе и на складе одновременно ячейка не может,
+         * а оставленная строка подталкивала бы контролёра переместить её
+         * второй раз.
+         *
+         * Переданные, но ещё не принятые складом номера отдают отдельным
+         * множеством: их показывают неактивными, иначе контролёр искал бы
+         * причину, по которой отмеченная ячейка не перемещается.
+         */
+        Set<String> accepted = quarantineTransferService.findAcceptedNumbers();
+
+        model.addAttribute(
+                "cells",
+                inputControlService.findQuarantineCells(filter).stream()
+                        .filter(cell -> !accepted.contains(cell.getFullNumber()))
+                        .toList()
+        );
+
+        model.addAttribute(
+                "transferredNumbers",
+                quarantineTransferService.findPendingNumbers()
+        );
 
         return "input-control/quarantine/index";
+    }
+
+    /**
+     * Проводит перемещение отмеченных ячеек из изолятора на склад.
+     *
+     * POST, а не GET: создаются строки перемещения и записи журнала.
+     * Состав сверяют с актуальным перечнем изолятора (см.
+     * {@link QuarantineTransferService#transfer}), поэтому ссылку на
+     * перемещение нельзя передать коллеге и провести её вслепую.
+     *
+     * Причина обязательна: перемещённая ячейка исчезает из изолятора,
+     * и без причины её исчезновение нечем объяснить ни разбору брака,
+     * ни рекламации.
+     *
+     * При отказе возврат — с flash-сообщением, а не с возвращением
+     * формы: перечень изолятора длинный, и перечерчивать его после
+     * правки отбора дороже, чем отметить ячейки заново.
+     */
+    @PostMapping("/quarantine/transfer")
+    public String transfer(
+            @RequestParam(name = "cells", required = false) List<String> cells,
+            @RequestParam(name = "reason", required = false) String reason,
+            Authentication authentication,
+            RedirectAttributes redirectAttributes
+    ) {
+        InputControlResult result =
+                quarantineTransferService.transfer(
+                        cells,
+                        reason,
+                        currentUser(authentication)
+                );
+
+        if (!result.completed()) {
+            redirectAttributes.addFlashAttribute("errorMessage", result.message());
+
+            return "redirect:/input-control/quarantine?view=cells";
+        }
+
+        redirectAttributes.addFlashAttribute("successMessage", result.message());
+
+        return "redirect:/input-control/quarantine?view=cells";
     }
 
     /**

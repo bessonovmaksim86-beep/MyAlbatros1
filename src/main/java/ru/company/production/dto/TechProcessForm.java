@@ -94,5 +94,59 @@ public class TechProcessForm {
          */
         private List<Long> predecessorOperationIds =
                 new ArrayList<>();
+
+        /*
+         * Контролируемые параметры операции. Вид и значение выбирают
+         * из справочника технолога «Контролируемые параметры».
+         */
+        @Valid
+        private List<ControlParamRow> controlParams =
+                new ArrayList<>();
+    }
+
+    @Getter
+    @Setter
+    @NoArgsConstructor
+    public static class ControlParamRow {
+
+        /*
+         * Вид параметра («Внесение типа трубки»).
+         */
+        @NotNull(message = "Выберите контролируемый параметр")
+        private Long controlParamId;
+
+        /*
+         * Значение параметра («1 слойная 14мм»).
+         *
+         * Заполнено только у параметра типа LIST. У TEXT_INPUT
+         * варианта в справочнике нет, и значение приходит в textValue,
+         * поэтому поле обязательным быть не может — это проверяет
+         * сервис по типу параметра.
+         */
+        private Long controlParamValueId;
+
+        /*
+         * Значение параметра со свободным вводом («А-15»).
+         *
+         * Заполнено только у параметра типа TEXT_INPUT.
+         */
+        @Size(
+                max = 255,
+                message = "Значение параметра не должно превышать "
+                        + "255 символов"
+        )
+        private String textValue;
+
+        /*
+         * Идентификатор ячейки — для режима «входящие ячейки»:
+         * когда в названии параметра есть слово «ячейка», значение
+         * выбирают из классификатора входящих ячеек датчика.
+         */
+        private Long cellClassifierId;
+
+        /*
+         * Отметка «обязательное поле».
+         */
+        private boolean mandatory;
     }
 }

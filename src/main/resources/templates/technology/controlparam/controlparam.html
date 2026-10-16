@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="ru"
+      xmlns:th="http://www.thymeleaf.org">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Контролируемые параметры</title>
+
+    <link rel="stylesheet" th:href="@{/technology/css/technology.css}">
+    <link rel="stylesheet" th:href="@{/technology/css/common.css}">
+    <link rel="stylesheet" th:href="@{/technology/css/operation.css}">
+</head>
+
+<body>
+
+<div class="app-shell">
+
+    <aside th:replace="~{technology/fragments/layout :: sidebar('controlparam')}">
+    </aside>
+
+    <main class="main">
+
+        <header th:replace="~{technology/fragments/layout :: topbar}">
+        </header>
+
+        <div class="page-content operation-page">
+
+            <div class="page-head operation-page-head">
+
+                <div class="page-title">
+                    <h1>Контролируемые параметры</h1>
+                    <p>Справочник параметров и их вариантов</p>
+                </div>
+
+                <div class="page-head-actions operation-actions-grid">
+                    <a class="btn primary operation-action-btn"
+                       th:href="@{/technology/controlparam/create}">
+                        Добавить параметр
+                    </a>
+                    <a class="btn secondary operation-action-btn"
+                       th:href="@{/technology/controlparam/update}">
+                        Изменить параметр
+                    </a>
+                    <a class="btn danger operation-action-btn"
+                       th:href="@{/technology/controlparam/delete}">
+                        Удалить параметр
+                    </a>
+                </div>
+            </div>
+
+            <div class="alert success" th:if="${successMessage}" th:text="${successMessage}">
+            </div>
+            <div class="alert danger" th:if="${errorMessage}" th:text="${errorMessage}">
+            </div>
+
+            <section class="card operation-list-card">
+
+                <div class="card-head">
+                    <div>
+                        <h2>Справочник</h2>
+                        <small>
+                            Показано параметров:
+                            <strong th:text="${#lists.size(controlParams)}">0</strong>
+                        </small>
+                    </div>
+                </div>
+
+                <div class="card-body">
+
+                    <div class="table-wrap">
+                        <table class="data-table operation-table">
+                            <thead>
+                            <tr>
+                                <th>Наименование</th>
+                                <th>Тип</th>
+                                <th>Варианты</th>
+                            </tr>
+                            </thead>
+
+                            <tbody>
+                            <tr th:if="${#lists.isEmpty(controlParams)}">
+                                <td colspan="3" class="empty-table">
+                                    Параметры пока не добавлены
+                                </td>
+                            </tr>
+
+                            <tr th:each="cpItem : ${controlParams}">
+                                <td class="operation-name" th:text="${cpItem.name}">
+                                    Параметр
+                                </td>
+                                <td>
+                                    <!--
+                                        Режим задаётся и типом, и
+                                        наименованием: параметр со
+                                        словом «ячейка» остаётся
+                                        списком, но значение берёт из
+                                        состава изделия.
+                                    -->
+                                    <span class="badge"
+                                          th:classappend="${
+                                              cpItem.type.name() == 'TEXT_INPUT'
+                                              or cpItem.cellMode
+                                                  ? 'info'
+                                                  : 'neutral'
+                                          }"
+                                          th:text="${
+                                              cpItem.type.name() == 'TEXT_INPUT'
+                                                  ? cpItem.type.displayName
+                                                  : (cpItem.cellMode
+                                                      ? 'Входящие ячейки'
+                                                      : cpItem.type.displayName)
+                                          }">
+                                        Тип
+                                    </span>
+                                </td>
+                                <td>
+                                    <ul class="param-values-list"
+                                        th:if="${
+                                            cpItem.type.name() != 'TEXT_INPUT'
+                                            and !cpItem.cellMode
+                                            and !#lists.isEmpty(cpItem.values)
+                                        }">
+                                        <li th:each="val : ${cpItem.values}"
+                                            th:text="${val.value}">
+                                            Вариант
+                                        </li>
+                                    </ul>
+
+                                    <!--
+                                        У текстового и «ячеечного»
+                                        параметра вариантов нет по
+                                        смыслу: значение вписывают либо
+                                        берут из состава изделия. Пустой
+                                        <ul> выглядел бы как
+                                        незаполненный справочник,
+                                        поэтому строку заменяет
+                                        пояснение.
+                                    -->
+                                    <small th:if="${
+                                        cpItem.type.name() == 'TEXT_INPUT'
+                                    }">
+                                        Значение вписывают при выполнении
+                                        операции
+                                    </small>
+
+                                    <small th:if="${cpItem.cellMode}">
+                                        Значение выбирают из ячеек,
+                                        входящих в изделие
+                                    </small>
+                                </td>
+                            </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+
+        </div>
+    </main>
+</div>
+
+<th:block th:replace="~{technology/fragments/layout :: commonScripts}">
+</th:block>
+
+</body>
+</html>

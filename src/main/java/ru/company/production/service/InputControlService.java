@@ -31,7 +31,6 @@ import ru.company.production.repository.ProductSerialRepository;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
-import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -87,6 +86,13 @@ public class InputControlService {
     private final InputControlDefectReasonRepository defectReasonRepository;
     private final CellReceivingBatchRepository batchRepository;
     private final ProductSerialRepository serialRepository;
+
+    /*
+     * Журнал перемещений: изоляция, возврат поставщику и отметка контроля
+     * обязаны оставить строку в истории номера. Пишет сам сервис журнала,
+     * здесь остаётся только решение по группе.
+     */
+    private final SerialMovementJournalService journal;
 
     /**
      * Партии, ожидающие проверки: оприходованные складом.
@@ -588,7 +594,17 @@ public class InputControlService {
                 controlType,
                 card.getCheckedBy(),
                 card.getCompletedAt()
-        );
+        ).size();
+
+        /*
+         * Журнал перемещений: изоляция и возврат поставщику — те самые
+         * события, без которых история номера обрывалась на входном
+         * контроле. Пишутся после закрытия карточки по тем же
+         * сохранённым группам, что видит реестр брака: «вся партия» в
+         * браке обязана попасть в журнал всем диапазоном, а не молча
+         * остаться неучтённой.
+         */
+        recordDefectEvents(card, batch, card.getCompletedAt());
 
         return InputControlResult.accepted(
                 groups.isEmpty()
@@ -662,11 +678,12 @@ public class InputControlService {
         card.setNote(trimToNull(form.getNote()));
         cardRepository.save(card);
 
-        int marked = markSerials(card, type, executor, LocalDateTime.now());
+        List<ProductSerial> passed = markSerials(
+                card, type, executor, LocalDateTime.now());
 
         return InputControlResult.accepted(
                 "Контроль проведён: «" + type.getDisplayName() + "» — "
-                        + marked + " яч. отмечено; карточка остаётся "
+                        + passed.size() + " яч. отмечено; карточка остаётся "
                         + "открытой, партия — на проверке"
         );
     }
@@ -682,12 +699,12 @@ public class InputControlService {
      * производству и закреплён ограничением {@code CHECK}, у колонки
      * не может быть двух хозяев. Отметка стоит в своих колонках.
      *
-     * @return число отмеченных ячеек
+     * @return ячейки, отмеченные контролем (для журнала перемещений)
      */
-    private int markSerials(InputControlCard card,
-                            InputControlType type,
-                            AppUser executor,
-                            LocalDateTime moment) {
+    private List<ProductSerial> markSerials(InputControlCard card,
+                                           InputControlType type,
+                                           AppUser executor,
+                                           LocalDateTime moment) {
 
         CellReceivingBatch batch = card.getBatch();
 
@@ -699,7 +716,7 @@ public class InputControlService {
          * нечего — проверять нечем.
          */
         if (groups.stream().anyMatch(InputControlDefectGroup::isDefectAll)) {
-            return 0;
+            return List.of();
         }
 
         Set<String> defectNumbers =
@@ -713,27 +730,35 @@ public class InputControlService {
                 .collect(Collectors.toCollection(LinkedHashSet::new));
 
         if (passedNumbers.isEmpty()) {
-            return 0;
+            return List.of();
         }
 
         /*
          * Карточка хранит номера строками, а отметка ставится на
          * строку реестра: сверка идёт по полному номеру ячейки.
          */
-        List<Long> ids = serialRepository
+        List<ProductSerial> passed = serialRepository
                 .findControlDetailsByReceivingBatchId(batch.getId())
                 .stream()
                 .filter(serial -> passedNumbers.contains(serial.getFullNumber()))
-                .map(ProductSerial::getId)
                 .toList();
 
-        if (ids.isEmpty()) {
-            return 0;
+        if (passed.isEmpty()) {
+            return List.of();
         }
 
-        serialRepository.markInputControlByIds(ids, type, moment, executor);
+        serialRepository.markInputControlByIds(
+                passed.stream().map(ProductSerial::getId).toList(),
+                type, moment, executor);
 
-        return ids.size();
+        /*
+         * Отметка контроля — событие паспорта. Строки реестра читают до
+         * отметки (markInputControlByIds очищает контекст), и журнал
+         * копирует состояние ячейки на этот момент.
+         */
+        journal.recordInputControlPassed(passed, type, executor, moment);
+
+        return passed;
     }
 
     /** Вид контроля из формы; {@code null} — выбран неверный или пустой. */
@@ -874,9 +899,10 @@ public class InputControlService {
      * Проверка групп брака.
      *
      * Каждая группа обязана быть самодостаточной: свои номера из
-     * партии и из выборки, своя причина, своё решение. Между группами
-     * проверяют только то, что нельзя вывести из отдельной группы, —
-     * пересечение номеров и отметку «вся партия».
+     * партии и из выборки, своя причина, своё решение. Один номер
+     * может стоять в нескольких группах — с разными причинами, но
+     * только с одним решением: ячейку нельзя и вернуть поставщику, и
+     * оставить на предприятии в изоляторе.
      */
     private String validateGroups(Set<String> batchNumbers,
                                   List<String> sampleNumbers,
@@ -886,7 +912,9 @@ public class InputControlService {
             return null;
         }
 
-        Set<String> assigned = new HashSet<>();
+        /* Номер → группа, которая первой его забрала, — для сверки решений. */
+        Map<String, ParsedGroup> claimed = new LinkedHashMap<>();
+        List<String> mixedDecisions = new ArrayList<>();
 
         for (ParsedGroup group : groups) {
 
@@ -928,22 +956,6 @@ public class InputControlService {
             }
 
             /*
-             * Ячейка физически не может лежать в двух изоляторах:
-             * две группы с одним номером означают два разных решения
-             * об одной ячейке.
-             */
-            List<String> duplicated = group.numbers().stream()
-                    .filter(assigned::contains)
-                    .toList();
-
-            if (!duplicated.isEmpty()) {
-                return "Один номер не может быть в двух группах брака: "
-                        + join(duplicated);
-            }
-
-            assigned.addAll(group.numbers());
-
-            /*
              * Бракуют только проверенное: выборочный контроль — то,
              * что контролёр действительно осмотрел.
              */
@@ -956,6 +968,30 @@ public class InputControlService {
                         + ": забраковать можно только проверенную ячейку — "
                         + "в выборочном контроле нет " + join(unchecked);
             }
+
+            /*
+             * Разные причины на одном номере — норма, разные решения —
+             * нет: ячейку нельзя и вернуть поставщику, и оставить на
+             * предприятии в изоляторе. Номер запоминается с решением
+             * первой взявшей его группы.
+             */
+            for (String number : group.numbers()) {
+
+                ParsedGroup owner = claimed.putIfAbsent(number, group);
+
+                if (owner != null
+                        && !owner.decision().equals(group.decision())
+                        && !mixedDecisions.contains(number)) {
+                    mixedDecisions.add(number);
+                }
+            }
+        }
+
+        if (!mixedDecisions.isEmpty()) {
+            return "Один номер не может быть возвращён поставщику "
+                    + "и перемещён в изолятор брака одновременно — "
+                    + "укажите для него одно решение в обеих группах: "
+                    + join(mixedDecisions);
         }
 
         return null;
@@ -1129,6 +1165,64 @@ public class InputControlService {
                         InputControlCellType.SAMPLE
                 ))
                 .toList());
+    }
+
+    /**
+     * События изолятора и возврата поставщику по закрытой карточке.
+     *
+     * Пишут по сохранённым группам, а не по форме: «вся партия» обязана
+     * попасть в журнал всем диапазоном номеров, а не отметкой — иначе
+     * номера, забракованные партией, остались бы в истории без единой
+     * строки, и их исчезновение из прихода было бы нечем объяснить.
+     *
+     * Одна группа — одно событие на номер, даже если причин у группы
+     * несколько (V64): число циклов брака считают как COUNT(QUARANTINED),
+     * и дубли исказили бы его. Причины поэтому складывают в note строки.
+     */
+    private void recordDefectEvents(InputControlCard card,
+                                    CellReceivingBatch batch,
+                                    LocalDateTime moment) {
+
+        List<InputControlDefectGroup> groups =
+                groupRepository.findByCardIdOrdered(card.getId());
+
+        if (groups.isEmpty()) {
+            return;
+        }
+
+        Map<Long, List<String>> numbersByGroup = groupNumbersByDefectGroup(
+                card.getId());
+        Map<Long, List<InputControlCardReason>> reasonsByGroup =
+                groupReasonsByDefectGroup(card.getId());
+
+        for (InputControlDefectGroup group : groups) {
+
+            List<String> numbers = group.isDefectAll()
+                    ? batch.fullNumbers()
+                    : numbersByGroup.getOrDefault(group.getId(), List.of());
+
+            journal.recordDefectDecision(
+                    numbers,
+                    group.getDecision(),
+                    card.getCheckedBy(),
+                    moment,
+                    group,
+                    batch,
+                    reasonChainOf(reasonsByGroup.get(group.getId()))
+            );
+        }
+    }
+
+    /** Причина группы для паспорта: цепочка ступеней через «→». */
+    private static String reasonChainOf(List<InputControlCardReason> reasons) {
+
+        if (reasons == null || reasons.isEmpty()) {
+            return null;
+        }
+
+        return reasons.stream()
+                .map(InputControlCardReason::getDisplayLabel)
+                .collect(Collectors.joining(" → "));
     }
 
     /**

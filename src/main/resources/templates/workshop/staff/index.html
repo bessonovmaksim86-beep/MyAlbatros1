@@ -238,14 +238,13 @@
                                                 th:value="${operation.id}"
                                                 th:text="${
                                                     (operation.operationName != null
-                                                     ? operation.operationName.code + ' — '
-                                                       + operation.operationName.name
+                                                     ? operation.operationName.name
                                                      : 'Операция №' + operation.id)
                                                     + (operation.operationType != null
                                                        ? ' (' + operation.operationType.name + ')'
                                                        : '')
                                                 }">
-                                            OP-01 — Сборка (Сборочные)
+                                            Сборка (Сборочные)
                                         </option>
 
                                     </optgroup>
@@ -395,7 +394,9 @@
                                                          : ' is-place')
                                               }"
                                               th:title="${binding.kind + ': '
-                                                  + binding.code + ' — ' + binding.name
+                                                  + (binding.code != null
+                                                     ? binding.code + ' — ' : '')
+                                                  + binding.name
                                                   + (binding.type != null
                                                      ? ' (' + binding.type + ')' : '')
                                                   + (binding.executorRole != null
@@ -411,8 +412,9 @@
                                             </span>
 
                                             <span class="workshop-chip__code"
+                                                  th:if="${binding.code != null}"
                                                   th:text="${binding.code}">
-                                                OP-01
+                                                РМ-01
                                             </span>
 
                                             <span class="workshop-chip__name"

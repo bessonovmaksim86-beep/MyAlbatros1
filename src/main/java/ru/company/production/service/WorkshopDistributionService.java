@@ -3117,11 +3117,7 @@ public class WorkshopDistributionService {
     }
 
     private String getOperationCode(OrderScheduleRow row) {
-        if (row.getOperation() == null
-                || row.getOperation().getOperationName() == null) {
-            return null;
-        }
-        return row.getOperation().getOperationName().getCode();
+        return null;
     }
 
     private String getOperationName(OrderScheduleRow row) {

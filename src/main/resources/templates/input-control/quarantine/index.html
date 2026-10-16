@@ -471,148 +471,282 @@
                     </div>
                 </form>
 
-                <section class="card">
+                <!--
+                    ============================================================
+                    ПЕРЕМЕЩЕНИЕ ИЗ ИЗОЛЯТОРА НА СКЛАД СПФ
 
-                    <div class="card-head">
+                    Одна POST-форма держит чекбоксы, кнопку «Переместить» и
+                    поле причины: состав передают на сервер целиком, а строкой
+                    запроса его не отдают — у группы с отметкой «вся партия»
+                    номеров сотни, и адрес упёрся бы в предел длины.
 
-                        <div>
+                    Значение чекбокса — пара «группа | номер» (cell.groupKey):
+                    один и тот же номер могли забраковать в двух группах с
+                    разными причинами, и перемещение обязано ссылаться на
+                    конкретную группу, чтобы склад понимал исход ячейки.
 
-                            <h2>Ячейки в изоляторе</h2>
+                    Ячейку, уже переданную складу, не отмечают: иначе
+                    контролёр отправил бы её на приёмку второй раз.
+                    ============================================================
+                -->
+                <form method="post"
+                      id="bvkTransferForm"
+                      th:action="@{/input-control/quarantine/transfer}">
 
-                            <small>
-                                Группы брака закрытых проверок развёрнуты
-                                поштучно: у группы с отметкой «вся
-                                партия» показан весь диапазон партии,
-                                поэтому строка отвечает на вопрос про
-                                отдельный номер
-                            </small>
+                    <input th:if="${_csrf != null}"
+                           type="hidden"
+                           th:name="${_csrf.parameterName}"
+                           th:value="${_csrf.token}">
 
-                        </div>
+                    <!--
+                        Панель перемещения: счётчик отмеченного и кнопка
+                        «Переместить». Кнопку рисуют только когда выбрана хотя
+                        бы одна ячейка — пустое перемещение отклоняет сервис,
+                        но серый вид кнопки говорит об этом до отправки
+                        длинной формы.
+                    -->
+                    <div class="bvk-transfer-bar"
+                         id="bvkTransferBar"
+                         hidden>
 
-                        <span class="bvk-counter"
-                              th:if="${cells != null and !#lists.isEmpty(cells)}">
+                        <div class="bvk-transfer-bar__summary">
 
-                            Ячеек в перечне:
-
-                            <strong th:text="${#lists.size(cells)}">
-                                4
+                            <strong class="bvk-transfer-bar__count"
+                                    id="bvkPickedCount">
+                                Отмечено ячеек: 0
                             </strong>
-                        </span>
-                    </div>
 
-                    <div class="card-body">
-
-                        <div class="alert danger"
-                             th:if="${cells == null or #lists.isEmpty(cells)}">
-
-                            <p>
-                                По выбранному отбору ячеек в изоляторе
-                                нет: перечень заполняется, когда
-                                контролёр закрывает проверку с решением
-                                «Перемещение в изолятор брака»
-                            </p>
-
+                            <span class="bvk-transfer-bar__hint">
+                                Отметьте ячейки и нажмите «Переместить»:
+                                их передадут на приёмку складу полуфабрикатов
+                            </span>
                         </div>
 
-                        <div class="table-wrap"
-                             th:unless="${cells == null or #lists.isEmpty(cells)}">
+                        <div class="bvk-transfer-bar__actions">
 
-                            <table class="data-table bvk-batch-table bvk-cell-table">
+                            <button type="button"
+                                    class="btn secondary"
+                                    id="bvkClearPicked">
+                                Снять отметки
+                            </button>
 
-                                <thead>
+                            <button type="button"
+                                    class="btn primary"
+                                    id="bvkTransferOpen"
+                                    aria-haspopup="dialog"
+                                    aria-controls="bvkTransferDialog">
+                                Переместить
+                            </button>
+                        </div>
+                    </div>
 
-                                <tr>
-                                    <th>Тип</th>
-                                    <th>Изделие</th>
-                                    <th>Номер ячейки</th>
-                                    <th>Причина брака</th>
-                                    <th>Поставщик</th>
-                                    <th>Проверка</th>
-                                    <th>Контролёр</th>
-                                    <th></th>
-                                </tr>
+                    <section class="card">
 
-                                </thead>
+                        <div class="card-head">
 
-                                <tbody>
+                            <div>
 
-                                <tr th:each="cell : ${cells}">
+                                <h2>Ячейки в изоляторе</h2>
 
-                                    <td th:text="${cell.kindLabel}">
-                                        Ячейка
-                                    </td>
+                                <small>
+                                    Группы брака закрытых проверок развёрнуты
+                                    поштучно: у группы с отметкой «вся
+                                    партия» показан весь диапазон партии,
+                                    поэтому строка отвечает на вопрос про
+                                    отдельный номер
+                                </small>
 
-                                    <td>
-                                        <div class="bvk-cell-table__stack">
+                            </div>
 
-                                            <span th:text="${cell.cellLabel}">
-                                                1212 — Подсборка ЯПР56
-                                            </span>
+                            <span class="bvk-counter"
+                                  th:if="${cells != null and !#lists.isEmpty(cells)}">
 
-                                            <small th:text="'Ордер: ' + ${cell.incomingOrderNumber}">
-                                                Ордер: ТОРГ-12/44
-                                            </small>
-                                        </div>
-                                    </td>
+                                Ячеек в перечне:
 
-                                    <td class="bvk-cell-table__number"
-                                        th:text="${cell.fullNumber}">
-                                        121200023
-                                    </td>
-
-                                    <td th:text="${cell.reasonChain}">
-                                        Механическое повреждение → Скол корпуса
-                                    </td>
-
-                                    <td th:text="${cell.supplierName}">
-                                        ООО «Компонент»
-                                    </td>
-
-                                    <td>
-                                        <div class="bvk-cell-table__stack">
-
-                                            <span class="status"
-                                                  th:classappend="' ' + ${cell.decisionBadgeClass}"
-                                                  th:text="${cell.decisionLabel}">
-                                                Перемещение в изолятор брака
-                                            </span>
-
-                                            <small th:text="${cell.completedLabel}">
-                                                21.09.2026 11:20
-                                            </small>
-                                        </div>
-                                    </td>
-
-                                    <td th:text="${cell.checkerName}">
-                                        Иванов И.И.
-                                    </td>
-
-                                    <td class="table-actions">
-
-                                        <!--
-                                            Причина и состав группы живут
-                                            в карточке проверки: в
-                                            поштучном перечне их не
-                                            правят, поэтому строку ведут
-                                            туда же, куда и в групповом
-                                            режиме.
-                                        -->
-                                        <a class="btn secondary compact"
-                                           th:href="@{/input-control/control/{id}(id=${cell.cardId})}">
-                                            Карточка проверки
-                                        </a>
-
-                                    </td>
-
-                                </tr>
-
-                                </tbody>
-                            </table>
-
+                                <strong th:text="${#lists.size(cells)}">
+                                    4
+                                </strong>
+                            </span>
                         </div>
 
-                    </div>
-                </section>
+                        <div class="card-body">
+
+                            <div class="alert danger"
+                                 th:if="${cells == null or #lists.isEmpty(cells)}">
+
+                                <p>
+                                    По выбранному отбору ячеек в изоляторе
+                                    нет: перечень заполняется, когда
+                                    контролёр закрывает проверку с решением
+                                    «Перемещение в изолятор брака»
+                                </p>
+
+                            </div>
+
+                            <div class="table-wrap"
+                                 th:unless="${cells == null or #lists.isEmpty(cells)}">
+
+                                <table class="data-table bvk-batch-table bvk-cell-table">
+
+                                    <thead>
+
+                                    <tr>
+                                        <th class="bvk-cell-table__pick">
+                                            <label class="bvk-check">
+
+                                                <input type="checkbox"
+                                                       id="bvkCheckAll">
+
+                                                <span class="visually-hidden">
+                                                    Выбрать все ячейки
+                                                </span>
+                                            </label>
+                                        </th>
+
+                                        <th>Тип</th>
+                                        <th>Изделие</th>
+                                        <th>Номер ячейки</th>
+                                        <th>Причина брака</th>
+                                        <th>Поставщик</th>
+                                        <th>Проверка</th>
+                                        <th>Контролёр</th>
+                                        <th></th>
+                                    </tr>
+
+                                    </thead>
+
+                                    <tbody>
+
+                                    <tr th:each="cell : ${cells}"
+                                        th:with="isTransferred=${transferredNumbers != null
+                                                and transferredNumbers.contains(cell.fullNumber)}"
+                                        th:classappend="${isTransferred}
+                                            ? ' is-transferred' : ''">
+
+                                        <td class="bvk-cell-table__pick">
+
+                                            <!--
+                                                Чекбокс заблокирован у ячейки,
+                                                уже переданной складу: её
+                                                нельзя переместить второй раз,
+                                                пока склад не завершит приёмку.
+                                            -->
+                                            <label class="bvk-check">
+
+                                                <input type="checkbox"
+                                                       class="bvk-check__input"
+                                                       name="cells"
+                                                       th:value="${cell.groupKey}"
+                                                       th:disabled="${isTransferred}">
+
+                                                <span class="visually-hidden">
+                                                    Отметить ячейку
+                                                    <span th:text="${cell.fullNumber}">
+                                                        121200023
+                                                    </span>
+                                                </span>
+                                            </label>
+                                        </td>
+
+                                        <td th:text="${cell.kindLabel}">
+                                            Ячейка
+                                        </td>
+
+                                        <td>
+                                            <div class="bvk-cell-table__stack">
+
+                                                <span th:text="${cell.cellLabel}">
+                                                    1212 — Подсборка ЯПР56
+                                                </span>
+
+                                                <small th:text="'Ордер: ' + ${cell.incomingOrderNumber}">
+                                                    Ордер: ТОРГ-12/44
+                                                </small>
+                                            </div>
+                                        </td>
+
+                                        <td class="bvk-cell-table__number"
+                                            th:text="${cell.fullNumber}">
+                                            121200023
+                                        </td>
+
+                                        <td th:text="${cell.reasonChain}">
+                                            Механическое повреждение → Скол корпуса
+                                        </td>
+
+                                        <td th:text="${cell.supplierName}">
+                                            ООО «Компонент»
+                                        </td>
+
+                                        <td>
+                                            <div class="bvk-cell-table__stack">
+
+                                                <span class="status"
+                                                      th:classappend="' ' + ${cell.decisionBadgeClass}"
+                                                      th:text="${cell.decisionLabel}">
+                                                    Перемещение в изолятор брака
+                                                </span>
+
+                                                <small th:text="${cell.completedLabel}">
+                                                    21.09.2026 11:20
+                                                </small>
+
+                                                <small class="bvk-cell-table__sent"
+                                                       th:if="${isTransferred}">
+                                                    Передана на склад
+                                                </small>
+                                            </div>
+                                        </td>
+
+                                        <td th:text="${cell.checkerName}">
+                                            Иванов И.И.
+                                        </td>
+
+                                        <td class="table-actions">
+
+                                            <!--
+                                                Причина и состав группы живут
+                                                в карточке проверки: в
+                                                поштучном перечне их не
+                                                правят, поэтому строку ведут
+                                                туда же, куда и в групповом
+                                                режиме.
+
+                                                type="button" обязателен:
+                                                ссылка рисуют внутри формы
+                                                перемещения, и без него браузер
+                                                отправил бы форму вместо перехода.
+                                            -->
+                                            <a class="btn secondary compact"
+                                               th:href="@{/input-control/control/{id}(id=${cell.cardId})}">
+                                                Карточка проверки
+                                            </a>
+
+                                        </td>
+
+                                    </tr>
+
+                                    </tbody>
+                                </table>
+
+                            </div>
+
+                        </div>
+                    </section>
+
+                    <!--
+                        Поле причины держат внутри формы, но показывают только
+                        в модальном окне: причину вводят один раз на весь
+                        состав, и висящее над перечнем поле спорело бы вид
+                        реестра.
+                    -->
+                    <textarea class="visually-hidden"
+                              id="bvkTransferReasonField"
+                              name="reason"
+                              rows="1"
+                              aria-hidden="true"></textarea>
+
+                </form>
 
             </th:block>
 
@@ -620,9 +754,99 @@
     </main>
 </div>
 
+<!-- =============================================================
+     ПОДТВЕРЖДЕНИЕ ПЕРЕМЕЩЕНИЯ ИЗ ИЗОЛЯТОРА
+
+     Перемещение выносит ячейки из изолятора: они перестают быть
+     видны в реестре брака и уходят на приёмку складу. Состав и
+     причину берут отдельным экраном с двумя кнопками, а не молча
+     проводят проверку: причину после проведения не изменить, а без
+     неё перемещение сервис отклоняет.
+
+     В окне перечисляют отмеченные номера — контролёр обязан увидеть
+     именно тот состав, который уходит со склада изолятора, а не
+     общий счётчик.
+     ============================================================= -->
+<div class="bvk-transfer-dialog"
+     id="bvkTransferDialog"
+     th:if="${quarantineView == 'cells'}"
+     hidden>
+
+    <div class="bvk-transfer-dialog__box"
+         role="dialog"
+         aria-modal="true"
+         aria-labelledby="bvkTransferDialogTitle"
+         aria-describedby="bvkTransferDialogNote">
+
+        <h2 id="bvkTransferDialogTitle">
+            Переместить ячейки на склад полуфабрикатов
+        </h2>
+
+        <p id="bvkTransferDialogNote">
+            Ячеек к перемещению:
+            <strong id="bvkTransferDialogCount">0</strong>.
+            После перемещения они исчезнут из изолятора брака и
+            появятся на приёмке склада — причину изменить будет
+            нельзя.
+        </p>
+
+        <div class="bvk-transfer-dialog__numbers">
+
+            <span class="bvk-transfer-dialog__numbers-title">
+                Состав перемещения
+            </span>
+
+            <ul class="bvk-transfer-dialog__list"
+                id="bvkTransferDialogList"></ul>
+        </div>
+
+        <div class="bvk-transfer-dialog__field">
+
+            <label for="bvkTransferReasonInput">
+                Причина перемещения
+            </label>
+
+            <!--
+                Поле живёт в окне, а значение пишет в скрытый textarea
+                формы (bvkTransferReasonField): форму держат одной, с
+                чекбоксами, а причину вводят один раз на весь состав.
+            -->
+            <textarea id="bvkTransferReasonInput"
+                      rows="3"
+                      maxlength="500"
+                      placeholder="Например: брак признан ошибочным, ячейка годна и возвращается на склад"></textarea>
+
+            <span class="bvk-transfer-dialog__error"
+                  id="bvkTransferDialogError"
+                  hidden>
+                Укажите причину перемещения — без неё ячейку нельзя
+                вынести из изолятора
+            </span>
+        </div>
+
+        <div class="bvk-transfer-dialog__actions">
+
+            <button type="button"
+                    class="btn secondary"
+                    id="bvkTransferDialogCancel">
+                Отмена
+            </button>
+
+            <button type="button"
+                    class="btn primary"
+                    id="bvkTransferDialogConfirm">
+                Подтвердить перемещение
+            </button>
+
+        </div>
+    </div>
+</div>
+
 <th:block th:replace="~{input-control/fragments/layout
         :: commonScripts}">
 </th:block>
+
+<script th:src="@{/input-control/js/quarantine.js}"></script>
 
 </body>
 </html>

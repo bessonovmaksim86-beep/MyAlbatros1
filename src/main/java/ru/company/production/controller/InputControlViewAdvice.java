@@ -7,10 +7,13 @@ import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.ControllerAdvice;
 import org.springframework.web.bind.annotation.ModelAttribute;
 import ru.company.production.entity.AppUser;
+import ru.company.production.entity.Role;
 import ru.company.production.repository.UserRepository;
 import ru.company.production.service.InputControlService;
 import ru.company.production.service.RepairKittingService;
+import ru.company.production.service.WorkshopStaffService;
 
+import java.util.List;
 import java.util.Locale;
 
 /**
@@ -20,6 +23,13 @@ import java.util.Locale;
  * Счётчик нужен на каждой странице: открытая карточка удерживает
  * партию от повторного взятия в работу, и видеть это контролёр должен,
  * не заходя в список партий.
+ *
+ * Руководителю бюро (BVK_MASTER) меню бюро дополняется руководящими
+ * пунктами цехового модуля — сотрудники, распределение работ,
+ * календарь (см. isBvkMaster в боковом меню). Без них переход по
+ * ссылке бюро из меню руководителя терял его кнопки: на /input-control/**
+ * рисовалось меню исполнителя, и возвращаться к сотрудникам и
+ * распределению приходилось через адресную строку.
  */
 @ControllerAdvice(assignableTypes = InputControlController.class)
 @RequiredArgsConstructor
@@ -28,6 +38,7 @@ public class InputControlViewAdvice {
     private final UserRepository userRepository;
     private final InputControlService inputControlService;
     private final RepairKittingService repairKittingService;
+    private final WorkshopStaffService staffService;
 
     @ModelAttribute
     public void addInputControlContext(
@@ -36,6 +47,7 @@ public class InputControlViewAdvice {
     ) {
         model.addAttribute("userDisplayName", "Пользователь");
         model.addAttribute("userPosition", "Должность не указана");
+        model.addAttribute("isBvkMaster", false);
 
         model.addAttribute(
                 "inWorkCount",
@@ -95,6 +107,47 @@ public class InputControlViewAdvice {
                 specialty == null || specialty.isBlank()
                         ? "Должность не указана"
                         : specialty
+        );
+
+        /*
+         * Роль — @Enumerated, читается без доп. запроса. Признак
+         * руководителя включает в меню бюро руководящие пункты; у
+         * контролёра (BVK_EXECUTOR) меню остаётся прежним.
+         */
+        if (user.getRole() != Role.BVK_MASTER) {
+            return;
+        }
+
+        model.addAttribute("isBvkMaster", true);
+
+        /*
+         * Подразделение и служба читаются отдельным запросом:
+         * open-in-view отключён, а граница сотрудников нужна уже
+         * detached-объекту. Роль при этом перечитывается у той же
+         * учётной записи — currentUser в меню обязан оставаться с
+         * загруженными связями.
+         */
+        AppUser supervisor = userRepository
+                .findWithUnitsByUsernameIgnoreCase(user.getUsername())
+                .orElse(user);
+
+        model.addAttribute("currentUser", supervisor);
+
+        model.addAttribute(
+                "unitGenitive",
+                staffService.unitKind(supervisor).getGenitive()
+        );
+
+        /*
+         * Пункт «Сотрудники» открыт руководителю бюро и его ролью в
+         * SecurityConfig, и границей списка (WorkshopStaffService),
+         * поэтому цифра берётся из той же границы, что и сам список.
+         */
+        List<Long> scope = staffService.unitScope(supervisor);
+
+        model.addAttribute(
+                "staffCount",
+                staffService.findEmployees(scope).size()
         );
     }
 

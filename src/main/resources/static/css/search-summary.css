@@ -55,6 +55,33 @@
 }
 
 /*
+ * Правый край шапки: ссылка на паспорт и статус стоят в одном блоке,
+ * иначе justify-content разбросал бы их по разным углам строки.
+ */
+.search-summary__head-actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-shrink: 0;
+}
+
+.search-summary__passport {
+    padding: 6px 14px;
+    border-radius: 999px;
+    border: 1px solid var(--orange);
+    color: var(--orange);
+    font-size: 13px;
+    font-weight: 700;
+    text-decoration: none;
+    white-space: nowrap;
+}
+
+.search-summary__passport:hover {
+    background: var(--orange);
+    color: #fff;
+}
+
+/*
  * Перечень свойств: dt — подпись, dd — значение. Двухколоночная сетка
  * держит подписи в одной колонне, чтобы длинные значения не «уезжали»
  * и список читался по вертикали.
@@ -95,6 +122,70 @@
     flex-wrap: wrap;
     gap: 10px;
     margin-top: 22px;
+}
+
+/* ---------- Паспорт изделия ---------- */
+
+/*
+ * Хронология шире сводки: строка паспорта несёт шесть колонок (дата,
+ * событие, исполнитель, документ, состояние, причина), и в 820px они
+ * сжимались бы в нечитаемый столбик слов.
+ */
+.passport {
+    max-width: 1200px;
+}
+
+.passport .search-summary__title {
+    /* Номер читают по частям и сверяют с этикеткой — перенос не нужен. */
+    word-break: keep-all;
+    font-variant-numeric: tabular-nums;
+}
+
+/*
+ * Модификаторы метки события совпадают с badgeClass у
+ * SerialMovementType: danger — изолятор, attention — уход со склада или
+ * в ремонт, ok — завершённое действие, muted — служебное.
+ */
+.badge--danger {
+    background: #fff0f1;
+    color: var(--red);
+}
+
+.badge--attention {
+    background: #fff1dd;
+    color: #a45c00;
+}
+
+.badge--ok {
+    background: #e8f5ee;
+    color: #18794e;
+}
+
+.badge--muted {
+    background: #edf1f4;
+    color: #5f6d79;
+}
+
+/*
+ * Хронология читается сверху вниз как пройденный путь, поэтому первая
+ * строка — первое событие. Даты держат табличные цифры, чтобы колонка
+ * не «гуляла», и не переносятся: дату сравнивают глазами по вертикали.
+ */
+.passport td:first-child {
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+    color: var(--muted);
+    font-weight: 600;
+}
+
+.passport td {
+    vertical-align: top;
+}
+
+@media (max-width: 760px) {
+    .passport {
+        max-width: none;
+    }
 }
 
 /* ---------- Страница поиска ---------- */

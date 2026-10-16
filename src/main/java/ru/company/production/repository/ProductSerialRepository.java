@@ -1,5 +1,6 @@
 package ru.company.production.repository;
 
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
@@ -612,5 +613,120 @@ public interface ProductSerialRepository
             @Param("ids") java.util.Collection<Long> ids,
             @Param("moment") java.time.LocalDateTime moment,
             @Param("receiver") AppUser receiver
+    );
+
+    /**
+     * Строка глобального поиска среди серийных номеров.
+     *
+     * Тип и статус отдаются перечислениями, как в
+     * {@link ClassifierSearchView}: строку читает JPQL-проекция, и
+     * конвертировать строку БД в enum вручную незачем.
+     *
+     * Приходный ордер и ЗНП приходят вместе с номером: по ним строку
+     * выдачи и находят, и она обязана показать, чем именно нашёлся
+     * экземпляр.
+     */
+    interface SerialSearchView {
+
+        Long getId();
+
+        Integer getClassifierCode();
+
+        String getClassifierName();
+
+        String getSensorClassName();
+
+        ProductType getProductType();
+
+        Integer getSerial();
+
+        String getZnpNumber();
+
+        String getIncomingOrderNumber();
+
+        ProductSerialStatus getStatus();
+    }
+
+    /**
+     * Поиск серийных номеров по полному номеру, ЗНП или приходному
+     * ордеру партии.
+     *
+     * Полный номер в базе не хранится: он складывается из кода
+     * классификатора и пятизначной серии (V17), поэтому собирается
+     * арифметически — code * 100000 + serial. Для кода 1212 и серии 22
+     * это 121200022, то есть ровно то, что печатает
+     * ProductSerial#getFullNumber(): пять знаков серии уже «зашиты» в
+     * множителе, и дополнять номер нулями в запросе не нужно.
+     *
+     * Ордер берётся левым join: у номеров выпуска связи с партией нет,
+     * и внутренний join отбросил бы их из выдачи.
+     */
+    @Query("""
+            select
+                serial.id            as id,
+                classifier.code      as classifierCode,
+                classifier.name      as classifierName,
+                sensor.name          as sensorClassName,
+                serial.productType   as productType,
+                serial.serial        as serial,
+                serial.znpNumber     as znpNumber,
+                batch.incomingOrderNumber as incomingOrderNumber,
+                serial.status        as status
+            from ProductSerial serial
+            join serial.productClassifier classifier
+            left join classifier.sensorCatalog sensor
+            left join serial.receivingBatch batch
+            where cast(classifier.code * 100000 + serial.serial as string)
+                      like concat('%', :term, '%')
+               or lower(serial.znpNumber)
+                      like lower(concat('%', :term, '%'))
+               or lower(batch.incomingOrderNumber)
+                      like lower(concat('%', :term, '%'))
+            order by classifier.code asc, serial.serial asc
+            """)
+    List<SerialSearchView> search(
+            @Param("term") String term,
+            Pageable pageable
+    );
+
+    /**
+     * Серийный номер со всеми связями для сводки поиска.
+     *
+     * Сводка печатает заказ, позицию заказа покупателя, приходный
+     * ордер и обе отметки маршрута (контроль, приёмка), а
+     * open-in-view выключен: без fetch-join'ов каждая из этих ссылок
+     * оборвалась бы на ленивой загрузке.
+     */
+    @Query("""
+            select serial
+            from ProductSerial serial
+            left join fetch serial.productClassifier classifier
+            left join fetch classifier.sensorCatalog
+            left join fetch serial.issuedProductionOrder
+            left join fetch serial.customerOrderItem customerItem
+            left join fetch customerItem.customerOrder
+            left join fetch serial.receivingBatch
+            left join fetch serial.inputControlBy
+            left join fetch serial.acceptedBy
+            where serial.id = :id
+            """)
+    Optional<ProductSerial> findDetailedById(@Param("id") Long id);
+
+    /**
+     * Серийники по полным номерам: для приёмки склада.
+     *
+     * Полный номер разбивается на код (первые 4 символа) и серию
+     * (остальные 5), затем ищется по арифметике — тот же метод, что
+     * и в глобальном поиске (V17).
+     */
+    @Query("""
+            select serial
+            from ProductSerial serial
+            join fetch serial.productClassifier classifier
+            where cast(classifier.code * 100000 + serial.serial as string)
+                   in :fullNumbers
+            """)
+    List<ProductSerial> findDetailsByFullNumbers(
+            @Param("fullNumbers") Collection<String> fullNumbers
     );
 }

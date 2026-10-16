@@ -6,7 +6,9 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 import java.math.BigDecimal;
+import java.util.ArrayList;
 import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Set;
 
 @Entity
@@ -139,4 +141,21 @@ public class TechProcessOperation {
             )
     )
     private Set<WorkPlace> workPlaces = new LinkedHashSet<>();
+
+    /*
+     * Контролируемые параметры операции (для датчиков): номер ячейки,
+     * тип трубки, тип проволоки.
+     */
+    @OneToMany(
+            mappedBy = "techProcessOperation",
+            cascade = CascadeType.ALL,
+            orphanRemoval = true
+    )
+    private List<TechProcessOperationControlParam> controlParams =
+            new ArrayList<>();
+
+    public void addControlParam(TechProcessOperationControlParam param) {
+        param.setTechProcessOperation(this);
+        controlParams.add(param);
+    }
 }

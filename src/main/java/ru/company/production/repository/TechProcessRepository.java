@@ -30,6 +30,13 @@ public interface TechProcessRepository
             """)
     Optional<TechProcess> findHeaderById(@Param("id") Long id);
 
+    /*
+     * Контролируемые параметры в запрос не включены сознательно:
+     * operations и controlParams — обе коллекции List, а Hibernate
+     * не умеет загружать два «бага» одним fetch (MultipleBagFetch).
+     * Параметры читают внутри транзакции (getForm, buildGraph), где
+     * ленивая загрузка работает так же, как у рабочих мест.
+     */
     @Query("""
             select distinct process
             from TechProcess process

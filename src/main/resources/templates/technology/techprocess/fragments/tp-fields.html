@@ -414,6 +414,118 @@
 
                     </div>
 
+                    <div class="tp-row-params">
+
+                        <label class="tp-row-index">
+                            Контролируемые параметры
+                        </label>
+
+                        <div class="tp-param-box" data-tp-params>
+
+                            <div class="tp-param-row"
+                                 th:each="paramItem : ${row.controlParams}">
+
+                                <!--
+                                    Неотмеченный чекбокс запрос не
+                                    покидает, поэтому перед ним стоит
+                                    скрытое поле с false. Имена обоим
+                                    полям даёт конструктор маршрута.
+                                -->
+                                <input type="hidden"
+                                       value="false"
+                                       data-tp-param-mandatory-flag>
+
+                                <!--
+                                    data-param-type и data-param-cell-mode
+                                    задают раздельно: режим второго поля
+                                    читает с выбранной опции сам скрипт,
+                                    и оба признака должны дойти до DOM.
+                                -->
+                                <select class="form-control tp-param-kind"
+                                        data-tp-param-kind>
+
+                                    <option value="">
+                                        Выберите параметр
+                                    </option>
+
+                                    <option th:each="kind : ${controlParams}"
+                                            th:value="${kind.id}"
+                                            th:data-param-type="${kind.type.name()}"
+                                            th:data-param-cell-mode="${kind.cellMode}"
+                                            th:selected="${paramItem.controlParamId == kind.id}"
+                                            th:text="${kind.name}">
+                                        Параметр
+                                    </option>
+
+                                </select>
+
+                                <!--
+                                    Второе поле зависит от параметра.
+                                    У параметра со списком вариантов его
+                                    нет вообще: варианты описывают сам
+                                    параметр, а значение вписывает
+                                    исполнитель при выполнении операции.
+                                    Здесь только два контрола, и оба
+                                    скрыты до выбора вида — скрипт
+                                    показывает нужный по data-признакам
+                                    выбранной опции.
+                                -->
+                                <select class="form-control tp-param-cell"
+                                        data-tp-param-cell
+                                        hidden>
+
+                                    <option value="">
+                                        Выберите ячейку
+                                    </option>
+
+                                    <option th:each="cell : ${cellOptions}"
+                                            th:value="${cell.id}"
+                                            th:selected="${paramItem.cellClassifierId == cell.id}"
+                                            th:text="${cell.fullDisplayName}">
+                                        Ячейка
+                                    </option>
+
+                                </select>
+
+                                <input type="text"
+                                       class="form-control tp-param-text"
+                                       data-tp-param-text
+                                       maxlength="255"
+                                       placeholder="Введите значение"
+                                       th:value="${
+                                           paramItem.textValue != null
+                                               ? paramItem.textValue
+                                               : ''
+                                       }"
+                                       hidden>
+
+                                <label class="tp-param-mandatory"
+                                       title="Значение обязательно для внесения исполнителем">
+                                    <input type="checkbox"
+                                           data-tp-param-mandatory
+                                           th:checked="${paramItem.mandatory}">
+                                    <span>Обязательное поле</span>
+                                </label>
+
+                                <button type="button"
+                                        class="tp-param-remove"
+                                        data-tp-param-remove
+                                        aria-label="Убрать параметр">
+                                    ×
+                                </button>
+
+                            </div>
+
+                        </div>
+
+                        <small>
+                            Заполняется для датчиков. После выбора
+                            значения появится строка для следующего
+                            параметра.
+                        </small>
+
+                    </div>
+
                     <div class="tp-row-note form-group">
 
                         <label class="tp-row-index">
@@ -589,6 +701,22 @@
 
                     </div>
 
+                    <div class="tp-row-params">
+
+                        <label class="tp-row-index">
+                            Контролируемые параметры
+                        </label>
+
+                        <div class="tp-param-box" data-tp-params></div>
+
+                        <small>
+                            Заполняется для датчиков. После выбора
+                            значения появится строка для следующего
+                            параметра.
+                        </small>
+
+                    </div>
+
                     <div class="tp-row-note form-group">
 
                         <label class="tp-row-index">
@@ -648,6 +776,95 @@
 
             <template data-tp-dep-template>
                 Нет других операций для связи
+            </template>
+
+            <!--
+                Строка контролируемого параметра для добавления на
+                лету. Список значений полный, а фильтр по выбранному
+                виду параметра делает скрипт (data-param-id у опций),
+                поэтому заготовка не зависит от того, какой параметр
+                выберет технолог.
+
+                Режим значения (список вариантов, список ячеек либо
+                свободный ввод) скрипт включает по data-param-type и
+                data-param-cell-mode выбранной опции вида.
+            -->
+            <template data-tp-param-template>
+
+                <div class="tp-param-row">
+
+                    <input type="hidden"
+                           value="false"
+                           data-tp-param-mandatory-flag>
+
+                    <select class="form-control tp-param-kind"
+                            data-tp-param-kind>
+
+                        <option value="">
+                            Выберите параметр
+                        </option>
+
+                        <option th:each="kind : ${controlParams}"
+                                th:value="${kind.id}"
+                                th:data-param-type="${kind.type.name()}"
+                                th:data-param-cell-mode="${kind.cellMode}"
+                                th:text="${kind.name}">
+                            Параметр
+                        </option>
+
+                    </select>
+
+                    <!--
+                        Список ячеек для параметра, в названии
+                        которого есть слово «ячейка»: значение берут
+                        из состава изделия. Если ячеек у изделия нет,
+                        список остаётся с пустым значением.
+                    -->
+                    <select class="form-control tp-param-cell"
+                            data-tp-param-cell
+                            hidden>
+
+                        <option value="">
+                            Выберите ячейку
+                        </option>
+
+                        <option th:each="cell : ${cellOptions}"
+                                th:value="${cell.id}"
+                                th:text="${cell.fullDisplayName}">
+                            Ячейка
+                        </option>
+
+                    </select>
+
+                    <!--
+                        Поле свободного ввода для параметра типа
+                        TEXT_INPUT. У параметра со списком вариантов
+                        второго поля нет: значение вписывает
+                        исполнитель при выполнении операции.
+                    -->
+                    <input type="text"
+                           class="form-control tp-param-text"
+                           data-tp-param-text
+                           maxlength="255"
+                           placeholder="Введите значение"
+                           hidden>
+
+                    <label class="tp-param-mandatory"
+                           title="Значение обязательно для внесения исполнителем">
+                        <input type="checkbox"
+                               data-tp-param-mandatory>
+                        <span>Обязательное поле</span>
+                    </label>
+
+                    <button type="button"
+                            class="tp-param-remove"
+                            data-tp-param-remove
+                            aria-label="Убрать параметр">
+                        ×
+                    </button>
+
+                </div>
+
             </template>
 
             <span class="field-error"

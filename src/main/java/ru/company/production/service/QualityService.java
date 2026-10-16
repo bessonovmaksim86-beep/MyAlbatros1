@@ -99,6 +99,13 @@ public class QualityService {
     private final WarehouseSupplierRepository supplierRepository;
     private final TechProcessRepository techProcessRepository;
 
+    /*
+     * Журнал перемещений: заказ на ремонт — единственная причина, по
+     * которой ячейка уходит из изолятора в работу. Без строки журнала
+     * номер исчезал бы из изолятора необъяснённым.
+     */
+    private final SerialMovementJournalService journal;
+
     /* ============================================================
        ПЕРЕЧЕНЬ ИЗОЛЯТОРА ДЛЯ РАЗБОРА
        ============================================================ */
@@ -479,7 +486,16 @@ public class QualityService {
             order.addItem(item);
         }
 
-        return repairOrderRepository.save(order);
+        RepairOrder saved = repairOrderRepository.save(order);
+
+        /*
+         * Намерение отремонтировать фиксируют сразу при оформлении:
+         * пара REPAIR_ORDERED → REPAIR_DONE даёт срок ремонта, а без
+         * первой строки срок посчитать нечем.
+         */
+        journal.recordRepairOrdered(saved);
+
+        return saved;
     }
 
     /**
@@ -594,7 +610,12 @@ public class QualityService {
         return repairOrderRepository.save(order);
     }
 
-    /** Закрывает заказ как выполненный. */
+    /**
+     * Закрывает заказ как выполненный.
+     *
+     * Закрытие пишет REPAIR_DONE — вторую половину пары к REPAIR_ORDERED:
+     * по ней считают срок ремонта по каждой ячейке заказа.
+     */
     @Transactional
     public RepairOrder complete(Long id) {
         RepairOrder order = getOrder(id);
@@ -607,10 +628,20 @@ public class QualityService {
 
         order.setStatus(RepairOrderStatus.DONE);
 
-        return repairOrderRepository.save(order);
+        RepairOrder saved = repairOrderRepository.save(order);
+
+        journal.recordRepairDone(saved);
+
+        return saved;
     }
 
-    /** Отменяет заказ: ячейки возвращаются в изолятор. */
+    /**
+     * Отменяет заказ: ячейки возвращаются в изолятор.
+     *
+     * Отмена обязана попасть в журнал: без неё номер навсегда числился
+     * бы «включён в ЗНП», и по истории нельзя было бы отличить
+     * отремонтированную ячейку от той, чей заказ сняли.
+     */
     @Transactional
     public RepairOrder cancel(Long id) {
         RepairOrder order = getOrder(id);
@@ -624,7 +655,11 @@ public class QualityService {
 
         order.setStatus(RepairOrderStatus.CANCELLED);
 
-        return repairOrderRepository.save(order);
+        RepairOrder saved = repairOrderRepository.save(order);
+
+        journal.recordRepairCancelled(saved);
+
+        return saved;
     }
 
     /* ============================================================

@@ -277,6 +277,41 @@ public class ProductSerial {
         return productType == null ? "—" : productType.getDisplayName();
     }
 
+    /*
+     * Реквизиты прослеживаемости для сводки поиска.
+     *
+     * Связи ленивые, а open-in-view выключен: значения читаются внутри
+     * readOnly-транзакции SearchSummaryService детальным запросом, и
+     * только тогда обращение к номеру заказа безопасно.
+     */
+
+    /** Заказ на производство, выпустивший номер. */
+    @Transient
+    public String getProductionOrderNumber() {
+        return issuedProductionOrder == null
+                ? null
+                : issuedProductionOrder.getNumber();
+    }
+
+    /** Позиция заказа покупателя, для которой выдан номер. */
+    @Transient
+    public String getCustomerOrderNumber() {
+        if (customerOrderItem == null
+                || customerOrderItem.getCustomerOrder() == null) {
+            return null;
+        }
+
+        return customerOrderItem.getCustomerOrder().getNumber();
+    }
+
+    /** Приходный ордер партии, если номер выпущен приходом. */
+    @Transient
+    public String getIncomingOrderNumber() {
+        return receivingBatch == null
+                ? null
+                : receivingBatch.getIncomingOrderNumber();
+    }
+
     /** Ячейку отмечали входным контролем. */
     @Transient
     public boolean isInputControlPassed() {
@@ -360,5 +395,18 @@ public class ProductSerial {
         return fullName == null || fullName.isBlank()
                 ? acceptedBy.getUsername()
                 : fullName;
+    }
+
+    /**
+     * Готовая подпись приёмки на склад для строки сводки поиска:
+     * «15.10.2026 10:30 · Иванов И. И.» либо «приёмка не проведена».
+     */
+    @Transient
+    public String getAcceptedMarkLabel() {
+        if (acceptedAt == null) {
+            return "приёмка не проведена";
+        }
+
+        return getFormattedAcceptedAt() + " · " + getAcceptedByName();
     }
 }

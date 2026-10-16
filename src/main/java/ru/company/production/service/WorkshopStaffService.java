@@ -768,10 +768,7 @@ public class WorkshopStaffService {
             return new StaffBindingView(
                     binding.getId(),
                     StaffBindingType.OPERATION.getDisplayName(),
-                    operation == null
-                            || operation.getOperationName() == null
-                            ? "—"
-                            : operation.getOperationName().getCode(),
+                    null,
                     operation == null
                             || operation.getOperationName() == null
                             ? "Операция удалена из справочника"

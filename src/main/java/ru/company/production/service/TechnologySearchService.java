@@ -8,11 +8,13 @@ import org.springframework.transaction.annotation.Transactional;
 import ru.company.production.dto.SearchResultView;
 import ru.company.production.entity.CustomerOrder;
 import ru.company.production.entity.ProductionOrder;
+import ru.company.production.repository.CellReceivingBatchRepository;
 import ru.company.production.repository.ClassifierSearchView;
 import ru.company.production.repository.CustomerOrderRepository;
 import ru.company.production.repository.OperationRepository;
 import ru.company.production.repository.OperationSearchView;
 import ru.company.production.repository.ProductClassifierRepository;
+import ru.company.production.repository.ProductSerialRepository;
 import ru.company.production.repository.ProductionOrderRepository;
 import ru.company.production.repository.TechProcessRepository;
 import ru.company.production.repository.TechProcessSearchView;
@@ -28,10 +30,11 @@ import java.util.regex.Pattern;
  * Универсальный поиск по сущностям производственной системы.
  *
  * Ищет одновременно по техпроцессам, изделиям классификатора,
- * операциям, рабочим местам и заказам (покупателя — ЗП, на
- * производство — ЗНП). Ответ — плоский список: клиент сам группирует
- * строки по полю category и рисует заголовки только над непустыми
- * группами.
+ * операциям, рабочим местам, заказам (покупателя — ЗП, на
+ * производство — ЗНП), серийным номерам (он же прибор, ячейка,
+ * датчик, система) и приходам склада по приходному ордеру. Ответ —
+ * плоский список: клиент сам группирует строки по полю category и
+ * рисует заголовки только над непустыми группами.
  *
  * Заказы ищутся только по номеру: иного наименования у них нет, а
  * заказчик и статус — уточнение строки выдачи, а не признак поиска.
@@ -45,12 +48,23 @@ public class TechnologySearchService {
 
     private static final int PER_CATEGORY_LIMIT = 8;
 
+    /**
+     * Категория паспортов изделия. Отдельна от реестра, потому что
+     * хронология ведётся и по номерам, которых в реестре уже нет:
+     * выпущенное изделие из реестра уходит, а его перемещения остаются
+     * в журнале и должны находиться по тому же номеру ячейки.
+     */
+    private static final String PASSPORT_CATEGORY = "Паспорта изделий (хронология)";
+
     private final TechProcessRepository techProcessRepository;
     private final ProductClassifierRepository classifierRepository;
     private final OperationRepository operationRepository;
     private final WorkPlaceRepository workPlaceRepository;
     private final CustomerOrderRepository customerOrderRepository;
     private final ProductionOrderRepository productionOrderRepository;
+    private final ProductSerialRepository productSerialRepository;
+    private final CellReceivingBatchRepository receivingBatchRepository;
+    private final ProductPassportService passportService;
 
     public List<SearchResultView> search(String term) {
         Pageable pageable = PageRequest.of(0, PER_CATEGORY_LIMIT);
@@ -73,6 +87,20 @@ public class TechnologySearchService {
             results.addAll(
                     searchProductionOrders(orders.pattern(), pageable)
             );
+        }
+
+        /*
+         * Серийники — сразу за заказами: набранный девятизначный номер
+         * и есть искомый экземпляр, и терять его ниже перечня
+         * техпроцессов нельзя.
+         */
+        if (orders.searchesSerials()) {
+            results.addAll(searchSerials(term, pageable));
+            results.addAll(searchPassports(term, pageable));
+        }
+
+        if (orders.searchesReceiving()) {
+            results.addAll(searchReceiving(term, pageable));
         }
 
         if (orders.searchesCatalog()) {
@@ -104,8 +132,7 @@ public class TechnologySearchService {
                             view.getClassifierName(),
                             view.getSensorClassName()
                     ),
-                    summaryUrl("techprocess", view.getId()),
-                    "/technology/techprocess/" + view.getId() + "/view"
+                    summaryUrl("techprocess", view.getId())
             ));
         }
 
@@ -127,8 +154,7 @@ public class TechnologySearchService {
                     "Классификаторы",
                     classifierTitle(view),
                     view.getProductType().getDisplayName(),
-                    summaryUrl("classifier", view.getId()),
-                    "/technology/classifier/update?id=" + view.getId()
+                    summaryUrl("classifier", view.getId())
             ));
         }
 
@@ -150,8 +176,7 @@ public class TechnologySearchService {
                     "Операции",
                     view.getOperationName(),
                     view.getOperationTypeName(),
-                    summaryUrl("operation", view.getId()),
-                    "/technology/operation/update?id=" + view.getId()
+                    summaryUrl("operation", view.getId())
             ));
         }
 
@@ -173,8 +198,7 @@ public class TechnologySearchService {
                     "Рабочие места",
                     view.getCode() + " — " + view.getName(),
                     view.getPlaceTypeName(),
-                    summaryUrl("workplace", view.getId()),
-                    "/technology/workplace/update?id=" + view.getId()
+                    summaryUrl("workplace", view.getId())
             ));
         }
 
@@ -203,8 +227,7 @@ public class TechnologySearchService {
                                     ? null
                                     : order.getStatus().getDisplayName()
                     ),
-                    summaryUrl("customerorder", order.getId()),
-                    "/dispatcher/customer-order/" + order.getId()
+                    summaryUrl("customerorder", order.getId())
             ));
         }
 
@@ -236,8 +259,98 @@ public class TechnologySearchService {
                                     ? null
                                     : order.getStatus().getDisplayName()
                     ),
-                    summaryUrl("productionorder", order.getId()),
-                    "/dispatcher/production-order/" + order.getId()
+                    summaryUrl("productionorder", order.getId())
+            ));
+        }
+
+        return results;
+    }
+
+    /*
+     * Строки реестра серийных номеров.
+     *
+     * Один и тот же реестр держит приборы, ячейки, датчики и системы,
+     * поэтому группа называется по признаку «серийный номер», а не по
+     * типу: тип видно в подписи строки и различает изделия.
+     */
+    private List<SearchResultView> searchSerials(
+            String term,
+            Pageable pageable
+    ) {
+        List<SearchResultView> results = new ArrayList<>();
+
+        for (ProductSerialRepository.SerialSearchView view :
+                productSerialRepository.search(term, pageable)) {
+
+            results.add(new SearchResultView(
+                    view.getId(),
+                    "serial",
+                    "Серийные номера",
+                    fullNumber(view),
+                    signature(serialItem(view), serialFoundBy(view)),
+                    summaryUrl("serial", view.getId())
+            ));
+        }
+
+        return results;
+    }
+
+    /*
+     * Паспорта изделия — хронология перемещений по номеру ячейки.
+     *
+     * Источник — журнал перемещений, а не реестр: в нём остаются и
+     * номера, выпущенные из реестра, и номера, в реестр никогда не
+     * попадавшие (например, снятые с изделия при ремонте). Идентификатор
+     * строке не нужен: паспорт адресуется самим номером.
+     */
+    private List<SearchResultView> searchPassports(
+            String term,
+            Pageable pageable
+    ) {
+        List<SearchResultView> results = new ArrayList<>();
+
+        for (String fullNumber : passportService.searchNumbers(
+                term, pageable.getPageSize())) {
+
+            results.add(new SearchResultView(
+                    null,
+                    "passport",
+                    PASSPORT_CATEGORY,
+                    fullNumber,
+                    "Хронология перемещений ячейки",
+                    "/passport/" + fullNumber
+            ));
+        }
+
+        return results;
+    }
+
+    /*
+     * Строки приходов склада.
+     *
+     * Партия может быть ещё не подтверждена сканированием, и её
+     * номеров в реестре нет, — приход ищется по своей таблице, чтобы
+     * оформленный, но незакрытый приход находился.
+     */
+    private List<SearchResultView> searchReceiving(
+            String term,
+            Pageable pageable
+    ) {
+        List<SearchResultView> results = new ArrayList<>();
+
+        for (CellReceivingBatchRepository.ReceivingSearchView view :
+                receivingBatchRepository.search(term, pageable)) {
+
+            results.add(new SearchResultView(
+                    view.getId(),
+                    "receiving",
+                    "Приходы склада (приходный ордер)",
+                    view.getIncomingOrderNumber(),
+                    signature(
+                            view.getSupplierName(),
+                            receivingCell(view)
+                    ),
+                    summaryUrl("receiving", view.getId())
             ));
         }
 
@@ -277,7 +390,9 @@ public class TechnologySearchService {
             String pattern,
             boolean customerOrders,
             boolean productionOrders,
-            boolean catalog
+            boolean catalog,
+            boolean serials,
+            boolean receiving
     ) {
 
         private static final String CUSTOMER_PREFIX = "ЗП";
@@ -300,7 +415,7 @@ public class TechnologySearchService {
                 Pattern.compile("[%_*\\\\]");
 
         private static final OrderSearch CATALOG_ONLY =
-                new OrderSearch(null, false, false, true);
+                new OrderSearch(null, false, false, true, true, true);
 
         /*
          * Признаки читаются методами, а не полями: вызов обязан говорить
@@ -316,6 +431,14 @@ public class TechnologySearchService {
 
         boolean searchesCatalog() {
             return catalog;
+        }
+
+        boolean searchesSerials() {
+            return serials;
+        }
+
+        boolean searchesReceiving() {
+            return receiving;
         }
 
         static OrderSearch of(String term) {
@@ -349,11 +472,19 @@ public class TechnologySearchService {
             String first = groups.get(0);
 
             if (first.startsWith(PRODUCTION_PREFIX)) {
+                /*
+                 * Номер ЗНП носит и изделие: оператор вписывает его в
+                 * серийник при выпуске (V50). Тот, кто набирает ЗНП,
+                 * ищет и заказ, и выпущенные под ним номера, поэтому
+                 * реестр опрашивается вместе с таблицей заказов.
+                 */
                 return prefixSearch(
                         PRODUCTION_PREFIX,
                         joined,
                         false,
-                        true
+                        true,
+                        true,
+                        false
                 );
             }
 
@@ -367,6 +498,8 @@ public class TechnologySearchService {
                         CUSTOMER_PREFIX,
                         joined,
                         true,
+                        false,
+                        false,
                         false
                 );
             }
@@ -380,6 +513,8 @@ public class TechnologySearchService {
                  */
                 return new OrderSearch(
                         "%" + joined + "%",
+                        true,
+                        true,
                         true,
                         true,
                         true
@@ -401,7 +536,9 @@ public class TechnologySearchService {
                 String prefix,
                 String joined,
                 boolean customer,
-                boolean production
+                boolean production,
+                boolean serials,
+                boolean receiving
         ) {
             String tail = joined.substring(prefix.length());
 
@@ -413,7 +550,14 @@ public class TechnologySearchService {
                     ? prefix + "%"
                     : prefix + "%" + tail;
 
-            return new OrderSearch(pattern, customer, production, false);
+            return new OrderSearch(
+                    pattern,
+                    customer,
+                    production,
+                    false,
+                    serials,
+                    receiving
+            );
         }
 
         private static boolean isDigits(String value) {
@@ -427,9 +571,8 @@ public class TechnologySearchService {
      *
      * Все строки выдачи ведут сюда, а не в раздел: поиск один на всю
      * систему, а интерфейсы разделов разные, и переход прямо в чужую
-     * страницу сбивал пользователя. Сводка показывает найденное в
-     * едином интерфейсе, а в раздел уже ведёт отдельная кнопка
-     * (moduleUrl той же строки).
+     * страницу сбивал пользователя.      * Сводка показывает найденное в
+     * едином интерфейсе, а в раздел человек уходит сам — по навигации.
      */
     private String summaryUrl(String category, Long id) {
         return "/search/object/" + category + "/" + id;
@@ -483,5 +626,86 @@ public class TechnologySearchService {
                 : sensorName;
 
         return code + (title != null ? " " + title : "");
+    }
+
+    /*
+     * Полный номер изделия из строки поиска: код классификатора плюс
+     * пятизначная серия. Формула повторяет ProductSerial#getFullNumber():
+     * выдача поиска и реестр обязаны показывать номер одинаково, иначе
+     * найденная строка не совпадёт с тем, что человек видит в карточке.
+     */
+    private String fullNumber(
+            ProductSerialRepository.SerialSearchView view
+    ) {
+        Integer code = view.getClassifierCode();
+        Integer serial = view.getSerial();
+
+        if (serial == null) {
+            return code == null ? "" : String.valueOf(code);
+        }
+
+        return (code == null ? "" : code)
+                + String.format("%05d", serial);
+    }
+
+    /* Наименование изделия серийника: у датчика — род из справочника. */
+    private String serialItem(
+            ProductSerialRepository.SerialSearchView view
+    ) {
+        String name = view.getClassifierName() != null
+                && !view.getClassifierName().isBlank()
+                ? view.getClassifierName()
+                : view.getSensorClassName();
+
+        if (name != null && !name.isBlank()) {
+            return name;
+        }
+
+        return view.getProductType() == null
+                ? null
+                : view.getProductType().getDisplayName();
+    }
+
+    /*
+     * Чем именно нашёлся серийник: приходным ордером или номером ЗНП.
+     *
+     * Строка выдачи обязана объяснять попадание: найденный по ордеру
+     * номер выглядит иначе, чем найденный по своему номеру, и без
+     * подписи человек не понял бы, при чём тут партия прихода.
+     */
+    private String serialFoundBy(
+            ProductSerialRepository.SerialSearchView view
+    ) {
+        String order = view.getIncomingOrderNumber();
+
+        if (order != null && !order.isBlank()) {
+            return "ордер " + order;
+        }
+
+        String znp = view.getZnpNumber();
+
+        return znp == null || znp.isBlank()
+                ? null
+                : "ЗНП " + znp;
+    }
+
+    /* Ячейка прихода: «1212 Подсборка ЯПР56» либо род датчика. */
+    private String receivingCell(
+            CellReceivingBatchRepository.ReceivingSearchView view
+    ) {
+        String name = view.getClassifierName() != null
+                && !view.getClassifierName().isBlank()
+                ? view.getClassifierName()
+                : view.getSensorClassName();
+
+        Integer code = view.getClassifierCode();
+
+        if (code == null) {
+            return name;
+        }
+
+        return name == null || name.isBlank()
+                ? String.valueOf(code)
+                : code + " " + name;
     }
 }

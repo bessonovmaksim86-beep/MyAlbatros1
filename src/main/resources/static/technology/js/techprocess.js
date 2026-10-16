@@ -23,6 +23,8 @@
         document.querySelector('[data-tp-workplace-required-message]');
     const workplaceTemplate =
         document.querySelector('[data-tp-workplace-template]');
+    const paramTemplate =
+        document.querySelector('[data-tp-param-template]');
     const collapseAllButton =
         document.querySelector('[data-tp-collapse-all]');
 
@@ -82,6 +84,15 @@
          * поэтому скрыты, пока операция не выбрана.
          */
         row.querySelector('.tp-row-places')?.toggleAttribute(
+            'hidden',
+            !enabled
+        );
+
+        /*
+         * Контролируемые параметры относятся к конкретной операции,
+         * поэтому блок скрыт, пока операция не выбрана.
+         */
+        row.querySelector('.tp-row-params')?.toggleAttribute(
             'hidden',
             !enabled
         );
@@ -258,6 +269,8 @@
                 input.name =
                     `operations[${index}].predecessorOperationIds`;
             });
+
+            numberControlParams(row, index, select.value);
 
             const badge = row.querySelector('[data-tp-row-number]');
 
@@ -442,6 +455,287 @@
         renumber();
     }
 
+    /*
+     * Контролируемые параметры операции.
+     *
+     * Строка параметра устроена как строка рабочего места: вид
+     * параметра, его значение и отметка обязательности. Значения
+     * в списке отдают полным составом справочника, а фильтр по
+     * выбранному виду делает data-param-id у каждой опции — так
+     * заготовка строки не зависит от того, какой вид выберут.
+     */
+    function paramRows(row) {
+        return [...row.querySelectorAll('.tp-param-row')];
+    }
+
+    function paramKindSelect(paramRow) {
+        return paramRow.querySelector('[data-tp-param-kind]');
+    }
+
+    function paramTextInput(paramRow) {
+        return paramRow.querySelector('[data-tp-param-text]');
+    }
+
+    function paramCellSelect(paramRow) {
+        return paramRow.querySelector('[data-tp-param-cell]');
+    }
+
+    /*
+     * Режим значения строки параметра: 'list', 'cell' или 'text'.
+     *
+     * Оба признака читаются с выбранной опции вида (data-param-type,
+     * data-param-cell-mode), а не хранятся отдельно: источник истины
+     * один — справочник, и после правки параметра форма подхватит
+     * новый режим без пересохранения.
+     *
+     * Режим ячеек важнее типа: параметр про ячейку выбирает значение
+     * из состава изделия даже тогда, когда в справочнике его завели
+     * как «поле ввода».
+     */
+    function paramModeOf(paramRow) {
+        const kind = paramKindSelect(paramRow);
+
+        if (!kind) {
+            return 'list';
+        }
+
+        const option = kind.options[kind.selectedIndex];
+
+        if (option?.dataset.paramCellMode === 'true') {
+            return 'cell';
+        }
+
+        const type = (option && option.dataset.paramType) || 'LIST';
+
+        return type === 'TEXT_INPUT' ? 'text' : 'list';
+    }
+
+    /*
+     * Режим значения строки параметра.
+     *
+     * У параметра со списком вариантов второго поля нет вообще:
+     * варианты описывают сам параметр, а конкретное значение вписывает
+     * исполнитель при выполнении операции. Технолог фиксирует в
+     * маршруте лишь то, что параметр контролируется, и его
+     * обязательность.
+     *
+     * Поэтому показан бывает не более одного контрола (список ячеек
+     * либо поле ввода), а при режиме 'list' скрыты все. Скрытый
+     * контрол ещё и очищается: иначе в сохранение ушло бы значение,
+     * которое технолог не видел.
+     */
+    function syncParamMode(paramRow) {
+        const mode = paramModeOf(paramRow);
+
+        const controls = {
+            cell: paramCellSelect(paramRow),
+            text: paramTextInput(paramRow)
+        };
+
+        Object.entries(controls).forEach(([name, control]) => {
+            if (!control) {
+                return;
+            }
+
+            const shown = name === mode;
+
+            control.hidden = !shown;
+
+            /*
+             * Скрытый контрол очищают: иначе в сохранение ушло бы
+             * значение, которое технолог не видел и не выбирал.
+             */
+            if (!shown) {
+                control.value = '';
+            }
+        });
+    }
+
+    /*
+     * Строка параметра заполнена, если выбран вид параметра.
+     *
+     * Значение к заполненности не относится: у параметра со списком
+     * второго поля нет, а у ячейки и текстового режима значение
+     * необязательно — технолог вправе зафиксировать контролируемый
+     * параметр, не выбирая конкретную ячейку.
+     */
+    function paramRowIsFilled(paramRow) {
+        return Boolean(paramKindSelect(paramRow)?.value);
+    }
+
+    function ensureParamRow(row) {
+        const box = row.querySelector('[data-tp-params]');
+
+        if (!box || !paramTemplate || paramRows(row).length === 0) {
+            return;
+        }
+
+        const last = paramRows(row)[paramRows(row).length - 1];
+
+        if (paramRowIsFilled(last)) {
+            box.append(paramTemplate.content.cloneNode(true));
+        }
+    }
+
+    function handleParamRemove(row, button) {
+        const paramRow = button.closest('.tp-param-row');
+
+        if (!paramRow) {
+            return;
+        }
+
+        paramRow.remove();
+
+        /* Строка для выбора параметра должна остаться. */
+        if (paramRows(row).length === 0 && paramTemplate) {
+            row.querySelector('[data-tp-params]')
+                ?.append(paramTemplate.content.cloneNode(true));
+        }
+
+        renumber();
+    }
+
+    /*
+     * Именование полей параметра.
+     *
+     * В сохранение уходит только строка со значением: пустая
+     * строка — это место для следующего выбора, а не данные.
+     * Индексы дают без пропусков, иначе Spring MVC собрал бы список
+     * controlParams с дырой на пропущенном индексе.
+     *
+     * Отметка обязательности — чекбокс, а неотмеченный чекбокс
+     * запрос не покидает. Перед ним стоит скрытое поле с false,
+     * поэтому снятое значение приходит явно, а отмеченное даёт пару
+     * «false, true», которую Spring читает как true.
+     */
+    function numberControlParams(row, operationIndex, operationChosen) {
+        let paramIndex = 0;
+
+        paramRows(row).forEach(paramRow => {
+            const kind = paramKindSelect(paramRow);
+            const cell = paramCellSelect(paramRow);
+            const text = paramTextInput(paramRow);
+            const mandatory =
+                paramRow.querySelector('[data-tp-param-mandatory]');
+            const mandatoryFlag =
+                paramRow.querySelector('[data-tp-param-mandatory-flag]');
+
+            const fields =
+                [kind, cell, text, mandatory, mandatoryFlag]
+                    .filter(Boolean);
+
+            if (
+                !operationChosen
+                || !paramRowIsFilled(paramRow)
+            ) {
+                fields.forEach(field => field.removeAttribute('name'));
+
+                return;
+            }
+
+            const prefix =
+                `operations[${operationIndex}]`
+                + `.controlParams[${paramIndex}]`;
+
+            if (kind) {
+                kind.name = `${prefix}.controlParamId`;
+            }
+
+            /*
+             * Имя получает только тот контрол значения, который
+             * относится к режиму параметра: у списка вариантов
+             * второго поля нет вообще, и ни один контрол имени не
+             * получает.
+             */
+            const mode = paramModeOf(paramRow);
+
+            [cell, text].forEach(control => {
+                if (!control) {
+                    return;
+                }
+
+                const own =
+                    (mode === 'cell' && control === cell)
+                    || (mode === 'text' && control === text);
+
+                if (!own) {
+                    control.removeAttribute('name');
+
+                    return;
+                }
+
+                control.name = mode === 'cell'
+                    ? `${prefix}.cellClassifierId`
+                    : `${prefix}.textValue`;
+            });
+
+            if (mandatory) {
+                mandatory.name = `${prefix}.mandatory`;
+            }
+
+            if (mandatoryFlag) {
+                mandatoryFlag.name = `${prefix}.mandatory`;
+            }
+
+            paramIndex++;
+        });
+    }
+
+    /*
+     * Строки параметров появляются на лету, поэтому их обработчики
+     * вешают на поле операции, а не на сами строки.
+     */
+    function handleParamChange(row, target) {
+        const paramRow = target.closest('.tp-param-row');
+
+        if (!paramRow) {
+            return;
+        }
+
+        if (target.matches('[data-tp-param-kind]')) {
+            syncParamMode(paramRow);
+        }
+
+        ensureParamRow(row);
+        paramRows(row).forEach(syncParamMode);
+        renumber();
+    }
+
+    /*
+     * Текст значения вводят посимвольно, поэтому следующую пустую
+     * строку добавляют по событию input, а не change: иначе
+     * технолог увидел бы её только после потери фокуса.
+     */
+    function handleParamInput(row) {
+        ensureParamRow(row);
+        renumber();
+    }
+
+    /*
+     * Строка выбора параметра обязана быть видна сразу, как только
+     * выбрана операция: у серверной строки параметров может не быть
+     * вовсе (операция датчика заполняется впервые), и тогда блок
+     * выглядел бы пустым — технолог не понял бы, что там можно
+     * что-то выбрать. Пустая строка здесь работает как у рабочих
+     * мест: она не уходит в форму, пока не выбрано значение.
+     */
+    function initParamRows(row) {
+        const box = row.querySelector('[data-tp-params]');
+
+        if (!box || !paramTemplate) {
+            return;
+        }
+
+        if (
+            paramRows(row).length === 0
+            && operationSelect(row).value
+        ) {
+            box.append(paramTemplate.content.cloneNode(true));
+        }
+
+        paramRows(row).forEach(syncParamMode);
+    }
+
     function addRow() {
         rowsBox.append(rowTemplate.content.cloneNode(true));
 
@@ -472,6 +766,13 @@
          * so an empty row is appended right away for the next one.
          */
         rows().forEach(ensureWorkplaceRow);
+
+        /*
+         * Rows loaded from the server already have params chosen,
+         * so init filters and append an empty row for the next one.
+         */
+        rows().forEach(initParamRows);
+        rows().forEach(ensureParamRow);
 
         rebuildDependencies();
         renumber();
@@ -530,14 +831,50 @@
         rowsBox.addEventListener('change', event => {
             const select = event.target.closest('[data-tp-workplace]');
 
-            if (!select) {
+            if (select) {
+                const row = select.closest('.tp-row');
+
+                if (row) {
+                    handleWorkplaceChange(row);
+                }
+
                 return;
             }
 
-            const row = select.closest('.tp-row');
+            /*
+             * Строки контролируемых параметров создают на лету,
+             * поэтому их события ведут себя так же, как у рабочих
+             * мест: обработчик один на всё поле операций.
+             */
+            const paramField = event.target.closest(
+                '[data-tp-param-kind], [data-tp-param-cell]'
+            );
+
+            if (paramField) {
+                const row = paramField.closest('.tp-row');
+
+                if (row) {
+                    handleParamChange(row, paramField);
+                }
+            }
+        });
+
+        /*
+         * Текст значения текстового параметра вводят посимвольно,
+         * поэтому следующую пустую строку добавляют по input: по
+         * change она появилась бы только после потери фокуса.
+         */
+        rowsBox.addEventListener('input', event => {
+            const text = event.target.closest('[data-tp-param-text]');
+
+            if (!text) {
+                return;
+            }
+
+            const row = text.closest('.tp-row');
 
             if (row) {
-                handleWorkplaceChange(row);
+                handleParamInput(row);
             }
         });
 
@@ -546,14 +883,26 @@
                 '[data-tp-workplace-remove]'
             );
 
-            if (!button) {
+            if (button) {
+                const row = button.closest('.tp-row');
+
+                if (row) {
+                    handleWorkplaceRemove(row, button);
+                }
+
                 return;
             }
 
-            const row = button.closest('.tp-row');
+            const paramButton = event.target.closest(
+                '[data-tp-param-remove]'
+            );
 
-            if (row) {
-                handleWorkplaceRemove(row, button);
+            if (paramButton) {
+                const row = paramButton.closest('.tp-row');
+
+                if (row) {
+                    handleParamRemove(row, paramButton);
+                }
             }
         });
 

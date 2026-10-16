@@ -1,0 +1,434 @@
+<!DOCTYPE html>
+<html lang="ru"
+      xmlns:th="http://www.thymeleaf.org">
+
+<head>
+    <meta charset="UTF-8">
+
+    <meta name="viewport"
+          content="width=device-width, initial-scale=1">
+
+    <title>Перемещение из изолятора брака</title>
+
+    <link rel="stylesheet"
+          th:href="@{/technology/css/technology.css}">
+
+    <link rel="stylesheet"
+          th:href="@{/technology/css/common.css}">
+
+    <link rel="stylesheet"
+          th:href="@{/warehouse/css/warehouse.css}">
+</head>
+
+<body>
+
+<div class="app-shell">
+
+    <aside th:replace="~{warehouse/fragments/layout
+            :: sidebar('quarantine-transfer')}">
+    </aside>
+
+    <main class="main">
+
+        <header th:replace="~{warehouse/fragments/layout
+                :: topbar}">
+        </header>
+
+        <div class="page-content warehouse-page">
+
+            <div class="page-head">
+
+                <div class="page-title">
+
+                    <h1>Перемещение из изолятора брака</h1>
+
+                    <p>
+                        Ячейки и подсборки, которые бюро входного
+                        контроля вынесло из изолятора брака и передало
+                        на приёмку: подтвердите сканером только те
+                        номера, что реально привезли
+                    </p>
+
+                </div>
+
+                <div class="page-head-actions">
+
+                    <a class="btn secondary"
+                       th:href="@{/warehouse/acceptance}">
+                        Приёмка с БВК
+                    </a>
+
+                    <a class="btn secondary"
+                       th:href="@{/warehouse/general}">
+                        Обзор склада
+                    </a>
+
+                </div>
+            </div>
+
+            <div class="alert success"
+                 th:if="${successMessage}"
+                 th:text="${successMessage}">
+            </div>
+
+            <div class="alert danger"
+                 th:if="${errorMessage}"
+                 th:text="${errorMessage}">
+            </div>
+
+            <ol class="warehouse-steps warehouse-steps--acceptance">
+
+                <li class="warehouse-steps__item is-done">
+                    Брак оформлен решением БВК
+                </li>
+
+                <li class="warehouse-steps__item is-done">
+                    Перемещение из изолятора с причиной
+                </li>
+
+                <li class="warehouse-steps__item"
+                    th:classappend="${#lists.isEmpty(transfers)}
+                        ? ' is-done' : ' is-current'">
+                    Проверка номеров складом
+                </li>
+
+                <li class="warehouse-steps__item"
+                    th:classappend="${#lists.isEmpty(transfers)}
+                        ? ' is-done' : ''">
+                    Ячейки приняты на склад
+                </li>
+
+            </ol>
+
+            <!-- =====================================================
+                 ПРИЁМКА: ПОДТВЕРЖДЕНИЕ НОМЕРОВ
+
+                 Перемещение — ещё не приёмка: бюро передало список, а
+                 привезли могли не всё. Кладовщик отмечает сканером
+                 только то, что лежит перед ним, поэтому приёмку проводят
+                 введёнными номерами, а не «всем списком разом».
+
+                 Поле и список ведут себя как при сканировании прихода:
+                 сканер печатает номер и жмёт Enter, а отправка формы на
+                 каждом скане закрыла бы приёмку по одной ячейке.
+
+                 Неподтверждённые номера остаются ждать приёмки — их не
+                 убирают и не проводят заодно с остальными.
+                 ===================================================== -->
+            <section class="card"
+                     th:if="${!#lists.isEmpty(transfers)}">
+
+                <div class="card-head">
+
+                    <div>
+
+                        <h2>Приёмка на склад</h2>
+
+                        <small>
+                            Поднесите этикетку к сканеру или введите
+                            номер вручную: примут только подтверждённые
+                            ячейки, остальные продолжат ждать приёмки
+                        </small>
+
+                    </div>
+
+                    <span class="warehouse-counter"
+                          id="scanCounter">
+
+                        Подтверждено <strong id="scanCount">0</strong>
+                        из <strong th:text="${#lists.size(cellNumbers)}">3</strong>
+                    </span>
+                </div>
+
+                <div class="card-body">
+
+                    <form method="post"
+                          id="scanForm"
+                          th:action="@{/warehouse/quarantine-transfer/accept}">
+
+                        <input th:if="${_csrf != null}"
+                               type="hidden"
+                               th:name="${_csrf.parameterName}"
+                               th:value="${_csrf.token}">
+
+                        <div class="warehouse-scan-input">
+
+                            <input type="text"
+                                   id="scanField"
+                                   name="scanField"
+                                   autocomplete="off"
+                                   spellcheck="false"
+                                   placeholder="Номер ячейки: 9 цифр, например 121200022"
+                                   aria-label="Номер принимаемой ячейки">
+
+                            <button type="button"
+                                    class="btn secondary"
+                                    id="scanAdd">
+                                Добавить
+                            </button>
+
+                        </div>
+
+                        <ul class="warehouse-scan-list" id="scanList"></ul>
+
+                        <p class="warehouse-scan-empty" id="scanEmpty">
+                            Подтверждённых ячеек пока нет
+                        </p>
+
+                        <div class="warehouse-actions">
+
+                            <div class="warehouse-actions__group">
+
+                                <button type="button"
+                                        class="btn secondary"
+                                        id="scanUndo">
+                                    Убрать последний
+                                </button>
+
+                                <button type="button"
+                                        class="btn danger"
+                                        id="scanClear">
+                                    Очистить ввод
+                                </button>
+
+                            </div>
+
+                            <button type="submit" class="btn primary">
+                                Принять подтверждённые на склад
+                            </button>
+                        </div>
+
+                    </form>
+
+                </div>
+            </section>
+
+            <!-- =====================================================
+                 ПЕРЕЧЕНЬ ПЕРЕМЕЩЁННЫХ ЯЧЕЕК
+
+                 Реквизиты нужны складу для сверки: по поставщику и
+                 приходному ордеру кладовщик находит этикетку, а причина
+                 объясняет, почему ячейка вообще вернулась из брака.
+                 ===================================================== -->
+            <section class="card">
+
+                <div class="card-head">
+
+                    <div>
+
+                        <h2>Передано из изолятора брака</h2>
+
+                        <small th:if="${!#lists.isEmpty(transfers)}">
+                            Отсканированный номер подсвечивается — так
+                            видно, какую ячейку склад уже принял
+                        </small>
+
+                        <small th:if="${#lists.isEmpty(transfers)}">
+                            Перечень заполняется, когда бюро входного
+                            контроля перемещает ячейки из изолятора
+                            брака на склад
+                        </small>
+
+                    </div>
+
+                    <span class="warehouse-counter"
+                          th:if="${!#lists.isEmpty(transfers)}">
+
+                        Ячеек ждут приёмки:
+
+                        <strong th:text="${#lists.size(transfers)}">
+                            3
+                        </strong>
+                    </span>
+                </div>
+
+                <div class="card-body">
+
+                    <div class="alert danger"
+                         th:if="${#lists.isEmpty(transfers)}">
+
+                        <p>
+                            Из изолятора брака ничего не передавали:
+                            перемещение оформляет бюро входного контроля
+                            в поштучном перечне изолятора с указанием
+                            причины
+                        </p>
+
+                    </div>
+
+                    <th:block th:unless="${#lists.isEmpty(transfers)}">
+
+                        <ul class="warehouse-numbers" id="expectedNumbers">
+
+                            <li class="warehouse-numbers__item"
+                                th:each="number, iteration : ${cellNumbers}"
+                                th:attr="data-number=${number}">
+
+                                <span class="warehouse-numbers__index"
+                                      th:text="'№ ' + ${iteration.count}">
+                                    № 1
+                                </span>
+
+                                <span th:text="${number}">
+                                    777700022
+                                </span>
+                            </li>
+
+                        </ul>
+
+                        <div class="warehouse-actions">
+
+                            <button type="button"
+                                    class="btn secondary"
+                                    id="copyNumbers">
+                                Скопировать номера
+                            </button>
+
+                            <span class="field-hint"
+                                  id="copyStatus"></span>
+                        </div>
+
+                        <!--
+                            Возврат в изолятор: ячейку, которую привезли
+                            не ту или по которой разбирательство по браку
+                            не окончено, возвращают бюро. Строку
+                            перемещения снимают, и перечень изолятора
+                            показывает ячейку снова.
+
+                            Форма отдельная и лежит вне формы приёмки:
+                            вложенные формы браузером запрещены, а две
+                            разные операции не должны отправляться
+                            вместе.
+                        -->
+                        <form method="post"
+                              id="returnForm"
+                              th:action="@{/warehouse/quarantine-transfer/return}">
+
+                            <input th:if="${_csrf != null}"
+                                   type="hidden"
+                                   th:name="${_csrf.parameterName}"
+                                   th:value="${_csrf.token}">
+
+                            <div class="table-wrap">
+
+                                <table class="data-table warehouse-batch-table">
+
+                                    <thead>
+
+                                    <tr>
+                                        <th></th>
+                                        <th>Тип</th>
+                                        <th>Изделие</th>
+                                        <th>Номер ячейки</th>
+                                        <th>Причина перемещения</th>
+                                        <th>Поставщик</th>
+                                        <th>Ордер</th>
+                                        <th>Переместил</th>
+                                    </tr>
+
+                                    </thead>
+
+                                    <tbody>
+
+                                    <tr th:each="row : ${transfers}"
+                                        th:attr="data-number=${row.fullNumber}">
+
+                                        <td class="table-actions">
+
+                                            <label class="warehouse-check"
+                                                   th:for="'return-' + ${row.id}">
+
+                                                <input type="checkbox"
+                                                       class="warehouse-check__input"
+                                                       th:id="'return-' + ${row.id}"
+                                                       name="transfer"
+                                                       th:value="${row.id}">
+
+                                                <span>Вернуть</span>
+                                            </label>
+                                        </td>
+
+                                        <td th:text="${row.kindLabel}">
+                                            Ячейка
+                                        </td>
+
+                                        <td th:text="${row.classifierLabel}">
+                                            7777 — Подсборка ЯПР1
+                                        </td>
+
+                                        <td class="warehouse-number-cell"
+                                            th:text="${row.fullNumber}">
+                                            777700022
+                                        </td>
+
+                                        <td th:text="${row.reason}">
+                                            Брак признан ошибочным
+                                        </td>
+
+                                        <td th:text="${row.supplierName}">
+                                            Карат
+                                        </td>
+
+                                        <td th:text="${row.incomingOrderNumber}">
+                                            ТОРГ-12/33
+                                        </td>
+
+                                        <td>
+                                            <span th:text="${row.transferredByLabel}">
+                                                Петров И. И.
+                                            </span>
+
+                                            <small class="warehouse-cell-note"
+                                                   th:text="${row.transferredAtLabel}">
+                                                15.10.2026 08:48
+                                            </small>
+                                        </td>
+
+                                    </tr>
+
+                                    </tbody>
+                                </table>
+
+                            </div>
+
+                            <div class="warehouse-actions">
+
+                                <span class="field-hint"
+                                      id="returnHint">
+                                    Отметьте ячейки, которые возвращаете
+                                    в изолятор брака: они исчезнут из
+                                    этого перечня и появятся в изоляторе
+                                </span>
+
+                                <button type="submit"
+                                        class="btn danger"
+                                        id="returnButton"
+                                        disabled>
+                                    Вернуть в изолятор брака
+                                </button>
+
+                            </div>
+
+                        </form>
+
+                    </th:block>
+
+                </div>
+            </section>
+
+        </div>
+    </main>
+</div>
+
+<th:block th:replace="~{warehouse/fragments/layout
+        :: commonScripts}">
+</th:block>
+
+<!-- Проверка номеров: переиспользует механику сканирования прихода -->
+<script th:src="@{/warehouse/js/receiving.js}"></script>
+
+<!-- Счётчик отмеченных для возврата и подтверждение операции -->
+<script th:src="@{/warehouse/js/quarantine-transfer.js}"></script>
+
+</body>
+</html>

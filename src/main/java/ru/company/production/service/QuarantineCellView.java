@@ -104,6 +104,35 @@ public record QuarantineCellView(
         return batch.getCellClassifier().getId();
     }
 
+    /**
+     * Ключ строки для чекбокса формы: «groupId|номер».
+     *
+     * Один и тот же номер могли забраковать в двух группах с разными
+     * причинами, и перемещение обязан ссылаться на конкретную группу —
+     * иначе кладовщик не смог бы понять, по какому исходу и причине
+     * ячейка попала в изолятор.
+     */
+    public String getGroupKey() {
+        return record.group().getId() + "|" + fullNumber;
+    }
+
+    /**
+     * Партия строки.
+     *
+     * Отдаётся обёрткой, а не полями: связь уже развёрнута
+     * fetch-join'ом запроса изолятора, поэтому вне сессии она
+     * читается безопасно. Нужна перемещению на склад, которое
+     * копирует партию и классификатор на момент перемещения.
+     */
+    public CellReceivingBatch getBatch() {
+        return record.batch();
+    }
+
+    /** Группа брака строки — по ней ячейку находят в изоляторе обратно. */
+    public ru.company.production.entity.InputControlDefectGroup getDefectGroup() {
+        return record.group();
+    }
+
     /*
      * Двойники вида getX() держат рядом с аксессорами record
      * намеренно: Thymeleaf читает свойства по JavaBeans-соглашению

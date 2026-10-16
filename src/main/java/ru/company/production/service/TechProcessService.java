@@ -7,15 +7,20 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import ru.company.production.dto.TechProcessForm;
 import ru.company.production.dto.TechProcessGraphView;
+import ru.company.production.entity.ControlParam;
+import ru.company.production.entity.ControlParamType;
+import ru.company.production.entity.ControlParamValue;
 import ru.company.production.entity.Operation;
 import ru.company.production.entity.ProductClassifier;
 import ru.company.production.entity.TechProcess;
 import ru.company.production.entity.TechProcessClassifier;
 import ru.company.production.entity.TechProcessOperation;
+import ru.company.production.entity.TechProcessOperationControlParam;
 import ru.company.production.entity.WorkPlace;
 import ru.company.production.repository.AppliedClassifierView;
 import ru.company.production.repository.ClassifierOptionProjection;
 import ru.company.production.repository.ClassifierRouteOptionView;
+import ru.company.production.repository.ControlParamRepository;
 import ru.company.production.repository.OperationRepository;
 import ru.company.production.repository.ProductClassifierRepository;
 import ru.company.production.repository.TechProcessClassifierRepository;
@@ -51,6 +56,7 @@ public class TechProcessService {
     private final ProductClassifierRepository classifierRepository;
     private final OperationRepository operationRepository;
     private final WorkPlaceRepository workPlaceRepository;
+    private final ControlParamRepository controlParamRepository;
     private final TechProcessCodeGenerator codeGenerator;
 
     @Transactional(readOnly = true)
@@ -104,6 +110,34 @@ public class TechProcessService {
         return classifierRepository.findAllOptions();
     }
 
+    /*
+     * Справочник контролируемых параметров для конструктора маршрута:
+     * виды параметров вместе с их вариантами. Форма маршрута только
+     * читает его — ведёт справочник технолог в разделе
+     * «Контролируемые параметры».
+     */
+    @Transactional(readOnly = true)
+    public List<ControlParam> findControlParams() {
+        return controlParamRepository.findAllDetailed();
+    }
+
+    /**
+     * Ячейки, входящие в изделие техпроцесса.
+     *
+     * Нужны форме техпроцесса как источник значений для параметра
+     * «…ячейки…»: список строит шаблон, а open-in-view выключен,
+     * поэтому состав читают здесь, а не из ленивой коллекции
+     * классификатора.
+     */
+    @Transactional(readOnly = true)
+    public List<ProductClassifier> findCellOptions(Long classifierId) {
+        if (classifierId == null) {
+            return List.of();
+        }
+
+        return classifierRepository.findCellOptionsByOwner(classifierId);
+    }
+
     public String nextCode() {
         return codeGenerator.next(techProcessRepository.findAllCodes());
     }
@@ -154,6 +188,46 @@ public class TechProcessService {
             }
 
             row.setPredecessorOperationIds(predecessors);
+
+            /*
+             * Контролируемые параметры: в форму уходят идентификаторы
+             * вида и значения из справочника плюс отметка
+             * обязательности.
+             *
+             * У параметра типа TEXT_INPUT варианта в справочнике нет,
+             * и в форму вместо него уходит вписанный текст — иначе
+             * обращение к controlParamValue дало бы NPE.
+             *
+             * У режима CELL_LIST ячейка хранится в cellClassifier, и
+             * её ID уходит в форму — сервер вернёт её же при повторном
+             * открытии.
+             */
+            for (TechProcessOperationControlParam param
+                    : node.getControlParams()) {
+                TechProcessForm.ControlParamRow paramRow =
+                        new TechProcessForm.ControlParamRow();
+
+                paramRow.setControlParamId(
+                        param.getControlParam().getId()
+                );
+
+                if (param.getControlParamValue() != null) {
+                    paramRow.setControlParamValueId(
+                            param.getControlParamValue().getId()
+                    );
+                } else if (param.getCellClassifier() != null) {
+                    paramRow.setCellClassifierId(
+                            param.getCellClassifier().getId()
+                    );
+                } else {
+                    paramRow.setTextValue(param.getTextValue());
+                }
+
+                paramRow.setMandatory(param.isMandatory());
+
+                row.getControlParams().add(paramRow);
+            }
+
             form.getOperations().add(row);
         }
 
@@ -850,6 +924,33 @@ public class TechProcessService {
          */
         Map<Long, WorkPlace> workPlaces = loadWorkPlaces(rows);
 
+        /*
+         * Справочник контролируемых параметров — виды и их варианты.
+         * Загружается один раз на весь маршрут.
+         */
+        List<ControlParam> controlParams =
+                controlParamRepository.findAllDetailed();
+
+        Map<Long, ControlParam> paramsById = new HashMap<>();
+        for (ControlParam cp : controlParams) {
+            paramsById.put(cp.getId(), cp);
+        }
+
+        /*
+         * Ячейки, входящие в изделие: источник значений для параметра
+         * «…ячейки…». Загружаются один раз на маршрут и только когда
+         * такой параметр в форме действительно есть — иначе форма
+         * маршрута без параметров платила бы лишним запросом.
+         */
+        Map<Long, ProductClassifier> cellOptions = new HashMap<>();
+
+        if (needsCellOptions(controlParams, rows)) {
+            for (ProductClassifier cell : classifierRepository
+                    .findCellOptionsByOwner(classifier.getId())) {
+                cellOptions.put(cell.getId(), cell);
+            }
+        }
+
         int position = 0;
 
         for (TechProcessForm.TechProcessOperationForm row : rows) {
@@ -866,6 +967,13 @@ public class TechProcessService {
                     row,
                     workPlaces,
                     operations.get(row.getOperationId())
+            );
+
+            applyControlParams(
+                    node,
+                    row,
+                    paramsById,
+                    cellOptions
             );
 
             process.addOperation(node);
@@ -954,6 +1062,178 @@ public class TechProcessService {
                             + "» выберите рабочее место"
             );
         }
+    }
+
+    /*
+     * Нужен ли маршруту список входящих ячеек.
+     *
+     * Состав изделия читают только когда в форме есть параметр
+     * «…ячейки…»: маршрут без таких параметров не должен платить
+     * лишним запросом к классификатору.
+     */
+    private boolean needsCellOptions(
+            List<ControlParam> controlParams,
+            List<TechProcessForm.TechProcessOperationForm> rows
+    ) {
+        Set<Long> cellParamIds = new HashSet<>();
+
+        for (ControlParam param : controlParams) {
+            if (param.isCellMode()) {
+                cellParamIds.add(param.getId());
+            }
+        }
+
+        if (cellParamIds.isEmpty()) {
+            return false;
+        }
+
+        for (TechProcessForm.TechProcessOperationForm row : rows) {
+            List<TechProcessForm.ControlParamRow> paramRows =
+                    row.getControlParams();
+
+            if (paramRows == null) {
+                continue;
+            }
+
+            for (TechProcessForm.ControlParamRow paramRow : paramRows) {
+                if (paramRow != null
+                        && cellParamIds.contains(
+                                paramRow.getControlParamId())) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    /*
+     * Контролируемые параметры операции.
+     *
+     * Строка параметра уходит в сохранение, когда выбран сам параметр:
+     * маршруту важно, что параметр контролируется и обязателен ли он.
+     * Значение зависит от того, как параметр его получает:
+     *
+     *   ячейка     — параметр, в названии которого есть слово
+     *                «ячейка» (ControlParam#isCellMode): значение
+     *                выбирают из состава изделия. Режим важнее типа,
+     *                поэтому проверяется первым: параметр про ячейку
+     *                выбирает ячейку даже если в справочнике его
+     *                завели как «поле ввода». Значение необязательно —
+     *                у изделия ячеек может и не быть;
+     *   TEXT_INPUT — значение вписывают текстом, оно тоже
+     *                необязательное: технолог фиксирует сам факт
+     *                контроля;
+     *   LIST       — второго поля нет: варианты справочника описывают
+     *                сам параметр, а конкретное значение вносит
+     *                исполнитель при выполнении операции.
+     */
+    private void applyControlParams(
+            TechProcessOperation node,
+            TechProcessForm.TechProcessOperationForm row,
+            Map<Long, ControlParam> paramsById,
+            Map<Long, ProductClassifier> cellOptions
+    ) {
+        List<TechProcessForm.ControlParamRow> rows =
+                row.getControlParams();
+
+        if (rows == null || rows.isEmpty()) {
+            return;
+        }
+
+        String operationName =
+                node.getOperation().getOperationName().getName();
+
+        for (TechProcessForm.ControlParamRow paramRow : rows) {
+            if (paramRow == null
+                    || paramRow.getControlParamId() == null) {
+                continue;
+            }
+
+            ControlParam param =
+                    paramsById.get(paramRow.getControlParamId());
+
+            if (param == null) {
+                throw new EntityNotFoundException(
+                        "Контролируемый параметр не найден в справочнике"
+                );
+            }
+
+            TechProcessOperationControlParam controlParam =
+                    new TechProcessOperationControlParam();
+
+            controlParam.setControlParam(param);
+            controlParam.setMandatory(paramRow.isMandatory());
+
+            if (param.isCellMode()) {
+                applyCellOption(controlParam, paramRow, cellOptions);
+            } else if (param.getType() == ControlParamType.TEXT_INPUT) {
+                String text = paramRow.getTextValue() == null
+                        ? ""
+                        : paramRow.getTextValue().trim();
+
+                controlParam.setTextValue(text.isBlank() ? null : text);
+            }
+
+            node.addControlParam(controlParam);
+        }
+
+        /*
+         * Повтор параметра в одной операции.
+         *
+         * Значение больше не различает строки: у списка его нет
+         * вовсе, у ячейки и текста оно необязательное. Поэтому
+         * повтором считается один и тот же параметр, выбранный дважды,
+         * — индекс uk_tp_operation_control_param на таком нас не
+         * поймает (control_param_value_id пуст), и проверка живёт
+         * здесь.
+         */
+        Set<Long> distinctParams = new HashSet<>();
+
+        for (TechProcessOperationControlParam controlParam
+                : node.getControlParams()) {
+            if (!distinctParams.add(
+                    controlParam.getControlParam().getId())) {
+                throw new IllegalArgumentException(
+                        "Операция «"
+                                + operationName
+                                + "» содержит повторяющийся "
+                                + "контролируемый параметр"
+                );
+            }
+        }
+    }
+
+    /*
+     * Ячейка — значение «ячеечного» параметра.
+     *
+     * cellOptions содержит только ячейки, входящие в изделие
+     * техпроцесса: отсутствие id в карте значит и «нет такой
+     * ячейки», и «ячейка не входит в изделие». Разделять эти случаи
+     * незачем — технологу важно только то, что выбрать её нельзя.
+     */
+    private void applyCellOption(
+            TechProcessOperationControlParam controlParam,
+            TechProcessForm.ControlParamRow paramRow,
+            Map<Long, ProductClassifier> cellOptions
+    ) {
+        Long cellId = paramRow.getCellClassifierId();
+
+        if (cellId == null) {
+            return;
+        }
+
+        ProductClassifier cell = cellOptions.get(cellId);
+
+        if (cell == null) {
+            throw new IllegalArgumentException(
+                    "Ячейка с идентификатором "
+                            + cellId
+                            + " не входит в изделие техпроцесса"
+            );
+        }
+
+        controlParam.setCellClassifier(cell);
     }
 
     /*

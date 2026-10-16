@@ -118,7 +118,7 @@ VALUES
 
     (
         'TECHNICAL_CONTROL_DEPARTMENT',
-        'Отдел технического контроля',
+        'Бюро технического контроля',
         (
             SELECT id
             FROM production_services
@@ -126,26 +126,6 @@ VALUES
         ),
         TRUE
     ),
-    (
-        'INPUT_CONTROL_BUREAU',
-        'Бюро входного контроля',
-        (
-            SELECT id
-            FROM production_services
-            WHERE code = 'SQ'
-        ),
-        TRUE
-    ),
-    (
-            'TECHNICAL_CONTROL_DEPARTMENT',
-            'Бюро технического контроля',
-            (
-                SELECT id
-                FROM production_services
-                WHERE code = 'SQ'
-            ),
-            TRUE
-        ),
     (
         'TECHNOLOGY',
         'Технологическое бюро',
