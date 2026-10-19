@@ -16,6 +16,7 @@ import ru.company.production.repository.UserRepository;
 import ru.company.production.service.CustomerOrderSuspensionService;
 import ru.company.production.service.FinishedProductClosureService;
 import ru.company.production.service.WarehouseKittingService;
+import ru.company.production.service.OperationControlParamService;
 import ru.company.production.service.WorkshopDistributionService;
 
 import java.util.List;
@@ -59,6 +60,15 @@ public class WarehouseKittingController {
      * «Мои операции» одинаково.
      */
     private final FinishedProductClosureService closureService;
+
+    /*
+     * Проведение склада идёт теми же строками графика, что и
+     * «Мои операции», поэтому операция с контролируемыми параметрами
+     * обязана вестить на форму отметки и отсюда: иначе кладовщик
+     * закрыл бы работу, не внеся ни одного значения, — а граница
+     * «Мои операции» для этого пути не сработала бы вовсе.
+     */
+    private final OperationControlParamService controlParamService;
 
     /**
      * Комплектование ЗНП — работы склада комплектования.
@@ -141,6 +151,16 @@ public class WarehouseKittingController {
                 .orElseThrow(() -> new IllegalStateException(
                         "Учётная запись пользователя не найдена"
                 ));
+
+        /*
+         * Операция с контролируемыми параметрами проводится только
+         * через форму отметки — тот же запрет, что и в «Мои операции».
+         * Раздел возвращается параметром section: кладовщик обязан
+         * попасть в свой список, а не в цеховой.
+         */
+        if (controlParamService.hasControlParams(rowId)) {
+            return "redirect:/my-operations/complete/" + rowId;
+        }
 
         try {
             suspensionService.assertRowOperable(rowId);

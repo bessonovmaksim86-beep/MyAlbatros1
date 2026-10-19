@@ -88,7 +88,11 @@ public class WorkshopDistributionController {
     @PostMapping("/assign")
     public String assign(
             @RequestParam Long rowId,
-            @RequestParam Long executorId,
+            // Параметр необязателен намеренно: страница, открытая до
+            // обновления, присылает форму без радиовыбора, и обязательный
+            // параметр отверг бы запрос страницей ошибки вместо привычного
+            // алерта. Проверку «исполнитель выбран» держит сервис.
+            @RequestParam(name = "executorId", required = false) Long executorId,
             @RequestParam(name = "weeks", required = false) Integer weeks,
             Authentication authentication,
             RedirectAttributes redirectAttributes

@@ -99,7 +99,10 @@ public class GroupZnpDistributionController {
     @PostMapping("/assign")
     public String assign(
             @RequestParam(name = "rowId") List<Long> rowIds,
-            @RequestParam Long executorId,
+            // Параметр необязателен намеренно: форма без радиовыбора
+            // иначе отвергается страницей ошибки, а понятный ответ про
+            // выбор исполнителя формирует сервис.
+            @RequestParam(name = "executorId", required = false) Long executorId,
             @RequestParam(name = "weeks", required = false) Integer weeks,
             Authentication authentication,
             RedirectAttributes redirectAttributes

@@ -429,7 +429,8 @@
                                                             <div class="group-panel__actions">
 
                                                                 <button type="submit"
-                                                                        class="btn primary compact">
+                                                                        class="btn primary compact"
+                                                                        th:onclick="'return validateAssign(this.form)'">
                                                                     Назначить
                                                                 </button>
 
@@ -729,6 +730,23 @@ function toggleGroup(panelId, caretId) {
     if (caret) {
         caret.textContent = hidden ? '▲' : '▼';
     }
+}
+
+/*
+ * Поле executorId отдаётся только радиовыбором: без отметки форма
+ * прислала бы пустое значение, и сервер отверг бы запрос уже после
+ * перехода — мастер потерял бы раскрытую панель и очередь на экране.
+ * Отсутствующие сотрудники отмечены disabled, поэтому их выбор здесь
+ * тоже не пройдёт.
+ */
+function validateAssign(form) {
+    if (form.querySelectorAll(
+            'input[type="radio"][name="executorId"]:checked').length === 0) {
+        alert('Выберите исполнителя');
+        return false;
+    }
+
+    return true;
 }
 
 /*

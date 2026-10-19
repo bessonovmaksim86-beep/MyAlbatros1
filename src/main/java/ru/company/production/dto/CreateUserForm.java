@@ -51,9 +51,9 @@ public class CreateUserForm {
 
     @NotBlank(message = "Укажите пароль")
     @Size(
-            min = 6,
+            min = 5,
             max = 100,
-            message = "Пароль должен содержать от 6 до 100 символов"
+            message = "Пароль должен содержать от 5 до 100 символов"
     )
     private String password;
 }

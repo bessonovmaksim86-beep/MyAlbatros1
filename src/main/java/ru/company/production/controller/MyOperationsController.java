@@ -5,12 +5,16 @@ import org.springframework.security.core.Authentication;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.ModelAttribute;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 import ru.company.production.entity.AppUser;
+import ru.company.production.dto.ControlParamCompletionForm;
+import ru.company.production.dto.ControlParamValueForm;
+import ru.company.production.dto.ControlParamView;
 import ru.company.production.dto.QuarantineFilter;
 import ru.company.production.dto.RepairKittingGroup;
 import ru.company.production.entity.QuarantineCellKind;
@@ -21,6 +25,7 @@ import ru.company.production.service.CustomerOrderSuspensionService;
 import ru.company.production.service.FinishedProductClosureService;
 import ru.company.production.service.InputControlService;
 import ru.company.production.service.ModuleRoutes;
+import ru.company.production.service.OperationControlParamService;
 import ru.company.production.service.RepairKittingOperationService;
 import ru.company.production.service.WorkshopDistributionService;
 import ru.company.production.service.WorkshopStaffService;
@@ -89,6 +94,8 @@ public class MyOperationsController {
      * перечень партий, что видит исполнитель бюро.
      */
     private final InputControlService inputControlService;
+
+    private final OperationControlParamService controlParamService;
 
     /**
      * Список работ текущего пользователя.
@@ -330,6 +337,93 @@ public class MyOperationsController {
      * Ошибка возвращается тем же списком с сообщением: страница одна,
      * и уходить с неё после неудачи незачем.
      */
+    /**
+     * Форма проведения экземпляра с отметкой контролируемых параметров.
+     *
+     * Открывается, когда у операции техпроцесса есть контролируемые
+     * параметры: исполнитель обязан внести значение каждого, а
+     * обязательное не может остаться пустым.
+     */
+    @GetMapping("/complete/{rowId}")
+    public String completeForm(
+            @PathVariable Long rowId,
+            Authentication authentication,
+            Model model,
+            RedirectAttributes redirectAttributes
+    ) {
+        AppUser user = currentUser(authentication);
+        List<ControlParamView> params;
+
+        try {
+            params = controlParamService.loadForRow(rowId);
+        } catch (RuntimeException ex) {
+            redirectError(redirectAttributes, ex);
+            return "redirect:/my-operations";
+        }
+
+        if (params.isEmpty()) {
+            return "redirect:/my-operations";
+        }
+
+        model.addAttribute("controlParams", params);
+        model.addAttribute("rowId", rowId);
+        model.addAttribute("completionForm", new ControlParamCompletionForm());
+
+        return decorate(user, "my-operations/complete", model);
+    }
+
+    /**
+     * Проведение экземпляра с отмеченными контролируемыми параметрами.
+     *
+     * Отметки приходят списком по индексу строки формы, поэтому
+     * порядок может содержать пропуски: сервис сопоставляет значение
+     * с параметром по его идентификатору, а не по позиции.
+     */
+    @PostMapping("/complete/{rowId}")
+    public String completeWithControlParams(
+            @PathVariable Long rowId,
+            @ModelAttribute("completionForm") ControlParamCompletionForm completionForm,
+            Authentication authentication,
+            RedirectAttributes redirectAttributes
+    ) {
+        AppUser user = currentUser(authentication);
+
+        try {
+            suspensionService.assertRowOperable(rowId);
+
+            List<ControlParamValueForm> values = completionForm == null
+                    ? List.of()
+                    : completionForm.getValues();
+
+            controlParamService.completeWithControlParams(rowId, user, values);
+            closureService.onRowCompleted(rowId);
+
+            redirectAttributes.addFlashAttribute(
+                    "successMessage",
+                    "Экземпляр проведён"
+            );
+        } catch (RuntimeException ex) {
+            redirectError(redirectAttributes, ex);
+            return "redirect:/my-operations/complete/" + rowId;
+        }
+
+        return "redirect:/my-operations";
+    }
+
+    /* Сообщение об отказе проведения — тем же списком, откуда
+     * исполнитель пришёл в форму. */
+    private static void redirectError(
+            RedirectAttributes redirectAttributes,
+            RuntimeException ex
+    ) {
+        redirectAttributes.addFlashAttribute(
+                "errorMessage",
+                ex.getMessage() == null
+                        ? "Не удалось провести экземпляр"
+                        : ex.getMessage()
+        );
+    }
+
     @PostMapping("/complete")
     public String complete(
             @RequestParam Long rowId,
@@ -337,6 +431,17 @@ public class MyOperationsController {
             RedirectAttributes redirectAttributes
     ) {
         AppUser user = currentUser(authentication);
+
+        /*
+         * Операция с контролируемыми параметрами проводится только
+         * через форму отметки: прямая отправка из списка закрыла бы
+         * работу, не зафиксировав ни одного значения, — а именно
+         * значения и требует техпроцесс. Проверка держится на
+         * сервере, потому что ссылка формы известна и без кнопки.
+         */
+        if (controlParamService.hasControlParams(rowId)) {
+            return "redirect:/my-operations/complete/" + rowId;
+        }
 
         try {
             suspensionService.assertRowOperable(rowId);

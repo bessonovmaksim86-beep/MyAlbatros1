@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="ru"
+      xmlns:th="http://www.thymeleaf.org">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport"
+          content="width=device-width, initial-scale=1">
+
+    <title>Проведение операции</title>
+
+    <link rel="stylesheet"
+          th:href="@{/technology/css/technology.css}">
+    <link rel="stylesheet"
+          th:href="@{/technology/css/common.css}">
+    <link rel="stylesheet"
+          th:href="@{/workshop/css/workshop.css}">
+    <link rel="stylesheet"
+          th:href="@{/workshop/css/distribution.css}">
+
+    <link rel="stylesheet"
+          th:if="${isSKGeneral}"
+          th:href="@{/quality/css/quality.css}">
+
+    <link rel="stylesheet"
+          th:href="@{/my-operations/css/control-params.css}">
+</head>
+
+<body>
+
+<div class="app-shell">
+
+    <aside th:replace="${isSKGeneral}
+            ? ~{quality/fragments/layout :: sidebar('my-operations')}
+            : ~{workshop/fragments/layout :: sidebar('my-operations')}">
+    </aside>
+
+    <main class="main">
+
+        <header th:replace="${isSKGeneral}
+                ? ~{quality/fragments/layout :: topbar}
+                : ~{workshop/fragments/layout :: topbar}">
+        </header>
+
+        <div class="page-content workshop-page">
+
+            <div class="page-head">
+
+                <div class="page-title">
+
+                    <h1>Проведение операции</h1>
+
+                    <p th:text="${
+                        'Исполнитель обязан отметить контролируемые параметры, '
+                        + 'заданные технологом в техпроцессе: обязательный параметр '
+                        + 'не может остаться пустым, а ячейка обязана соответствовать '
+                        + 'требуемому классификатору'
+                    }">
+                        Отметьте контролируемые параметры и проведите операцию
+                    </p>
+
+                </div>
+
+                <div class="page-head-actions">
+
+                    <a th:href="@{/my-operations}" class="btn secondary">
+                        К списку работ
+                    </a>
+
+                </div>
+
+            </div>
+
+            <div class="alert danger"
+                 th:if="${errorMessage}"
+                 th:text="${errorMessage}">
+            </div>
+
+            <section class="card">
+
+                <div class="card-head">
+
+                    <div>
+
+                        <h2>Контролируемые параметры</h2>
+
+                        <small>
+                            Значение вносит исполнитель: вариант из справочника,
+                            текст по условию техпроцесса или подтверждение
+                            соответствия ячейки. Отмечать нужно все параметры
+                            операции — проведение не закроет работу с пропуском.
+                        </small>
+
+                    </div>
+
+                    <span class="badge"
+                          th:text="${#lists.size(controlParams)} + ' шт.'">
+                        0 шт.
+                    </span>
+
+                </div>
+
+                <div class="card-body">
+
+                    <form th:action="@{/my-operations/complete/{rowId}(rowId=${rowId})}"
+                          th:object="${completionForm}"
+                          method="post"
+                          class="control-params-form">
+
+                        <input th:if="${_csrf != null}"
+                               type="hidden"
+                               th:name="${_csrf.parameterName}"
+                               th:value="${_csrf.token}">
+
+                        <!--
+                            Порядок строк задаётся перечнем параметров, а индексы
+                            нумеруются подряд: Spring собирает список values[]
+                            только из полей с непрерывной нумерацией, поэтому
+                            пропуск индекса обронил бы отметку следующего
+                            параметра. Привязка держится на скрытом paramId —
+                            сервис находит параметр по нему, а не по позиции.
+                        -->
+                        <div class="control-param-row"
+                             th:each="cp, stat : ${controlParams}"
+                             th:classappend="${cp.cellMode} ? ' is-cell' : ''">
+
+                            <input type="hidden"
+                                   name="values[__${stat.index}__].paramId"
+                                   th:value="${cp.id}">
+
+                            <div class="control-param-row__info">
+
+                                <strong class="control-param-row__name"
+                                        th:text="${cp.name}">
+                                    Внесение типа трубки
+                                </strong>
+
+                                <span class="control-param-row__mark"
+                                      th:if="${cp.mandatory}">
+                                    обязательно
+                                </span>
+
+                                <small class="control-param-row__hint"
+                                       th:if="${cp.hint != null}"
+                                       th:text="'Условие техпроцесса: ' + ${cp.hint}">
+                                    Условие техпроцесса: 1 слойная 14мм
+                                </small>
+
+                                <!--
+                                    Режим ячейки показывает пару подписей: что
+                                    требует техпроцесс и чем фактически является
+                                    изделие экземпляра. Исполнитель сверяет строки
+                                    глазами, а сервер сверяет идентификаторы —
+                                    несоответствие не пропустит проведение.
+                                -->
+                                <th:block th:if="${cp.cellMode}">
+
+                                    <p class="control-param-row__cell">
+                                        <span>Требование техпроцесса:</span>
+                                        <strong th:text="${
+                                            cp.requiredClassifierLabel != null
+                                                ? cp.requiredClassifierLabel
+                                                : 'классификатор не задан'
+                                        }">
+                                            1212 — Подсборка ЯПР56
+                                        </strong>
+                                    </p>
+
+                                    <p class="control-param-row__cell"
+                                       th:if="${cp.hasActualCell()}">
+                                        <span>Ячейка экземпляра:</span>
+                                        <strong th:text="${
+                                            cp.actualCellNumber
+                                            + ' — '
+                                            + (cp.actualClassifierLabel != null
+                                                ? cp.actualClassifierLabel
+                                                : 'классификатор не определён')
+                                        }">
+                                            121200022 — 1212 — Подсборка ЯПР56
+                                        </strong>
+                                    </p>
+
+                                    <p class="control-param-row__cell is-empty"
+                                       th:unless="${cp.hasActualCell()}">
+                                        Номер ячейки у экземпляра ещё не внесён —
+                                        провести операцию нельзя, пока склад не
+                                        оформит состав заказа.
+                                    </p>
+
+                                    <p class="control-param-row__verdict is-ok"
+                                       th:if="${
+                                           cp.hasActualCell()
+                                           and cp.cellClassifierMatch
+                                       }">
+                                        Классификатор совпадает
+                                    </p>
+
+                                    <p class="control-param-row__verdict is-bad"
+                                       th:if="${
+                                           cp.hasActualCell()
+                                           and !cp.cellClassifierMatch
+                                       }">
+                                        Классификатор не совпадает с требованием
+                                        техпроцесса
+                                    </p>
+
+                                </th:block>
+
+                            </div>
+
+                            <div class="control-param-row__value">
+
+                                <select th:if="${cp.listMode}"
+                                        th:field="*{values[__${stat.index}__].valueId}"
+                                        th:required="${cp.mandatory}">
+                                    <option value="">— выберите значение —</option>
+                                    <option th:each="option : ${cp.options}"
+                                            th:value="${option.id}"
+                                            th:text="${option.value}">
+                                        1 слойная 14мм
+                                    </option>
+                                </select>
+
+                                <input type="text"
+                                       th:if="${cp.textMode}"
+                                       th:field="*{values[__${stat.index}__].text}"
+                                       th:required="${cp.mandatory}"
+                                       maxlength="255"
+                                       th:placeholder="${
+                                           cp.hint != null
+                                               ? cp.hint
+                                               : 'Значение параметра'
+                                       }">
+
+                                <div th:if="${cp.cellMode}"
+                                     class="control-param-row__value">
+
+                                    <p class="control-param-row__verdict is-ok"
+                                       th:if="${
+                                           cp.hasActualCell()
+                                           and cp.cellClassifierMatch
+                                       }">
+                                        Ячейка относится к требуемому
+                                        классификатору
+                                    </p>
+
+                                    <p class="control-param-row__verdict is-bad"
+                                       th:if="${
+                                           cp.hasActualCell()
+                                           and !cp.cellClassifierMatch
+                                       }">
+                                        Классификатор ячейки не совпадает
+                                        с требованием техпроцесса
+                                    </p>
+
+                                    <p class="control-param-row__cell is-empty"
+                                       th:unless="${cp.hasActualCell()}">
+                                        Номер ячейки у экземпляра ещё не
+                                        внесён — провести операцию нельзя,
+                                        пока склад не оформит состав заказа.
+                                    </p>
+
+                                </div>
+
+                            </div>
+
+                        </div>
+
+                        <div class="control-params-footer">
+
+                            <button type="submit" class="btn primary">
+                                Провести операцию
+                            </button>
+
+                            <a th:href="@{/my-operations}" class="btn secondary">
+                                Отмена
+                            </a>
+
+                        </div>
+
+                    </form>
+
+                </div>
+
+            </section>
+
+        </div>
+
+    </main>
+
+</div>
+
+<th:block th:replace="${isSKGeneral}
+        ? ~{quality/fragments/layout :: commonScripts}
+        : ~{workshop/fragments/layout :: commonScripts}">
+</th:block>
+
+</body>
+</html>

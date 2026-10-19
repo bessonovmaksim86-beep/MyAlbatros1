@@ -1,0 +1,159 @@
+/*
+ * Форма проведения экземпляра с отметкой контролируемых параметров.
+ *
+ * Разметка строит строку из двух половинок: слева подпись параметра и
+ * его условия, справа — поле значения. Такая пара держит глазами
+ * связь «параметр — поле» на экране, где параметров несколько, и
+ * не даёт исполнителю отметить значение не того параметра.
+ */
+
+.control-params-form {
+    display: flex;
+    flex-direction: column;
+}
+
+.control-param-row {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 1.5rem;
+    padding: 1rem 0;
+    border-bottom: 1px solid var(--line, #e5e7eb);
+}
+
+.control-param-row:last-child {
+    border-bottom: none;
+}
+
+.control-param-row__info {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.control-param-row__name {
+    display: block;
+    font-size: 0.95rem;
+    color: var(--ink, #111827);
+}
+
+.control-param-row__mark {
+    display: inline-block;
+    margin-top: 0.35rem;
+    padding: 0.1rem 0.45rem;
+    border-radius: 999px;
+    background: #fef2f2;
+    color: #b91c1c;
+    font-size: 0.72rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
+}
+
+.control-param-row__hint {
+    display: block;
+    margin-top: 0.35rem;
+    color: var(--muted, #6b7280);
+    font-size: 0.82rem;
+}
+
+.control-param-row__cell {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+    margin: 0.5rem 0 0;
+    font-size: 0.84rem;
+    color: var(--muted, #6b7280);
+}
+
+.control-param-row__cell strong {
+    color: var(--ink, #111827);
+    font-weight: 600;
+}
+
+.control-param-row__cell.is-empty {
+    color: #92400e;
+}
+
+.control-param-row__verdict {
+    margin: 0.4rem 0 0;
+    font-size: 0.82rem;
+    font-weight: 600;
+}
+
+.control-param-row__verdict.is-ok {
+    color: #15803d;
+}
+
+.control-param-row__verdict.is-bad {
+    color: #b91c1c;
+}
+
+.control-param-row__value {
+    flex: 0 0 320px;
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+}
+
+.control-param-row__value select,
+.control-param-row__value input[type="text"] {
+    width: 100%;
+    padding: 0.55rem 0.7rem;
+    border: 1px solid var(--line, #d1d5db);
+    border-radius: 8px;
+    background: #fff;
+    font: inherit;
+    font-size: 0.9rem;
+    color: var(--ink, #111827);
+}
+
+.control-param-row__value select:focus,
+.control-param-row__value input[type="text"]:focus {
+    outline: none;
+    border-color: #2563eb;
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
+}
+
+.control-param-row__confirm {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.55rem 0.7rem;
+    border: 1px solid var(--line, #d1d5db);
+    border-radius: 8px;
+    background: #f9fafb;
+    font-size: 0.86rem;
+    color: var(--ink, #111827);
+    cursor: pointer;
+}
+
+.control-param-row__confirm.is-disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+.control-param-row__confirm input[type="checkbox"] {
+    width: 1rem;
+    height: 1rem;
+    margin: 0;
+    accent-color: #2563eb;
+}
+
+.control-params-footer {
+    display: flex;
+    gap: 0.75rem;
+    margin-top: 1.25rem;
+    padding-top: 1.25rem;
+    border-top: 1px solid var(--line, #e5e7eb);
+}
+
+@media (max-width: 860px) {
+    .control-param-row {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .control-param-row__value {
+        flex: 1 1 auto;
+    }
+}

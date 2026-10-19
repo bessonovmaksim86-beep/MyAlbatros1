@@ -27,7 +27,7 @@ public class PasswordGenerator {
         characters.add(randomCharacter(DIGITS));
         characters.add(randomCharacter(SPECIAL));
 
-        while (characters.size() < 14) {
+        while (characters.size() < 5) {
             characters.add(randomCharacter(ALL));
         }
 
