@@ -340,9 +340,20 @@ public class TechnologyClassifierController {
 
     /**
      * Страница выбора классификатора для удаления.
+     *
+     * Пустая форма в модели обязательна: шаблон читает
+     * classifierForm.id в th:selected списка выбора, а без атрибута
+     * Thymeleaf прерывает отрисовку на середине страницы.
      */
     @GetMapping("/delete")
     public String deleteClassifierSelectionPage(Model model) {
+        if (!model.containsAttribute("classifierForm")) {
+            model.addAttribute(
+                    "classifierForm",
+                    new ClassifierForm()
+            );
+        }
+
         fillCommonModel(model, null);
 
         return "technology/classifier/delete";
