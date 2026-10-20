@@ -308,6 +308,44 @@
                                             Описание операции
                                         </div>
 
+                                        <div class="tp-node-params"
+                                             th:if="${
+                                                 node.controlParams != null
+                                                 and !#lists.isEmpty(node.controlParams)
+                                             }">
+
+                                            <strong>
+                                                Контролируемые параметры:
+                                            </strong>
+
+                                            <div class="tp-node-param"
+                                                 th:each="cp : ${node.controlParams}">
+
+                                                <span
+                                                    th:text="${cp.paramName}">
+                                                    Параметр
+                                                </span>
+
+                                                <span class="tp-node-param-value"
+                                                      th:if="${cp.paramValue != null}"
+                                                      th:text="${cp.paramValue}">
+                                                    Значение
+                                                </span>
+
+                                                <span class="tp-node-param-value tp-node-param-value--empty"
+                                                      th:unless="${cp.paramValue != null}">
+                                                    не указано
+                                                </span>
+
+                                                <span class="tp-node-param-mandatory"
+                                                      th:if="${cp.mandatory}">
+                                                    * обязательно
+                                                </span>
+
+                                            </div>
+
+                                        </div>
+
                                     </div>
 
                                 </div>

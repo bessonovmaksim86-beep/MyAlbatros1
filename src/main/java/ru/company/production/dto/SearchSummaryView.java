@@ -49,12 +49,23 @@ public class SearchSummaryView {
      */
     private final String passportUrl;
 
+    /**
+     * Адрес основного действия по объекту: визуализация графа для
+     * техпроцесса. Заполняется сервисом, а шаблон рисует кнопку.
+     */
+    private final String actionUrl;
+
+    /**
+     * Подпись кнопки основного действия.
+     */
+    private final String actionLabel;
+
     public SearchSummaryView(String category,
                              String title,
                              String categoryLabel,
                              String statusLabel,
                              List<Field> fields) {
-        this(category, title, categoryLabel, statusLabel, fields, null);
+        this(category, title, categoryLabel, statusLabel, fields, null, null, null);
     }
 
     public SearchSummaryView(String category,
@@ -63,12 +74,25 @@ public class SearchSummaryView {
                              String statusLabel,
                              List<Field> fields,
                              String passportUrl) {
+        this(category, title, categoryLabel, statusLabel, fields, passportUrl, null, null);
+    }
+
+    public SearchSummaryView(String category,
+                             String title,
+                             String categoryLabel,
+                             String statusLabel,
+                             List<Field> fields,
+                             String passportUrl,
+                             String actionUrl,
+                             String actionLabel) {
         this.category = category;
         this.title = title;
         this.categoryLabel = categoryLabel;
         this.statusLabel = statusLabel;
         this.fields = fields;
         this.passportUrl = passportUrl;
+        this.actionUrl = actionUrl;
+        this.actionLabel = actionLabel;
     }
 
     /** Одна строка сводки: подпись свойства и его значение. */

@@ -91,6 +91,19 @@ public class TechProcessGraphView {
         private String note;
         private List<String> workPlaces = new ArrayList<>();
         private List<String> dependsOn = new ArrayList<>();
+        
+        /*
+         * Контролируемые параметры операции (для отображения в карточке).
+         */
+        private List<ControlParamInfo> controlParams = new ArrayList<>();
+
+        @Getter
+        @Setter
+        public static class ControlParamInfo {
+            private String paramName;
+            private String paramValue;
+            private boolean mandatory;
+        }
     }
 
     @Getter

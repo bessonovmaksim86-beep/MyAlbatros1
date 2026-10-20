@@ -105,12 +105,22 @@ public class SearchSummaryService {
 
         add(fields, "Назначение", process.getNote());
 
+        /*
+         * Визуализация графа маршрута — основное действие для техпроцесса.
+         *
+         * Адрес ведёт в нейтральную сводку (см. SearchSummaryController),
+         * а не в раздел технологов: поиск один на всю систему, и забрасывать
+         * пользователя в чужое боковое меню было бы переходом между ролями.
+         */
         return new SearchSummaryView(
                 "techprocess",
                 process.getCode(),
                 "Техпроцесс",
                 process.isActive() ? "Действующий" : "Недействующий",
-                fields
+                fields,
+                null,
+                "/search/graph/" + id,
+                "Граф зависимостей"
         );
     }
 

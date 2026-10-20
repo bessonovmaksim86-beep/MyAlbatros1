@@ -1,0 +1,462 @@
+<!DOCTYPE html>
+<html lang="ru"
+      xmlns:th="http://www.thymeleaf.org">
+
+<head>
+    <meta charset="UTF-8">
+
+    <meta name="viewport"
+          content="width=device-width, initial-scale=1">
+
+    <title th:text="'Маршрут ' + ${graph.code} + ' — граф зависимостей'">
+        Маршрут — граф зависимостей
+    </title>
+
+    <link rel="stylesheet"
+          th:href="@{/technology/css/technology.css}">
+
+    <link rel="stylesheet"
+          th:href="@{/technology/css/common.css}">
+
+    <link rel="stylesheet"
+          th:href="@{/technology/css/techprocess.css}">
+
+    <link rel="stylesheet"
+          th:href="@{/css/search-summary.css}">
+</head>
+
+<body>
+
+<!--
+    Визуализация графа маршрута в нейтральном интерфейсе сводки.
+
+    Кнопка «Граф зависимостей» из сводки поиска ведёт сюда, а не в
+    раздел технологов: пользователь не должен видеть чужое боковое
+    меню при переходе из общего поиска.
+-->
+<div class="app">
+
+    <aside class="sidebar">
+
+        <div class="brand">
+            <span class="brand-mark"></span>
+
+            <div>
+                <b>Альбатрос</b>
+                <small>Производственная система</small>
+            </div>
+        </div>
+
+        <div class="nav-title">
+            Раздел
+        </div>
+
+        <div class="nav">
+            <a class="nav-btn"
+               th:href="@{/search}">
+                <span class="ico">
+                    <svg viewBox="0 0 24 24" width="14" height="14"
+                         fill="currentColor" aria-hidden="true">
+                        <path d="M10 2a8 8 0 1 0 4.9 14.3l5.4 5.4 1.4-1.4-5.4-5.4A8 8 0 0 0 10 2Zm0 2a6 6 0 1 1 0 12 6 6 0 0 1 0-12Z"/>
+                    </svg>
+                </span>
+                <span>Поиск</span>
+            </a>
+        </div>
+
+        <div class="sidebar-foot">
+            Визуализация маршрута
+        </div>
+    </aside>
+
+    <main class="main">
+
+        <header class="topbar">
+
+            <span class="clock">
+                <strong>Граф зависимостей</strong>
+                <small>Техпроцесс</small>
+            </span>
+
+            <div class="topbar-spacer"></div>
+
+            <a class="btn secondary"
+               th:href="@{/search/object/techprocess/${graph.processId}}">
+                К сводке
+            </a>
+        </header>
+
+        <div class="page-content techprocess-page">
+
+            <div class="tp-head">
+
+                <div>
+                    <h1 th:text="'Маршрут ' + ${graph.code}">
+                        Маршрут ТП-0001
+                    </h1>
+
+                    <p th:text="${
+                        graph.productDisplayName
+                        + ' · операций: '
+                        + #lists.size(graph.nodes)
+                    }">
+                        Изделие
+                    </p>
+                </div>
+
+            </div>
+
+            <div class="tp-summary">
+
+                <div class="tp-summary-item">
+                    <small>Операций в маршруте</small>
+                    <strong th:text="${#lists.size(graph.nodes)}">0</strong>
+                </div>
+
+                <div class="tp-summary-item">
+                    <small>Суммарная трудоёмкость, ч</small>
+                    <strong th:text="${graph.totalLaborHours}">0</strong>
+                </div>
+
+                <div class="tp-summary-item">
+                    <small>Суммарное машиновремя, ч</small>
+                    <strong th:text="${graph.totalMachineHours}">0</strong>
+                </div>
+
+                <div class="tp-summary-item highlight">
+                    <small>Длительность маршрута, ч</small>
+                    <strong th:text="${graph.criticalPathHours}">0</strong>
+                    <span>критический путь</span>
+                </div>
+
+                <div class="tp-summary-item highlight">
+                    <small>Длительность, раб. дней</small>
+                    <strong th:text="${graph.criticalPathDays}">0</strong>
+                    <span>
+                        при рабочем дне
+                        <b th:text="${graph.workdayHours}">8</b> ч
+                    </span>
+                </div>
+
+            </div>
+
+            <div class="alert danger"
+                 th:if="${errorMessage}"
+                 th:text="${errorMessage}">
+            </div>
+
+            <section class="card">
+
+                <div class="card-head">
+                    <div>
+                        <h2>Граф зависимостей</h2>
+
+                        <small>
+                            Слева — операции, не требующие
+                            предшественников. Наведите курсор на
+                            операцию, чтобы увидеть подробности.
+                        </small>
+                    </div>
+                </div>
+
+                <div class="card-body">
+
+                    <div class="tp-empty"
+                         th:if="${#lists.isEmpty(graph.nodes)}">
+
+                        В маршруте нет операций
+
+                    </div>
+
+                    <div class="tp-graph-wrap"
+                         th:unless="${#lists.isEmpty(graph.nodes)}">
+
+                        <div class="tp-graph" data-tp-graph>
+
+                            <!--
+                                Стрелки рисуются поверх узлов:
+                                список рёбер передаётся атрибутом,
+                                координаты считает скрипт.
+                            -->
+                            <svg class="tp-graph-links"
+                                 data-tp-graph-links
+                                 th:attr="data-edges=${graph.edgePairs}"
+                                 aria-hidden="true">
+
+                                <defs>
+                                    <marker id="tp-arrow-head"
+                                            viewBox="0 0 10 10"
+                                            refX="9"
+                                            refY="5"
+                                            markerWidth="7"
+                                            markerHeight="7"
+                                            orient="auto-start-reverse">
+                                        <path d="M 0 0 L 10 5 L 0 10 z"
+                                              fill="#64748b">
+                                        </path>
+                                    </marker>
+                                </defs>
+
+                            </svg>
+
+                            <div class="tp-graph-level"
+                                 th:each="level : ${graph.levels}">
+
+                                <div class="tp-graph-level-title">
+                                    Этап
+                                    <span th:text="${level.key + 1}">1</span>
+                                </div>
+
+                                <div class="tp-node"
+                                     th:each="node : ${level.value}"
+                                     th:attr="data-node-id=${node.id}"
+                                     th:classappend="'tp-shape-' + ${node.shape}
+                                                     + ' tp-type-' + ${node.typeCode}">
+
+                                    <div class="tp-node-shape">
+
+                                        <span class="tp-node-name"
+                                              th:text="${node.name}">
+                                            Операция
+                                        </span>
+
+                                        <span class="tp-node-duration"
+                                              th:text="${
+                                                  node.durationHours + ' ч'
+                                              }">
+                                            1 ч
+                                        </span>
+
+                                    </div>
+
+                                    <!--
+                                        Подробная карточка: видна при
+                                        наведении на узел.
+                                    -->
+                                    <div class="tp-node-card">
+
+                                        <b th:text="${node.name}">
+                                            Операция
+                                        </b>
+
+                                        <span class="tp-node-type"
+                                              th:text="${node.typeName}">
+                                            Тип
+                                        </span>
+
+                                        <div class="tp-node-meta">
+
+                                            <span>
+                                                Трудоёмкость
+                                                <b th:text="${
+                                                    node.laborHours + ' ч'
+                                                }">1 ч</b>
+                                            </span>
+
+                                            <span>
+                                                Машиновремя
+                                                <b th:text="${
+                                                    node.machineHours + ' ч'
+                                                }">1 ч</b>
+                                            </span>
+
+                                            <span>
+                                                Длительность
+                                                <b th:text="${
+                                                    node.durationHours
+                                                    + ' ч · '
+                                                    + node.durationDays
+                                                    + ' раб. дн.'
+                                                }">1 ч</b>
+                                            </span>
+
+                                            <span>
+                                                Макс. в день
+                                                <b th:text="${node.dailyLimit}">
+                                                    8
+                                                </b>
+                                            </span>
+
+                                            <span>
+                                                Служба
+                                                <b th:text="${node.serviceName}">
+                                                    Служба
+                                                </b>
+                                            </span>
+
+                                            <span th:if="${
+                                                node.organizationUnitName != null
+                                            }">
+                                                Подразделение
+                                                <b th:text="${
+                                                    node.organizationUnitName
+                                                }">
+                                                    Подразделение
+                                                </b>
+                                            </span>
+
+                                            <span>
+                                                Исполнитель
+                                                <b th:text="${
+                                                    node.executorRoleName
+                                                }">
+                                                    Исполнитель
+                                                </b>
+                                            </span>
+
+                                        </div>
+
+                                        <div class="tp-node-places"
+                                             th:unless="${
+                                                 #lists.isEmpty(node.workPlaces)
+                                             }">
+
+                                            Рабочее место:
+                                            <span class="tp-node-place"
+                                                  th:each="place : ${node.workPlaces}"
+                                                  th:text="${place}">
+                                                Рабочее место
+                                            </span>
+
+                                        </div>
+
+                                        <div class="tp-node-deps"
+                                             th:unless="${
+                                                 #lists.isEmpty(node.dependsOn)
+                                             }">
+
+                                            После:
+                                            <span th:each="dependency, iter : ${node.dependsOn}"
+                                                  th:text="${
+                                                      dependency
+                                                      + (iter.last ? '' : ', ')
+                                                  }">
+                                                Операция
+                                            </span>
+
+                                        </div>
+
+                                        <div class="tp-node-note"
+                                             th:if="${node.note != null
+                                                    and !#strings.isEmpty(node.note)}"
+                                             th:text="${node.note}">
+                                            Описание операции
+                                        </div>
+
+                                        <div class="tp-node-params"
+                                             th:if="${
+                                                 node.controlParams != null
+                                                 and !#lists.isEmpty(node.controlParams)
+                                             }">
+
+                                            <strong>
+                                                Контролируемые параметры:
+                                            </strong>
+
+                                            <div class="tp-node-param"
+                                                 th:each="cp : ${node.controlParams}">
+
+                                                <span
+                                                    th:text="${cp.paramName}">
+                                                    Параметр
+                                                </span>
+
+                                                <span class="tp-node-param-value"
+                                                      th:if="${cp.paramValue != null}"
+                                                      th:text="${cp.paramValue}">
+                                                    Значение
+                                                </span>
+
+                                                <span class="tp-node-param-value tp-node-param-value--empty"
+                                                      th:unless="${cp.paramValue != null}">
+                                                    не указано
+                                                </span>
+
+                                                <span class="tp-node-param-mandatory"
+                                                      th:if="${cp.mandatory}">
+                                                    * обязательно
+                                                </span>
+
+                                            </div>
+
+                                        </div>
+
+                                    </div>
+
+                                </div>
+
+                            </div>
+
+                        </div>
+
+                    </div>
+
+                    <div class="tp-legend"
+                         th:unless="${#lists.isEmpty(graph.nodes)}">
+
+                        <span class="tp-legend-item
+                                     tp-shape-rect
+                                     tp-type-PRODUCTION">
+                            Производственная
+                        </span>
+
+                        <span class="tp-legend-item
+                                     tp-shape-parallelogram
+                                     tp-type-TRANSFER">
+                            Передаточная
+                        </span>
+
+                        <span class="tp-legend-item
+                                     tp-shape-hexagon
+                                     tp-type-RETURN">
+                            Возвратная
+                        </span>
+
+                        <span class="tp-legend-item
+                                     tp-shape-diamond
+                                     tp-type-WORK_DISTRIBUTION">
+                            Распределение работ
+                        </span>
+
+                        <span class="tp-legend-item
+                                     tp-shape-oval
+                                     tp-type-KIT_RECEIPT">
+                            Получение комплектации
+                        </span>
+
+                        <span class="tp-legend-item
+                                     tp-shape-pentagon
+                                     tp-type-KITTING">
+                            Комплектовочная
+                        </span>
+
+                        <span class="tp-legend-item
+                                     tp-shape-octagon
+                                     tp-type-CONTROL">
+                            Контрольная
+                        </span>
+
+                    </div>
+
+                    <p th:if="${graph.note != null
+                               and !#strings.isEmpty(graph.note)}"
+                       class="tp-node-deps"
+                       th:text="'Примечание: ' + ${graph.note}">
+                        Примечание
+                    </p>
+
+                </div>
+
+            </section>
+
+        </div>
+
+    </main>
+
+</div>
+
+<script th:src="@{/js/float-scroll.js}"></script>
+<script th:src="@{/technology/js/techprocess.js}"></script>
+
+</body>
+</html>

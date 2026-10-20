@@ -526,6 +526,26 @@ public class TechProcessService {
                 );
             }
 
+            /*
+             * Контролируемые параметры в карточке узла: технолог
+             * обязан видеть их не входя в маршрут — иначе, наводя
+             * курсор на операцию графа, он не узнает, что там есть
+             * что контролировать.
+             */
+            for (TechProcessOperationControlParam param
+                    : node.getControlParams()) {
+                TechProcessGraphView.Node.ControlParamInfo info =
+                        new TechProcessGraphView.Node.ControlParamInfo();
+
+                info.setParamName(
+                        param.getControlParam().getName()
+                );
+                info.setParamValue(controlParamValueLabel(param));
+                info.setMandatory(param.isMandatory());
+
+                viewNode.getControlParams().add(info);
+            }
+
             view.getNodes().add(viewNode);
             view.addNode(level[i], viewNode);
 
@@ -726,6 +746,35 @@ public class TechProcessService {
             case "RECEIVING" -> "stadium";
             default -> "rect";
         };
+    }
+
+    /*
+     * Подпись значения контролируемого параметра для карточки узла.
+     *
+     * У параметра три способа задать значение (см.
+     * TechProcessOperationControlParam): вариант справочника, свободный
+     * ввод или входящая ячейка — поэтому подпись собирается по тому же
+     * приоритету, что и контрол в конструкторе маршрута. Пустое значение
+     * оставляем пустым: технолог зафиксировал сам факт контроля, и
+     * выдумывать за него значение граф не вправе.
+     */
+    private static String controlParamValueLabel(
+            TechProcessOperationControlParam param
+    ) {
+        if (param.getControlParamValue() != null) {
+            return param.getControlParamValue().getValue();
+        }
+
+        if (param.getTextValue() != null
+                && !param.getTextValue().isBlank()) {
+            return param.getTextValue();
+        }
+
+        if (param.getCellClassifier() != null) {
+            return param.getCellClassifier().getDisplayName();
+        }
+
+        return null;
     }
 
     /*

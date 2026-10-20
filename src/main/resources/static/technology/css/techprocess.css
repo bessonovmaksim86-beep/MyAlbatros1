@@ -806,30 +806,39 @@
 }
 
 /*
- * Карточка подробностей узла: скрыта, показывается при наведении.
+ * Карточка подробностей узла.
+ *
+ * position: fixed нужен потому, что контейнер графа прокручивается
+ * по горизонтали (overflow-x: auto на .tp-graph-wrap), а браузер при
+ * этом обрезает содержимое и по вертикали: карточки верхнего ряда
+ * обрезались по верху. Fixed-элемент overflow предков не пересекает,
+ * поэтому его координаты считает JS (initGraphTooltips), а здесь —
+ * только внешний вид.
+ *
+ * Скрыта opacity, а не display: карточка обязана сохранять размеры,
+ * чтобы скрипт мог измерить её высоту ДО показа и решить, ставить её
+ * над узлом или под него. pointer-events: none — чтобы карточка,
+ * перекрывшая соседний узел, не вызывала на нём наведение и не
+ * рождала вторую карточку.
  */
 .techprocess-page .tp-node-card {
-    position: absolute;
-    left: 50%;
-    bottom: calc(100% + 10px);
-    z-index: 30;
-    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    z-index: 1200;
     width: 292px;
     padding: 13px 15px;
     background: #ffffff;
     border: 1px solid var(--tp-border);
     border-radius: 12px;
     box-shadow: 0 14px 34px rgba(16, 47, 75, 0.18);
-    transform: translateX(-50%);
     text-align: left;
+    opacity: 0;
+    pointer-events: none;
 }
 
 .techprocess-page .tp-node:hover .tp-node-card {
-    display: block;
-}
-
-.techprocess-page .tp-node:hover {
-    z-index: 40;
+    opacity: 1;
 }
 
 .techprocess-page .tp-node-card b {
@@ -902,6 +911,50 @@
     border-top: 1px dashed var(--tp-border);
     font-size: 11.5px;
     line-height: 1.5;
+}
+
+/*
+ * Контролируемые параметры в карточке узла.
+ */
+.techprocess-page .tp-node-params {
+    margin-top: 9px;
+    padding-top: 8px;
+    border-top: 1px dashed var(--tp-border);
+    font-size: 11px;
+    line-height: 1.45;
+}
+
+.techprocess-page .tp-node-params > strong {
+    display: block;
+    color: var(--tp-primary);
+    font-size: 11px;
+    font-weight: 700;
+}
+
+.techprocess-page .tp-node-param {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px 8px;
+    margin-top: 4px;
+    color: #344054;
+}
+
+.techprocess-page .tp-node-param-value {
+    color: var(--tp-text);
+    font-weight: 600;
+}
+
+.techprocess-page .tp-node-param-value--empty {
+    color: #93a49c;
+    font-style: italic;
+}
+
+.techprocess-page .tp-node-param-mandatory {
+    color: var(--tp-danger);
+    font-size: 10px;
+    font-weight: 700;
+    white-space: nowrap;
 }
 
 /* Легенда форм и цветов */

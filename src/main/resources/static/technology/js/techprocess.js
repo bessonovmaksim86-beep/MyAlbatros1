@@ -1507,6 +1507,89 @@
     }
 
     /*
+     * Вынос карточки из прокручиваемого контейнера в fixed.
+     *
+     * .tp-graph-wrap имеет overflow-x: auto, а браузер при этом обрезает
+     * содержимое и по вертикали — карточки верхнего ряда обрезаются.
+     * position: fixed не пересекает overflow предков, поэтому при
+     * наведении карточка получает fixed-позицию, рассчитанную по
+     * координатам узла. При скролле и ресайзе позиция пересчитывается.
+     */
+    function initGraphTooltips() {
+        var nodes = document.querySelectorAll('.tp-node');
+
+        nodes.forEach(function (node) {
+            var card = node.querySelector('.tp-node-card');
+
+            if (!card) {
+                return;
+            }
+
+            /*
+             * Карточка скрыта opacity, а не display: она обязана
+             * сохранять размеры, чтобы скрипт мог измерить её высоту
+             * ДО показа и решить, ставить над узлом или под него.
+             */
+            var shown = false;
+
+            function position() {
+                var shape = node.querySelector('.tp-node-shape');
+                if (!shape) return;
+
+                var rect = shape.getBoundingClientRect();
+                var cardH = card.offsetHeight;
+
+                /*
+                 * Пробуем поставить над узлом. Если не помещается —
+                 * под узлом.
+                 */
+                var top = rect.top - 10 - cardH;
+
+                if (top < 10) {
+                    top = rect.bottom + 10;
+                }
+
+                var left = rect.left + rect.width / 2;
+
+                card.style.top = top + 'px';
+                card.style.left = left + 'px';
+                card.style.transform = 'translateX(-50%)';
+            }
+
+            function show() {
+                if (shown) return;
+                shown = true;
+
+                /*
+                 * Даем браузеру отрисовать карточку (opacity: 1),
+                 * чтобы offsetHeight был корректным.
+                 */
+                card.style.opacity = '1';
+                position();
+            }
+
+            function hide() {
+                if (!shown) return;
+                shown = false;
+                card.style.opacity = '';
+                card.style.top = '';
+                card.style.left = '';
+                card.style.transform = '';
+            }
+
+            node.addEventListener('mouseenter', function () {
+                card.style.position = 'fixed';
+                show();
+            });
+
+            node.addEventListener('mouseleave', hide);
+
+            window.addEventListener('scroll', position, true);
+            window.addEventListener('resize', position);
+        });
+    }
+
+    /*
      * Each builder module is independent: a failure in one (for
      * example a page without a picker) must not stop the graph
      * arrows from being drawn.
@@ -1526,6 +1609,7 @@
         runSafely(initProductPicker);
         runSafely(initDelete);
         runSafely(initGraphLinks);
+        runSafely(initGraphTooltips);
     }
 
     if (document.readyState === 'loading') {

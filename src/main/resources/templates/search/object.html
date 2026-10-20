@@ -133,6 +133,18 @@
                             Паспорт изделия
                         </a>
 
+                        <!--
+                            Кнопка основного действия для объекта: для
+                            техпроцесса — визуализация графа зависимостей.
+                        -->
+                        <a class="btn primary"
+                           th:if="${summary.actionUrl != null
+                                   and !#strings.isEmpty(summary.actionUrl)}"
+                           th:href="@{${summary.actionUrl}}"
+                           th:text="${summary.actionLabel}">
+                            Действие
+                        </a>
+
                         <span class="search-summary__status"
                               th:if="${summary.statusLabel != null
                                       and !#strings.isEmpty(summary.statusLabel)}"
