@@ -4,17 +4,25 @@ import jakarta.persistence.EntityNotFoundException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import ru.company.production.dto.UnassignedOperationView;
 import ru.company.production.dto.WorkPlaceForm;
 import ru.company.production.entity.AppUser;
 import ru.company.production.entity.Operation;
 import ru.company.production.entity.OrganizationUnit;
+import ru.company.production.entity.ProductType;
 import ru.company.production.entity.WorkPlace;
 import ru.company.production.repository.OrganizationUnitRepository;
+import ru.company.production.repository.RouteOperationProbe;
+import ru.company.production.repository.TechProcessOperationRepository;
+import ru.company.production.repository.WorkshopStaffBindingRepository;
 
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * Рабочие места подразделения руководителя.
@@ -36,6 +44,8 @@ public class WorkshopUnitOperationsService {
     private final OperationService operationService;
     private final WorkPlaceService workPlaceService;
     private final OrganizationUnitRepository organizationUnitRepository;
+    private final TechProcessOperationRepository routeOperationRepo;
+    private final WorkshopStaffBindingRepository bindingRepo;
 
     /**
      * Операции подразделения — список раздела
@@ -301,6 +311,103 @@ public class WorkshopUnitOperationsService {
         }
 
         return scope;
+    }
+
+    /*
+     * Неприсвоенные операции — операции из действующих маршрутов
+     * подразделения, у которых нет привязок исполнителя.
+     *
+     * Запрос читает все операции подразделения в маршрутах, затем
+     * — множество идентификаторов операций с активными привязками,
+     * и вычитает одно из другого. Поскольку одна операция входит в
+     * несколько маршрутов и изделий, результат группируется: одна
+     * строка отчёта = одна операция с перечнем маршрутов и изделий.
+     */
+    @Transactional(readOnly = true)
+    public List<UnassignedOperationView> findUnassignedOperations(
+            AppUser supervisor
+    ) {
+        List<Long> scope = requireUnitScope(supervisor);
+
+        /*
+         * Все операции подразделения в составе маршрутов.
+         */
+        List<RouteOperationProbe> routeOps =
+                routeOperationRepo.findUnitRouteOperations(scope);
+
+        if (routeOps.isEmpty()) {
+            return List.of();
+        }
+
+        /*
+         * Операции, у которых есть живой исполнитель.
+         */
+        List<Long> assignedIds =
+                bindingRepo.findAssignedOperationIds(scope);
+
+        Set<Long> assigned = new HashSet<>(assignedIds);
+
+        /*
+         * Группировка: ключ — идентификатор операции, значение —
+         * строка отчёта, к которой дописываются маршруты и изделия.
+         */
+        Map<Long, UnassignedOperationView> grouped = new LinkedHashMap<>();
+
+        for (RouteOperationProbe probe : routeOps) {
+            if (assigned.contains(probe.getOperationId())) {
+                continue;
+            }
+
+            UnassignedOperationView row = grouped.computeIfAbsent(
+                    probe.getOperationId(),
+                    key -> new UnassignedOperationView(
+                            probe.getOperationId(),
+                            probe.getOperationName(),
+                            probe.getOperationTypeName(),
+                            probe.getUnitName()
+                    )
+            );
+
+            row.addRoute(
+                    probe.getProcessCode(),
+                    formatProductName(probe)
+            );
+        }
+
+        return List.copyOf(grouped.values());
+    }
+
+    /*
+     * Формирование подписи изделия для отчёта: у датчиков —
+     * наименование каталога + product_name, у прибора/ячейки/системы —
+     * product_name, для всех типов — код классификатора.
+     */
+    private static String formatProductName(RouteOperationProbe probe) {
+        String code = probe.getClassifierCode() != null
+                ? String.valueOf(probe.getClassifierCode())
+                : null;
+
+        String sensorName = probe.getSensorName();
+        String classifierName = probe.getClassifierName();
+        ProductType productType = probe.getProductType();
+
+        /*
+         * Для датчиков product_name в классификаторе не хранится,
+         * наименование берётся из каталога датчиков.
+         */
+        if (productType == ProductType.SENSOR && sensorName != null) {
+            return code + " — " + sensorName;
+        }
+
+        /*
+         * Для прибора, ячейки и системы product_name — это
+         * classifierName (заполняется через getDisplayName).
+         */
+        if (classifierName != null) {
+            return code + " — " + classifierName;
+        }
+
+        return code;
     }
 
     /*

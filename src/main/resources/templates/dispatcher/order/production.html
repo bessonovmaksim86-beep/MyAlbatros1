@@ -18,6 +18,86 @@
 
     <link rel="stylesheet"
           th:href="@{/dispatcher/css/page-actions.css}">
+
+    <style>
+        /* ===== Древовидная таблица ===== */
+        .tree-table .col-tree-expand {
+            width: 40px;
+            text-align: center;
+            vertical-align: middle;
+        }
+
+        .tree-toggle {
+            background: none;
+            border: none;
+            cursor: pointer;
+            font-size: 11px;
+            color: var(--muted, #64748b);
+            padding: 4px;
+            line-height: 1;
+            border-radius: 4px;
+            transition: all 150ms;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 24px;
+            height: 24px;
+        }
+
+        .tree-toggle:hover {
+            background: var(--border, #e2e8f0);
+        }
+
+        .tree-toggle::before {
+            content: '▸';
+            transition: transform 150ms;
+        }
+
+        .tree-toggle.expanded::before {
+            content: '▾';
+        }
+
+        .tree-placeholder {
+            color: var(--muted, #c8d0d8);
+            font-size: 14px;
+            user-select: none;
+        }
+
+        /*
+         * Вершина дерева (заказ без родителя) выделяется, чтобы на
+         * фоне раскрытых комплектующих глаз сразу находил выпуск.
+         */
+        .tree-table .row-depth-0 > td {
+            background: #f0f7ff;
+            font-weight: 600;
+        }
+
+        .tree-table .row-depth-1 > td {
+            background: #fafbfc;
+        }
+
+        .tree-table .row-depth-2 > td {
+            background: #fff;
+            font-size: 13px;
+            color: var(--muted, #64748b);
+        }
+
+        .tree-table .row-hidden {
+            display: none;
+        }
+
+        /*
+         * Отступ номера по глубине: иерархия должна читаться глазами,
+         * а не только стрелками.
+         */
+        .tree-table .row-depth-1 .cell-number {
+            padding-left: 20px;
+        }
+
+        .tree-table .row-depth-2 .cell-number {
+            padding-left: 40px;
+        }
+    </style>
 </head>
 
 <body>
@@ -313,16 +393,38 @@
 
                     </div>
 
+                    <!--
+                        Кнопка раскрытия/сворачивания дерева.
+
+                        Ползунок глубины убран: дереву нужно не «сколько
+                        уровней видно», а одно из двух состояний — список
+                        компактный (видны только заказы верхнего уровня)
+                        или раскрыт целиком. Промежуточные положения
+                        диспетчеру не требовались, а точечно ветку всегда
+                        можно раскрыть стрелкой в строке.
+
+                        Верх диапазона (treeMaxDepth) считает сервер: у
+                        списка без вложенных заказов кнопки нет —
+                        сворачивать нечего.
+                    -->
+                    <button type="button"
+                            class="btn secondary compact"
+                            id="depthToggle"
+                            th:if="${treeMaxDepth != null and treeMaxDepth > 0}">
+                        ▾ Раскрыть все входящие
+                    </button>
+
                 </div>
 
                 <div class="card-body">
 
                     <div class="table-wrap">
 
-                        <table class="data-table">
+                        <table class="data-table tree-table">
 
                             <thead>
                             <tr>
+                                <th class="col-tree-expand"></th>
                                 <th>Номер заказа</th>
                                 <th>Серийник(и)</th>
                                 <th>Дата открытия</th>
@@ -335,23 +437,57 @@
                             </tr>
                             </thead>
 
-                            <tbody>
+                            <tbody id="znpTreeBody">
 
                             <tr th:if="${
-                                    productionOrders == null
-                                    or #lists.isEmpty(productionOrders)
+                                    znpTree == null
+                                    or #lists.isEmpty(znpTree)
                                  }">
 
-                                <td colspan="9"
+                                <td colspan="10"
                                     class="empty-table">
                                     Заказы на производство пока не добавлены
                                 </td>
 
                             </tr>
 
-                            <tr th:each="order : ${productionOrders}">
+                            <!--
+                                Порядок строк задаёт сервер: интерцептор
+                                отдаёт список обходом в глубину, поэтому
+                                заказ стоит сразу перед входящими в него
+                                ЗНП, и разметке не нужно ничего сортировать.
 
-                                <td th:text="${order.number}">
+                                data-node — номер заказа, data-parent —
+                                номер родителя: связь держится номером,
+                                потому что проекция строки идентификатор
+                                родителя не отдаёт.
+                            -->
+                            <tr th:each="node : ${znpTree}"
+                                class="tree-row"
+                                th:classappend="'row-depth-' + ${node['depth']}"
+                                th:attr="data-node=${node['number']},
+                                         data-parent=${node['parent']},
+                                         data-depth=${node['depth']},
+                                         data-expandable=${node['hasChildren']}">
+
+                                <td class="col-tree-expand">
+
+                                    <button type="button"
+                                            class="tree-toggle"
+                                            th:if="${node['hasChildren']}"
+                                            th:attr="data-node=${node['number']}"
+                                            th:title="'Показать входящие в ' + ${node['number']}">
+                                    </button>
+
+                                    <span class="tree-placeholder"
+                                          th:unless="${node['hasChildren']}">
+                                        ·
+                                    </span>
+
+                                </td>
+
+                                <td class="cell-number"
+                                    th:text="${node['number']}">
                                     ЗНП-2026-001
                                 </td>
 
@@ -377,39 +513,34 @@
                                 <td style="max-width: 320px;
                                            white-space: normal;
                                            word-break: break-word;"
-                                    th:text="${
-                                        orderSerials != null
-                                        and orderSerials.containsKey(order.id)
-                                            ? orderSerials.get(order.id)
-                                            : '—'
-                                    }">
+                                    th:text="${node['serials']}">
                                     121205333, 121205334
                                 </td>
 
-                                <td th:text="${order.formattedOrderDate}">
+                                <td th:text="${node['orderDate']}">
                                     01.01.2026
                                 </td>
 
-                                <td th:text="${order.customerOrderNumber}">
+                                <td th:text="${node['customerOrderNumber']}">
                                     ЗП-2026-001
                                 </td>
 
-                                <td th:text="${order.itemCount}">
+                                <td th:text="${node['itemCount']}">
                                     3
                                 </td>
 
-                                <td th:text="${order.doneProgress}">
+                                <td th:text="${node['doneProgress']}">
                                     0 из 3
                                 </td>
 
-                                <td th:text="${order.formattedDueDate}">
+                                <td th:text="${node['dueDate']}">
                                     01.01.2026
                                 </td>
 
                                 <td>
                                     <span class="status"
-                                          th:classappend="${order.statusBadgeClass}"
-                                          th:text="${order.statusDisplayName}">
+                                          th:classappend="${node['statusClass']}"
+                                          th:text="${node['statusName']}">
                                         Статус
                                     </span>
                                 </td>
@@ -419,7 +550,7 @@
                                     <div class="table-actions">
 
                                         <a class="btn secondary compact"
-                                           th:href="@{/dispatcher/production-order/{id}(id=${order.id})}">
+                                           th:href="@{/dispatcher/production-order/{id}(id=${node['id']})}">
                                             Открыть
                                         </a>
 
@@ -434,13 +565,12 @@
                                         -->
                                         <form method="post"
                                               th:if="${
-                                                  order.status != null
-                                                  and order.status.name() != 'DONE'
-                                                  and order.status.name() != 'CANCELLED'
+                                                  node['statusCode'] != 'DONE'
+                                                  and node['statusCode'] != 'CANCELLED'
                                               }"
-                                              th:action="@{/dispatcher/production-order/{id}/plan(id=${order.id})}"
+                                              th:action="@{/dispatcher/production-order/{id}/plan(id=${node['id']})}"
                                               th:attr="data-confirm=${
-                                                  'Взять заказ «' + order.number + '» в работу?'
+                                                  'Взять заказ «' + node['number'] + '» в работу?'
                                               }"
                                               onsubmit="return this.querySelector('button').disabled
                                                   ? false
@@ -453,71 +583,70 @@
 
                                             <button class="btn primary compact"
                                                     type="submit"
-                                                    th:disabled="${!order.planAllowed}"
-                                                    th:title="${order.planBlockReason}">
+                                                    th:disabled="${!node['planAllowed']}"
+                                                    th:title="${node['planBlockReason']}">
                                                 В работу
                                             </button>
 
                                         </form>
 
-                                                                                                            <!--
-                                        Тот же возврат из отмены, что в карточке:
-                                        у отменённого ЗНП в списке не осталось
-                                        ни одного действия, кроме «Открыть».
-                                    -->
-                                    <form method="post"
-                                          th:if="${
-                                              order.component
-                                              and order.status != null
-                                              and order.status.name() == 'CANCELLED'
-                                          }"
-                                          th:action="@{/dispatcher/production-order/{id}/reopen(id=${order.id})}"
-                                          th:attr="data-confirm=${
-                                              'Вернуть ЗНП «' + order.number
-                                              + '» в работу? Заказ перейдёт в статус «Новый».'
-                                          }"
-                                          onsubmit="return confirm(this.getAttribute('data-confirm'));">
+                                        <!--
+                                            Тот же возврат из отмены, что в карточке:
+                                            у отменённого ЗНП в списке не осталось
+                                            ни одного действия, кроме «Открыть».
+                                        -->
+                                        <form method="post"
+                                              th:if="${
+                                                  node['component']
+                                                  and node['statusCode'] == 'CANCELLED'
+                                              }"
+                                              th:action="@{/dispatcher/production-order/{id}/reopen(id=${node['id']})}"
+                                              th:attr="data-confirm=${
+                                                  'Вернуть ЗНП «' + node['number']
+                                                  + '» в работу? Заказ перейдёт в статус «Новый».'
+                                              }"
+                                              onsubmit="return confirm(this.getAttribute('data-confirm'));">
 
-                                        <input th:if="${_csrf != null}"
-                                               type="hidden"
-                                               th:name="${_csrf.parameterName}"
-                                               th:value="${_csrf.token}">
+                                            <input th:if="${_csrf != null}"
+                                                   type="hidden"
+                                                   th:name="${_csrf.parameterName}"
+                                                   th:value="${_csrf.token}">
 
-                                        <button class="btn primary compact"
-                                                type="submit">
-                                            Вернуть в работу
-                                        </button>
+                                            <button class="btn primary compact"
+                                                    type="submit">
+                                                Вернуть в работу
+                                            </button>
 
-                                    </form>
+                                        </form>
 
-<!--
-                                        Кнопка есть у любой строки списка:
-                                        отказывает сервис, а не разметка, — так
-                                        строка не «исчезает» при взятии заказа
-                                        в работу и диспетчер видит причину в
-                                        подтверждении и в баннере.
+                                        <!--
+                                            Кнопка есть у любой строки списка:
+                                            отказывает сервис, а не разметка, — так
+                                            строка не «исчезает» при взятии заказа
+                                            в работу и диспетчер видит причину в
+                                            подтверждении и в баннере.
 
-                                        Текст подтверждения несёт проекция
-                                        (getDeleteConfirmText): только она знает
-                                        про вложенные комплектующие без
-                                        дополнительного запроса на строку.
-                                    -->
-                                    <form method="post"
-                                          th:action="@{/dispatcher/production-order/{id}/delete(id=${order.id})}"
-                                          th:attr="data-confirm=${order.deleteConfirmText}"
-                                          onsubmit="return confirm(this.getAttribute('data-confirm'));">
+                                            Текст подтверждения несёт проекция
+                                            (getDeleteConfirmText): только она знает
+                                            про вложенные комплектующие без
+                                            дополнительного запроса на строку.
+                                        -->
+                                        <form method="post"
+                                              th:action="@{/dispatcher/production-order/{id}/delete(id=${node['id']})}"
+                                              th:attr="data-confirm=${node['deleteConfirmText']}"
+                                              onsubmit="return confirm(this.getAttribute('data-confirm'));">
 
-                                        <input th:if="${_csrf != null}"
-                                               type="hidden"
-                                               th:name="${_csrf.parameterName}"
-                                               th:value="${_csrf.token}">
+                                            <input th:if="${_csrf != null}"
+                                                   type="hidden"
+                                                   th:name="${_csrf.parameterName}"
+                                                   th:value="${_csrf.token}">
 
-                                        <button class="btn danger compact"
-                                                type="submit">
-                                            Удалить
-                                        </button>
+                                            <button class="btn danger compact"
+                                                    type="submit">
+                                                Удалить
+                                            </button>
 
-                                    </form>
+                                        </form>
 
                                     </div>
 
@@ -532,11 +661,9 @@
                 </div>
             </section>
 
-            <div class="empty-state"
-                 th:if="${
-                     productionOrders == null
-                     or #lists.isEmpty(productionOrders)
-                 }">
+            <div class="empty-state tree-empty"
+                 id="tree-empty-state"
+                 style="display: none;">
                 <h3>Заказов на производство пока нет</h3>
 
                 <p>
@@ -554,6 +681,14 @@
 <th:block th:replace="~{dispatcher/fragments/layout
         :: commonScripts}">
 </th:block>
+
+<!--
+    Скрипт дерева подключается ПОСЛЕ commonScripts, а не внутри его
+    th:block: th:replace заменяет элемент-приёмник целиком, и вложенный
+    в него тег исчезал из готовой страницы — дерево не получало ни
+    обработчиков, ни начального сворачивания.
+-->
+<script th:src="@{/dispatcher/js/production-tree.js}"></script>
 
 </body>
 </html>

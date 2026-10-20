@@ -109,6 +109,8 @@ public class WorkshopDistributionService {
             Role.OMTSIK_MASTER,
             Role.OMTSIK_С_MASTER,
             Role.BVK_MASTER,
+            Role.SGP_MASTER,
+            Role.SGM_MASTER,
             Role.SDP_SERVICE_HEAD_TECHNOLOGY,
             Role.SDP_SERVICE_HEAD_DISPATCHER,
             Role.DISPATCHER,

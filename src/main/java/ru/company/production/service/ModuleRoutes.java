@@ -120,6 +120,29 @@ public final class ModuleRoutes {
                     )
             ),
 
+            /*
+             * Склад готовой продукции и отдел метрологии ведут тот же
+             * модуль руководителя подразделения: их границы задаёт
+             * подразделение учётной записи (WorkshopStaffService), а не
+             * отдельный интерфейс — операции и сотрудники у них работают
+             * по тем же правилам, что у цехов и прочих складов.
+             */
+            Map.entry(
+                    Role.SGP_MASTER,
+                    new Destination(
+                            "Склад готовой продукции",
+                            "/workshop/staff"
+                    )
+            ),
+
+            Map.entry(
+                    Role.SGM_MASTER,
+                    new Destination(
+                            "Отдел метрологии",
+                            "/workshop/staff"
+                    )
+            ),
+
             Map.entry(
                     Role.OMTSIK_EXECUTOR,
                     new Destination(

@@ -106,6 +106,103 @@
             </div>
 
             <!--
+                Неприсвоенные операции — из действующих маршрутов
+                подразделения, у которых нет привязок исполнителя.
+            -->
+            <section class="card">
+
+                <div class="card-head">
+
+                    <div>
+
+                        <h2>Неприсвоенные операции</h2>
+
+                        <p>
+                            Операции из маршрутов, включённые в техпроцессы,
+                            но не закреплённые ни за одним сотрудником
+                            подразделения: закрепите исполнителя в разделе
+                            «Сотрудники»
+                        </p>
+
+                    </div>
+
+                    <span class="badge"
+                          th:text="${#lists.isEmpty(unassignedOperations)
+                              ? '0 шт.'
+                              : unassignedOperations.size() + ' шт.'}">
+                        0 шт.
+                    </span>
+
+                </div>
+
+                <div class="card-body">
+
+                    <div class="alert danger"
+                         th:if="${#lists.isEmpty(unassignedOperations)}">
+
+                        <p>
+                            Операций из маршрутов без исполнителя не найдено:
+                            все операции подразделений закреплены за сотрудниками
+                        </p>
+
+                    </div>
+
+                    <div class="table-wrap"
+                         th:unless="${#lists.isEmpty(unassignedOperations)}">
+
+                        <table class="data-table workshop-staff-table">
+
+                            <thead>
+
+                            <tr>
+                                <th>Операция</th>
+                                <th>Тип</th>
+                                <th>Маршрут</th>
+                                <th>Изделие</th>
+                            </tr>
+
+                            </thead>
+
+                            <tbody>
+
+                            <tr th:each="op : ${unassignedOperations}">
+
+                                <td class="staff-cell">
+                                    <strong th:text="${op.operationName}">
+                                        Приёмка комплектующих
+                                    </strong>
+
+                                    <small class="field-hint"
+                                           th:text="${op.unitName}">
+                                        Цех
+                                    </small>
+                                </td>
+
+                                <td th:text="${op.operationTypeName}">
+                                    Производственная
+                                </td>
+
+                                <td th:text="${op.processCodes}">
+                                    ТП-14, ТП-22
+                                </td>
+
+                                <td th:text="${op.productNames}">
+                                    1212 ЯПР56 — Датчик ДУУ2М
+                                </td>
+
+                            </tr>
+
+                            </tbody>
+
+                        </table>
+
+                    </div>
+
+                </div>
+
+            </section>
+
+            <!--
                 Форма рабочего места — только пользователям с правами
                 на изменение (fullModule или canViewUnit). Служба
                 качества заходит в раздел почитать операции своего

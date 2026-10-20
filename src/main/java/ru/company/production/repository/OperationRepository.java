@@ -168,53 +168,6 @@ public interface OperationRepository
     );
 
     /**
-     * Операции по списку подразделений с ролью исполнителя — граница
-     * службы качества для закрепления работ.
-     */
-    @EntityGraph(attributePaths = {
-            "operationName",
-            "operationType",
-            "service",
-            "organizationUnit",
-            "executorRole"
-    })
-    @Query("""
-            select operation
-            from Operation operation
-            where operation.organizationUnit.id in :organizationUnitIds
-              and operation.executorRole.code = :executorRoleCode
-            order by operation.organizationUnit.name asc,
-                     operation.operationName.name asc
-            """)
-    List<Operation> findUnitExecutorOperationsByUnitIds(
-            @Param("organizationUnitIds") List<Long> organizationUnitIds,
-            @Param("executorRoleCode") String executorRoleCode
-    );
-
-    /**
-     * Операции получения комплектации по списку подразделений.
-     */
-    @EntityGraph(attributePaths = {
-            "operationName",
-            "operationType",
-            "service",
-            "organizationUnit",
-            "executorRole"
-    })
-    @Query("""
-            select operation
-            from Operation operation
-            where operation.organizationUnit.id in :organizationUnitIds
-              and operation.operationType.code = :typeCode
-            order by operation.organizationUnit.name asc,
-                     operation.operationName.name asc
-            """)
-    List<Operation> findUnitKitReceiptOperationsByUnitIds(
-            @Param("organizationUnitIds") List<Long> organizationUnitIds,
-            @Param("typeCode") String typeCode
-    );
-
-    /**
      * Количество операций подразделения — счётчик бокового меню.
      * Отдельный запрос нужен потому, что для счётчика в списке строк
      * нет смысла, а выбирать их целиком на каждую страницу модуля

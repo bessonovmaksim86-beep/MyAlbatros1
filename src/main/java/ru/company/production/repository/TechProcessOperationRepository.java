@@ -122,4 +122,39 @@ public interface TechProcessOperationRepository
             @Param("unitCode") String unitCode
     );
 
+    /**
+     * Операции подразделений в составе действующих маршрутов —
+     * пробы для отчёта «Неприсвоенные операции».
+     *
+     * Строка — пара «маршрут — операция»: одна операция входит в
+     * несколько маршрутов, и сервис склеивает их в одну строку
+     * отчёта. Учитываются только активные маршруты.
+     */
+    @Query("""
+            select
+                operation.id            as operationId,
+                operationName.name      as operationName,
+                operationType.name      as operationTypeName,
+                unit.name               as unitName,
+                process.code            as processCode,
+                classifier.code         as classifierCode,
+                classifier.name         as classifierName,
+                sensor.name             as sensorName,
+                classifier.productType  as productType
+            from TechProcessOperation node
+            join node.techProcess process
+            join node.operation operation
+            join operation.operationName operationName
+            join operation.operationType operationType
+            join operation.organizationUnit unit
+            join process.productClassifier classifier
+            left join classifier.sensorCatalog sensor
+            where process.active = true
+              and unit.id in :unitIds
+            order by operationName.name asc, process.code asc
+            """)
+    List<RouteOperationProbe> findUnitRouteOperations(
+            @Param("unitIds") List<Long> unitIds
+    );
+
 }

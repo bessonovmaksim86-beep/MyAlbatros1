@@ -36,9 +36,6 @@ import java.util.*;
 @RequiredArgsConstructor
 public class WorkshopStaffService {
 
-    /** Код роли «Исполнитель» в справочнике user_roles. */
-    private static final String EXECUTOR_ROLE_CODE = "EXECUTOR";
-
     /**
      * Подразделение, которым руководит каждая из руководящих ролей.
      * Нужен как запасной вариант, когда у учётной записи подразделение
@@ -84,6 +81,14 @@ public class WorkshopStaffService {
                     Map.entry(
                             Role.BVK_MASTER,
                             List.of("Input Control Bureau", "INPUT_CONTROL_BUREAU")
+                    ),
+                    Map.entry(
+                            Role.SGP_MASTER,
+                            List.of("FINISHED_PRODUCT_WAREHOUS")
+                    ),
+                    Map.entry(
+                            Role.SGM_MASTER,
+                            List.of("METROLOGY_DEPARTMENT")
                     )
             );
 
@@ -105,7 +110,9 @@ public class WorkshopStaffService {
             Role.SDP_ST_MASTER,
             Role.OMTSIK_MASTER,
             Role.OMTSIK_С_MASTER,
-            Role.BVK_MASTER
+            Role.BVK_MASTER,
+            Role.SGP_MASTER,
+            Role.SGM_MASTER
     );
 
     /**
@@ -240,38 +247,21 @@ public class WorkshopStaffService {
     }
 
     /**
-     * Операции подразделения (подразделений) с ролью «Исполнитель».
-     */
-    @Transactional(readOnly = true)
-    public List<Operation> findWorkshopOperations(Collection<Long> unitIds) {
-        List<Long> ids = cleanIds(unitIds);
-
-        if (ids.isEmpty()) {
-            return List.of();
-        }
-
-        return operationRepository.findUnitExecutorOperationsByUnitIds(
-                ids,
-                EXECUTOR_ROLE_CODE
-        );
-    }
-
-    /**
-     * Операции, доступные для закрепления, сгруппированные по природе.
+     * Операции подразделения, доступные для закрепления.
      *
-     * Кроме цеховых работ с ролью «Исполнитель» в список попадают
-     * операции получения комплектации того же подразделения. Раньше их
-     * не отдавали вовсе: они отнесены к цеху или отделу напрямую и роль
-     * «Исполнитель» не носят, поэтому запрос цеховых работ их не
-     * возвращал, и закрепить получение комплектации за сотрудником было
-     * нельзя — хотя по плану комплектацию под свои работы получает
-     * именно этот цех.
+     * В список попадают все операции, привязанные к подразделению
+     * руководителя — производственные, передаточные, приёмка,
+     * контрольные, получение комплектации и любые другие. Раньше
+     * показывались только операции с ролью «Исполнитель» и получение
+     * комплектации, из-за чего руководитель не мог закрепить за
+     * сотрудниками остальные типы работ, относящиеся к его цеху
+     * или отделу.
      *
      * Граница та же, что у остальных выборок модуля: только своё
      * подразделение, поэтому чужие операции руководителю не видны.
      *
      * @param unitGenitive род подразделения в родительном падеже —
-     *                     подпись первой группы («операции склада»
+     *                     подпись группы («операции склада»
      *                     вместо «операции цеха»)
      */
     @Transactional(readOnly = true)
@@ -286,23 +276,20 @@ public class WorkshopStaffService {
         }
 
         return StaffOperationGroup.of(
-                findWorkshopOperations(ids),
-                operationRepository.findUnitKitReceiptOperationsByUnitIds(
-                        ids,
-                        OperationTypeCode.KIT_RECEIPT.name()
-                ),
+                findAllUnitOperations(ids),
                 unitGenitive
         );
     }
 
     /**
      * Все операции подразделения (подразделений) без фильтра по роли
-     * исполнителя — список раздела «Операции и рабочие места».
+     * исполнителя — список раздела «Операции и рабочие места» и тот же
+     * перечень для закрепления за сотрудниками.
      *
-     * От выборки для закрепления отличается принципиально: там нужны
-     * только те операции, которые сотрудник подразделения и выполняет,
-     * а здесь руководитель видит весь свой перечень, включая операции
-     * приёма, выдачи и перемещения, и заводит новые.
+     * Фильтр по роли «Исполнитель» здесь неприменим: руководитель
+     * склада или бюро работает со своими операциями приёма, выдачи и
+     * перемещения, которые этой роли не носят, и в отфильтрованной
+     * выборке их не видно — ни в справочнике, ни в списке закрепления.
      */
     @Transactional(readOnly = true)
     public List<Operation> findAllUnitOperations(Collection<Long> unitIds) {
@@ -665,7 +652,9 @@ public class WorkshopStaffService {
                     Map.entry(Role.SDP_ST_MASTER,   UnitKind.WORKSHOP),
                     Map.entry(Role.OMTSIK_MASTER,   UnitKind.WAREHOUSE),
                     Map.entry(Role.OMTSIK_С_MASTER, UnitKind.WAREHOUSE),
+                    Map.entry(Role.SGP_MASTER,      UnitKind.WAREHOUSE),
                     Map.entry(Role.BVK_MASTER,      UnitKind.BUREAU),
+                    Map.entry(Role.SGM_MASTER,      UnitKind.DEPARTMENT),
                     Map.entry(
                             Role.SDP_SERVICE_HEAD_TECHNOLOGY,
                             UnitKind.DEPARTMENT

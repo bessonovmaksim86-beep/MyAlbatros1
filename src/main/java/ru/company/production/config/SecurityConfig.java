@@ -120,6 +120,8 @@ public class SecurityConfig {
                                 "OMTSIK_MASTER",
                                 "OMTSIK_С_MASTER",
                                 "BVK_MASTER",
+                                "SGP_MASTER",
+                                "SGM_MASTER",
                                 "SK_GENERAL",
                                 "SDP_SERVICE_HEAD_TECHNOLOGY",
                                 "SDP_SERVICE_HEAD_DISPATCHER",
@@ -164,6 +166,8 @@ public class SecurityConfig {
                                 "OMTSIK_MASTER",
                                 "OMTSIK_С_MASTER",
                                 "BVK_MASTER",
+                                "SGP_MASTER",
+                                "SGM_MASTER",
                                 "SK_GENERAL"
                         )
                         .requestMatchers(
@@ -183,6 +187,8 @@ public class SecurityConfig {
                                 "OMTSIK_MASTER",
                                 "OMTSIK_С_MASTER",
                                 "BVK_MASTER",
+                                "SGP_MASTER",
+                                "SGM_MASTER",
                                 "SK_GENERAL"
                         )
                         /*
@@ -198,7 +204,9 @@ public class SecurityConfig {
                                 "SDP_ST_MASTER",
                                 "OMTSIK_MASTER",
                                 "OMTSIK_С_MASTER",
-                                "BVK_MASTER"
+                                "BVK_MASTER",
+                                "SGP_MASTER",
+                                "SGM_MASTER"
                         )
                         /*
                          * Склад полуфабрикатов: оприходование ячеек.

@@ -83,4 +83,27 @@ public interface WorkshopStaffBindingRepository
             @Param("workPlaceIds") List<Long> workPlaceIds,
             @Param("hasPlaces") boolean hasPlaces
     );
+
+    /**
+     * Идентификаторы операций, закреплённых за действующими
+     * сотрудниками подразделения — множество «есть исполнитель» для
+     * отчёта о неприсвоенных операциях.
+     *
+     * Неработающий сотрудник операцию не закрывает: привязка
+     * уволенного остаётся в справочнике, но выполнить работу ему
+     * некому, поэтому операция без живого исполнителя должна
+     * остаться в отчёте. Граница по подразделениям нужна, потому что
+     * руководитель отвечает за закрепление у своих людей.
+     */
+    @Query("""
+            select distinct binding.operation.id
+            from WorkshopStaffBinding binding
+            where binding.bindingType = ru.company.production.entity.StaffBindingType.OPERATION
+              and binding.operation.id is not null
+              and binding.employee.active = true
+              and binding.employee.organizationUnit.id in :unitIds
+            """)
+    List<Long> findAssignedOperationIds(
+            @Param("unitIds") List<Long> unitIds
+    );
 }

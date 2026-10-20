@@ -301,10 +301,17 @@ public class AdminUserService {
         boolean metrology = isMetrologyService(service);
 
         /*
-         * СГМ подразделения не выбираются,
-         * пользователь относится к службе целиком.
+         * СГМ подразделения не выбираются, пользователь относится к
+         * службе целиком — кроме метрологического отдела: ролью
+         * SGM_MASTER заведён модуль руководителя подразделения, а его
+         * границы (сотрудники, операции, рабочие места) строятся по
+         * подразделению учётной записи, поэтому METROLOGY_DEPARTMENT
+         * для СГМ разрешён.
          */
-        if (metrology && unit != null) {
+        if (metrology && unit != null
+                && !"METROLOGY_DEPARTMENT".equalsIgnoreCase(
+                        unit.getCode())) {
+
             throw new IllegalArgumentException(
                     "СГМ не содержит подразделений"
             );

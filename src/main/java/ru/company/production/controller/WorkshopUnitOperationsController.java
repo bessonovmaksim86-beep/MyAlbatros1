@@ -101,6 +101,15 @@ public class WorkshopUnitOperationsController {
 
         addFormData(model);
 
+        /*
+         * Неприсвоенные операции: операции из действующих маршрутов
+         * подразделения, закреплённые ни за одним сотрудником.
+         */
+        model.addAttribute(
+                "unassignedOperations",
+                unitOperationsService.findUnassignedOperations(supervisor)
+        );
+
         model.addAttribute("activePage", "operations");
 
         return "workshop/operations/index";
@@ -268,6 +277,11 @@ public class WorkshopUnitOperationsController {
         }
 
         addFormData(model);
+
+        model.addAttribute(
+                "unassignedOperations",
+                unitOperationsService.findUnassignedOperations(supervisor)
+        );
     }
 
     /*
