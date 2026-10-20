@@ -1404,6 +1404,30 @@ body {
     opacity: .85;
 }
 
+/*
+ * Предпросмотр плана: кнопка «Внести план в заказ» блокируется, когда
+ * за операцию графика не закреплено ни одного исполнителя. Базовый
+ * каркас technology.css описывает только cursor у .btn, поэтому
+ * неактивная кнопка выглядела бы обычной — подсвечиваем явно.
+ */
+.schedule-confirm-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 12px;
+}
+
+.schedule-confirm-actions .btn:disabled {
+    opacity: .45;
+    cursor: not-allowed;
+}
+
+.schedule-confirm-actions .field-hint {
+    margin-top: 0;
+
+    flex: 1 1 260px;
+}
+
 
 /* ============================================================
    АДАПТИВНОСТЬ

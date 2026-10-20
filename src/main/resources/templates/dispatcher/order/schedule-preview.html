@@ -70,6 +70,11 @@
                  th:text="${errorMessage}">
             </div>
 
+            <div class="alert danger"
+                 th:if="${schedule != null and !schedule.confirmable()}"
+                 th:text="${schedule.unassignedHint()}">
+            </div>
+
             <th:block th:if="${schedule != null}">
 
                 <section class="card gap">
@@ -205,18 +210,34 @@
 
                         <form method="post"
                               th:action="@{/dispatcher/customer-order/{id}/schedule-confirm(id=${orderId})}"
-                              class="inline-action">
+                              class="inline-action schedule-confirm-actions">
 
                             <input th:if="${_csrf != null}"
                                    type="hidden"
                                    th:name="${_csrf.parameterName}"
                                    th:value="${_csrf.token}">
 
+                            <!--
+                                Кнопка активна только когда за каждую
+                                операцию графика закреплён исполнитель:
+                                строку без исполнителя некому закрыть, и
+                                заказ встал бы запланированным с мёртвым
+                                этапом. Причина — в подсказке под кнопкой,
+                                чтобы блокировка не выглядела отказом без
+                                объяснения.
+                            -->
                             <button class="btn primary"
                                     type="submit"
-                                    th:disabled="${schedule.rows().isEmpty()}">
+                                    th:disabled="${schedule.rows().isEmpty()
+                                            or !schedule.confirmable()}">
                                 Внести план в заказ
                             </button>
+
+                            <small class="field-hint"
+                                   th:unless="${schedule.confirmable()}">
+                                Закрепите исполнителей за операциями выше —
+                                после этого план можно будет внести
+                            </small>
 
                         </form>
 

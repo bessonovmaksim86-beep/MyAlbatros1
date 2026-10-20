@@ -10,6 +10,7 @@ import ru.company.production.entity.CustomerOrderItem;
 import ru.company.production.entity.EmployeeAbsence;
 import ru.company.production.entity.HolidayDay;
 import ru.company.production.entity.Operation;
+import ru.company.production.entity.OperationTypeCode;
 import ru.company.production.entity.OrderPriority;
 import ru.company.production.entity.OrderScheduleRow;
 import ru.company.production.entity.OrganizationUnit;
@@ -134,6 +135,17 @@ public class OrderSchedulingService {
     @Transactional
     public ScheduleResult confirm(Long orderId) {
         ScheduleResult result = calculate(orderId);
+
+        /*
+         * План вносится только целиком: одна операция без закреплённого
+         * исполнителя превратила бы заказ в запланированный с этапом,
+         * который некому закрыть, — цех бы его не увидел в распределении,
+         * а маршрут дальше не пошёл бы. Поэтому отказываем до записи,
+         * хотя бы запрос пришёл мимо предпросмотра.
+         */
+        if (!result.confirmable()) {
+            throw new IllegalStateException(result.unassignedHint());
+        }
 
         scheduleRowRepository.deleteByOrderIdAndStatus(
                 orderId,
@@ -429,6 +441,15 @@ public class OrderSchedulingService {
                         : null,
                 planned,
                 views,
+                List.of(),
+                /*
+                 * Групповой ЗНП не имеет табличного предпросмотра: его
+                 * план заводится автоматически при взятии заказа в
+                 * работу, и блокировать этот шаг нельзя — заказ уже
+                 * создан складом и ждёт работ. Нехватку исполнителей
+                 * здесь закрывает руководитель подразделения в
+                 * распределении работ.
+                 */
                 List.of()
         );
     }
@@ -509,6 +530,14 @@ public class OrderSchedulingService {
         List<ScheduleRowView> views = new ArrayList<>();
         List<String> warnings = new ArrayList<>();
 
+        /*
+         * Этапы, поставленные в график, но не закреплённые ни за одним
+         * действующим сотрудником. Список подписывает причину блокировки:
+         * диспетчеру нужно назвать операции, а не просто увидеть мёртвую
+         * кнопку.
+         */
+        List<String> unassignedOperations = new ArrayList<>();
+
         LocalDate lastDate = startDate;
         boolean feasible = true;
 
@@ -557,12 +586,33 @@ public class OrderSchedulingService {
                             calendar
                     );
 
-                    if (placement.capacityEmployees <= 0) {
+                    /*
+                     * Предупреждение объясняет методику расчёта: при
+                     * нулевой мощности этапа загрузка нарисована условной,
+                     * и это верно для любого вида работ. Блокирует же
+                     * внесение плана только отсутствие закреплённого
+                     * исполнителя там, где он нужен: цех получил бы
+                     * строку, которую некому закрыть, а заказ уже
+                     * числился бы запланированным.
+                     */
+                    if (!placement.executorBound) {
                         warnings.add("Операция «" + operationName(base)
                                 + "» (позиция «" + itemLabel(item)
                                 + "»): за ней не закреплено ни одного "
                                 + "исполнителя — загрузка рассчитана "
                                 + "условно по одному человеку");
+
+                        if (requiresBoundExecutor(base)) {
+                            unassignedOperations.add(
+                                    operationName(base) + " — «"
+                                            + itemLabel(item) + "»");
+                        }
+                    } else if (placement.capacityEmployees <= 0) {
+                        warnings.add("Операция «" + operationName(base)
+                                + "» (позиция «" + itemLabel(item)
+                                + "»): в день " + ru(placement.date)
+                                + " все закреплённые исполнители отсутствуют"
+                                + " — загрузка рассчитана условно");
                     }
 
                     if (placement.shiftedPastHorizon) {
@@ -624,7 +674,8 @@ public class OrderSchedulingService {
                 message,
                 planned,
                 views,
-                warnings
+                warnings,
+                unassignedOperations
         );
     }
 
@@ -836,7 +887,8 @@ public class OrderSchedulingService {
                         loadPercent.setScale(0, RoundingMode.HALF_UP)
                                 .intValue(),
                         present,
-                        false
+                        false,
+                        !capable.isEmpty()
                 );
             }
 
@@ -856,7 +908,8 @@ public class OrderSchedulingService {
                         capacityHours(capable, present)
                 ).setScale(0, RoundingMode.HALF_UP).intValue(),
                 present,
-                true
+                true,
+                !capable.isEmpty()
         );
     }
 
@@ -1075,6 +1128,48 @@ public class OrderSchedulingService {
     }
 
     /*
+     * Виды работ, которые план закрепляет за подразделением, а не за
+     * человеком: получение комплектации и распределение работ — личные
+     * работы руководителя, контрольные и передаточные проводит тот, кто
+     * принимает или передаёт изделие по маршруту (контролёр, кладовщик,
+     * мастер участка), а не закреплённый исполнитель операции.
+     *
+     * Требовать от такой операции привязки сотрудника нельзя: её просто
+     * не существует в справочнике закреплений, и заказ нельзя было бы
+     * поставить в план ни при каких настройках подразделения.
+     */
+    private static final Set<String> UNIT_BOUND_TYPE_CODES = Set.of(
+            OperationTypeCode.KIT_RECEIPT.name(),
+            OperationTypeCode.WORK_DISTRIBUTION.name(),
+            OperationTypeCode.CONTROL.name(),
+            OperationTypeCode.TRANSFER.name()
+    );
+
+    /*
+     * Нужен ли операции закреплённый исполнитель, чтобы её строку было
+     * кому закрывать. Работы руководителя и его службы (роль-исполнитель
+     * «Начальник цеха/отдела», «Руководитель службы») идут тем же путём,
+     * что получение комплектации: их проводит сам руководитель, и
+     * закрепления у них нет по замыслу.
+     */
+    private static boolean requiresBoundExecutor(Operation operation) {
+        if (operation == null) {
+            return false;
+        }
+
+        if (operation.getOperationType() != null
+                && UNIT_BOUND_TYPE_CODES.contains(
+                        operation.getOperationType().getCode())) {
+            return false;
+        }
+
+        return operation.getExecutorRole() == null
+                || !WorkshopDistributionService
+                        .SUPERVISOR_EXECUTOR_ROLE_CODES
+                        .contains(operation.getExecutorRole().getCode());
+    }
+
+    /*
      * Подпись позиции: полное обозначение «как в КД», введённое
      * диспетчером, а при его отсутствии — наименование классификатора
      * (для датчика — его род). Тот же приоритет, что в
@@ -1124,7 +1219,15 @@ public class OrderSchedulingService {
             LocalDate date,
             int loadPercent,
             int capacityEmployees,
-            boolean shiftedPastHorizon
+            boolean shiftedPastHorizon,
+
+            /*
+             * Закреплён ли за операцией хоть один действующий сотрудник.
+             * Не то же самое, что нулевой capacityEmployees: там люди
+             * есть, но в этот день отсутствуют, и план от этого не
+             * становится невозможным — здесь же работу не закроет никто.
+             */
+            boolean executorBound
     ) {
     }
 
@@ -1309,8 +1412,42 @@ public class OrderSchedulingService {
             String message,
             List<PlannedRow> plannedRows,
             List<ScheduleRowView> rows,
-            List<String> warnings
+            List<String> warnings,
+
+            /*
+             * Операции, для которых построен график, но за них не
+             * закреплено ни одного действующего сотрудника. Пустой
+             * список — единственное условие, при котором план можно
+             * вносить: одна такая операция блокирует весь заказ,
+             * потому что цех не смог бы закрыть её строку, а заказ
+             * остался бы запланированным с мёртвым этапом.
+             */
+            List<String> unassignedOperations
     ) {
+
+        /** План можно внести в заказ: все этапы имеют исполнителя. */
+        public boolean confirmable() {
+            return unassignedOperations.isEmpty();
+        }
+
+        /**
+         * Подсказка для заблокированной кнопки «Внести план в заказ»:
+         * перечисляет операции, за которые некому взяться.
+         */
+        public String unassignedHint() {
+            if (confirmable()) {
+                return null;
+            }
+
+            return "План нельзя внести в заказ: за "
+                    + unassignedOperations.size()
+                    + (unassignedOperations.size() == 1
+                            ? " операцией" : " операциями")
+                    + " график построен, но ни один исполнитель не"
+                    + " закреплён: " + String.join("; ", unassignedOperations)
+                    + ". Закрепите исполнителей в разделе «Сотрудники»"
+                    + " подразделения и пересчитайте план.";
+        }
 
         /** Дату начала — для подписи в шапке предпросмотра. */
         public String getFormattedStartDate() {
