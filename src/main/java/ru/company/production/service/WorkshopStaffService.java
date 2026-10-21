@@ -830,4 +830,17 @@ public class WorkshopStaffService {
                 ? " " + parts[2].substring(0, 1).toUpperCase(locale) + "."
                 : "");
     }
+
+    /**
+     * Все активные подразделения — для задач, работающих по всему
+     * предприятию (перенос непроведённых работ при запуске).
+     */
+    @Transactional(readOnly = true)
+    public List<Long> allUnitIds() {
+        return organizationUnitRepository
+                .findAllByActiveTrueOrderByNameAsc()
+                .stream()
+                .map(unit -> unit.getId())
+                .toList();
+    }
 }

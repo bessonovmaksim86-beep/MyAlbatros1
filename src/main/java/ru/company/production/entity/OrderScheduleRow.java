@@ -205,6 +205,15 @@ public class OrderScheduleRow {
     )
     private AppUser completedBy;
 
+    /**
+     * Оригинальная дата плана: сохранялась при переносе непроведённых
+     * операций, чтобы диспетчер видел, когда работа была запланирована
+     * изначально, а не когда фактически перенесена на ближайший
+     * свободный день.
+     */
+    @Column(name = "original_planned_date")
+    private LocalDate originalPlannedDate;
+
     @Column(length = 2000)
     private String note;
 
@@ -259,9 +268,20 @@ public class OrderScheduleRow {
                 : customerOrder.getNumber();
     }
 
+    /*
+     * Оригинальная дата заполняется самой датой плана: у новой строки
+     * переноса ещё не было, и обе даты совпадают. Поле обязано быть
+     * заполнено здесь, а не в каждом создателе, — строки графика
+     * пишут и планировщик заказа, и операции ремонта комплектования,
+     * и пропуск одного из них дал бы отказ вставки по NOT NULL.
+     */
     @PrePersist
     void onCreate() {
         createdAt = LocalDateTime.now();
+
+        if (originalPlannedDate == null) {
+            originalPlannedDate = plannedDate;
+        }
     }
 
     @PreUpdate

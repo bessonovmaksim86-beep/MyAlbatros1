@@ -1101,6 +1101,140 @@ public interface OrderScheduleRowRepository
             @Param("to") LocalDate to
     );
 
+    /*
+     * Уже распределённые строки обычного основания — для раздела
+     * «Распределённые работы» переключателя режимов.
+     *
+     * Обычное основание — заказ покупателя или выпуск (KITTING): именно
+     * эти строки подписываются серийным номером выпуска и группируются
+     * по изделию. У группового ЗНП подписью служит номер ячейки, и
+     * показывать их в той же таблице, что и обычные изделия, нельзя —
+     * колонка серийного номера врёт либо там, либо там.
+     */
+    @EntityGraph(attributePaths = {
+            "operation",
+            "operation.operationName",
+            "operation.operationType",
+            "customerOrder",
+            "productionOrder",
+            "executor"
+    })
+    @Query("""
+            select row
+            from OrderScheduleRow row
+            where row.status = :status
+              and (exists (select 1 from CustomerOrder co
+                           where co.id = row.customerOrder.id
+                             and co.active = true)
+                or exists (select 1 from ProductionOrder po
+                           where po.id = row.productionOrder.id
+                             and po.active = true
+                             and po.znpKind
+                                     = ru.company.production.entity.ZnpKind.KITTING))
+              and row.organizationUnit.id in :unitIds
+              and row.executor is not null
+              and row.plannedDate between :from and :to
+            order by row.plannedDate asc,
+                     row.operation.operationName.name asc,
+                     row.itemPosition asc, row.instanceIndex asc
+            """)
+    List<OrderScheduleRow> findAssignedRegularForUnitIds(
+            @Param("status") ScheduleRowStatus status,
+            @Param("unitIds") java.util.Collection<Long> unitIds,
+            @Param("from") LocalDate from,
+            @Param("to") LocalDate to
+    );
+
+    /*
+     * Уже распределённые строки группового основания — вторая половина
+     * переключателя «Распределённые работы».
+     *
+     * Групповое основание — производственный заказ группового вида: у
+     * него нет заказа покупателя, и изделие подписывается номером
+     * ячейки, внесённой складом. Показывать их в одной таблице с
+     * обычными изделиями нельзя — разная структура подписи датчика.
+     */
+    @EntityGraph(attributePaths = {
+            "operation",
+            "operation.operationName",
+            "operation.operationType",
+            "productionOrder",
+            "executor"
+    })
+    @Query("""
+            select row
+            from OrderScheduleRow row
+            where row.status = :status
+              and exists (select 1 from ProductionOrder po
+                          where po.id = row.productionOrder.id
+                            and po.active = true
+                            and po.znpKind in :groupKinds)
+              and row.organizationUnit.id in :unitIds
+              and row.executor is not null
+              and row.plannedDate between :from and :to
+            order by row.plannedDate asc,
+                     row.operation.operationName.name asc,
+                     row.itemPosition asc, row.instanceIndex asc
+            """)
+    List<OrderScheduleRow> findAssignedGroupForUnitIds(
+            @Param("status") ScheduleRowStatus status,
+            @Param("unitIds") java.util.Collection<Long> unitIds,
+            @Param("groupKinds") java.util.Collection<ru.company.production.entity.ZnpKind> groupKinds,
+            @Param("from") LocalDate from,
+            @Param("to") LocalDate to
+    );
+
+    /*
+     * Цифры половин переключателя «Распределённые работы».
+     *
+     * Считаются запросом, а не размером списка: кнопка видна и в том
+     * режиме, чей список сейчас не открыт, — мастер обязан видеть
+     * объём второй половины, чтобы понимать, есть ли смысл в неё
+     * переходить.
+     */
+    @Query("""
+            select count(row.id)
+            from OrderScheduleRow row
+            where row.status = :status
+              and (exists (select 1 from CustomerOrder co
+                           where co.id = row.customerOrder.id
+                             and co.active = true)
+                or exists (select 1 from ProductionOrder po
+                           where po.id = row.productionOrder.id
+                             and po.active = true
+                             and po.znpKind
+                                     = ru.company.production.entity.ZnpKind.KITTING))
+              and row.organizationUnit.id in :unitIds
+              and row.executor is not null
+              and row.plannedDate between :from and :to
+            """)
+    long countAssignedRegularForUnitIds(
+            @Param("status") ScheduleRowStatus status,
+            @Param("unitIds") java.util.Collection<Long> unitIds,
+            @Param("from") LocalDate from,
+            @Param("to") LocalDate to
+    );
+
+    @Query("""
+            select count(row.id)
+            from OrderScheduleRow row
+            where row.status = :status
+              and exists (select 1 from ProductionOrder po
+                          where po.id = row.productionOrder.id
+                            and po.active = true
+                            and po.znpKind in :groupKinds)
+              and row.organizationUnit.id in :unitIds
+              and row.executor is not null
+              and row.plannedDate between :from and :to
+            """)
+    long countAssignedGroupForUnitIds(
+            @Param("status") ScheduleRowStatus status,
+            @Param("unitIds") java.util.Collection<Long> unitIds,
+            @Param("groupKinds") java.util.Collection<ru.company.production.entity.ZnpKind> groupKinds,
+            @Param("from") LocalDate from,
+            @Param("to") LocalDate to
+    );
+
     /** Уже распределённые строки подразделения — счётчик в меню. */
     @Query("""
             select count(row.id)
@@ -1621,5 +1755,54 @@ public interface OrderScheduleRowRepository
             @Param("supervisorRoleCodes") java.util.Collection<String> supervisorRoleCodes,
             @Param("from") LocalDate from,
             @Param("to") LocalDate to
+    );
+
+    /*
+     * ============================================================
+     * Перенос непроведённых работ с прошедших дат
+     * ============================================================
+     *
+     * Строка с пустой completed_at — работа, которую исполнитель не
+     * закрыл. Если её плановая дата уже прошла, она навсегда остаётся
+     * за левым краем любого интервала: фильтр «сегодня — +2 недели»
+     * её не покажет, и мастер о ней не вспомнит, хотя работа не
+     * сделана. Такие строки сдвигают на ближайший свободный день, а
+     * прежнюю дату оставляют в original_planned_date.
+     *
+     * Статус и живость основания те же, что у очереди распределения:
+     * черновик планировщика и строка удалённого заказа переносить
+     * нельзя — их вообще в плане нет.
+     *
+     * Проведённые строки исключены обязательно: у закрытой работы
+     * дата плана — часть истории, и сдвиг её исказил бы отчёт о
+     * сроках.
+     */
+    @EntityGraph(attributePaths = {
+            "operation",
+            "operation.operationName",
+            "customerOrder",
+            "productionOrder",
+            "executor"
+    })
+    @Query("""
+            select row
+            from OrderScheduleRow row
+            where row.status = :status
+              and (exists (select 1 from CustomerOrder co
+                           where co.id = row.customerOrder.id
+                             and co.active = true)
+                or exists (select 1 from ProductionOrder po
+                           where po.id = row.productionOrder.id
+                             and po.active = true))
+              and row.completedAt is null
+              and row.plannedDate < :today
+              and row.organizationUnit.id in :unitIds
+            order by row.plannedDate asc, row.executor.id asc,
+                     row.laborHours desc, row.id asc
+            """)
+    List<OrderScheduleRow> findOverdueUncompleted(
+            @Param("status") ScheduleRowStatus status,
+            @Param("today") LocalDate today,
+            @Param("unitIds") java.util.Collection<Long> unitIds
     );
 }
