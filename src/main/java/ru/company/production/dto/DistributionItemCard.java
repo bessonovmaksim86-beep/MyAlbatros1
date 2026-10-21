@@ -108,7 +108,7 @@ public record DistributionItemCard(
     }
 
     /**
-     * Подпись просрочки: «просрочена на N дн.».
+     * Подпись просрочки: «просрочка N дней».
      *
      * Вычисляется по разнице между сегодня и оригинальной датой плана —
      * даже если строку перенесли, просрочка остаётся и показывает,
@@ -119,7 +119,7 @@ public record DistributionItemCard(
     }
 
     /** Есть ли просрочка: блок рисуется с предупреждением. */
-    public boolean isOverdue() {
+    public boolean overdue() {
         return overdueDays > 0;
     }
 
