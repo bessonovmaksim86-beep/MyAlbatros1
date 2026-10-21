@@ -21,6 +21,7 @@ public record SubassemblyKittingZnpRow(
         String number,
         String znpKindDisplayName,
         String productTypeName,
+        String kittingTypeDisplayName,
         String techProcessCode,
         String operationName,
         String formattedOrderDate,
@@ -32,6 +33,19 @@ public record SubassemblyKittingZnpRow(
         List<SubassemblyKittingCellRow> cells,
         List<SubassemblyKittingCellRow> attached
 ) {
+
+    /**
+     * Заказ «изготовление ячеек из подсборок» (V72): склад принимает в
+     * нём ещё не принятые подсборки и переводит их в ячейки.
+     *
+     * Признак нужен шаблону не для красоты: у такого заказа перечень
+     * «свободного» склада — это подсборки, и подписи на экране должны
+     * говорить «подсборки», а не «принятые ячейки».
+     */
+    public boolean subassemblyKitting() {
+        return kittingTypeDisplayName != null
+                && !kittingTypeDisplayName.isBlank();
+    }
 
     /*
      * Сколько ячеек уже оформлено в заказ.

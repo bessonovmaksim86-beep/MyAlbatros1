@@ -593,6 +593,41 @@ public interface ProductSerialRepository
     List<ProductSerial> findFreeOnWarehouse();
 
     /**
+     * Подсборки, дошедшие до склада и ещё не принятые: перечень для
+     * приёмки группового ЗНП «из подсборок» (V72).
+     *
+     * Подсборка отличается от ячейки отсутствием отметки приёмки
+     * (см. QuarantineCellKind#ofAccepted): она уже лежит на складе, но
+     * склад её ещё не принимал, и приёмка по заказу — тот самый шаг,
+     * который переводит её в статус ячейки.
+     *
+     * NOT EXISTS по матрице комплектования (V20) обязателен: подсборку,
+     * внесённую в другой заказ, принять вторично нельзя, иначе один
+     * номер попал бы в два заказа.
+     *
+     * Классификатор подтянут fetch-join'ом: строка перечня печатает
+     * полный номер и наименование, а open-in-view выключен.
+     */
+    @Query("""
+            select serial
+            from ProductSerial serial
+            left join fetch serial.productClassifier classifier
+            left join fetch serial.receivingBatch
+            where serial.productType =
+                  ru.company.production.entity.ProductType.CELL
+              and serial.acceptedAt is null
+              and not exists (
+                    select 1
+                    from SerialProductionOrder link
+                    join link.productionOrder ord
+                    where link.serial.id = serial.id
+                      and ord.active = true
+              )
+            order by classifier.code asc, serial.serial asc
+            """)
+    List<ProductSerial> findUnacceptedCells();
+
+    /**
      * Приёмка на склад сразу для перечня ячеек.
      *
      * Событие одно — кладовщик принял партию, — поэтому отметку ставят

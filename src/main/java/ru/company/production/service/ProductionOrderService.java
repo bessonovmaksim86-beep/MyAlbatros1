@@ -8,6 +8,7 @@ import ru.company.production.dto.ProductionOrderForm;
 import ru.company.production.entity.AppUser;
 import ru.company.production.entity.CustomerOrder;
 import ru.company.production.entity.CustomerOrderItem;
+import ru.company.production.entity.KittingType;
 import ru.company.production.entity.Operation;
 import ru.company.production.entity.OperationTypeCode;
 import ru.company.production.entity.ProductClassifier;
@@ -866,6 +867,9 @@ public class ProductionOrderService {
         order.setZnpKind(kind);
         order.setProductClassifier(groupClassifier);
         order.setQuantity(groupQuantity);
+        order.setKittingType(form.getKittingType() != null
+                ? KittingType.ofNullable(form.getKittingType())
+                : null);
         order.setProductionOperation(operation);
         order.setTechProcess(techProcess);
         order.setOrderDate(form.getOrderDate());
@@ -1130,6 +1134,9 @@ public class ProductionOrderService {
         order.setZnpKind(kind);
         order.setProductClassifier(groupClassifier);
         order.setQuantity(groupQuantity);
+        order.setKittingType(form.getKittingType() != null
+                ? KittingType.ofNullable(form.getKittingType())
+                : null);
         order.setProductionOperation(operation);
         order.setTechProcess(techProcess);
         order.setOrderDate(form.getOrderDate());

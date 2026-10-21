@@ -139,8 +139,22 @@
                                     </a>
                                 </td>
 
-                                <td th:text="${order.znpKindDisplayName}">
-                                    ЗНП на комплектование
+                                <td>
+                                    <div th:text="${order.znpKindDisplayName}">
+                                        ЗНП на комплектование
+                                    </div>
+
+                                    <!--
+                                         Тип комплектования печатают только
+                                         заказам V72: у остальных поле
+                                         пустое, и пустая строка в колонке
+                                         читалась бы как потерянные данные.
+                                    -->
+                                    <small class="text-muted"
+                                           th:if="${order.subassemblyKitting()}"
+                                           th:text="${order.kittingTypeDisplayName}">
+                                        Изготовление ячеек из подсборок
+                                    </small>
                                 </td>
 
                                 <td th:text="${order.productTypeName}">

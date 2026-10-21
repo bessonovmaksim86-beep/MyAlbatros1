@@ -460,11 +460,19 @@ public interface ProductionOrderRepository
      */
 
     /**
-     * Действующие ЗНП с приёмкой подсборок на склад полуфабрикатов —
-     * список раздела «Комплектование подсборок в ЗНП».
+     * Оснований попасть в раздел два, и оба значат одно: приёмку
+     * подсборок проводит склад полуфабрикатов.
      *
-     * Родитель НЕ требуется: групповой ЗНП заводят без выпуска (V38),
-     * и подсборки в него идут те же самые.
+     *   * операция самого заказа относится к складу и имеет подходящий
+     *       тип — так укомплектовывают ЗНП, вложенный в выпуск;
+     *   * такая операция есть в техпроцессе заказа — так укомплектовывают
+     *       групповой заказ, который ведут по маршруту (V55), в том
+     *       числе заказ «на изготовление ячеек из подсборок» (V72):
+     *       у него приёмка на склад и есть перевод подсборки в ячейку.
+     *
+     * Заказа без такой операции в списке нет намеренно: провести его
+     * не по чему, и показать заказ без возможности проведения значило бы
+     * обещать то, что экран не выполняет.
      *
      * Справочники дочитаны fetch-join'ом: open-in-view выключен, и
      * номер родителя, вид заказа, наименование операции и автор в
@@ -477,16 +485,21 @@ public interface ProductionOrderRepository
             from ProductionOrder ord
             left join fetch ord.parentProductionOrder parent
             left join fetch ord.productClassifier
+            left join fetch ord.createdBy
+            left join fetch ord.priority
+            left join fetch ord.techProcess
             left join fetch ord.productionOperation operation
             left join fetch operation.operationName
             left join fetch operation.operationType
             left join fetch operation.organizationUnit
-            left join fetch ord.techProcess
-            left join fetch ord.createdBy
             where ord.active = true
               and ord.status = :status
               and (
                     (
+                          ord.kittingType =
+                              ru.company.production.entity.KittingType.SUBASSEMBLY
+                    )
+                 or (
                           ord.productionOperation is not null
                       and operation.operationType.code in :typeCodes
                       and operation.organizationUnit.code = :unitCode
@@ -522,6 +535,10 @@ public interface ProductionOrderRepository
               and ord.status = :status
               and (
                     (
+                          ord.kittingType =
+                              ru.company.production.entity.KittingType.SUBASSEMBLY
+                    )
+                 or (
                           ord.productionOperation is not null
                       and ord.productionOperation.operationType.code
                             in :typeCodes

@@ -27,7 +27,9 @@ import ru.company.production.repository.TechProcessOperationRepository;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -122,7 +124,15 @@ public class SubassemblyKittingService {
             return List.of();
         }
 
-        List<SubassemblyKittingCellRow> stockRows = stockRows();
+        /*
+         * Оба свободных перечня читаются лениво и по одному разу:
+         * принятый складской остаток нужен обычным заказам, непринятые
+         * подсборки — заказам режима V72. Запрашивать оба на каждую
+         * загрузку списка значило бы всегда платить одним лишним
+         * обращением к базе, хотя заказов второго рода обычно нет.
+         */
+        List<SubassemblyKittingCellRow> stockRows = null;
+        List<SubassemblyKittingCellRow> unacceptedRows = null;
 
         /*
          * Операции маршрутов читаются одним запросом на всю страницу:
@@ -144,11 +154,26 @@ public class SubassemblyKittingService {
 
         for (ProductionOrder order : orders) {
 
+            List<SubassemblyKittingCellRow> free;
+
+            if (order.isSubassemblyKitting()) {
+                if (unacceptedRows == null) {
+                    unacceptedRows = unacceptedStockRows();
+                }
+                free = freeCells(order, unacceptedRows);
+            } else {
+                if (stockRows == null) {
+                    stockRows = stockRows();
+                }
+                free = freeCells(order, stockRows);
+            }
+
             result.add(new SubassemblyKittingZnpRow(
                     order.getId(),
                     order.getNumber(),
                     order.getZnpKindDisplayName(),
                     order.getProductTypeName(),
+                    order.getKittingTypeDisplayName(),
                     order.getTechProcessCode(),
                     operationName(order, routeOperations),
                     order.getFormattedOrderDate(),
@@ -157,7 +182,7 @@ public class SubassemblyKittingService {
                     order.getStatusBadgeClass(),
                     order.getNote(),
                     order.getQuantity(),
-                    freeCells(order, stockRows),
+                    free,
                     attachedByOrder.getOrDefault(order.getId(), List.of())
             ));
         }
@@ -172,15 +197,29 @@ public class SubassemblyKittingService {
      * Заказ читается детальным запросом: карточка печатает номер
      * родителя, вид заказа и наименование операции, а связи ленивые
      * ({@code open-in-view} выключен).
+     *
+     * Для заказа с {@code kittingType=SUBASSEMBLY} (V72) свободный
+     * перечень — непринятые подсборки из {@code findUnacceptedCells()},
+     * а не принятые ячейки из {@code findFreeOnWarehouse()}.
      */
     @Transactional(readOnly = true)
     public SubassemblyKittingView loadView(Long orderId) {
 
         ProductionOrder order = requireKittingOrder(orderId);
 
+        /*
+         * Режим V72: свободный перечень — непринятые подсборки, а не
+         * принятые ячейки. Отбор по изделию заказа общий для обоих
+         * перечней, поэтому тот же freeCells.
+         */
+        List<SubassemblyKittingCellRow> free =
+                order.isSubassemblyKitting()
+                        ? freeCells(order, unacceptedStockRows())
+                        : freeCells(order, stockRows());
+
         return new SubassemblyKittingView(
                 order,
-                freeCells(order, stockRows()),
+                free,
                 attachedRows(orderId),
                 quarantineCells(order),
                 operationName(order, routeOperationsByProcess(List.of(order)))
@@ -225,6 +264,21 @@ public class SubassemblyKittingService {
         List<ProductSerial> stock = serialRepository.findFreeOnWarehouse();
 
         return stock.stream()
+                .map(SubassemblyKittingService::toCellRow)
+                .toList();
+    }
+
+    /**
+     * Свободный перечень режима V72: подсборки, дошедшие до склада, но
+     * ещё не принятые.
+     *
+     * Приёмка такого заказа и есть перевод подсборки в ячейку, поэтому
+     * кладовщику показывают то, что ещё не принято, — принятая ячейка
+     * в этом перечне уже не числится.
+     */
+    private List<SubassemblyKittingCellRow> unacceptedStockRows() {
+
+        return serialRepository.findUnacceptedCells().stream()
                 .map(SubassemblyKittingService::toCellRow)
                 .toList();
     }
@@ -375,6 +429,10 @@ public class SubassemblyKittingService {
      *
      * Already внесённые номера молча пропускаются — повторный клик не
      * должен ломать уже проведённое.
+     *
+     * Для заказа с {@code kittingType=SUBASSEMBLY} (V72) — режим
+     * «изготовление ячеек из подсборок»: берутся непринятые подсборки
+     * и при внесении принимаются на склад как ячейки.
      */
     @Transactional
     public KittingResult attachCells(Long orderId,
@@ -393,6 +451,20 @@ public class SubassemblyKittingService {
         }
 
         /*
+         * Режим V72: «Изготовление ячеек из подсборок».
+         *
+         * Берём непринятые подсборки из findUnacceptedCells(), вносим
+         * в матрицу и принимаем на склад как ячейки (markAccepted +
+         * recordAccepted). Подсборка становится ячейкой — тот самый
+         * шаг, который переводит QuarantineCellKind из SUBASSEMBLY в CELL.
+         */
+        if (order.isSubassemblyKitting()) {
+            return attachUnacceptedCells(order, chosen, executor);
+        }
+
+        /*
+         * Обычный режим: принятые складом ячейки.
+         *
          * Складской перечень — единственная граница допустимого: номера
          * нет на складе, если он не принят (accepted_at пуст) или его
          * нет в реестре вовсе.
@@ -531,6 +603,240 @@ public class SubassemblyKittingService {
     }
 
     /**
+     * Режим V72: внесение непринятых подсборок с приёмкой на склад.
+     *
+     * Подсборка ещё не принята на склад (acceptedAt IS NULL), и внесение
+     * в заказ — тот самый шаг, который переводит её в статус ячейки.
+     * Сервис вносит подсборки в матрицу комплектования, принимает их
+     * на склад (markAcceptedByIds + recordAccepted) и проводит
+     * комплектовочную операцию.
+     *
+     * Отличие от обычного режима: stock — это непринятые подсборки
+     * (findUnacceptedCells), а не принятые ячейки (findFreeOnWarehouse).
+     * После внесения подсборка становится ячейкой — acceptedAt ставится
+     * на все внесённые номера одним UPDATE, а журнал получает событие
+     * ACCEPTED с cellKind=CELL.
+     */
+    private KittingResult attachUnacceptedCells(
+            ProductionOrder order,
+            List<String> chosen,
+            AppUser executor) {
+
+        /*
+         * Берём непринятые подсборки по изделию заказа.
+         *
+         * loadView уже отфильтровал по классификатору, и здесь
+         * тот же отбор — кладовщик не должен видеть чужие изделия.
+         */
+        List<ProductSerial> unaccepted = unacceptedStock(order);
+
+        /*
+         * Внесённые ранее номера читаются матрицей комплектования
+         * (V20) — она же даёт и счётчик уже вошедших: повторный
+         * запрос count по тому же заказу был бы вторым обращением
+         * за тем же множеством строк.
+         *
+         * Матрица — источник истины: если строка уже есть, подсборка
+         * в заказе, и принимать её заново нельзя. Счётчик по матрице,
+         * а не по принятым номерам, потому что в режиме V72 подсборка
+         * попадает в заказ и принимается одной транзакцией.
+         */
+        Set<Long> alreadyAttachedIds = new HashSet<>();
+
+        for (SerialProductionOrder link
+                : linkRepository.findByProductionOrderId(order.getId())) {
+
+            if (link.getSerial() != null) {
+                alreadyAttachedIds.add(link.getSerial().getId());
+            }
+        }
+
+        long already = alreadyAttachedIds.size();
+
+        /*
+         * Собираем список новых подсборок ДО записи в базу.
+         *
+         * Заказанное количество — граница, и проверить её нужно
+         * на всём перечне сразу. Проводить по одной до первого отказа
+         * значило бы оставить заказ половину списка принявшим,
+         * а половину — нет.
+         */
+        List<ProductSerial> attached = new ArrayList<>();
+
+        for (String number : chosen) {
+
+            ProductSerial serial = unaccepted.stream()
+                    .filter(s -> number.equals(s.getFullNumber()))
+                    .findFirst()
+                    .orElse(null);
+
+            if (serial == null) {
+                continue;
+            }
+
+            /*
+             * Уже в матрице — пропускаем.
+             *
+             * Это может случиться, если кладовщик ввёл номера повторно:
+             * первый проход записал в матрицу, но транзакция ещё не
+             * завершилась, и acceptedAt ещё не стоит.
+             */
+            if (alreadyAttachedIds.contains(serial.getId())) {
+                continue;
+            }
+
+            attached.add(serial);
+        }
+
+        if (attached.isEmpty()) {
+            return KittingResult.rejected(
+                    already > 0
+                            ? "Все внесённые подсборки уже входят в заказ «"
+                            + order.getNumber() + "»"
+                            : "Внесите номера подсборок, которые берёте в заказ «"
+                            + order.getNumber() + "»"
+            );
+        }
+
+        /*
+         * Заказанное количество — потолок состава.
+         *
+         * Количество задают только групповым и ремонтным видам; у
+         * заказа на комплектование количества нет, и ограничивать нечем.
+         */
+        Long required = requiredQuantity(order);
+
+        if (required != null) {
+
+            long total = already + attached.size();
+
+            if (total > required) {
+                return KittingResult.rejected(
+                        "В заказ «" + order.getNumber() + "» заказано "
+                                + required + " яч., а вносится " + total
+                                + " (уже вошло " + already + "). Уберите лишние номера: "
+                                + join(attached.stream()
+                                .skip(Math.max(0, required - already))
+                                .map(ProductSerial::getFullNumber)
+                                .toList())
+                );
+            }
+        }
+
+        /*
+         * Операция приёмки на склад полуфабрикатов.
+         *
+         * Для режима V72 ищем операцию в техпроцессе — она уже есть
+         * (тип KITTING_SUBASSEMBLY, подразделение СПФ), и тот же метод,
+         * что и для обычного режима, её найдёт.
+         */
+        Operation operation = findKittingOperation(order);
+
+        if (operation == null) {
+            throw new IllegalStateException(
+                    "В заказе «" + order.getNumber()
+                            + "» не задана операция комплектования "
+                            + "подсборок (KITTING_SUBASSEMBLY)"
+            );
+        }
+
+        LocalDateTime moment = LocalDateTime.now();
+
+        /*
+         * Вносим в матрицу комплектования.
+         *
+         * Та же таблица V20, что и для обычного режима: каждая
+         * подсборка связывается с заказом и операцией.
+         */
+        List<Long> attachedIds = new ArrayList<>();
+
+        for (ProductSerial serial : attached) {
+
+            SerialProductionOrder link = new SerialProductionOrder();
+
+            link.setSerial(serial);
+            link.setProductionOrder(order);
+            link.setOperation(operation);
+            link.setCreatedBy(executor);
+            link.setNote("Комплектование подсборок на складе (V72)");
+
+            linkRepository.save(link);
+            attachedIds.add(serial.getId());
+
+            /*
+             * Проводим операцию изделия — та же логика, что и для
+             * обычного режима: создаёт или закрывает строку
+             * product_serial_operations.
+             */
+            performSerialOperation(serial, order, operation, executor);
+
+            /*
+             * Проводим строку плана заказа — разблокирует следующую
+             * операцию маршрута («Монтаж подсборок»).
+             */
+            completeScheduleRow(order, operation, executor);
+        }
+
+        /*
+         * Принимаем подсборки на склад как ячейки.
+         *
+         * bulk-UPDATE: acceptedAt = now, acceptedBy = executor.
+         * Подсборка становится ячейкой — QuarantineCellKind
+         * переключается из SUBASSEMBLY в CELL.
+         */
+        serialRepository.markAcceptedByIds(attachedIds, moment, executor);
+
+        /*
+         * Журнал перемещений: событие ACCEPTED с cellKind=CELL.
+         *
+         * В паспорте ячейки будет видно, что подсборка принята
+         * на склад как ячейка в рамках этого заказа.
+         */
+        journal.recordAccepted(attached, executor, moment);
+
+        /*
+         * Оприходование в производство — для общего учёта.
+         *
+         * Те же serials, что были приняты — теперь они официально
+         * в составе заказа.
+         */
+        journal.recordInProduction(attached, order, executor);
+
+        return KittingResult.accepted(
+                "Принято на склад и внесено в заказ «" + order.getNumber()
+                        + "»: " + attached.size() + " яч."
+                        + (already > 0
+                                ? "; уже вошло ранее " + already + " яч."
+                                : "")
+        );
+    }
+
+    /**
+     * Непринятые подсборки для режима V72: stock для attachUnacceptedCells.
+     *
+     * Тот же отбор по классификатору, что в loadView — кладовщик
+     * не должен видеть чужие изделия.
+     */
+    private List<ProductSerial> unacceptedStock(ProductionOrder order) {
+
+        Long classifierId = order.getProductClassifier() == null
+                ? null
+                : order.getProductClassifier().getId();
+
+        List<ProductSerial> all = serialRepository.findUnacceptedCells();
+
+        if (classifierId == null) {
+            return all;
+        }
+
+        return all.stream()
+                .filter(serial -> serial.getProductClassifier() != null
+                        && classifierId.equals(
+                                serial.getProductClassifier().getId()))
+                .toList();
+    }
+
+    /**
      * Проведение операции изделия: создаёт или закрывает строку
      * product_serial_operations в рамках этого заказа.
      *
@@ -651,7 +957,13 @@ public class SubassemblyKittingService {
 
     /**
      * Заказ обязан быть комплектующим: выпуск подсборки на склад не
-     * принимает, а групповой и ремонтный ЗНП самостоятельны.
+     * принимает.
+     *
+     * Групповой ЗНП режима V72 («изготовление ячеек из подсборок») —
+     * исключение: он заводится самостоятельно, без выпуска-родителя
+     * (V38), и при этом именно склад переводит его подсборки в ячейки.
+     * Пускать его в раздел нужно по типу комплектования, а не по
+     * уровню дерева.
      */
     private ProductionOrder requireKittingOrder(Long orderId) {
 
@@ -661,11 +973,12 @@ public class SubassemblyKittingService {
                         "Заказ на производство не найден"
                 ));
 
-        if (!order.isComponent()) {
+        if (!order.isComponent() && !order.isSubassemblyKitting()) {
             throw new IllegalStateException(
                     "Комплектование подсборок проходит по заказу-"
-                            + "комплектующему, а заказ «" + order.getNumber()
-                            + "» им не является"
+                            + "комплектующему либо по групповому ЗНП с типом "
+                            + "комплектования «из подсборок», а заказ «"
+                            + order.getNumber() + "» ни то, ни другое"
             );
         }
 

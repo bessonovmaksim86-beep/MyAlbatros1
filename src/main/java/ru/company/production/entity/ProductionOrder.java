@@ -143,6 +143,18 @@ public class ProductionOrder {
     @Column(name = "quantity", precision = 15, scale = 3)
     private BigDecimal quantity;
 
+    /*
+     * Тип комплектования группового ЗНП (миграция V72).
+     *
+     * Заполняется только групповым заказам на ячейки, состав которых
+     * склад собирает из подсборок: приёмка на склад переводит каждую
+     * внесённую подсборку в статус ячейки. Пустое значение — обычный
+     * заказ, где склад в укомплектовании не участвует.
+     */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "kitting_type", length = 30)
+    private KittingType kittingType;
+
     /* Конкретная комплектовочная операция из справочника. */
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(
@@ -463,6 +475,31 @@ public class ProductionOrder {
         }
 
         return productClassifier.getProductType().getDisplayName();
+    }
+
+    /*
+     * Тип комплектования — текстом (миграция V72).
+     *
+     * Пустое значение отдаётся пустой строкой, а не прочерком: поле
+     * печатают только там, где оно заполнено (список приёмки ячеек),
+     * и прочерк в пустой клетке читался бы как потерянные данные.
+     */
+    @Transient
+    public String getKittingTypeDisplayName() {
+        return kittingType == null ? "" : kittingType.getDisplayName();
+    }
+
+    /*
+     * Собирается ли заказ из подсборок, принимаемых складом.
+     *
+     * Признак, по которому групповой ЗНП попадает в раздел «Приёмка
+     * ячеек»: у него нет выпуска-родителя и комплектовочной операции,
+     * поэтому состав заказа задаёт не выпуск, а складской перечень
+     * подсборок (см. ZnpAcceptanceService).
+     */
+    @Transient
+    public boolean isSubassemblyKitting() {
+        return kittingType == KittingType.SUBASSEMBLY;
     }
 
     /*

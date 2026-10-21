@@ -129,6 +129,21 @@
                             </dd>
                         </div>
 
+                        <!--
+                             Тип комплектования печатают только заказу V72:
+                             у остальных поле пустое, и пустая клетка
+                             читалась бы как потерянные данные.
+                        -->
+                        <div class="warehouse-summary__row"
+                             th:if="${view.order.subassemblyKitting}">
+
+                            <dt>Тип комплектования</dt>
+
+                            <dd th:text="${view.order.kittingTypeDisplayName}">
+                                Изготовление ячеек из подсборок
+                            </dd>
+                        </div>
+
                         <div class="warehouse-summary__row">
 
                             <dt>Изделие заказа</dt>

@@ -1788,6 +1788,16 @@ public class DispatcherController {
         );
 
         /*
+         * Типы комплектования (миграция V72): передаются для селектора
+         * формы создания группового ЗНП «на изготовление ячеек из
+         * подсборок».
+         */
+        model.addAttribute(
+                "kittingTypes",
+                ru.company.production.entity.KittingType.values()
+        );
+
+        /*
          * Счётчик меню здесь не ставится: его считает
          * DispatcherViewAdvice по видам своего раздела. Прежняя строка
          * с countByActiveTrue() перезаписывала значение всем страницам
