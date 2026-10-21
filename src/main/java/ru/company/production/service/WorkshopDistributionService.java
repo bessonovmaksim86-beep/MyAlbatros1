@@ -30,6 +30,7 @@ import ru.company.production.repository.ExecutorDayLoadView;
 import ru.company.production.repository.OpenInstanceRowView;
 import ru.company.production.repository.OrderScheduleRowRepository;
 import ru.company.production.repository.ProductionOrderSerialProjection;
+import ru.company.production.repository.TechProcessOperationControlParamRepository;
 import ru.company.production.repository.TechProcessOperationRepository;
 import ru.company.production.repository.TechProcessRepository;
 import ru.company.production.repository.UserRepository;
@@ -173,6 +174,14 @@ public class WorkshopDistributionService {
     private final WorkshopStaffService staffService;
     private final WorkshopDistributionSerialService serialService;
     private final TechProcessOperationRepository routeNodeRepo;
+
+    /*
+     * Признак «у операции есть контролируемые параметры» нужен панели
+     * экземпляров: массовое проведение закрывает только те экземпляры,
+     * где отметка значений не требуется, — обязательный параметр нельзя
+     * закрыть без значения, а внести его может только форма.
+     */
+    private final TechProcessOperationControlParamRepository controlParamLinkRepo;
 
     /*
      * ============================================================
@@ -477,14 +486,27 @@ public class WorkshopDistributionService {
             AppUser supervisor,
             int weeks
     ) {
+        LocalDate from = LocalDate.now();
+        LocalDate to = from.plusDays(7L * normalizeWeeks(weeks));
+
+        return findDistributionOperations(unitIds, supervisor, from, to);
+    }
+
+    /**
+     * То же, но по заданному интервалу дат вместо «сегодня + недели».
+     */
+    @Transactional(readOnly = true)
+    public List<OperationDistributionView> findDistributionOperations(
+            Collection<Long> unitIds,
+            AppUser supervisor,
+            LocalDate from,
+            LocalDate to
+    ) {
         List<Long> scope = cleanIds(unitIds);
 
         if (scope.isEmpty()) {
             return List.of();
         }
-
-        LocalDate from = LocalDate.now();
-        LocalDate to = from.plusDays(7L * normalizeWeeks(weeks));
 
         return groupByOperation(
                 scheduleRowRepo.findAssignableForUnitIds(
@@ -513,14 +535,26 @@ public class WorkshopDistributionService {
             Collection<Long> unitIds,
             int weeks
     ) {
+        LocalDate from = LocalDate.now();
+        LocalDate to = from.plusDays(7L * normalizeWeeks(weeks));
+
+        return findAssignedDistributionOperations(unitIds, from, to);
+    }
+
+    /**
+     * То же, но по заданному интервалу дат.
+     */
+    @Transactional(readOnly = true)
+    public List<OperationDistributionView> findAssignedDistributionOperations(
+            Collection<Long> unitIds,
+            LocalDate from,
+            LocalDate to
+    ) {
         List<Long> scope = cleanIds(unitIds);
 
         if (scope.isEmpty()) {
             return List.of();
         }
-
-        LocalDate from = LocalDate.now();
-        LocalDate to = from.plusDays(7L * normalizeWeeks(weeks));
 
         return groupByOperation(
                 scheduleRowRepo.findAssignedForUnitIds(
@@ -533,6 +567,149 @@ public class WorkshopDistributionService {
                 to,
                 false
         );
+    }
+
+    /**
+     * Уже закреплённые работы обычного основания — для переключателя
+     * режимов распределения.
+     *
+     * Обычное основание — заказ покупателя или выпуск (KITTING): именно
+     * эти строки подписываются серийным номером выпуска и группируются
+     * по изделию. У группового ЗНП подписью служит номер ячейки, и
+     * показывать их в той же таблице нельзя — колонка датчика врёт
+     * либо там, либо там.
+     */
+    @Transactional(readOnly = true)
+    public List<OperationDistributionView> findAssignedRegularDistributionOperations(
+            Collection<Long> unitIds,
+            int weeks
+    ) {
+        LocalDate from = LocalDate.now();
+        LocalDate to = from.plusDays(7L * normalizeWeeks(weeks));
+
+        return findAssignedRegularDistributionOperations(unitIds, from, to);
+    }
+
+    /**
+     * То же, но по заданному интервалу дат — панель срока раздела
+     * работает интервалом, и цифра кнопки обязана считаться тем же
+     * интервалом, что показан под переключателем.
+     */
+    @Transactional(readOnly = true)
+    public List<OperationDistributionView> findAssignedRegularDistributionOperations(
+            Collection<Long> unitIds,
+            LocalDate from,
+            LocalDate to
+    ) {
+        List<Long> scope = cleanIds(unitIds);
+
+        if (scope.isEmpty()) {
+            return List.of();
+        }
+
+        return groupByOperation(
+                scheduleRowRepo.findAssignedRegularForUnitIds(
+                        ScheduleRowStatus.CONFIRMED,
+                        scope,
+                        from,
+                        to
+                ),
+                from,
+                to,
+                false
+        );
+    }
+
+    /**
+     * Уже закреплённые работы группового основания — вторая половина
+     * переключателя «Распределённые работы».
+     *
+     * Групповое основание — производственный заказ группового вида: у
+     * него нет заказа покупателя, и изделие подписывается номером
+     * ячейки, внесённой складом. Показывать их в одной таблице с
+     * обычными изделиями нельзя — разная структура подписи.
+     */
+    @Transactional(readOnly = true)
+    public List<OperationDistributionView> findAssignedGroupDistributionOperations(
+            Collection<Long> unitIds,
+            int weeks
+    ) {
+        LocalDate from = LocalDate.now();
+        LocalDate to = from.plusDays(7L * normalizeWeeks(weeks));
+
+        return findAssignedGroupDistributionOperations(unitIds, from, to);
+    }
+
+    /**
+     * То же, но по заданному интервалу дат.
+     */
+    @Transactional(readOnly = true)
+    public List<OperationDistributionView> findAssignedGroupDistributionOperations(
+            Collection<Long> unitIds,
+            LocalDate from,
+            LocalDate to
+    ) {
+        List<Long> scope = cleanIds(unitIds);
+
+        if (scope.isEmpty()) {
+            return List.of();
+        }
+
+        List<OrderScheduleRow> rows =
+                scheduleRowRepo.findAssignedGroupForUnitIds(
+                        ScheduleRowStatus.CONFIRMED,
+                        scope,
+                        GROUP_KINDS,
+                        from,
+                        to
+                );
+
+        /*
+         * Карта внесённых ячеек обязательна: у группового заказа состава
+         * выпуска нет, и без неё блок датчика остался бы без подписи —
+         * мастер не понял бы, над какой ячейкой он работает.
+         */
+        return groupByOperation(
+                rows,
+                from,
+                to,
+                false,
+                serialService.resolveAttachedCells(rows)
+        );
+    }
+
+    /**
+     * Цифры половин переключателя «Распределённые работы».
+     *
+     * Считаются запросом, а не размером списка: кнопка видна и в том
+     * режиме, чей список сейчас не открыт, — мастер обязан видеть объём
+     * второй половины, чтобы понимать, есть ли смысл в неё переходить.
+     */
+    @Transactional(readOnly = true)
+    public long countAssignedRegular(Collection<Long> unitIds,
+                                     LocalDate from,
+                                     LocalDate to) {
+        List<Long> scope = cleanIds(unitIds);
+
+        return scope.isEmpty()
+                ? 0L
+                : scheduleRowRepo.countAssignedRegularForUnitIds(
+                        ScheduleRowStatus.CONFIRMED, scope, from, to
+                );
+    }
+
+    @Transactional(readOnly = true)
+    public long countAssignedGroup(Collection<Long> unitIds,
+                                   LocalDate from,
+                                   LocalDate to) {
+        List<Long> scope = cleanIds(unitIds);
+
+        return scope.isEmpty()
+                ? 0L
+                : scheduleRowRepo.countAssignedGroupForUnitIds(
+                        ScheduleRowStatus.CONFIRMED, scope, GROUP_KINDS,
+                        from, to
+                );
     }
 
     /**
@@ -551,6 +728,26 @@ public class WorkshopDistributionService {
             LocalDate from,
             LocalDate to,
             boolean withExecutors
+    ) {
+        return groupByOperation(rows, from, to, withExecutors, Map.of());
+    }
+
+    /*
+     * Тот же группировщик с картой внесённых ячеек.
+     *
+     * {@code cellMap} передаёт номер ячейки, внесённой складом в
+     * групповой ЗНП (V20): у таких заказов состава выпуска нет, и
+     * серийный номер их экземпляров не подписывает ничего. Карта
+     * приходит из
+     * {@link WorkshopDistributionSerialService#resolveAttachedCells} и
+     * пуста для всех прочих разделов — там работает {@code serialMap}.
+     */
+    private List<OperationDistributionView> groupByOperation(
+            List<OrderScheduleRow> rows,
+            LocalDate from,
+            LocalDate to,
+            boolean withExecutors,
+            Map<Long, AttachedCellView> cellMap
     ) {
         if (rows == null || rows.isEmpty()) {
             return List.of();
@@ -594,7 +791,8 @@ public class WorkshopDistributionService {
                     from,
                     to,
                     withExecutors,
-                    capableCache
+                    capableCache,
+                    cellMap
             ));
         }
 
@@ -619,6 +817,32 @@ public class WorkshopDistributionService {
             boolean withExecutors,
             Map<String, List<AssignableExecutor>> capableCache
     ) {
+        return toOperationView(
+                group, serialMap, itemNames, from, to,
+                withExecutors, capableCache, Map.of()
+        );
+    }
+
+    /*
+     * Тот же сборщик карточек с картой внесённых ячеек.
+     *
+     * {@code cellMap} передаёт номер ячейки, внесённой складом в
+     * групповой ЗНП (V20): у таких заказов состава выпуска нет, и
+     * серийный номер их экземпляров не подписывает ничего. Карта
+     * приходит из
+     * {@link WorkshopDistributionSerialService#resolveAttachedCells} и
+     * пуста для всех прочих разделов — там работает {@code serialMap}.
+     */
+    private OperationDistributionView toOperationView(
+            List<OrderScheduleRow> group,
+            Map<Long, ProductionOrderSerialProjection> serialMap,
+            Map<String, String> itemNames,
+            LocalDate from,
+            LocalDate to,
+            boolean withExecutors,
+            Map<String, List<AssignableExecutor>> capableCache,
+            Map<Long, AttachedCellView> cellMap
+    ) {
         OrderScheduleRow head = group.get(0);
 
         List<DistributionItemCard> items =
@@ -631,12 +855,17 @@ public class WorkshopDistributionService {
             ProductionOrderSerialProjection serial = serialMap == null
                     ? null
                     : serialMap.get(row.getId());
+            AttachedCellView cell = cellMap == null
+                    ? null
+                    : cellMap.get(row.getId());
 
             totalHours = totalHours.add(row.getLaborHours());
 
             if (row.getExecutor() != null) {
                 assignedCount++;
             }
+
+            long overdue = computeOverdueDays(row);
 
             items.add(new DistributionItemCard(
                     row.getId(),
@@ -652,7 +881,9 @@ public class WorkshopDistributionService {
                             ? null
                             : WorkshopStaffService.displayName(
                                     row.getExecutor()
-                            )
+                            ),
+                    cell == null ? null : cell.getFullNumber(),
+                    overdue
             ));
         }
 
@@ -694,6 +925,35 @@ public class WorkshopDistributionService {
         return row.getCustomerOrder() == null
                 ? null
                 : row.getCustomerOrder().getNumber();
+    }
+
+    /*
+     * Дни просрочки работы.
+     *
+     * Отсчёт идёт от первоначальной даты плана, а не от текущей:
+     * перенос сдвигает planned_date на ближайший свободный день, и
+     * без original_planned_date перенесённая работа выглядела бы
+     * свежей, хотя с момента решения планировщика прошла уже
+     * неделя. Проведённая работа просроченной не считается — у неё
+     * срок закрыт фактом выполнения.
+     */
+    private static long computeOverdueDays(OrderScheduleRow row) {
+        if (row.getCompletedAt() != null) {
+            return 0L;
+        }
+
+        LocalDate planned = row.getOriginalPlannedDate() != null
+                ? row.getOriginalPlannedDate()
+                : row.getPlannedDate();
+
+        if (planned == null) {
+            return 0L;
+        }
+
+        long days = java.time.temporal.ChronoUnit.DAYS
+                .between(planned, LocalDate.now());
+
+        return days > 0 ? days : 0L;
     }
 
     /*
@@ -2139,6 +2399,8 @@ public class WorkshopDistributionService {
 
         Map<Long, InstanceBlocker> blockers = blockersOf(rows);
 
+        Set<String> parametrisedNodes = controlParamNodes(rows);
+
         Map<String, List<OrderScheduleRow>> grouped = new LinkedHashMap<>();
 
         for (OrderScheduleRow row : rows) {
@@ -2181,7 +2443,7 @@ public class WorkshopDistributionService {
                     ownWork,
                     buildInstances(
                             group, serialMap, blockers, poolUnitIds, ownWork,
-                            cellMap
+                            cellMap, parametrisedNodes
                     ),
                     /*
                      * Главная подпись группы. Пока карта ячеек не
@@ -2542,7 +2804,8 @@ public class WorkshopDistributionService {
             boolean ownWork
     ) {
         return buildInstances(
-                group, serialMap, blockers, poolUnitIds, ownWork, Map.of()
+                group, serialMap, blockers, poolUnitIds, ownWork,
+                Map.of(), Set.of()
         );
     }
 
@@ -2556,6 +2819,11 @@ public class WorkshopDistributionService {
      * {@link WorkshopDistributionSerialService#resolveAttachedCells} и
      * пуста для всех прочих разделов — там работает
      * {@code serialMap}.
+     *
+     * {@code parametrisedNodes} — узлы маршрута с контролируемыми
+     * параметрами (см. {@link #controlParamNodes}): экземпляр такого
+     * узла массовое проведение обходит, потому что значение параметра
+     * вносит только форма отметки.
      */
     private List<OperationInstance> buildInstances(
             List<OrderScheduleRow> group,
@@ -2563,7 +2831,8 @@ public class WorkshopDistributionService {
             Map<Long, InstanceBlocker> blockers,
             List<Long> poolUnitIds,
             boolean ownWork,
-            Map<Long, AttachedCellView> cellMap
+            Map<Long, AttachedCellView> cellMap,
+            Set<String> parametrisedNodes
     ) {
         List<OperationInstance> instances = new ArrayList<>();
 
@@ -2623,7 +2892,21 @@ public class WorkshopDistributionService {
                             : (cell == null ? null : cell.getDisplayName()),
                     blocker.blocked(),
                     blocker.blockerLabel(),
-                    cell == null ? null : cell.getFullNumber()
+                    cell == null ? null : cell.getFullNumber(),
+                    /*
+                     * Отметка контролируемых параметров обязательна, если
+                     * технолог задал их в этом узле маршрута: такое
+                     * проведение принимает только форма с значениями.
+                     */
+                    parametrisedNodes != null
+                            && parametrisedNodes.contains(routePairKey(
+                                    row.getTechProcess() == null
+                                            ? null
+                                            : row.getTechProcess().getId(),
+                                    row.getOperation() == null
+                                            ? null
+                                            : row.getOperation().getId()
+                            ))
             ));
         }
 
@@ -2853,6 +3136,47 @@ public class WorkshopDistributionService {
             Long operationId
     ) {
         return processId + ":" + operationId;
+    }
+
+    /*
+     * Узлы маршрута строк списка, у которых заданы контролируемые
+     * параметры.
+     *
+     * Один запрос на весь список, а не по одному на строку: панель
+     * экземпляров раскрывается на десятки строк графика, а ответ
+     * нужен только как множество ключей «техпроцесс + операция».
+     */
+    private Set<String> controlParamNodes(List<OrderScheduleRow> rows) {
+
+        Set<Long> processIds = new HashSet<>();
+        Set<Long> operationIds = new HashSet<>();
+
+        for (OrderScheduleRow row : rows) {
+            TechProcess process = row.getTechProcess();
+            Operation operation = row.getOperation();
+
+            if (process == null || process.getId() == null
+                    || operation == null || operation.getId() == null) {
+                continue;
+            }
+
+            processIds.add(process.getId());
+            operationIds.add(operation.getId());
+        }
+
+        if (processIds.isEmpty() || operationIds.isEmpty()) {
+            return Set.of();
+        }
+
+        Set<String> nodes = new HashSet<>();
+
+        for (Object[] pair : controlParamLinkRepo.findParametrisedNodes(
+                processIds, operationIds
+        )) {
+            nodes.add(routePairKey((Long) pair[0], (Long) pair[1]));
+        }
+
+        return nodes;
     }
 
     /** Наименование операции узла — подпись причины блокировки. */

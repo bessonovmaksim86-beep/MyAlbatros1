@@ -17,6 +17,7 @@ import ru.company.production.service.WorkshopStaffService;
 
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -41,15 +42,36 @@ import java.util.Map;
  * Границы те же, что у остальных разделов модуля: подразделение
  * берётся из учётной записи руководителя, а не из параметров запроса,
  * поэтому мастер одного цеха не распределит работы чужого.
+ *
+ * Интервал дат: periodFrom / periodTo. Если оба пустые —
+ * дефолт: сегодня + 14 дней. Параметр weeks сохранён для
+ * совместимости: если periodFrom / periodTo не заданы,
+ * вычисляем интервал из weeks.
  */
 @Controller
 @RequestMapping("/workshop/distribution")
 @RequiredArgsConstructor
 public class WorkshopDistributionController {
 
-    /** Выбор срока в неделях: 1, 2 (по умолчанию), 3, 4, 6, 8, 12. */
-    private static final List<Integer> WEEK_CHOICES =
-            List.of(1, 2, 3, 4, 6, 8, 12);
+    /** Срок по умолчанию, если интервал не задан: две недели. */
+    private static final int DEFAULT_PERIOD_DAYS = 14;
+
+    /*
+     * Режимы переключателя раздела.
+     *
+     * Очередь и закреплённые работы живут на одном адресе с параметром,
+     * а не на двух: это половины одного раздела, и переход между ними не
+     * должен выглядеть как уход из него. Закреплённые дополнительно
+     * разделяются по основанию строки — у обычного ЗНП датчик подписан
+     * серийным номером выпуска, у группового номером ячейки.
+     */
+    private static final String QUEUE_MODE = "queue";
+
+    /** Закреплённые работы обычного основания. */
+    private static final String ASSIGNED_MODE = "assigned";
+
+    /** Закреплённые работы группового основания. */
+    private static final String ASSIGNED_GROUP_MODE = "assigned-group";
 
     private static final DateTimeFormatter RU_DATE =
             DateTimeFormatter.ofPattern("dd.MM.yyyy");
@@ -61,43 +83,78 @@ public class WorkshopDistributionController {
     /**
      * Очередь распределения и уже закреплённые работы подразделения —
      * оба списка сгруппированы по изделию (заказ + позиция).
+     *
+     * Режим задаётся параметром {@code mode}: пустой или «regular» —
+     * очередь распределения, «assigned» и «assigned-group» — закреплённые
+     * работы обычного и группового основания. Разделение сделано
+     * переключателем, а не двумя блоками на одном экране: закреплённая
+     * работа мастеру уже не интересна в очереди — он её распределил, и
+     * она только мешала читать остаток.
      */
     @GetMapping({"", "/"})
     public String index(
+            @RequestParam(name = "periodFrom", required = false) String periodFrom,
+            @RequestParam(name = "periodTo", required = false) String periodTo,
             @RequestParam(name = "weeks", required = false) Integer weeks,
+            @RequestParam(name = "mode", required = false) String mode,
             Authentication authentication,
             Model model
     ) {
-        fillIndexModel(authentication, model,
-                WorkshopDistributionService.normalizeWeeks(weeks));
+        LocalDate from = parseDate(periodFrom);
+        LocalDate to = parseDate(periodTo);
+
+        if (from == null && to == null) {
+            from = LocalDate.now();
+            to = from.plusDays(DEFAULT_PERIOD_DAYS);
+        } else if (from == null) {
+            from = to.minusDays(DEFAULT_PERIOD_DAYS);
+        } else if (to == null) {
+            to = from.plusDays(DEFAULT_PERIOD_DAYS);
+        }
+
+        fillIndexModel(authentication, model, from, to, viewMode(mode));
 
         model.addAttribute("activePage", "distribution");
+        model.addAttribute("periodFrom", from != null ? from.toString() : "");
+        model.addAttribute("periodTo", to != null ? to.toString() : "");
 
         return "workshop/distribution/index";
     }
 
+    private static LocalDate parseDate(String value) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        try {
+            return LocalDate.parse(value);
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
     /**
      * Закрепление одного датчика за исполнителем.
-     *
-     * Форма отдаёт идентификатор строки графика: блок раскрытия — один
-     * экземпляр одной операции, и мастер закрепляет ровно тот датчик,
-     * номер которого видит. Соседние датчики той же операции остаются
-     * чужими решениями мастера, поэтому пара «операция + дата» здесь
-     * была бы слишком широкой границей.
      */
     @PostMapping("/assign")
     public String assign(
             @RequestParam Long rowId,
-            // Параметр необязателен намеренно: страница, открытая до
-            // обновления, присылает форму без радиовыбора, и обязательный
-            // параметр отверг бы запрос страницей ошибки вместо привычного
-            // алерта. Проверку «исполнитель выбран» держит сервис.
             @RequestParam(name = "executorId", required = false) Long executorId,
-            @RequestParam(name = "weeks", required = false) Integer weeks,
+            @RequestParam(name = "periodFrom", required = false) String periodFrom,
+            @RequestParam(name = "periodTo", required = false) String periodTo,
+            @RequestParam(name = "mode", required = false) String mode,
             Authentication authentication,
             RedirectAttributes redirectAttributes
     ) {
-        int horizon = WorkshopDistributionService.normalizeWeeks(weeks);
+        LocalDate from = parseDate(periodFrom);
+        LocalDate to = parseDate(periodTo);
+        if (from == null && to == null) {
+            from = LocalDate.now();
+            to = from.plusDays(DEFAULT_PERIOD_DAYS);
+        } else if (from == null) {
+            from = to.minusDays(DEFAULT_PERIOD_DAYS);
+        } else if (to == null) {
+            to = from.plusDays(DEFAULT_PERIOD_DAYS);
+        }
 
         try {
             distributionService.assignRow(
@@ -117,21 +174,31 @@ public class WorkshopDistributionController {
             );
         }
 
-        return redirect(horizon);
+        return redirect(from, to, mode);
     }
 
     /**
-     * Снятие назначения с одного датчика: он возвращается в очередь,
-     * остальные датчики операции остаются за своими исполнителями.
+     * Снятие назначения с одного датчика.
      */
     @PostMapping("/unassign")
     public String unassign(
             @RequestParam Long rowId,
-            @RequestParam(name = "weeks", required = false) Integer weeks,
+            @RequestParam(name = "periodFrom", required = false) String periodFrom,
+            @RequestParam(name = "periodTo", required = false) String periodTo,
+            @RequestParam(name = "mode", required = false) String mode,
             Authentication authentication,
             RedirectAttributes redirectAttributes
     ) {
-        int horizon = WorkshopDistributionService.normalizeWeeks(weeks);
+        LocalDate from = parseDate(periodFrom);
+        LocalDate to = parseDate(periodTo);
+        if (from == null && to == null) {
+            from = LocalDate.now();
+            to = from.plusDays(DEFAULT_PERIOD_DAYS);
+        } else if (from == null) {
+            from = to.minusDays(DEFAULT_PERIOD_DAYS);
+        } else if (to == null) {
+            to = from.plusDays(DEFAULT_PERIOD_DAYS);
+        }
 
         try {
             distributionService.unassignRow(
@@ -150,13 +217,25 @@ public class WorkshopDistributionController {
             );
         }
 
-        return redirect(horizon);
+        return redirect(from, to, mode);
     }
 
+    /**
+     * Тот же заполнитель с режимом экрана.
+     *
+     * Режим выбирает, какой список стоит под переключателем: очередь
+     * распределения или закреплённые работы обычного и группового
+     * основания. Основания разделяются намеренно — у обычного ЗНП
+     * датчик подписан серийным номером выпуска, у группового номером
+     * ячейки, внесённой складом, и в одной таблице эти подписи спорили
+     * бы друг с другом.
+     */
     private void fillIndexModel(
             Authentication authentication,
             Model model,
-            int weeks
+            LocalDate from,
+            LocalDate to,
+            String view
     ) {
         AppUser supervisor = currentUser(authentication);
 
@@ -167,18 +246,51 @@ public class WorkshopDistributionController {
          */
         var scope = staffService.unitScope(supervisor);
 
-        List<OperationDistributionView> operations =
-                distributionService.findDistributionOperations(
-                        scope, supervisor, weeks
-                );
+        /*
+         * Список читается только тот, что открыт: второй заведомо пуст
+         * на этом экране, и запрос ради него стоил бы двух лишних
+         * выборок на каждую загрузку.
+         */
+        boolean queueView = QUEUE_MODE.equals(view);
 
-        model.addAttribute("operations", operations);
+        model.addAttribute("operations", queueView
+                ? distributionService.findDistributionOperations(
+                        scope, supervisor, from, to
+                )
+                : List.<OperationDistributionView>of());
+
         model.addAttribute(
                 "assignedOperations",
-                distributionService.findAssignedDistributionOperations(
-                        scope, weeks
-                )
+                queueView
+                        ? List.<OperationDistributionView>of()
+                        : ASSIGNED_GROUP_MODE.equals(view)
+                        ? distributionService
+                                .findAssignedGroupDistributionOperations(
+                                        scope, from, to
+                                )
+                        : distributionService
+                                .findAssignedRegularDistributionOperations(
+                                        scope, from, to
+                                )
         );
+
+        /*
+         * Цифры всех кнопок считаются запросом по тому же интервалу:
+         * кнопка обязана показать объём и того списка, который сейчас
+         * не открыт, иначе переключатель не ответил бы на вопрос «есть
+         * ли смысл переходить».
+         */
+        model.addAttribute(
+                "assignedRegularCount",
+                distributionService.countAssignedRegular(scope, from, to)
+        );
+        model.addAttribute(
+                "assignedGroupCount",
+                distributionService.countAssignedGroup(scope, from, to)
+        );
+        model.addAttribute("distributionMode", view);
+        model.addAttribute("assignedView", !queueView);
+        model.addAttribute("groupMode", ASSIGNED_GROUP_MODE.equals(view));
 
         /*
          * Счётчика экземпляров в шапке карточки больше нет: он считал
@@ -192,43 +304,47 @@ public class WorkshopDistributionController {
                 staffService.scopeName(supervisor)
         );
 
-        /* Панель срока: значение, варианты и показанный период. */
-        LocalDate from = LocalDate.now();
-        LocalDate to = from.plusDays(7L * weeks);
-
-        Map<Integer, String> choices = new LinkedHashMap<>();
-        for (Integer choice : WEEK_CHOICES) {
-            choices.put(choice, weeksLabel(choice));
-        }
-
-        model.addAttribute("weeks", weeks);
-        model.addAttribute("weekChoices", choices);
+        /* Панель периода. */
         model.addAttribute("periodLabel",
                 "Период: " + from.format(RU_DATE)
                         + " — " + to.format(RU_DATE));
     }
 
-    /* Срок после изменения данных: фильтр не должен сбрасываться. */
-    private static String redirect(int weeks) {
-        return "redirect:/workshop/distribution?weeks=" + weeks;
-    }
+    /**
+     * Режим экрана из параметра адреса.
+     *
+     * Пустое или неизвестное значение — очередь распределения: та же
+     * граница по умолчанию, что была у раздела до появления закреплённых
+     * половин, поэтому старая закладка ведёт к очереди, а не к пустому
+     * списку.
+     */
+    private static String viewMode(String mode) {
+        String value = mode == null ? "" : mode.trim();
 
-    /** Подпись варианта срока: «1 неделя», «2 недели», «5 недель». */
-    private static String weeksLabel(int weeks) {
-        int mod10 = weeks % 10;
-        int mod100 = weeks % 100;
-
-        String noun;
-
-        if (mod10 == 1 && mod100 != 11) {
-            noun = "неделя";
-        } else if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) {
-            noun = "недели";
-        } else {
-            noun = "недель";
+        if (ASSIGNED_MODE.equalsIgnoreCase(value)) {
+            return ASSIGNED_MODE;
         }
 
-        return weeks + " " + noun;
+        if (ASSIGNED_GROUP_MODE.equalsIgnoreCase(value)) {
+            return ASSIGNED_GROUP_MODE;
+        }
+
+        return QUEUE_MODE;
+    }
+
+    /*
+     * Срок и режим после изменения данных: фильтр не должен
+     * сбрасываться. Снятый датчик уходит из закреплённых в очередь, и
+     * возврат на прежнее место оставил бы мастера у пустого списка,
+     * пока он сам снова выберет режим.
+     */
+    private static String redirect(LocalDate from, LocalDate to, String mode) {
+        String view = mode == null || mode.isBlank() ? QUEUE_MODE : mode.trim();
+
+        return "redirect:/workshop/distribution"
+                + "?periodFrom=" + from
+                + "&periodTo=" + to
+                + "&mode=" + view;
     }
 
     /*

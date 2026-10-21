@@ -24,6 +24,11 @@ import java.time.format.DateTimeFormatter;
  * @param hours         трудоёмкость экземпляра, человеко-часы
  * @param assigned      экземпляр закреплён за исполнителем
  * @param executorLabel закреплённый исполнитель (для распределённых)
+ * @param cellNumber    номер ячейки, внесённой складом в групповой ЗНП
+ *                      (V20); для строк выпуска — пусто
+ * @param overdueDays   сколько дней просрочена: если дата плана прошла
+ *                      и работа не проведена, сколько дней назад она
+ *                      должна была быть выполнена; 0 — в норме
  */
 public record DistributionItemCard(
         Long rowId,
@@ -35,7 +40,9 @@ public record DistributionItemCard(
         String orderNumber,
         BigDecimal hours,
         boolean assigned,
-        String executorLabel
+        String executorLabel,
+        String cellNumber,
+        long overdueDays
 ) {
 
     private static final DateTimeFormatter RU_DATE =
@@ -53,6 +60,20 @@ public record DistributionItemCard(
         return serialNumber == null || serialNumber.isBlank()
                 ? planLabel()
                 : serialNumber.trim();
+    }
+
+    /**
+     * Номер ячейки — основная подпись датчика в групповой половине.
+     *
+     * У группового ЗНП серийного номера выпуска не бывает вовсе, и
+     * изделие опознано номером, внесённым складом (V20). Прочерк
+     * честнее плановой подписи «поз. · датчик»: работа существует до
+     * того, как кладовщик внёс в заказ номер.
+     */
+    public String cellLabel() {
+        return cellNumber == null || cellNumber.isBlank()
+                ? "—"
+                : cellNumber.trim();
     }
 
     /** Плановая подпись датчика: «поз. 3 · датчик 2». */
@@ -84,5 +105,48 @@ public record DistributionItemCard(
         return hours.setScale(1, RoundingMode.HALF_UP)
                 .stripTrailingZeros()
                 .toPlainString();
+    }
+
+    /**
+     * Подпись просрочки: «просрочена на N дн.».
+     *
+     * Вычисляется по разнице между сегодня и оригинальной датой плана —
+     * даже если строку перенесли, просрочка остаётся и показывает,
+     * насколько работа опоздала.
+     */
+    public long overdueDays() {
+        return overdueDays;
+    }
+
+    /** Есть ли просрочка: блок рисуется с предупреждением. */
+    public boolean isOverdue() {
+        return overdueDays > 0;
+    }
+
+    /**
+     * Подпись дня просрочки со склонением: «просрочка 1 день»,
+     * «просрочка 3 дня», «просрочка 5 дней».
+     *
+     * Пустая строка, когда работы в графике — шаблон не рисует бейдж.
+     */
+    public String overdueLabel() {
+        if (overdueDays <= 0) {
+            return "";
+        }
+
+        long mod10 = overdueDays % 10;
+        long mod100 = overdueDays % 100;
+
+        String noun;
+
+        if (mod10 == 1 && mod100 != 11) {
+            noun = "день";
+        } else if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) {
+            noun = "дня";
+        } else {
+            noun = "дней";
+        }
+
+        return "просрочка " + overdueDays + " " + noun;
     }
 }

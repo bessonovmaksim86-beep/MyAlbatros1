@@ -426,6 +426,33 @@
     margin-bottom: 8px;
 }
 
+/*
+ * Шапка блока экземпляров: подпись и массовое проведение одной строки.
+ *
+ * Кнопка стоит над таблицей, а не в её строках: проводится вся группа
+ * сразу, и искать для неё место в последнем экземпляре было бы
+ * подписывать действием одного изделия работу всех.
+ */
+.group-panel__instances-head {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin-bottom: 8px;
+}
+
+.group-panel__instances-head > strong {
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: #35514a;
+}
+
+.group-panel__instances-hint {
+    font-size: 12px;
+    color: #8a5a00;
+}
+
 /* ------------------------------------------------------------
    Адаптив. Каждый набор задаётся полностью и даёт ровно 100 %.
    ------------------------------------------------------------ */
@@ -559,6 +586,30 @@
     outline-offset: 1px;
 }
 
+.filter-bar__input {
+    min-width: 145px;
+    padding: 7px 10px;
+    font: inherit;
+    font-size: 13px;
+    color: #17322a;
+    border: 1px solid rgba(18, 58, 46, 0.28);
+    border-radius: 8px;
+    background: #ffffff;
+}
+
+.filter-bar__input:focus-visible {
+    outline: 2px solid #ef7d00;
+    outline-offset: 1px;
+}
+
+.filter-bar__separator {
+    display: flex;
+    align-items: center;
+    padding-bottom: 7px;
+    color: #5b6f66;
+    font-size: 14px;
+}
+
 .filter-bar__period {
     font-size: 12px;
     color: #5b6f66;
@@ -604,6 +655,14 @@
 
     .filter-bar__select {
         width: 100%;
+    }
+
+    .filter-bar__input {
+        width: 100%;
+    }
+
+    .filter-bar__separator {
+        padding-bottom: 0;
     }
 
     .filter-bar__period {

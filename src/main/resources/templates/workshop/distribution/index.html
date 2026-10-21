@@ -75,36 +75,44 @@
                 «серийный номер не выпущен» там, где серийника не бывает
                 вовсе.
             -->
-            <div th:replace="~{workshop/fragments/distribution-mode-switch :: modeSwitch('regular')}"></div>
+            <div th:replace="~{workshop/fragments/distribution-mode-switch :: modeSwitch(${distributionMode})}"></div>
 
             <!--
-                Срок показа работ. Значение живёт в адресной строке, а
-                не в сессии: ссылку на «шесть недель» можно передать
+                Интервал дат показа работ. Значение живёт в адресной строке,
+                а не в сессии: ссылку на «две недели» можно передать
                 коллеге, и назначение не должно сбрасывать выбор.
-                Форма отправляется по onchange, кнопка остаётся для
-                noscript.
+                Форма отправляется по onchange на полях и кнопкой.
             -->
             <form class="filter-bar"
                   method="get"
                   th:if="${workshopUnitId != null}"
                   th:action="@{/workshop/distribution}">
 
+                <input type="hidden"
+                       name="mode"
+                       th:value="${distributionMode != null ? distributionMode : 'regular'}">
+
                 <label class="filter-bar__field">
 
                     <span class="filter-bar__caption">Срок работ</span>
 
-                    <select name="weeks"
-                            class="filter-bar__select"
-                            onchange="this.form.submit()">
+                    <input type="date"
+                           name="periodFrom"
+                           class="filter-bar__input"
+                           th:value="${periodFrom}"
+                           onchange="this.form.submit()">
 
-                        <option th:each="opt : ${weekChoices}"
-                                th:value="${opt.key}"
-                                th:text="${opt.value}"
-                                th:selected="${opt.key == weeks}">
-                            2 недели
-                        </option>
+                </label>
 
-                    </select>
+                <span class="filter-bar__separator">—</span>
+
+                <label class="filter-bar__field">
+
+                    <input type="date"
+                           name="periodTo"
+                           class="filter-bar__input"
+                           th:value="${periodTo}"
+                           onchange="this.form.submit()">
 
                 </label>
 
@@ -160,7 +168,7 @@
                 кнопка «Назначить».
             -->
             <section class="card"
-                     th:if="${!#lists.isEmpty(operations)}">
+                     th:if="${!#lists.isEmpty(operations) and !assignedView}">
 
                 <div class="card-head">
 
@@ -299,17 +307,28 @@
 
                                                             </div>
 
+                                                            </span>
+
+                                                            </div>
+
                                                             <div class="item-card__meta">
 
                                                                 <span th:text="${item.formattedDate()}">
                                                                     19.10.2026
                                                                 </span>
 
-                                                                <span th:text="${item.orderNumber()}">
+                                                                <span th:if="${item.overdue()}"
+                                                                      class="badge badge--danger">
+                                                                    <span th:text="${item.overdueLabel()}">
+                                                                        просрочка 3 дня
+                                                                    </span>
+                                                                </span>
+
+                                                                <span th:text="${item.orderNumber()}">  
                                                                     ЗП-2026-029
                                                                 </span>
 
-                                                                <span th:text="${item.hoursLabel()}
+                                                                <span th:text="${item.hoursLabel()}     
                                                                         + ' ч.'">
                                                                     2 ч.
                                                                 </span>
@@ -319,8 +338,6 @@
                                                                       th:text="${item.executorLabel()}">
                                                                     Иванов И. И.
                                                                 </span>
-
-                                                            </div>
 
                                                         </div>
 
@@ -339,8 +356,16 @@
                                                                    th:value="${item.rowId()}">
 
                                                             <input type="hidden"
-                                                                   name="weeks"
-                                                                   th:value="${weeks}">
+                                                                   name="periodFrom"
+                                                                   th:value="${periodFrom}">
+
+                                                            <input type="hidden"
+                                                                   name="periodTo"
+                                                                   th:value="${periodTo}">
+
+                                                            <input type="hidden"
+                                                                   name="mode"
+                                                                   th:value="${distributionMode}">
 
                                                             <div class="group-panel__head">
 
@@ -476,7 +501,7 @@
                 возвращает в очередь ровно один датчик, а не всю операцию.
             -->
             <section class="card"
-                     th:if="${!#lists.isEmpty(assignedOperations)}">
+                     th:if="${!#lists.isEmpty(assignedOperations) and assignedView}">
 
                 <div class="card-head">
 
@@ -581,7 +606,9 @@
                                                             <div class="item-card__title">
 
                                                                 <span class="item-card__serial"
-                                                                      th:text="${item.serialLabel()}">
+                                                                      th:text="${groupMode
+                                                                          ? item.cellLabel()
+                                                                          : item.serialLabel()}">
                                                                     119200063
                                                                 </span>
 
@@ -596,6 +623,13 @@
 
                                                                 <span th:text="${item.formattedDate()}">
                                                                     19.10.2026
+                                                                </span>
+
+                                                                <span th:if="${item.overdue()}"
+                                                                      class="badge badge--danger">
+                                                                    <span th:text="${item.overdueLabel()}">
+                                                                        просрочка 3 дня
+                                                                    </span>
                                                                 </span>
 
                                                                 <span th:text="${item.orderNumber()}">
@@ -639,8 +673,16 @@
                                                                        th:value="${item.rowId()}">
 
                                                                 <input type="hidden"
-                                                                       name="weeks"
-                                                                       th:value="${weeks}">
+                                                                       name="periodFrom"
+                                                                       th:value="${periodFrom}">
+
+                                                                <input type="hidden"
+                                                                       name="periodTo"
+                                                                       th:value="${periodTo}">
+
+                                                                <input type="hidden"
+                                                                       name="mode"
+                                                                       th:value="${distributionMode}">
 
                                                                 <button type="submit"
                                                                         class="btn danger compact">
@@ -680,20 +722,37 @@
 
             </section>
 
-            <!-- Пусто -->
+            <!-- Пусто: очередь -->
             <div class="alert success"
                  th:if="${
                      #lists.isEmpty(operations)
-                     and #lists.isEmpty(assignedOperations)
+                     and !assignedView
                      and workshopUnitId != null
                  }">
 
                 <p>
-                    Распределяемых и распределённых операций за
+                    Распределяемых операций за
                     выбранный срок нет: они появятся после того, как
                     диспетчер внесёт заказы покупателя в план. Увеличьте
                     срок работ в панели выше, чтобы увидеть более
                     поздние даты плана.
+                </p>
+
+            </div>
+
+            <!-- Пусто: закреплённые работы -->
+            <div class="alert success"
+                 th:if="${
+                     #lists.isEmpty(assignedOperations)
+                     and assignedView
+                     and workshopUnitId != null
+                 }">
+
+                <p>
+                    Закреплённых за исполнителями работ за выбранный
+                    срок нет: назначьте работы в очереди распределения —
+                    они появятся здесь. Увеличьте срок работ в панели
+                    выше, чтобы увидеть более поздние даты плана.
                 </p>
 
             </div>
