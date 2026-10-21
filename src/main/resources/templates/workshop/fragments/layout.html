@@ -152,6 +152,15 @@
             <th:block th:replace="~{workshop/fragments/bvk-menu :: items}">
             </th:block>
 
+            <!--
+                Пункты модуля БТК: аналогично БВК, но пока не имеют
+                собственных реестров — контролёры работают через
+                «Мои операции» и распределение. Блок оставлен для
+                расширения при появлении собственных реестров БТК.
+            -->
+            <th:block th:replace="~{workshop/fragments/btk-menu :: items}">
+            </th:block>
+
         </nav>
 
         <div class="workshop-sidebar__footer">

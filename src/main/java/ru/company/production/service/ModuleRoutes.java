@@ -144,6 +144,14 @@ public final class ModuleRoutes {
             ),
 
             Map.entry(
+                    Role.BTK_MASTER,
+                    new Destination(
+                            "Бюро технического контроля",
+                            "/workshop/staff"
+                    )
+            ),
+
+            Map.entry(
                     Role.OMTSIK_EXECUTOR,
                     new Destination(
                             "Склад полуфабрикатов",
@@ -209,6 +217,23 @@ public final class ModuleRoutes {
                     Role.SDP_ST_EXECUTOR,
                     new Destination(
                             "Цех испытаний",
+                            "/workshop-executor"
+                    )
+            ),
+
+            /*
+             * Контролёр бюро технического контроля работает в том же
+             * интерфейсе «Мои операции», что и исполнитель цеха: у БТК
+             * нет своего модуля исполнителя, потому что набор работ у
+             * него тот же — закреплённые руководителем и планировщиком
+             * операции своего подразделения. Границы проходит по
+             * карточке учётной записи, поэтому роль отличается от
+             * цеховой только подписью модуля в шапке.
+             */
+            Map.entry(
+                    Role.BTK_EXECUTOR,
+                    new Destination(
+                            "Бюро технического контроля",
                             "/workshop-executor"
                     )
             )

@@ -120,6 +120,7 @@ public class SecurityConfig {
                                 "OMTSIK_MASTER",
                                 "OMTSIK_С_MASTER",
                                 "BVK_MASTER",
+                                "BTK_MASTER",
                                 "SGP_MASTER",
                                 "SGM_MASTER",
                                 "SK_GENERAL",
@@ -166,6 +167,7 @@ public class SecurityConfig {
                                 "OMTSIK_MASTER",
                                 "OMTSIK_С_MASTER",
                                 "BVK_MASTER",
+                                "BTK_MASTER",
                                 "SGP_MASTER",
                                 "SGM_MASTER",
                                 "SK_GENERAL"
@@ -187,6 +189,7 @@ public class SecurityConfig {
                                 "OMTSIK_MASTER",
                                 "OMTSIK_С_MASTER",
                                 "BVK_MASTER",
+                                "BTK_MASTER",
                                 "SGP_MASTER",
                                 "SGM_MASTER",
                                 "SK_GENERAL"
@@ -205,6 +208,7 @@ public class SecurityConfig {
                                 "OMTSIK_MASTER",
                                 "OMTSIK_С_MASTER",
                                 "BVK_MASTER",
+                                "BTK_MASTER",
                                 "SGP_MASTER",
                                 "SGM_MASTER"
                         )

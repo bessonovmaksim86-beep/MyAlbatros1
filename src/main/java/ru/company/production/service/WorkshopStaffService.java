@@ -89,6 +89,10 @@ public class WorkshopStaffService {
                     Map.entry(
                             Role.SGM_MASTER,
                             List.of("METROLOGY_DEPARTMENT")
+                    ),
+                    Map.entry(
+                            Role.BTK_MASTER,
+                            List.of("TECHNICAL_CONTROL_DEPARTMENT")
                     )
             );
 
@@ -111,6 +115,7 @@ public class WorkshopStaffService {
             Role.OMTSIK_MASTER,
             Role.OMTSIK_С_MASTER,
             Role.BVK_MASTER,
+            Role.BTK_MASTER,
             Role.SGP_MASTER,
             Role.SGM_MASTER
     );
@@ -654,6 +659,8 @@ public class WorkshopStaffService {
                     Map.entry(Role.OMTSIK_С_MASTER, UnitKind.WAREHOUSE),
                     Map.entry(Role.SGP_MASTER,      UnitKind.WAREHOUSE),
                     Map.entry(Role.BVK_MASTER,      UnitKind.BUREAU),
+                    Map.entry(Role.BTK_MASTER,      UnitKind.BUREAU),
+                    Map.entry(Role.BTK_EXECUTOR,    UnitKind.BUREAU),
                     Map.entry(Role.SGM_MASTER,      UnitKind.DEPARTMENT),
                     Map.entry(
                             Role.SDP_SERVICE_HEAD_TECHNOLOGY,

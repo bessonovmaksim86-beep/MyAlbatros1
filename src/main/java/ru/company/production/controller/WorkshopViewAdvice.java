@@ -181,7 +181,12 @@ public class WorkshopViewAdvice {
                 supervisor.getRole()
                         == ru.company.production.entity.Role.BVK_MASTER;
 
+        boolean btkModule =
+                supervisor.getRole()
+                        == ru.company.production.entity.Role.BTK_MASTER;
+
         model.addAttribute("bvkModule", bvkModule);
+        model.addAttribute("btkModule", btkModule);
 
         if (bvkModule) {
             model.addAttribute(
