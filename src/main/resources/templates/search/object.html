@@ -22,6 +22,10 @@
 
     <link rel="stylesheet"
           th:href="@{/css/search-summary.css}">
+
+    <!-- Всплывающие уведомления о новых делах -->
+    <link rel="stylesheet"
+          th:href="@{/css/notifications.css}">
 </head>
 
 <body>
@@ -242,5 +246,7 @@
 </div>
 
 <script th:src="@{/js/float-scroll.js}"></script>
+<!-- Фоновая проверка счётчиков: звук + тосты при приросте -->
+<script th:src="@{/js/notifications.js}"></script>
 </body>
 </html>

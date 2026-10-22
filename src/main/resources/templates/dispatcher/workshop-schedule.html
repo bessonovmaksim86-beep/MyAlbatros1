@@ -4,6 +4,8 @@
     <meta charset="UTF-8">
     <title>Календарный план — заявка <span th:text="${order != null ? order.id : ''}"></span></title>
     <link rel="stylesheet" th:href="@{/css/workshop.css}">
+    <!-- Всплывающие уведомления о новых делах -->
+    <link rel="stylesheet" th:href="@{/css/notifications.css}">
 </head>
 <body>
 <div th:replace="~{fragments/layout :: header}"></div>
@@ -80,5 +82,7 @@
 </main>
 <!-- Прокрутка страницы в виде датчика ДУУ2М: один большой поплавок -->
 <script th:src="@{/js/float-scroll.js}"></script>
+<!-- Фоновая проверка счётчиков: звук + тосты при приросте -->
+<script th:src="@{/js/notifications.js}"></script>
 </body>
 </html>

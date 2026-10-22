@@ -310,9 +310,12 @@
      ОБЩИЕ СКРИПТЫ
      ========================================================= -->
 <th:block th:fragment="commonScripts">
+    <link rel="stylesheet" th:href="@{/css/notifications.css}">
     <script th:src="@{/admin/js/common.js}"></script>
     <!-- Прокрутка страницы в виде датчика ДУУ2М: один большой поплавок -->
     <script th:src="@{/js/float-scroll.js}"></script>
+    <!-- Фоновая проверка счётчиков: звук + тосты при приросте -->
+    <script th:src="@{/js/notifications.js}"></script>
 </th:block>
 
 </body>

@@ -13,6 +13,10 @@
 
     <link rel="stylesheet"
           th:href="@{/dispatcher/css/dispatcher.css}">
+
+    <!-- Всплывающие уведомления о новых делах -->
+    <link rel="stylesheet"
+          th:href="@{/css/notifications.css}">
 </head>
 
 <body>
@@ -252,5 +256,7 @@
 
 <!-- Прокрутка страницы в виде датчика ДУУ2М: один большой поплавок -->
 <script th:src="@{/js/float-scroll.js}"></script>
+<!-- Фоновая проверка счётчиков: звук + тосты при приросте -->
+<script th:src="@{/js/notifications.js}"></script>
 </body>
 </html>

@@ -2,6 +2,7 @@ package ru.company.production.service;
 
 import ru.company.production.entity.Role;
 
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -272,7 +273,7 @@ public final class ModuleRoutes {
     /**
      * Род склада для подписей меню и верхней панели.
      *
-     * Формулировка одна на все интерфейсы: складские страницы подписывают
+     * Форматировка одна на все интерфейсы: складские страницы подписывают
      * модуль этими словами, и «Мои операции» кладовщика не должны назвать
      * склад иначе, чем обзор склада.
      */
@@ -281,5 +282,112 @@ public final class ModuleRoutes {
                 || role == Role.OMTSIK_С_MASTER
                 ? "комплектования"
                 : "полуфабрикатов";
+    }
+
+    /*
+     * Адреса разделов, открытых роли.
+     *
+     * Нужны уведомлениям: счётчик без права войти бесполезен — кладовщик
+     * получил бы сигнал про чужой раздел и по клику упёрся бы в 403.
+     * Поэтому уведомление показывается только по тем адресам, которые
+     * роль действительно открывает.
+     *
+     * Соответствие намеренно живёт рядом с перечнем входов выше: и там, и
+     * здесь вопрос «какой модуль принадлежит роли», и держать его в двух
+     * местах означало бы расходимость при первом же новом модуле.
+     *
+     * Сравнение — по префиксу адреса, а не по точному совпадению: раздел
+     * отдаёт и список, и карточку, и форму, и все они относятся к тому же
+     * праву.
+     */
+    private static final Map<Role, List<String>> ROLE_PREFIXES =
+            Map.ofEntries(
+                    Map.entry(
+                            Role.SDP_SERVICE_HEAD_DISPATCHER,
+                            List.of("/dispatcher", "/workshop/distribution")
+                    ),
+                    Map.entry(
+                            Role.DISPATCHER,
+                            List.of("/dispatcher", "/workshop/distribution")
+                    ),
+                    Map.entry(
+                            Role.SDP_SERVICE_HEAD_TECHNOLOGY,
+                            List.of("/technology", "/workshop/distribution")
+                    ),
+                    Map.entry(
+                            Role.OMTSIK_EXECUTOR,
+                            List.of("/warehouse")
+                    ),
+                    Map.entry(
+                            Role.OMTSIK_С_EXECUTOR,
+                            List.of("/warehouse")
+                    ),
+                    Map.entry(
+                            Role.BVK_EXECUTOR,
+                            List.of("/input-control", "/pending-defects")
+                    ),
+                    Map.entry(
+                            Role.BVK_MASTER,
+                            List.of(
+                                    "/input-control",
+                                    "/pending-defects",
+                                    "/workshop"
+                            )
+                    ),
+                    Map.entry(
+                            Role.SK_GENERAL,
+                            List.of("/quality", "/workshop/distribution")
+                    )
+            );
+
+    /*
+     * Цеховые мастера и руководители подразделений: модуль общий
+     * (/workshop), его границы проходит подразделение учётной записи, а
+     * не роль, поэтому роль открывает весь префикс.
+     */
+    private static final List<Role> UNIT_MANAGER_ROLES = List.of(
+            Role.SDP_SPP_MASTER,
+            Role.SDP_SA_MASTER,
+            Role.SDP_SC_MASTER,
+            Role.SDP_ST_MASTER,
+            Role.OMTSIK_MASTER,
+            Role.OMTSIK_С_MASTER,
+            Role.BTK_MASTER,
+            Role.SGP_MASTER,
+            Role.SGM_MASTER
+    );
+
+    /**
+     * Открыт ли роли адрес раздела.
+     *
+     * «Мои операции» доступны всем аутентифицированным (так держит
+     * {@code SecurityConfig}), поэтому они не перечисляются в таблице и
+     * проходят без проверки роли.
+     */
+    public static boolean canOpen(Role role, String url) {
+        if (url == null) {
+            return false;
+        }
+
+        if (url.equals("/my-operations")
+                || url.startsWith("/my-operations/")) {
+            return true;
+        }
+
+        if (role == null) {
+            return false;
+        }
+
+        List<String> prefixes = ROLE_PREFIXES.get(role);
+
+        if (prefixes == null && UNIT_MANAGER_ROLES.contains(role)) {
+            prefixes = List.of("/workshop");
+        }
+
+        if (prefixes == null) {
+            return false;
+        }
+
+        return prefixes.stream().anyMatch(url::startsWith);
     }
 }
