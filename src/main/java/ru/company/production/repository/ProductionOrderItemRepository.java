@@ -206,4 +206,52 @@ public interface ProductionOrderItemRepository
     long countWithoutZnpByOrderId(
             @Param("productionOrderId") Long productionOrderId
     );
+
+    /**
+     * Удаляет позиции заказа целиком.
+     *
+     * Ключ заказа в этой таблице стоит с ON DELETE CASCADE (V16), но
+     * раздел «Очистка данных» удаляет заказ пакетными запросами в
+     * определённом порядке: позиция держит ссылку на серийный номер с
+     * RESTRICT (V17), и строки обязаны уйти ДО удаления реестра, иначе
+     * удаление номеров упрётся во внешний ключ.
+     */
+    @Modifying(flushAutomatically = true, clearAutomatically = true)
+    @Query("""
+            delete from ProductionOrderItem item
+            where item.productionOrder.id = :productionOrderId
+            """)
+    int deleteAllByOrderId(
+            @Param("productionOrderId") Long productionOrderId
+    );
+
+    /** Позиции выпуска с их серийниками — для предпросмотра удаления. */
+    @Query("""
+            select serial.id
+            from ProductionOrderItem item
+            join item.serial serial
+            where item.productionOrder.id = :productionOrderId
+            """)
+    List<Long> findSerialIdsByOrderId(
+            @Param("productionOrderId") Long productionOrderId
+    );
+
+    /**
+     * Снимает удаляемые серийники с позиций выпуска.
+     *
+     * Ключ serial_id ссылается на реестр с RESTRICT (V17): позиция
+     * выпуска удержала бы удаление номера из реестра. Колонка
+     * разрешающая — выпуск теряет привязку изделия к позиции, и
+     * раздел обязан назвать это предупреждением до удаления, а не
+     * получить отказ базы на середине транзакции.
+     */
+    @Modifying(flushAutomatically = true, clearAutomatically = true)
+    @Query("""
+            update ProductionOrderItem item
+            set item.serial = null
+            where item.serial.id in :serialIds
+            """)
+    int detachSerials(
+            @Param("serialIds") java.util.Collection<Long> serialIds
+    );
 }

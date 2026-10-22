@@ -1,6 +1,7 @@
 package ru.company.production.repository;
 
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
@@ -307,7 +308,7 @@ public interface SerialProductionOrderRepository
 
     /*
      * ============================================================
-     * Приёмка ячеек по серийным ЗНП
+     * Приёмка ячеек по заказам-комплектующим (ЗНП)
      * ============================================================
      *
      * Склад принимает ячейки, которые вошли в состав заказ-
@@ -315,15 +316,23 @@ public interface SerialProductionOrderRepository
      * по заказу: все непринятые ячейки состава переходят в «принято»
      * разом, а их комплектовочная операция закрывается фактом.
      *
-     * Отбор держится на признаке серийного ЗНП (родитель задан +
-     * комплектовочная операция задана), а не на перечне идентификаторов:
-     * заказ без родителя или без операции — групповой или ремонтный,
-     * приёмка ячеек к ним не относится (см. ZnpKind.isSerialBased()).
+     * Попадают заказы двух родов:
+     *
+     *   * серийные ЗНП (parent IS NOT NULL) — заказ внутрь выпуска
+     *       с комплектовочной операцией на самом заказе;
+     *   * групповые ЗНП (parent IS NULL, znpKind IS NOT NULL,
+     *       znpKind <> KITTING) — самостоятельные заказы-комплектующие,
+     *       которые ведутся по техпроцессу, а их ячейки привязаны
+     *       через матрицу комплектования (SerialProductionOrder),
+     *       где операция хранится в строке связи.
+     *
+     * Отсекаются только выпуски (parent IS NULL, znpKind IS NULL или
+     * KITTING) — они комплектующих не имеют и приёмки ячеек не
+     * проходят.
      */
 
     /**
-     * Серийные ЗНП, в состав которых входят непринятые ячейки:
-     * список раздела «Приёмка ячеек».
+     * Заказы с непринятыми ячейками: список раздела «Приёмка ячеек».
      *
      * EXISTS, а не join: заказ обязан попасть в выдачу один раз, даже
      * если в его составе несколько непринятых ячеек.
@@ -332,8 +341,11 @@ public interface SerialProductionOrderRepository
             select distinct ord
             from ProductionOrder ord
             where ord.active = true
-              and ord.parentProductionOrder is not null
-              and ord.productionOperation is not null
+              and not (
+                  ord.parentProductionOrder is null
+                  and (ord.znpKind is null
+                       or ord.znpKind = 'KITTING')
+              )
               and exists (
                   select 1
                   from SerialProductionOrder link
@@ -354,8 +366,11 @@ public interface SerialProductionOrderRepository
             select count(distinct ord.id)
             from ProductionOrder ord
             where ord.active = true
-              and ord.parentProductionOrder is not null
-              and ord.productionOperation is not null
+              and not (
+                  ord.parentProductionOrder is null
+                  and (ord.znpKind is null
+                       or ord.znpKind = 'KITTING')
+              )
               and exists (
                   select 1
                   from SerialProductionOrder link
@@ -392,8 +407,7 @@ public interface SerialProductionOrderRepository
     );
 
     /**
-     * Непринятые ячейки состава заказа: что принимает склад.
-     *
+     * Непринятые ячейки состава заказа: что принимает склад.     *
      * Fetch join обязателен: строка списка печатает полный номер
      * (getFullNumber() читает code классификатора), а open-in-view
      * выключен.
@@ -423,5 +437,73 @@ public interface SerialProductionOrderRepository
             """)
     List<SerialProductionOrder> findPendingCellsByOrderId(
             @Param("productionOrderId") Long productionOrderId
+    );
+
+    /*
+     * ============================================================
+     * Жёсткое удаление заказа (раздел «Очистка данных»)
+     * ============================================================
+     */
+
+    /**
+     * Изделия, внесённые в удаляемый заказ, — перечень для предпросмотра.
+     *
+     * Нужны именно номера, а не количество: администратор обязан
+     * увидеть, какие ячейки вернутся на склад, потому что для склада
+     * это изменение остатка, а не техническое удаление строк.
+     */
+    @Query("""
+            select serial.id
+            from SerialProductionOrder link
+            join link.serial serial
+            where link.productionOrder.id = :productionOrderId
+            order by serial.productType asc, serial.serial asc
+            """)
+    List<Long> findSerialIdsByProductionOrderId(
+            @Param("productionOrderId") Long productionOrderId
+    );
+
+    /**
+     * Вносит ли заказ хоть что-нибудь в чужие изделия.
+     *
+     * Проверяется ДО удаления: связь «изделие ⇄ заказ» — это
+     * укомплектованность конкретного датчика, и заказ, внесённый в
+     * изделия чужого выпуска, одним удалением менял бы состав
+     * уже собранного прибора.
+     */
+    @Query("""
+            select count(link) > 0
+            from SerialProductionOrder link
+            where link.productionOrder.id = :productionOrderId
+            """)
+    boolean existsAnyByProductionOrderId(
+            @Param("productionOrderId") Long productionOrderId
+    );
+
+    /** Удаляет состав комплектования заказа. */
+    @Modifying(flushAutomatically = true, clearAutomatically = true)
+    @Query("""
+            delete from SerialProductionOrder link
+            where link.productionOrder.id = :productionOrderId
+            """)
+    int deleteByProductionOrderId(
+            @Param("productionOrderId") Long productionOrderId
+    );
+
+    /**
+     * Удаляет связи удаляемых изделий целиком.
+     *
+     * Применяется к серийникам, которых раздел убирает из реестра:
+     * ключ матрицы по изделию стоит с ON DELETE CASCADE, но удаление
+     * идёт пакетным запросом, и без явного шага Hibernate мог бы
+     * уронить удаление реестра на внешнем ключе в другой порядок.
+     */
+    @Modifying(flushAutomatically = true, clearAutomatically = true)
+    @Query("""
+            delete from SerialProductionOrder link
+            where link.serial.id in :serialIds
+            """)
+    int deleteBySerialIdIn(
+            @Param("serialIds") Collection<Long> serialIds
     );
 }

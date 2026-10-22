@@ -2,6 +2,7 @@ package ru.company.production.repository;
 
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import ru.company.production.entity.SerialMovementEvent;
@@ -94,4 +95,79 @@ public interface SerialMovementEventRepository
             where event.fullNumber = :fullNumber
             """)
     LocalDateTime findLastMoment(@Param("fullNumber") String fullNumber);
+
+    /*
+     * ============================================================
+     * Раздел «Очистка данных» (администратор)
+     *
+     * Журнал ссылается на заказ, номер и партию ключами с RESTRICT
+     * (V42/V65), поэтому ни заказ, ни номер, ни партия не уйдут, пока
+     * строки журнала на них указывают. Отсюда два вида запросов:
+     * отвязать (когда событие остаётся нужным в паспорте) и удалить
+     * (когда вместе с номером исчезает и то, о чём событие говорило).
+     * ============================================================
+     */
+
+    long countByProductionOrderId(Long productionOrderId);
+
+    long countByReceivingBatchId(Long receivingBatchId);
+
+    long countBySerialIdIn(java.util.Collection<Long> serialIds);
+
+    /**
+     * Снимает ссылку на удаляемый заказ, строки журнала сохраняя.
+     *
+     * Событие описывает путь номера, а не заказ: «выпущена
+     * производством» остаётся правдой и после того, как выпуск удалён,
+     * поэтому строку не удаляют, а отвязывают — иначе из паспорта
+     * исчезла бы половина пройденного номером пути ради удаления
+     * документа, которого больше нет.
+     */
+    @Modifying(flushAutomatically = true, clearAutomatically = true)
+    @Query("""
+            update SerialMovementEvent event
+            set event.productionOrder = null
+            where event.productionOrder.id = :productionOrderId
+            """)
+    int detachProductionOrder(
+            @Param("productionOrderId") Long productionOrderId
+    );
+
+    /**
+     * Удаляет события удаляемых номеров.
+     *
+     * Здесь отвязать нельзя: {@code chk_sme_has_identifier} требует,
+     * чтобы у строки оставался хотя бы идентификатор, и строка о
+     * номере, которого больше нет в реестре и который вернули в свободный
+     * ряд, показала бы в паспорте движение несуществующего изделия.
+     */
+    @Modifying(flushAutomatically = true, clearAutomatically = true)
+    @Query("""
+            delete from SerialMovementEvent event
+            where event.serialId in :serialIds
+            """)
+    int deleteBySerialIdIn(
+            @Param("serialIds") java.util.Collection<Long> serialIds
+    );
+
+    /** Снимает ссылку на откатываемую партию, события сохраняя. */
+    @Modifying(flushAutomatically = true, clearAutomatically = true)
+    @Query("""
+            update SerialMovementEvent event
+            set event.receivingBatch = null
+            where event.receivingBatch.id = :receivingBatchId
+            """)
+    int detachReceivingBatch(
+            @Param("receivingBatchId") Long receivingBatchId
+    );
+
+    /** Удаляет события прихода откатываемой партии. */
+    @Modifying(flushAutomatically = true, clearAutomatically = true)
+    @Query("""
+            delete from SerialMovementEvent event
+            where event.receivingBatch.id = :receivingBatchId
+            """)
+    int deleteByReceivingBatchId(
+            @Param("receivingBatchId") Long receivingBatchId
+    );
 }

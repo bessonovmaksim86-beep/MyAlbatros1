@@ -61,4 +61,14 @@ public interface InputControlCardReasonRepository
     List<InputControlCardReason> findChainByGroupIds(
             @Param("groupIds") java.util.Collection<Long> groupIds
     );
+
+    /** Снимает цепочки причин со всех карточек удаляемой партии. */
+    @Modifying(flushAutomatically = true, clearAutomatically = true)
+    @Query("""
+            delete from InputControlCardReason chosen
+            where chosen.card.id in :cardIds
+            """)
+    int deleteAllByCardIds(
+            @Param("cardIds") java.util.Collection<Long> cardIds
+    );
 }

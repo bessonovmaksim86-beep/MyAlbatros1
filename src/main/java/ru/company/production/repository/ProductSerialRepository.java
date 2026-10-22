@@ -764,4 +764,278 @@ public interface ProductSerialRepository
     List<ProductSerial> findDetailsByFullNumbers(
             @Param("fullNumbers") Collection<String> fullNumbers
     );
+
+    /*
+     * ============================================================
+     * Наличие на складе полуфабрикатов
+     * ============================================================
+     *
+     * Реестр склада — это номера рода «Ячейка»: склад получает их
+     * приходом (cell_receiving_batches), и именно они лежат на полках.
+     * Принятая складом позиция — ячейка, непринятая — подсборка
+     * (см. QuarantineCellKind), поэтому различие видов выводят из
+     * accepted_at, а не заводят второй признак.
+     *
+     * Скалярная проекция, а не сущности: экран перечисляет сотни
+     * позиций и печатает номер, изделие, контрагента и даты, — fetch
+     * join ради этого тянул бы за собой классификатор, справочник
+     * датчиков, партию и двоих сотрудников.
+     */
+
+    /**
+     * Позиции склада полуфабрикатов — реестр наличия.
+     *
+     * Отбор целиком задан параметрами, а не набором методов: экран
+     * фильтруют по виду, изделию, контрагенту и интервалу дат, и
+     * отдельный запрос на каждую комбинацию означал бы, что эти
+     * комбинации разъедутся по правилам отбора.
+     *
+     * Дата поступления считается одной формулой на весь запрос —
+     * приёмка склада, иначе подтверждение прихода, иначе дата партии,
+     * иначе выдача номера. И фильтр интервала, и сортировка по ней
+     * обязаны опираться на одно и то же выражение: иначе отсортированные
+     * «по поступлению» строки не совпали бы с отобранными по датам.
+     *
+     * Написание контрагента сравнивается по нормализованной строке
+     * (тот же приём, что у сводки поставщиков): поставщик в партии —
+     * свободный текст, и «Компонент » с пробелом — тот же контрагент.
+     *
+     * Порядок по умолчанию — изделие, затем номер: реестр читают как
+     * перечень полок, и он обязан оставаться предсказуемым от
+     * открытия к открытию, пока пользователь не выбрал сортировку.
+     */
+    @Query("""
+            select
+                serial.id                  as id,
+                classifier.id              as classifierId,
+                classifier.code            as classifierCode,
+                classifier.name            as classifierName,
+                sensor.name                as sensorClassName,
+                serial.productType         as productType,
+                serial.serial              as serial,
+                serial.status              as status,
+                serial.znpNumber           as znpNumber,
+                batch.id                   as batchId,
+                batch.supplierName         as supplierName,
+                batch.incomingOrderNumber  as incomingOrderNumber,
+                batch.changeNumber         as changeNumber,
+                batch.quantity             as batchQuantity,
+                batch.confirmedAt          as confirmedAt,
+                batch.acceptedAt           as batchAcceptedAt,
+                serial.acceptedAt          as acceptedAt,
+                serial.issuedAt            as issuedAt,
+                coalesce(
+                    serial.acceptedAt,
+                    batch.confirmedAt,
+                    batch.createdAt,
+                    serial.issuedAt
+                )                          as receivedAt
+            from ProductSerial serial
+            join serial.productClassifier classifier
+            left join classifier.sensorCatalog sensor
+            left join serial.receivingBatch batch
+            where serial.productType =
+                  ru.company.production.entity.ProductType.CELL
+              and (:kind is null
+                   or (:kind = 'CELL' and serial.acceptedAt is not null)
+                   or (:kind = 'SUBASSEMBLY' and serial.acceptedAt is null))
+              and (:classifierId is null or classifier.id = :classifierId)
+              and (:supplierKey is null
+                   or lower(trim(batch.supplierName)) = :supplierKey)
+              and (:from is null
+                   or coalesce(
+                          serial.acceptedAt,
+                          batch.confirmedAt,
+                          batch.createdAt,
+                          serial.issuedAt
+                      ) >= :from)
+              and (:to is null
+                   or coalesce(
+                          serial.acceptedAt,
+                          batch.confirmedAt,
+                          batch.createdAt,
+                          serial.issuedAt
+                      ) < :to)
+            order by classifier.code asc, serial.serial asc
+            """)
+    List<WarehouseStockProjection> findWarehouseStock(
+            @Param("kind") String kind,
+            @Param("classifierId") Long classifierId,
+            @Param("supplierKey") String supplierKey,
+            @Param("from") java.time.LocalDateTime from,
+            @Param("to") java.time.LocalDateTime to
+    );
+
+    /**
+     * Изделия, позиции которых лежат на складе, — опции фильтра.
+     *
+     * Список берут из реестра склада, а не из справочника классификаторов
+     * целиком: тот же приём, что у фильтра изолятора, — иначе выпадающий
+     * список на сотни наименований читался бы как поиск вслепую.
+     */
+    @Query("""
+            select distinct
+                   classifier.id       as id,
+                   classifier.code     as code,
+                   classifier.name     as name,
+                   sensor.name         as sensorName
+            from ProductSerial serial
+            join serial.productClassifier classifier
+            left join classifier.sensorCatalog sensor
+            where serial.productType =
+                  ru.company.production.entity.ProductType.CELL
+            order by classifier.code asc
+            """)
+    List<WarehouseStockClassifierOption> findWarehouseStockClassifiers();
+
+    /**
+     * Написания контрагентов складских приходов — опции фильтра.
+     *
+     * Группировка по нормализованному написанию, показ — любым из
+     * встреченных написаний в исходном регистре: тот же приём, что у
+     * сводки поставщиков. Порядок задаёт вызывающий сервис по-русски:
+     * сортировка по агрегатной функции в JPQL зависит от диалекта, а
+     * порядок списка поставщик обязан видеть привычный.
+     */
+    @Query("""
+            select
+                lower(trim(batch.supplierName)) as supplierKey,
+                min(batch.supplierName)         as displayName
+            from CellReceivingBatch batch
+            group by lower(trim(batch.supplierName))
+            """)
+    List<WarehouseStockSupplierOption> findWarehouseStockSuppliers();
+
+    /**
+     * Строка реестра наличия: изделие, приход и даты одной позиции.
+     *
+     * Тип держится перечислением, как в {@link SerialSearchView}:
+     * Spring Data проецирует алиасы JPQL на геттеры по имени, и
+     * конвертировать строку БД в enum вручную незачем.
+     */
+    interface WarehouseStockProjection {
+
+        Long getId();
+
+        Long getClassifierId();
+
+        Integer getClassifierCode();
+
+        String getClassifierName();
+
+        String getSensorClassName();
+
+        ProductType getProductType();
+
+        Integer getSerial();
+
+        ProductSerialStatus getStatus();
+
+        String getZnpNumber();
+
+        Long getBatchId();
+
+        String getSupplierName();
+
+        String getIncomingOrderNumber();
+
+        String getChangeNumber();
+
+        Integer getBatchQuantity();
+
+        java.time.LocalDateTime getConfirmedAt();
+
+        java.time.LocalDateTime getBatchAcceptedAt();
+
+        java.time.LocalDateTime getAcceptedAt();
+
+        java.time.LocalDateTime getIssuedAt();
+
+        java.time.LocalDateTime getReceivedAt();
+    }
+
+    /** Опция фильтра «изделие»: классификатор позиции склада. */
+    interface WarehouseStockClassifierOption {
+
+        Long getId();
+
+        Integer getCode();
+
+        String getName();
+
+        String getSensorName();
+    }
+
+    /** Опции фильтра «контрагент»: нормализованное написание и подпись. */
+    interface WarehouseStockSupplierOption {
+
+        String getSupplierKey();
+
+        String getDisplayName();
+    }
+
+    /*
+     * ============================================================
+     * Жёсткое удаление заказа и откат прихода
+     * (раздел «Очистка данных»)
+     * ============================================================
+     */
+
+    /**
+     * Серийники сразу нескольких заказов — состав вложенных ЗНП за
+     * один запрос.
+     *
+     * Выпуск удаляется вместе со всеми вложенными заказами, и номера
+     * каждого из них входят в тот же перечень; запрос на заказ дал бы
+     * N обращений к базе на экране предпросмотра.
+     */
+    @Query("""
+            select serial
+            from ProductSerial serial
+            where serial.issuedProductionOrder.id in :productionOrderIds
+            order by serial.productType asc, serial.serial asc
+            """)
+    List<ProductSerial> findByProductionOrderIds(
+            @Param("productionOrderIds") java.util.Collection<Long> productionOrderIds
+    );
+
+    /**
+     * Снимает ссылку на удаляемый заказ, оставляя номера в реестре.
+     *
+     * Второй из двух возможных исходов: раздел умеет и удалить номер
+     * (ряд нумерации освобождается), и оставить изделие, отвязав его
+     * от заказа. Выбор делает администратор, и оба варианта обязаны
+     * быть выполнимы — иначе «удалить заказ, не трогая реестр»
+     * упиралось бы во внешний ключ.
+     */
+    @Modifying(flushAutomatically = true, clearAutomatically = true)
+    @Query("""
+            update ProductSerial serial
+            set serial.issuedProductionOrder = null
+            where serial.issuedProductionOrder.id = :productionOrderId
+            """)
+    int detachProductionOrder(
+            @Param("productionOrderId") Long productionOrderId
+    );
+
+    /** Снимает номера откатываемой партии с прихода, реестр сохраняя. */
+    @Modifying(flushAutomatically = true, clearAutomatically = true)
+    @Query("""
+            update ProductSerial serial
+            set serial.receivingBatch = null
+            where serial.receivingBatch.id = :receivingBatchId
+            """)
+    int detachReceivingBatch(
+            @Param("receivingBatchId") Long receivingBatchId
+    );
+
+    /** Удаляет номера партии из реестра — ряд нумерации освобождается. */
+    @Modifying(flushAutomatically = true, clearAutomatically = true)
+    @Query("""
+            delete from ProductSerial serial
+            where serial.receivingBatch.id = :receivingBatchId
+            """)
+    int deleteAllByReceivingBatchId(
+            @Param("receivingBatchId") Long receivingBatchId
+    );
 }

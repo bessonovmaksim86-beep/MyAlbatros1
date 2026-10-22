@@ -1,6 +1,7 @@
 package ru.company.production.repository;
 
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
@@ -77,6 +78,23 @@ public interface RepairKittingItemRepository
             where item.productionOrder.id = :productionOrderId
             """)
     List<String> findFullNumbersByOrderId(
+            @Param("productionOrderId") Long productionOrderId
+    );
+
+    /**
+     * Удаляет перечень комплектования ремонтного заказа.
+     *
+     * Ключ заказа стоит с ON DELETE CASCADE (V52); запрос нужен
+     * разделу «Очистка данных», чтобы состав ушёл до удаления самого
+     * заказа — пакетные удаления идут в фиксированном порядке и не
+     * должны зависеть от того, как MySQL разберёт каскады.
+     */
+    @Modifying(flushAutomatically = true, clearAutomatically = true)
+    @Query("""
+            delete from RepairKittingItem item
+            where item.productionOrder.id = :productionOrderId
+            """)
+    int deleteAllByOrderId(
             @Param("productionOrderId") Long productionOrderId
     );
 }

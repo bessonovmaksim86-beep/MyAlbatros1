@@ -1,0 +1,450 @@
+<!DOCTYPE html>
+<html lang="ru"
+      xmlns:th="http://www.thymeleaf.org">
+
+<head>
+    <meta charset="UTF-8">
+
+    <meta name="viewport"
+          content="width=device-width, initial-scale=1">
+
+    <title>Очистка данных</title>
+
+    <link rel="stylesheet"
+          th:href="@{/technology/css/technology.css}">
+
+    <link rel="stylesheet"
+          th:href="@{/technology/css/common.css}">
+
+    <link rel="stylesheet"
+          th:href="@{/admin/css/admin.css}">
+</head>
+
+<body>
+
+<div class="app-shell">
+
+    <aside th:replace="~{admin/fragments/layout
+            :: sidebar('cleanup')}">
+    </aside>
+
+    <main class="main">
+
+        <header th:replace="~{admin/fragments/layout
+                :: topbar}">
+        </header>
+
+        <div class="page-content admin-page">
+
+            <div class="page-head">
+
+                <div>
+
+                    <h1>Очистка данных</h1>
+
+                    <p>
+                        Записи удаляются из базы физически: ни один раздел
+                        их больше не покажет, и отменить действие нельзя.
+                        Поэтому сначала предпросмотр — он показывает, что
+                        уйдёт вместе с записью, и только после него
+                        появляется кнопка выполнения.
+                    </p>
+                </div>
+
+                <span class="badge"
+                      th:text="${'Удалений в журнале: ' + deletionCount}">
+                    Удалений в журнале: 4
+                </span>
+            </div>
+
+            <div class="alert success"
+                 th:if="${successMessage}"
+                 th:text="${successMessage}">
+            </div>
+
+            <div class="alert danger"
+                 th:if="${errorMessage}"
+                 th:text="${errorMessage}">
+            </div>
+
+            <div class="alert danger admin-cleanup-notice">
+                Удаляют ошибочно проведённые записи: выпуск, заведённый
+                дважды, приход, проведённый не по тому классификатору. Всё
+                остальное снимается со работы своими разделами — заказ
+                покупателя снимает диспетчер, складскую позицию — склад.
+            </div>
+
+            <!-- ============ ПОИСК ============ -->
+            <section class="card gap">
+
+                <div class="card-head">
+
+                    <div>
+
+                        <h2>Найти запись</h2>
+
+                        <p>
+                            Заказ — по номеру (ЗП-2026-014, ЗНП-2026-007),
+                            партия прихода — по приходному ордеру или
+                            поставщику. Пустая строка даёт последние записи.
+                        </p>
+                    </div>
+                </div>
+
+                <div class="card-body">
+
+                    <form class="admin-cleanup-search"
+                          th:action="@{/admin/cleanup}"
+                          method="get">
+
+                        <div class="field">
+
+                            <label for="query">Номер, изделие или поставщик</label>
+
+                            <input id="query"
+                                   type="text"
+                                   name="query"
+                                   autocomplete="off"
+                                   placeholder="ЗП-2026, ордер 114, Альфа"
+                                   th:value="${query}">
+                        </div>
+
+                        <div class="form-actions">
+
+                            <button type="submit" class="btn primary">
+                                Найти
+                            </button>
+
+                            <a class="btn secondary"
+                               th:if="${query != null and !#strings.isEmpty(query)}"
+                               th:href="@{/admin/cleanup}">
+                                Сбросить
+                            </a>
+                        </div>
+                    </form>
+
+                </div>
+
+            </section>
+
+            <!-- ============ ЗАКАЗЫ ============ -->
+            <section class="card gap">
+
+                <div class="card-head">
+
+                    <div>
+
+                        <h2>Заказы на производство</h2>
+
+                        <p>
+                            Выпуск (ЗП) удаляется вместе со вложенными
+                            заказами-комплектующими: ключ родителя висит на
+                            них с ограничением, и оставить их нельзя.
+                            Ячейки из состава при этом возвращаются на склад.
+                        </p>
+                    </div>
+
+                    <span class="badge"
+                          th:text="${#lists.size(orders) + ' найд.'}">
+                        6 найд.
+                    </span>
+                </div>
+
+                <div class="card-body">
+
+                    <p class="empty-inline"
+                       th:if="${#lists.isEmpty(orders)}">
+                        Ничего не найдено — уточните номер заказа.
+                    </p>
+
+                    <div class="table-wrap"
+                         th:unless="${#lists.isEmpty(orders)}">
+
+                        <table>
+                            <thead>
+                            <tr>
+                                <th>Номер</th>
+                                <th>Уровень</th>
+                                <th>Статус</th>
+                                <th>Изделие</th>
+                                <th>План</th>
+                                <th>Срок</th>
+                                <th></th>
+                            </tr>
+                            </thead>
+
+                            <tbody>
+                            <tr th:each="order : ${orders}">
+
+                                <td>
+                                    <strong th:text="${order.number}">
+                                        ЗП-2026-014
+                                    </strong>
+
+                                    <small class="field-hint"
+                                           th:if="${order.parentOrderNumber != '—'}"
+                                           th:text="'внутри ' + ${order.parentOrderNumber}">
+                                        внутри ЗП-2026-012
+                                    </small>
+                                </td>
+
+                                <td th:text="${order.levelDisplayName}">
+                                    Выпуск
+                                </td>
+
+                                <td>
+                                    <span class="badge"
+                                          th:classappend="' ' + ${order.statusBadgeClass}"
+                                          th:text="${order.statusDisplayName}">
+                                        В работе
+                                    </span>
+                                </td>
+
+                                <td th:text="${order.productTypeName}">
+                                    Датчик ДУУ2М
+                                </td>
+
+                                <td th:text="${order.formattedQuantity}">
+                                    12 шт.
+                                </td>
+
+                                <td th:text="${order.formattedDueDate}">
+                                    30.10.2026
+                                </td>
+
+                                <td>
+                                    <a class="btn danger compact"
+                                       th:href="@{/admin/cleanup/preview/order/{id}(id=${order.id})}"
+                                       title="Показать, что будет удалено">
+
+                                        Очистить
+                                    </a>
+                                </td>
+                            </tr>
+                            </tbody>
+                        </table>
+                    </div>
+
+                </div>
+
+            </section>
+
+            <!-- ============ ПАРТИИ ПРИХОДА ============ -->
+            <section class="card gap">
+
+                <div class="card-head">
+
+                    <div>
+
+                        <h2>Партии оприходования</h2>
+
+                        <p>
+                            Откат возвращает приход в черновик и освобождает
+                            ряд нумерации — приход можно провести заново.
+                            Сама заявка прихода удаляют отдельно.
+                        </p>
+                    </div>
+
+                    <span class="badge"
+                          th:text="${#lists.size(batches) + ' найд.'}">
+                        3 найд.
+                    </span>
+                </div>
+
+                <div class="card-body">
+
+                    <p class="empty-inline"
+                       th:if="${#lists.isEmpty(batches)}">
+                        Приходных ордеров по этому запросу нет.
+                    </p>
+
+                    <div class="table-wrap"
+                         th:unless="${#lists.isEmpty(batches)}">
+
+                        <table>
+                            <thead>
+                            <tr>
+                                <th>Ордер</th>
+                                <th>Поставщик</th>
+                                <th>Ячейки</th>
+                                <th>Ряд номеров</th>
+                                <th>Статус</th>
+                                <th>Этикетки</th>
+                                <th></th>
+                            </tr>
+                            </thead>
+
+                            <tbody>
+                            <tr th:each="batch : ${batches}">
+
+                                <td>
+                                    <strong th:text="${batch.incomingOrderNumber}">
+                                        114
+                                    </strong>
+
+                                    <small class="field-hint"
+                                           th:text="'изм. ' + ${batch.changeNumber}">
+                                        изм. 1
+                                    </small>
+                                </td>
+
+                                <td th:text="${batch.supplierName}">
+                                    Альфа
+                                </td>
+
+                                <td th:text="${batch.cellLabel}">
+                                    Ячейка 121200022
+                                </td>
+
+                                <td th:text="${batch.numberRangeLabel}">
+                                    121200022 — 121200043
+                                </td>
+
+                                <td>
+                                    <span class="badge"
+                                          th:classappend="' ' + ${batch.statusBadgeClass}"
+                                          th:text="${batch.statusLabel}">
+                                        Оприходовано
+                                    </span>
+                                </td>
+
+                                <td>
+                                    <span th:if="${batch.qrPrinted}"
+                                          class="admin-cleanup-printed"
+                                          th:text="'напечатаны ' + ${batch.formattedQrPrintedAt}">
+                                        напечатаны 12.10.2026 09:40
+                                    </span>
+
+                                    <span th:unless="${batch.qrPrinted}"
+                                          class="empty-inline">
+                                        не печатались
+                                    </span>
+                                </td>
+
+                                <td>
+                                    <a class="btn danger compact"
+                                       th:href="@{/admin/cleanup/preview/batch/{id}(id=${batch.id})}"
+                                       title="Показать, что даст откат">
+
+                                        Откатить
+                                    </a>
+                                </td>
+                            </tr>
+                            </tbody>
+                        </table>
+                    </div>
+
+                </div>
+
+            </section>
+
+            <!-- ============ ЖУРНАЛ ============ -->
+            <section class="card">
+
+                <div class="card-head">
+
+                    <div>
+
+                        <h2>Журнал удалений</h2>
+
+                        <p>
+                            Кто, когда и что удалил, с развёрткой удалённого
+                            состава. Записи журнала не удаляются: ссылки на
+                            стёртую запись в них нет, поэтому журнал
+                            переживает само удаление.
+                        </p>
+                    </div>
+                </div>
+
+                <div class="card-body">
+
+                    <p class="empty-inline"
+                       th:if="${#lists.isEmpty(deletions)}">
+                       Физических удалений ещё не выполнялось.
+                    </p>
+
+                    <div class="table-wrap"
+                         th:unless="${#lists.isEmpty(deletions)}">
+
+                        <table>
+                            <thead>
+                            <tr>
+                                <th>Когда</th>
+                                <th>Запись</th>
+                                <th>Действие</th>
+                                <th>Что ушло</th>
+                                <th>Кто</th>
+                            </tr>
+                            </thead>
+
+                            <tbody>
+                            <tr th:each="item : ${deletions}">
+
+                                <td>
+                                    <span th:text="${item.formattedPerformedAt}">
+                                        22.10.2026 14:05
+                                    </span>
+
+                                    <small class="field-hint"
+                                           th:if="${item.targetId != null}"
+                                           th:text="'id ' + ${item.targetId}">
+                                        id 57
+                                    </small>
+                                </td>
+
+                                <td th:text="${item.targetLabelView}">
+                                    Заказ на производство · ЗП-2026-014
+                                </td>
+
+                                <td th:text="${item.action.displayName}">
+                                    Жёсткое удаление
+                                </td>
+
+                                <td>
+                                    <span th:text="${item.affectedCounts}">
+                                        Позиции выпуска: 3; Строки графика: 6
+                                    </span>
+
+                                    <small class="field-hint"
+                                           th:if="${!#strings.isEmpty(item.note)}"
+                                           th:text="${item.note}">
+                                        задвоили выпуск при переносе срока
+                                    </small>
+                                </td>
+
+                                <td>
+                                    <span th:text="${item.actorName}">
+                                        Иванов И. И.
+                                    </span>
+
+                                    <!--
+                                        Отметка подмены: удаление выполнено из
+                                        интерфейса другой роли, и отвечает за
+                                        него администратор, давший себе такие
+                                        права, а не сотрудник за этим экраном.
+                                    -->
+                                    <small class="field-hint"
+                                           th:if="${!#strings.isEmpty(item.impersonatedBy)}"
+                                           th:text="'из чужой роли: ' + ${item.impersonatedBy}">
+                                        из чужой роли: admin
+                                    </small>
+                                </td>
+                            </tr>
+                            </tbody>
+                        </table>
+                    </div>
+
+                </div>
+
+            </section>
+
+        </div>
+    </main>
+</div>
+
+<th:block th:replace="~{admin/fragments/layout
+        :: commonScripts}">
+</th:block>
+
+</body>
+</html>

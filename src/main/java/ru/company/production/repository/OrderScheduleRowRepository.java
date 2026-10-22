@@ -1805,4 +1805,43 @@ public interface OrderScheduleRowRepository
             @Param("today") LocalDate today,
             @Param("unitIds") java.util.Collection<Long> unitIds
     );
+
+    /*
+     * ============================================================
+     * Жёсткое удаление заказа (раздел «Очистка данных»)
+     * ============================================================
+     */
+
+    /**
+     * Все строки графика заказа, включая закрытые — количество и
+     * состав для предпросмотра.
+     *
+     * Закрытая строка (completed_at) — факт, и при отмене заказа её
+     * не трогают; здесь же удаляется заказ целиком, а ключ
+     * production_order_id стоит с ON DELETE CASCADE (V56): строки
+     * уйдут за заказом в любом случае, и предпросмотр обязан показать
+     * их честно, включая закрытые.
+     */
+    long countByProductionOrder_Id(Long productionOrderId);
+
+    /** Удаляет все строки графика заказа, включая закрытые. */
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("""
+            delete from OrderScheduleRow row
+            where row.productionOrder.id = :productionOrderId
+            """)
+    int deleteAllByProductionOrderId(
+            @Param("productionOrderId") Long productionOrderId
+    );
+
+    /** Закрытые строки заказа — количество для предупреждения. */
+    @Query("""
+            select count(row)
+            from OrderScheduleRow row
+            where row.productionOrder.id = :productionOrderId
+              and row.completedAt is not null
+            """)
+    long countCompletedByProductionOrderId(
+            @Param("productionOrderId") Long productionOrderId
+    );
 }

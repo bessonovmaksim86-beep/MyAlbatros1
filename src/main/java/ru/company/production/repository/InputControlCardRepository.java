@@ -135,4 +135,29 @@ public interface InputControlCardRepository
 
     /** Партий, взятых в работу: счётчик в боковом меню. */
     long countByStatus(InputControlStatus status);
+
+    /*
+     * ============================================================
+     * Жёсткое удаление партии (раздел «Очистка данных»)
+     * ============================================================
+     */
+
+    /**
+     * Все карточки партии без ограничения статуса.
+     *
+     * Разделу нужны и закрытые карточки: ключ batch_id стоит с
+     * RESTRICT (V29), и незакрытая проверка БВК так же удерживает
+     * партию от удаления, как и проведённая.
+     */
+    @Query("""
+            select card
+            from InputControlCard card
+            where card.batch.id = :batchId
+            order by card.startedAt asc, card.id asc
+            """)
+    List<InputControlCard> findAllByBatchId(
+            @Param("batchId") Long batchId
+    );
+
+    long countByBatch_Id(Long batchId);
 }

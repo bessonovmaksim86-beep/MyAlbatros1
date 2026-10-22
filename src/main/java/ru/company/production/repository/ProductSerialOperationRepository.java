@@ -359,4 +359,98 @@ public interface ProductSerialOperationRepository
     int deletePlannedByCustomerOrderId(
             @Param("customerOrderId") Long customerOrderId
     );
+
+    /*
+     * ============================================================
+     * Жёсткое удаление заказа (раздел «Очистка данных»)
+     * ============================================================
+     */
+
+    /**
+     * Плановые строки маршрута заказа — количество для предпросмотра.
+     *
+     * Считается отдельно от проведённых: на экране предпросмотра это
+     * две разные группы с разной ценой удаления, и сведение их в одну
+     * цифру лишило бы администратора возможности удалить план, оставив
+     * отметки цеха о сделанной работе.
+     */
+    @Query("""
+            select count(op)
+            from ProductSerialOperation op
+            where op.productionOrder.id = :productionOrderId
+              and op.actualDate is null
+            """)
+    long countPlannedByProductionOrderId(
+            @Param("productionOrderId") Long productionOrderId
+    );
+
+    /** Проведённые фактом строки маршрута заказа — количество. */
+    @Query("""
+            select count(op)
+            from ProductSerialOperation op
+            where op.productionOrder.id = :productionOrderId
+              and op.actualDate is not null
+            """)
+    long countPerformedByProductionOrderId(
+            @Param("productionOrderId") Long productionOrderId
+    );
+
+    /**
+     * Наименования операций проведённых строк — подписка предупреждения.
+     *
+     * Отказ обязан назвать, какие именно работы уже закрыты фактом,
+     * иначе «есть проведённые операции» выглядело бы как отказ без
+     * причины. Distinct: одну операцию проходят десятки экземпляров.
+     */
+    @Query("""
+            select distinct name.name
+            from ProductSerialOperation op
+            join op.operation operation
+            join operation.operationName name
+            where op.productionOrder.id = :productionOrderId
+              and op.actualDate is not null
+            order by name.name asc
+            """)
+    List<String> findPerformedOperationNamesByProductionOrderId(
+            @Param("productionOrderId") Long productionOrderId
+    );
+
+    /**
+     * Удаляет ВСЕ строки маршрута заказа, включая проведённые фактом.
+     *
+     * Отдельный запрос, а не снятие условия {@code actual_date is null}
+     * из {@link #deletePlannedByProductionOrderId}: тот задуман как
+     * безопасный — его можно применить к любому заказу, и факты он не
+     * тронет даже по ошибке. Здесь же удаление фактов осознанное, и
+     * проверка «администратор подтвердил удаление проведённых операций»
+     * живёт в сервисе, а не в запросе.
+     */
+    @Modifying(
+            flushAutomatically = true,
+            clearAutomatically = true
+    )
+    @Query("""
+            delete from ProductSerialOperation op
+            where op.productionOrder.id = :productionOrderId
+            """)
+    int deleteAllByProductionOrderId(
+            @Param("productionOrderId") Long productionOrderId
+    );
+
+    /**
+     * Операций по удаляемым изделиям — количество для предупреждения.
+     *
+     * Нужна проверке отката прихода: строка маршрута на номере
+     * означает, что изделие уже прошло хотя бы одну операцию цеха, и
+     * убрать такой номер из реестра значит оставить операцию без
+     * изделия (её ключ висит на реестре с ON DELETE CASCADE, V19).
+     */
+    @Query("""
+            select count(op)
+            from ProductSerialOperation op
+            where op.serial.id in :serialIds
+            """)
+    long countBySerialIdIn(
+            @Param("serialIds") java.util.Collection<Long> serialIds
+    );
 }

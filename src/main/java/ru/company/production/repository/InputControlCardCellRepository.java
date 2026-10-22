@@ -107,4 +107,20 @@ public interface InputControlCardCellRepository
     List<InputControlCardCell> findDefectsByCardIds(
             @Param("cardIds") java.util.Collection<Long> cardIds
     );
+
+    /**
+     * Удаляет перечень ячеек сразу всех карточек партии.
+     *
+     * Нужен разделу «Очистка данных»: ключ card_id ссылается на
+     * карточку с RESTRICT (V29), поэтому строки обязаны уйти раньше
+     * самих карточек — каскада в схеме нет.
+     */
+    @Modifying(flushAutomatically = true, clearAutomatically = true)
+    @Query("""
+            delete from InputControlCardCell cell
+            where cell.card.id in :cardIds
+            """)
+    int deleteAllByCardIds(
+            @Param("cardIds") java.util.Collection<Long> cardIds
+    );
 }

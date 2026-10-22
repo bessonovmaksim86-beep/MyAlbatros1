@@ -1,6 +1,7 @@
 package ru.company.production.repository;
 
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
@@ -58,5 +59,24 @@ public interface RepairOrderItemRepository
             """)
     List<String> findNumbersInOpenOrdersByNumbers(
             @Param("numbers") Collection<String> numbers
+    );
+
+    /**
+     * Снимает ссылку на удаляемые группы брака, позиции сохраняя.
+     *
+     * Ключ defect_group_id ссылается на группу с RESTRICT (V34), и
+     * позиция ремонтного заказа удержала бы удаление карточки входного
+     * контроля всей партии. Строку при этом не удаляют: ячейка в
+     * ремонтный заказ внесена фактически, и исчезнуть из-за удаления
+     * карточки БВК она не вправе — остаётся без группы-источника.
+     */
+    @Modifying(flushAutomatically = true, clearAutomatically = true)
+    @Query("""
+            update RepairOrderItem item
+            set item.defectGroup = null
+            where item.defectGroup.id in :groupIds
+            """)
+    int detachDefectGroups(
+            @Param("groupIds") Collection<Long> groupIds
     );
 }

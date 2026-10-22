@@ -234,7 +234,7 @@ public interface InputControlDefectGroupRepository
     );
 
     /**
-     * Опция фильтра «класс/имя ячейки»: классификатор изделия,
+     * Опции фильтра «класс/имя ячейки»: классификатор изделия,
      * присутствующего в изоляторе.
      */
     interface QuarantineClassifierOption {
@@ -249,4 +249,31 @@ public interface InputControlDefectGroupRepository
 
         String getSensorName();
     }
+
+    /*
+     * ============================================================
+     * Жёсткое удаление партии (раздел «Очистка данных»)
+     * ============================================================
+     */
+
+    /** Группы брака сразу всех карточек удаляемой партии. */
+    @Query("""
+            select grp
+            from InputControlDefectGroup grp
+            where grp.card.id in :cardIds
+            order by grp.card.id asc, grp.sortOrder asc, grp.id asc
+            """)
+    List<InputControlDefectGroup> findAllByCardIds(
+            @Param("cardIds") java.util.Collection<Long> cardIds
+    );
+
+    /** Удаляет группы брака перечисленных карточек. */
+    @Modifying(flushAutomatically = true, clearAutomatically = true)
+    @Query("""
+            delete from InputControlDefectGroup grp
+            where grp.card.id in :cardIds
+            """)
+    int deleteAllByCardIds(
+            @Param("cardIds") java.util.Collection<Long> cardIds
+    );
 }

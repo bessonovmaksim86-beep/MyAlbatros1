@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html lang="ru"
+      xmlns:th="http://www.thymeleaf.org">
+
+<head>
+    <meta charset="UTF-8">
+
+    <meta name="viewport"
+          content="width=device-width, initial-scale=1">
+
+    <title>Предпросмотр удаления</title>
+
+    <link rel="stylesheet"
+          th:href="@{/technology/css/technology.css}">
+
+    <link rel="stylesheet"
+          th:href="@{/technology/css/common.css}">
+
+    <link rel="stylesheet"
+          th:href="@{/admin/css/admin.css}">
+</head>
+
+<body>
+
+<div class="app-shell">
+
+    <aside th:replace="~{admin/fragments/layout
+            :: sidebar('cleanup')}">
+    </aside>
+
+    <main class="main">
+
+        <header th:replace="~{admin/fragments/layout
+                :: topbar}">
+        </header>
+
+        <div class="page-content admin-page">
+
+            <div class="page-head">
+
+                <div>
+
+                    <h1 th:text="${preview.action.displayName}">
+                        Жёсткое удаление
+                    </h1>
+
+                    <p th:text="${
+                        preview.label
+                        + ' · ' + preview.subtitle
+                        + ' · состав: ' + preview.totalRecords() + ' стр.'
+                    }">
+                        ЗП-2026-014 · Выпуск · В работе · состав: 27 стр.
+                    </p>
+                </div>
+
+                <a class="btn secondary"
+                   th:href="@{/admin/cleanup}">
+                    К поиску
+                </a>
+            </div>
+
+            <div class="alert danger"
+                 th:if="${errorMessage}"
+                 th:text="${errorMessage}">
+            </div>
+
+            <!-- ============ ЗАПРЕТ ============ -->
+            <div class="alert danger admin-cleanup-blocked"
+                 th:if="${preview.blocked}">
+
+                <strong>Выполнить операцию нельзя.</strong>
+
+                <div th:each="warning : ${preview.blockingWarnings}">
+                    <p th:text="${warning.title}">Причина</p>
+
+                    <small th:text="${warning.detail}">
+                        Что нашлось и что с этим делать
+                    </small>
+                </div>
+            </div>
+
+            <!-- ============ ПРЕДУПРЕЖДЕНИЯ ============ -->
+            <section class="card gap"
+                     th:if="${not #lists.isEmpty(preview.attentionWarnings)}">
+
+                <div class="card-head">
+
+                    <div>
+
+                        <h2>Затрагивает чужую работу</h2>
+
+                        <p>
+                            Эти отметки поставили другие подразделения.
+                            Удаление необратимо, и ниже требуется отдельное
+                            подтверждение.
+                        </p>
+                    </div>
+                </div>
+
+                <div class="card-body">
+
+                    <ul class="admin-cleanup-warnings is-attention">
+                        <li th:each="warning : ${preview.attentionWarnings}">
+                            <strong th:text="${warning.title}">
+                                По заказу проведены фактические работы
+                            </strong>
+
+                            <span th:if="${warning.detail != null}"
+                                  th:text="${warning.detail}">
+                                Пояснение
+                            </span>
+                        </li>
+                    </ul>
+
+                </div>
+
+            </section>
+
+            <section class="card gap"
+                     th:if="${not #lists.isEmpty(preview.infoWarnings)}">
+
+                <div class="card-head">
+
+                    <div>
+
+                        <h2>Что произойдёт кроме удаления</h2>
+
+                        <p>
+                            Последствия, которые не теряют данные, но меняют
+                            работу других разделов.
+                        </p>
+                    </div>
+                </div>
+
+                <div class="card-body">
+
+                    <ul class="admin-cleanup-warnings is-info">
+                        <li th:each="warning : ${preview.infoWarnings}">
+                            <strong th:text="${warning.title}">
+                                Ячейки состава вернутся на склад
+                            </strong>
+
+                            <span th:if="${warning.detail != null}"
+                                  th:text="${warning.detail}">
+                                Пояснение
+                            </span>
+                        </li>
+                    </ul>
+
+                </div>
+
+            </section>
+
+            <!-- ============ ФОРМА ============ -->
+            <section class="card">
+
+                <div class="card-head">
+
+                    <div>
+
+                        <h2>Состав операции</h2>
+
+                        <p>
+                            Отмечено уйдёт, снятое останется. Отметить можно
+                            только то, что показано: набор зафиксирован
+                            подписью, и выполнен будет ровно он.
+                        </p>
+                    </div>
+
+                    <span class="badge"
+                          th:text="${preview.groups.size() + ' групп'}">
+                        7 групп
+                    </span>
+                </div>
+
+                <div class="card-body">
+
+                    <p class="empty-inline"
+                       th:if="${#lists.isEmpty(preview.groups)}">
+                        Кроме самой записи удалять нечего.
+                    </p>
+
+                    <form th:unless="${#lists.isEmpty(preview.groups)}"
+                          th:action="${preview.kind.name() == 'PRODUCTION_ORDER'}
+                              ? @{/admin/cleanup/order/{id}/delete(id=${preview.id})}
+                              : @{/admin/cleanup/batch/{id}/rollback(id=${preview.id})}"
+                          method="post"
+                          th:attr="data-confirm=${
+                              'Запись ' + preview.label
+                              + ' будет удалена из базы без возможности отмены.'
+                          }"
+                          onsubmit="return confirm(this.getAttribute('data-confirm'));">
+
+                        <input th:if="${_csrf != null}"
+                               type="hidden"
+                               th:name="${_csrf.parameterName}"
+                               th:value="${_csrf.token}">
+
+                        <!--
+                            Подпись показанного перечня: она подтверждает, что
+                            удаляют эту запись и тот состав, что на экране.
+                            Обязательные группы приходят скрытым полем, потому
+                            что недоступный чекбокс сам ничего не отправляет.
+                        -->
+                        <input type="hidden"
+                               name="confirmationToken"
+                               th:value="${preview.confirmationToken}">
+
+                        <div class="admin-cleanup-groups">
+
+                            <div class="admin-cleanup-group"
+                                 th:each="group : ${preview.groups}"
+                                 th:with="blocked=${blockedGroups.contains(group.kind)},
+                                          mandatory=${group.kind.mandatory}">
+
+                                <!--
+                                    Обязательная группа показана отмеченной и
+                                    недоступной, но отправляется скрытым полем:
+                                    снятый с недоступного чекбокса флажок ничего
+                                    бы не передал, а её удаление обязательно.
+                                    Заблокированная группа не отправляется ничем.
+                                -->
+                                <label th:if="${blocked}">
+
+                                    <input type="checkbox" disabled>
+
+                                    <span class="admin-cleanup-group__title"
+                                          th:text="${group.kind.title}">
+                                        Серийные номера выпуска
+                                    </span>
+
+                                    <span class="admin-cleanup-group__count"
+                                          th:text="${group.count}">
+                                        24
+                                    </span>
+                                </label>
+
+                                <label th:unless="${blocked}">
+
+                                    <input type="checkbox"
+                                           name="groups"
+                                           th:value="${group.kind.name()}"
+                                           th:checked="${mandatory
+                                                        or selectedGroups.contains(group.kind)}"
+                                           th:disabled="${mandatory}">
+
+                                    <input th:if="${mandatory}"
+                                           type="hidden"
+                                           name="groups"
+                                           th:value="${group.kind.name()}">
+
+                                    <span class="admin-cleanup-group__title"
+                                          th:text="${group.kind.title}">
+                                        Серийные номера выпуска
+                                    </span>
+
+                                    <span class="admin-cleanup-group__count"
+                                          th:text="${group.count}">
+                                        24
+                                    </span>
+                                </label>
+
+                                <p class="admin-cleanup-group__note is-blocked"
+                                   th:if="${blocked}"
+                                   th:text="${preview.blockerFor(group.kind).title
+                                             + ' — '
+                                             + preview.blockerFor(group.kind).detail}">
+                                    Нельзя удалить: номера уже в комплектовании
+                                </p>
+
+                                <p class="admin-cleanup-group__note"
+                                   th:unless="${blocked}"
+                                   th:text="${group.kind.description}">
+                                    Строки, выданные этим заказом
+                                </p>
+
+                                <p class="admin-cleanup-group__samples"
+                                   th:if="${not #strings.isEmpty(group.sampleLabel)}"
+                                   th:text="${group.sampleLabel}">
+                                    121200022, 121200023, … и ещё 21
+                                </p>
+
+                                <p class="admin-cleanup-group__note is-mandatory"
+                                   th:if="${mandatory and !blocked}">
+                                    Снять нельзя: без этой группы удаление
+                                    упрётся во внешний ключ
+                                </p>
+                            </div>
+                        </div>
+
+                        <!-- ============ ПОДТВЕРЖДЕНИЕ ============ -->
+                        <div class="admin-cleanup-confirm"
+                             th:if="${!preview.blocked}">
+
+                            <div class="field"
+                                 th:if="${preview.requiresConfirmation()}">
+
+                                <label class="admin-cleanup-ack">
+
+                                    <input type="checkbox"
+                                           name="confirmed"
+                                           value="true"
+                                           required>
+
+                                    <span>
+                                        Понимаю, что удаляю отметки других
+                                        подразделений, и отменить это нельзя
+                                    </span>
+                                </label>
+                            </div>
+
+                            <div class="field">
+
+                                <label for="note">Причина удаления</label>
+
+                                <textarea id="note"
+                                          name="note"
+                                          rows="2"
+                                          maxlength="500"
+                                          placeholder="Например: выпуск проведён дважды при переносе срока">
+                                </textarea>
+
+                                <small class="field-hint">
+                                    Попадет в журнал — по нему разбирают
+                                    претензии после удаления
+                                </small>
+                            </div>
+
+                            <div class="form-actions">
+
+                                <button type="submit" class="btn danger">
+                                    <span th:if="${preview.action.name() == 'HARD_DELETE'}">
+                                        Удалить безвозвратно
+                                    </span>
+
+                                    <span th:unless="${preview.action.name() == 'HARD_DELETE'}">
+                                        Откатить оприходование
+                                    </span>
+                                </button>
+
+                                <a class="btn secondary"
+                                   th:href="@{/admin/cleanup}">
+                                    Отмена
+                                </a>
+                            </div>
+                        </div>
+
+                    </form>
+
+                    <div class="form-actions"
+                         th:if="${preview.blocked}">
+
+                        <a class="btn secondary"
+                           th:href="@{/admin/cleanup}">
+                            К поиску
+                        </a>
+                    </div>
+
+                </div>
+
+            </section>
+
+        </div>
+    </main>
+</div>
+
+<th:block th:replace="~{admin/fragments/layout
+        :: commonScripts}">
+</th:block>
+
+</body>
+</html>

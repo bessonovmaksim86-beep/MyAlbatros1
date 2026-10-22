@@ -1,7 +1,9 @@
 package ru.company.production.repository;
 
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 import ru.company.production.entity.QuarantineTransfer;
 
@@ -71,4 +73,48 @@ public interface QuarantineTransferRepository
             where transfer.accepted = false
             """)
     List<String> findPendingFullNumbers();
+
+    /*
+     * ============================================================
+     * Жёсткое удаление партии (раздел «Очистка данных»)
+     * ============================================================
+     */
+
+    /**
+     * Перемещения, оформленные на откатываемую партию.
+     *
+     * Колонка receiving_batch_id ссылается на партию с RESTRICT (V63),
+     * поэтому строку либо отвязывают, либо удаляют — третьего вариант
+     * база не даёт. Отвязка сохранила бы в изоляторе ссылку на приход,
+     * которого больше нет, и раздел показывает эти строки отдельной
+     * группой, а не молча снимает отметку.
+     */
+    @Query("""
+            select transfer
+            from QuarantineTransfer transfer
+            where transfer.receivingBatch.id = :batchId
+            order by transfer.transferredAt asc, transfer.id asc
+            """)
+    List<QuarantineTransfer> findByBatchId(
+            @Param("batchId") Long batchId
+    );
+
+    long countByReceivingBatch_Id(Long batchId);
+
+    /** Снимает ссылку на партию, строку перемещения сохраняя. */
+    @Modifying(flushAutomatically = true, clearAutomatically = true)
+    @Query("""
+            update QuarantineTransfer transfer
+            set transfer.receivingBatch = null
+            where transfer.receivingBatch.id = :batchId
+            """)
+    int detachBatch(@Param("batchId") Long batchId);
+
+    /** Удаляет перемещения, оформленные на удаляемую партию. */
+    @Modifying(flushAutomatically = true, clearAutomatically = true)
+    @Query("""
+            delete from QuarantineTransfer transfer
+            where transfer.receivingBatch.id = :batchId
+            """)
+    int deleteByBatchId(@Param("batchId") Long batchId);
 }
