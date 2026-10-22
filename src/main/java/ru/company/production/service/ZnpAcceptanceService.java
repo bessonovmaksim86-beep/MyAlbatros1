@@ -150,7 +150,17 @@ public class ZnpAcceptanceService {
                 .toList();
 
         serialRepository.markAcceptedByIds(ids, moment, receiver);
+
+        /*
+         * Приёмка по заказу-комплектующему переводит позицию в готовую
+         * ячейку (V75): принятое после БВК изделие лежит на складе
+         * подсборкой, а состав заказа принимается уже ячейкой. Без
+         * второй отметки реестр наличия показал бы её подсборкой, и её
+         * нельзя было бы взять в комплектование.
+         */
+        serialRepository.markCellReadyByIds(ids, moment, receiver);
         journal.recordAccepted(serials, receiver, moment);
+        journal.recordCellReady(serials, receiver, moment);
         closeKittingOperations(orderId, Set.copyOf(ids), receiver, moment);
 
         return InputControlResult.accepted(

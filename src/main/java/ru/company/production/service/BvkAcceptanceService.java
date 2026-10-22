@@ -259,13 +259,36 @@ public class BvkAcceptanceService {
             );
         }
 
+        /*
+         * Принимаем: accepted_at = «лежит на складе», cell_ready_at =
+         * «готовая ячейка». Без галочки ставим только accepted_at —
+         * позиция остаётся подсборкой. С галочкой — ставим обе отметки,
+         * позиция сразу выходит в комплектование и отчёты.
+         */
+        LocalDateTime cellReadyMoment = form.isCellReady() ? moment : null;
+
         serialRepository.markAcceptedByIds(ids, moment, receiver);
+
+        if (cellReadyMoment != null) {
+            serialRepository.markCellReadyByIds(ids, cellReadyMoment, receiver);
+        }
 
         batch.setAcceptedAt(moment);
         batch.setAcceptedBy(receiver);
         batch.setAcceptedQuantity(ids.size());
+
+        if (form.isCellReady()) {
+            batch.setCellReadyAt(cellReadyMoment);
+            batch.setCellReadyBy(receiver);
+        }
+
         batchRepository.save(batch);
+
         journal.recordAccepted(acceptedSerials, receiver, moment);
+
+        if (cellReadyMoment != null) {
+            journal.recordCellReady(acceptedSerials, receiver, cellReadyMoment);
+        }
         int defects = (int) batchNumbers.stream()
                 .filter(defectNumbers::contains)
                 .count();

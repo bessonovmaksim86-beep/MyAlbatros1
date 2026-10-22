@@ -77,7 +77,7 @@ public class PendingDefectService {
             classifier = serial.getProductClassifier();
             batch = serial.getReceivingBatch();
             serialStatus = serial.getStatus();
-            cellKind = QuarantineCellKind.ofAccepted(serial.isAccepted());
+            cellKind = QuarantineCellKind.ofCellReady(serial.isCellReady());
             location = computeLocationFromSerial(serial);
         } else {
             // Номер вне реестра — смотрим журнал

@@ -551,10 +551,11 @@ public interface ProductSerialRepository
      * Свободный остаток склада полуфабрикатов — список для
      * комплектования подсборок.
      *
-     * Ячейка считается лежащей на складе, когда отмечена приёмкой
-     * (acceptedAt IS NOT NULL) и ещё не оформлена ни в один заказ.
-     * Эти номера кладовщик вводит в ЗНП: склад подтверждает, что нужные
-     * подсборки физически лежат на полках и готовы к выдаче.
+     * Ячейка считается лежащей на складе и готовой к использованию,
+     * когда отмечена приёмкой (acceptedAt IS NOT NULL) И готовой
+     * ячейкой (cellReadyAt IS NOT NULL) — миграция V75 разделяет
+     * «лежит на складе» и «готовая ячейка». Без cellReadyAt позиция
+     * остаётся подсборкой, и её нельзя использовать в комплектовании.
      *
      * NOT EXISTS по матрице комплектования (V20) обязателен: внесённая
      * в ЗНП ячейка проведена в производство и с полок снята, поэтому
@@ -580,6 +581,7 @@ public interface ProductSerialRepository
             left join fetch serial.productClassifier classifier
             left join fetch classifier.sensorCatalog
             where serial.acceptedAt is not null
+              and serial.cellReadyAt is not null
               and not exists (
                     select 1
                     from SerialProductionOrder link
@@ -593,13 +595,14 @@ public interface ProductSerialRepository
     List<ProductSerial> findFreeOnWarehouse();
 
     /**
-     * Подсборки, дошедшие до склада и ещё не принятые: перечень для
-     * приёмки группового ЗНП «из подсборок» (V72).
+     * Подсборки, дошедшие до склада и ещё не ставшие ячейками:
+     * перечень для приёмки группового ЗНП «из подсборок» (V72).
      *
-     * Подсборка отличается от ячейки отсутствием отметки приёмки
-     * (см. QuarantineCellKind#ofAccepted): она уже лежит на складе, но
-     * склад её ещё не принимал, и приёмка по заказу — тот самый шаг,
-     * который переводит её в статус ячейки.
+     * Граница V75 — отметка готовности (cellReadyAt IS NULL): позиция
+     * остаётся подсборкой, пока склад не отметил её готовой ячейкой,
+     * и приёмка по заказу — тот самый шаг, который переводит её в
+     * статус ячейки. В перечень попадают и непринятые после БВК
+     * (acceptedAt пуст), и принятые без галочки готовности.
      *
      * NOT EXISTS по матрице комплектования (V20) обязателен: подсборку,
      * внесённую в другой заказ, принять вторично нельзя, иначе один
@@ -615,7 +618,7 @@ public interface ProductSerialRepository
             left join fetch serial.receivingBatch
             where serial.productType =
                   ru.company.production.entity.ProductType.CELL
-              and serial.acceptedAt is null
+              and serial.cellReadyAt is null
               and not exists (
                     select 1
                     from SerialProductionOrder link
@@ -645,6 +648,30 @@ public interface ProductSerialRepository
             where serial.id in :ids
             """)
     int markAcceptedByIds(
+            @Param("ids") java.util.Collection<Long> ids,
+            @Param("moment") java.time.LocalDateTime moment,
+            @Param("receiver") AppUser receiver
+    );
+
+    /**
+     * Отметить позиции готовыми ячейками (V75).
+     *
+     * Принятые позиции (accepted_at) остаются подсборками, пока
+     * кладовщик не подтвердит их готовность. Эта отметка ставит
+     * cell_ready_at и cell_ready_by, переводя позицию в статус
+     * «готовая ячейка» — выход в комплектование, изолятор и отчёты.
+     */
+    @Modifying(
+            flushAutomatically = true,
+            clearAutomatically = true
+    )
+    @Query("""
+            update ProductSerial serial
+            set serial.cellReadyAt = :moment,
+                serial.cellReadyBy = :receiver
+            where serial.id in :ids
+            """)
+    int markCellReadyByIds(
             @Param("ids") java.util.Collection<Long> ids,
             @Param("moment") java.time.LocalDateTime moment,
             @Param("receiver") AppUser receiver
@@ -822,7 +849,9 @@ public interface ProductSerialRepository
                 batch.quantity             as batchQuantity,
                 batch.confirmedAt          as confirmedAt,
                 batch.acceptedAt           as batchAcceptedAt,
+                batch.cellReadyAt          as batchCellReadyAt,
                 serial.acceptedAt          as acceptedAt,
+                serial.cellReadyAt         as cellReadyAt,
                 serial.issuedAt            as issuedAt,
                 coalesce(
                     serial.acceptedAt,
@@ -837,8 +866,8 @@ public interface ProductSerialRepository
             where serial.productType =
                   ru.company.production.entity.ProductType.CELL
               and (:kind is null
-                   or (:kind = 'CELL' and serial.acceptedAt is not null)
-                   or (:kind = 'SUBASSEMBLY' and serial.acceptedAt is null))
+                   or (:kind = 'CELL' and serial.cellReadyAt is not null)
+                   or (:kind = 'SUBASSEMBLY' and serial.cellReadyAt is null))
               and (:classifierId is null or classifier.id = :classifierId)
               and (:supplierKey is null
                    or lower(trim(batch.supplierName)) = :supplierKey)
@@ -947,7 +976,11 @@ public interface ProductSerialRepository
 
         java.time.LocalDateTime getBatchAcceptedAt();
 
+        java.time.LocalDateTime getBatchCellReadyAt();
+
         java.time.LocalDateTime getAcceptedAt();
+
+        java.time.LocalDateTime getCellReadyAt();
 
         java.time.LocalDateTime getIssuedAt();
 

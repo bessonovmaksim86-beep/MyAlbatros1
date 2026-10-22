@@ -763,8 +763,8 @@ public class QualityService {
 
     private QuarantineCellKind kindOf(InputControlDefectGroup group) {
         CellReceivingBatch batch = group.getCard().getBatch();
-        return QuarantineCellKind.ofAccepted(
-                batch != null && batch.getAcceptedAt() != null
+        return QuarantineCellKind.ofCellReady(
+                batch != null && batch.getCellReadyAt() != null
         );
     }
 

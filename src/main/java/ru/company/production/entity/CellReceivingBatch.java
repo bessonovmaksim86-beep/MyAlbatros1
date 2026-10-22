@@ -114,6 +114,27 @@ public class CellReceivingBatch {
     @Column(name = "accepted_quantity")
     private Integer acceptedQuantity;
 
+    /*
+     * Отметка «партия принята как готовые ячейки» (V75).
+     *
+     * Приёмка после БВК кладёт партию на склад, но позицию она даёт
+     * подсборкой: ячейкой она становится по галочке «отметить как
+     * готовые ячейки». Отметка держится и на партии, и на каждой
+     * ячейке: перечни изолятора и брака фильтруют партии, а не строки
+     * реестра (см. InputControlService.DefectRecordView#getKind).
+     */
+    @Column(name = "cell_ready_at")
+    private LocalDateTime cellReadyAt;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(
+            name = "cell_ready_by",
+            foreignKey = @ForeignKey(
+                    name = "fk_cell_receiving_cell_ready_by"
+            )
+    )
+    private AppUser cellReadyBy;
+
     @Column(name = "qr_printed_at")
     private LocalDateTime qrPrintedAt;
 
@@ -143,6 +164,12 @@ public class CellReceivingBatch {
     @Transient
     public boolean isAccepted() {
         return acceptedAt != null;
+    }
+
+    /** Партию приняли как готовые ячейки (V75). */
+    @Transient
+    public boolean isCellReady() {
+        return cellReadyAt != null;
     }
 
     /** Номера переданы в программу печати. */
@@ -267,6 +294,12 @@ public class CellReceivingBatch {
     @Transient
     public String getFormattedAcceptedAt() {
         return formatDateTime(acceptedAt);
+    }
+
+    /** Момент, когда партию приняли как готовые ячейки (V75). */
+    @Transient
+    public String getFormattedCellReadyAt() {
+        return formatDateTime(cellReadyAt);
     }
 
     /** Автор прихода — в журнал выводится фамилия, а не логин. */

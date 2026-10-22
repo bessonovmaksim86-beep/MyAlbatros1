@@ -183,9 +183,8 @@ public interface InputControlDefectGroupRepository
      *
      * Отличие от {@link #findQuarantineGroupsDetailed()} — отбор:
      * разновидность изделия, классификатор и причина брака. Разновидность
-     * выводят из приёмки складом (см. {@link QuarantineCellKind}), а не
-     * из типа классификатора, поэтому условие построено по
-     * {@code batch.acceptedAt}.
+     * выводят из отметки готовности ячейки (V75), а не из приёмки
+     * партии, поэтому условие построено по {@code batch.cellReadyAt}.
      *
      * Причина задаётся поддеревом: выбранный тип верхнего уровня
      * захватывает и его уточнения, иначе фильтр по типу «Механическое
@@ -208,8 +207,8 @@ public interface InputControlDefectGroupRepository
               and card.status =
                   ru.company.production.entity.InputControlStatus.COMPLETED
               and (:kind is null
-                   or (:kind = 'CELL' and batch.acceptedAt is not null)
-                   or (:kind = 'SUBASSEMBLY' and batch.acceptedAt is null))
+                   or (:kind = 'CELL' and batch.cellReadyAt is not null)
+                   or (:kind = 'SUBASSEMBLY' and batch.cellReadyAt is null))
               and (:classifierId is null
                    or batch.cellClassifier.id = :classifierId)
               and (

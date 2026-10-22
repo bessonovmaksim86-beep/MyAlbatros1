@@ -198,6 +198,35 @@ public class ProductSerial {
     )
     private AppUser acceptedBy;
 
+    /*
+     * Момент, когда позиция превратилась в готовую ячейку.
+     *
+     * accepted_at означает «лежит на складе»: кладовщик принял партию
+     * после БВК (или внёс в ЗНП V72), и позиция физически на полках.
+     * Но до cell_ready_at позиция остаётся «подсборкой» — её нельзя
+     * использовать в комплектовании, изоляторе и отчётах как ячейку.
+     *
+     * cell_ready_at ставится галочкой «отметить как готовые ячейки»
+     * в «Приёмке с БВК» или автоматически при приёмке в «Комплектовании
+     * подсборок» (V72). При обратном вызове ячейки на брак поле
+     * остаётся: отметка готовности — исторический факт, а не текущий
+     * статус.
+     *
+     * Обратная совместимость V75: все принятые после БВК до миграции
+     * получают cell_ready_at = accepted_at.
+     */
+    @Column(name = "cell_ready_at")
+    private LocalDateTime cellReadyAt;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(
+            name = "cell_ready_by",
+            foreignKey = @ForeignKey(
+                    name = "fk_product_serial_ready_by"
+            )
+    )
+    private AppUser cellReadyBy;
+
     @CreationTimestamp
     @Column(name = "issued_at", nullable = false, updatable = false)
     private LocalDateTime issuedAt;
@@ -324,6 +353,12 @@ public class ProductSerial {
         return acceptedAt != null;
     }
 
+    /** Позиция отмечена как готовая ячейка. */
+    @Transient
+    public boolean isCellReady() {
+        return cellReadyAt != null;
+    }
+
     /*
      * Диалект Thymeleaf java8time в проект не подключён, поэтому даты
      * для шаблонов форматируют сами сущности — как CellReceivingBatch.
@@ -383,6 +418,14 @@ public class ProductSerial {
                 : acceptedAt.format(DATE_TIME_FORMATTER);
     }
 
+    /** Момент, когда позицию отметили готовой ячейкой. */
+    @Transient
+    public String getFormattedCellReadyAt() {
+        return cellReadyAt == null
+                ? "—"
+                : cellReadyAt.format(DATE_TIME_FORMATTER);
+    }
+
     /** Кладовщика выводят фамилией, а не логином учётной записи. */
     @Transient
     public String getAcceptedByName() {
@@ -394,6 +437,20 @@ public class ProductSerial {
 
         return fullName == null || fullName.isBlank()
                 ? acceptedBy.getUsername()
+                : fullName;
+    }
+
+    /** Кладовщик, отметивший позицию готовой ячейкой. */
+    @Transient
+    public String getCellReadyByName() {
+        if (cellReadyBy == null) {
+            return "—";
+        }
+
+        String fullName = cellReadyBy.getFullName();
+
+        return fullName == null || fullName.isBlank()
+                ? cellReadyBy.getUsername()
                 : fullName;
     }
 

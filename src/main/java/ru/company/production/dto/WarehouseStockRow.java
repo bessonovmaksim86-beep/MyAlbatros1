@@ -38,7 +38,9 @@ public record WarehouseStockRow(
         String changeNumber,
         Integer batchQuantity,
         LocalDateTime batchAcceptedAt,
+        LocalDateTime batchCellReadyAt,
         LocalDateTime acceptedAt,
+        LocalDateTime cellReadyAt,
         LocalDateTime receivedAt,
         String placedZnpNumbers,
         boolean free
@@ -57,14 +59,14 @@ public record WarehouseStockRow(
     }
 
     /**
-     * Разновидность позиции: принята складом — ячейка, нет — подсборка.
+     * Разновидность позиции: готовая ячейка — подсборка.
      *
-     * Тот же признак, что у изолятора брака
-     * ({@link QuarantineCellKind#ofAccepted}): род классификатора для
-     * обоих одинаков, а различает их именно приёмка.
+     * Граница задана отметкой cellReadyAt (V75): acceptedAt означает
+     * «лежит на складе», но позиция остаётся подсборкой, пока не
+     * отмечена готовой ячейкой. Тот же принцип, что у изолятора брака.
      */
     public QuarantineCellKind getKind() {
-        return QuarantineCellKind.ofAccepted(acceptedAt != null);
+        return QuarantineCellKind.ofCellReady(cellReadyAt != null);
     }
 
     /** «Ячейка» / «Подсборка» — подпись колонки вида. */
@@ -158,9 +160,19 @@ public record WarehouseStockRow(
         return acceptedAt == null ? "—" : acceptedAt.format(DATE_TIME_FORMATTER);
     }
 
+    /** Позицию отметили готовой ячейкой (V75). */
+    public String getCellReadyLabel() {
+        return cellReadyAt == null ? "—" : cellReadyAt.format(DATE_TIME_FORMATTER);
+    }
+
     /** Партию принял склад (отметка на партии), а не на позиции. */
     public String getBatchAcceptedLabel() {
         return batchAcceptedAt == null ? "—" : batchAcceptedAt.format(DATE_FORMATTER);
+    }
+
+    /** Партию приняли как готовые ячейки (V75). */
+    public String getBatchCellReadyLabel() {
+        return batchCellReadyAt == null ? "—" : batchCellReadyAt.format(DATE_FORMATTER);
     }
 
     /** Статус реестра для подписи колонки. */

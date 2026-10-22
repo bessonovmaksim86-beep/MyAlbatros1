@@ -164,6 +164,51 @@ public interface CellReceivingBatchRepository
     List<SupplierStatProjection> findSupplierStats();
 
     /**
+     * Номер изменения последней партии данного классификатора.
+     *
+     * Нужен карточке комплектования: изделие заказа печатают как
+     * «5006 — ПВВЗ изм.3», чтобы кладовщик не перепутал изменения
+     * одного изделия. Партия берётся самая свежая — именно её значение
+     * склад вводил при последнем оприходовании.
+     */
+    @Query("""
+            select batch.changeNumber
+            from CellReceivingBatch batch
+            where batch.cellClassifier.id = :classifierId
+            order by batch.createdAt desc, batch.id desc
+            """)
+    List<String> findChangeNumbersOfClassifier(
+            @Param("classifierId") Long classifierId
+    );
+
+    /**
+     * Номера изменений сразу по перечню классификаторов — одним запросом.
+     *
+     * Список комплектования печатает изделие у каждой строки, и запрос
+     * на заказ дал бы N+1 на экране с десятками заказов. Строки идут от
+     * свежих к старым, поэтому вызывающий оставляет себе первую
+     * встреченную по классификатору.
+     */
+    @Query("""
+            select batch.cellClassifier.id as classifierId,
+                   batch.changeNumber      as changeNumber
+            from CellReceivingBatch batch
+            where batch.cellClassifier.id in :classifierIds
+            order by batch.createdAt desc, batch.id desc
+            """)
+    List<ChangeNumberView> findChangeNumbersByClassifiers(
+            @Param("classifierIds") java.util.Collection<Long> classifierIds
+    );
+
+    /** Пара «классификатор → номер изменения его последней партии». */
+    interface ChangeNumberView {
+
+        Long getClassifierId();
+
+        String getChangeNumber();
+    }
+
+    /**
      * Строка глобального поиска среди приходов склада.
      *
      * Ищут по номеру приходного ордера, а показать нужно и поставщика,

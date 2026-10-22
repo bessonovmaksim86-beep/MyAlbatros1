@@ -118,6 +118,7 @@
                                 <th>Заказ</th>
                                 <th>Вид</th>
                                 <th>Тип ячеек</th>
+                                <th>Изделие заказа</th>
                                 <th>Техпроцесс</th>
                                 <th>Дата заказа</th>
                                 <th>Срок</th>
@@ -158,7 +159,12 @@
                                 </td>
 
                                 <td th:text="${order.productTypeName}">
-                                    Ячейка
+                                    Подсборка
+                                </td>
+
+                                <td class="mono"
+                                    th:text="${order.classifierLabel}">
+                                    5006 — ПВВЗ
                                 </td>
 
                                 <td class="mono"

@@ -1454,13 +1454,15 @@ public class InputControlService {
         /**
          * Разновидность изделия строки: ячейка либо подсборка.
          *
-         * Граница проходит по факту приёмки партии складом, а не по
-         * типу классификатора, — поэтому разновидность выводят из
-         * {@code batch.acceptedAt}, а не хранят в группе.
+         * Граница проходит по отметке готовности ячейки (V75), а не по
+         * типу классификатора и не по приёмке партии: принятое после БВК
+         * изделие лежит на складе, но остаётся подсборкой, пока его не
+         * отметили готовой ячейкой. Поэтому разновидность выводят из
+         * {@code batch.cellReadyAt}.
          */
         public QuarantineCellKind getKind() {
-            return QuarantineCellKind.ofAccepted(
-                    batch != null && batch.getAcceptedAt() != null
+            return QuarantineCellKind.ofCellReady(
+                    batch != null && batch.getCellReadyAt() != null
             );
         }
 

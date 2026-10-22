@@ -356,6 +356,11 @@ public class QuarantineTransferService {
      * Реестр может не содержать номера: в изолятор попадают номера
      * партий прихода ещё до сканирования. Поэтому отсутствие строки —
      * не ошибка, а обычный случай, и приёмка от неё не отменяется.
+     *
+     * V75: перемещённая из изолятора ячейка уже лежит на складе
+     * (acceptedAt стоит), но остаётся подсборкой, пока кладовщик не
+     * отметит её готовой. Приёмка из изолятора — тот шаг, который
+     * переводит её в ячейку.
      */
     private void markWarehouseAccepted(List<String> numbers,
                                        AppUser receiver,
@@ -378,7 +383,14 @@ public class QuarantineTransferService {
                 receiver
         );
 
+        serialRepository.markCellReadyByIds(
+                serials.stream().map(ProductSerial::getId).toList(),
+                moment,
+                receiver
+        );
+
         journal.recordAccepted(serials, receiver, moment);
+        journal.recordCellReady(serials, receiver, moment);
     }
 
     /**

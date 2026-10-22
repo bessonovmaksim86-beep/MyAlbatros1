@@ -118,7 +118,9 @@ public class WarehouseStockService {
                     row.getChangeNumber(),
                     row.getBatchQuantity(),
                     row.getBatchAcceptedAt(),
+                    row.getBatchCellReadyAt(),
                     row.getAcceptedAt(),
+                    row.getCellReadyAt(),
                     row.getReceivedAt(),
                     orders.isEmpty() ? null : String.join(", ", orders),
                     orders.isEmpty()

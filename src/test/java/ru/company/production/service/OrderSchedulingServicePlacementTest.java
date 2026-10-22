@@ -79,7 +79,7 @@ class OrderSchedulingServicePlacementTest {
                     eq(operationId), anyList(), anyBoolean()
             )).thenReturn(List.of(101L));
 
-            CalendarSnapshot snap = snapshotOf();
+            OrderSchedulingService.CalendarSnapshot snap = snapshotOf();
 
             // Вызываем private метод через reflection
             Object placement = callPlaceOperation(
@@ -106,7 +106,7 @@ class OrderSchedulingServicePlacementTest {
                     eq(operationId), anyList(), anyBoolean()
             )).thenReturn(List.of(101L));
 
-            CalendarSnapshot snap = snapshotOf();
+            OrderSchedulingService.CalendarSnapshot snap = snapshotOf();
 
             Object placement = callPlaceOperation(
                     operationId, node,
@@ -131,7 +131,7 @@ class OrderSchedulingServicePlacementTest {
                     eq(operationId), anyList(), anyBoolean()
             )).thenReturn(List.of(101L, 102L));
 
-            CalendarSnapshot snap = snapshotOf();
+            OrderSchedulingService.CalendarSnapshot snap = snapshotOf();
 
             Object placement = callPlaceOperation(
                     operationId, node,
@@ -156,7 +156,7 @@ class OrderSchedulingServicePlacementTest {
                     eq(operationId), anyList(), anyBoolean()
             )).thenReturn(List.of(101L, 102L, 103L));
 
-            CalendarSnapshot snap = snapshotOf();
+            OrderSchedulingService.CalendarSnapshot snap = snapshotOf();
 
             Object placement = callPlaceOperation(
                     operationId, node,
@@ -188,7 +188,7 @@ class OrderSchedulingServicePlacementTest {
                     eq(operationId), anyList(), anyBoolean()
             )).thenReturn(List.of(101L));
 
-            CalendarSnapshot snap = snapshotOf();
+            OrderSchedulingService.CalendarSnapshot snap = snapshotOf();
 
             // Существующая занятость: 8ч в этот день (чужой заказ)
             Map<StageDayKey, BigDecimal> occupancy = new HashMap<>();
@@ -218,7 +218,7 @@ class OrderSchedulingServicePlacementTest {
                     eq(operationId), anyList(), anyBoolean()
             )).thenReturn(List.of(101L));
 
-            CalendarSnapshot snap = snapshotOf();
+            OrderSchedulingService.CalendarSnapshot snap = snapshotOf();
 
             // 22.10 нет загрузки → помещается
             Map<StageDayKey, BigDecimal> occupancy = new HashMap<>();
@@ -245,7 +245,7 @@ class OrderSchedulingServicePlacementTest {
                     eq(operationId), anyList(), anyBoolean()
             )).thenReturn(List.of(101L));
 
-            CalendarSnapshot snap = snapshotOf();
+            OrderSchedulingService.CalendarSnapshot snap = snapshotOf();
 
             Map<StageDayKey, BigDecimal> occupancy = new HashMap<>();
 
@@ -290,7 +290,7 @@ class OrderSchedulingServicePlacementTest {
                     eq(operationId), anyList(), anyBoolean()
             )).thenReturn(List.of());
 
-            CalendarSnapshot snap = snapshotOf();
+            OrderSchedulingService.CalendarSnapshot snap = snapshotOf();
 
             Object placement = callPlaceOperation(
                     operationId, node,
@@ -321,7 +321,7 @@ class OrderSchedulingServicePlacementTest {
             Map<LocalDate, Set<Long>> absences = new HashMap<>();
             absences.put(LocalDate.of(2026, 10, 21), Set.of(101L));
 
-            CalendarSnapshot snap = new CalendarSnapshot(
+            OrderSchedulingService.CalendarSnapshot snap = new OrderSchedulingService.CalendarSnapshot(
                     LocalDate.of(2026, 9, 1),
                     LocalDate.of(2027, 1, 31),
                     Set.of(),
@@ -358,7 +358,7 @@ class OrderSchedulingServicePlacementTest {
                     eq(operationId), anyList(), anyBoolean()
             )).thenReturn(List.of(101L));
 
-            CalendarSnapshot snap = snapshotOf();
+            OrderSchedulingService.CalendarSnapshot snap = snapshotOf();
 
             // 21.10: 8ч, 22.10: 8ч, 23.10: 8ч
             Map<StageDayKey, BigDecimal> occupancy = new HashMap<>();
@@ -393,7 +393,7 @@ class OrderSchedulingServicePlacementTest {
                     eq(operationId), anyList(), anyBoolean()
             )).thenReturn(List.of(101L));
 
-            CalendarSnapshot snap = snapshotOf();
+            OrderSchedulingService.CalendarSnapshot snap = snapshotOf();
 
             // 23.10 (ПТ) полностью загружена
             Map<StageDayKey, BigDecimal> occupancy = new HashMap<>();
@@ -430,7 +430,7 @@ class OrderSchedulingServicePlacementTest {
                     eq(operationId), anyList(), anyBoolean()
             )).thenReturn(List.of(101L, 102L));
 
-            CalendarSnapshot snap = snapshotOf();
+            OrderSchedulingService.CalendarSnapshot snap = snapshotOf();
 
             // Существующая загрузка: 10ч из 16ч
             Map<StageDayKey, BigDecimal> occupancy = new HashMap<>();
@@ -461,7 +461,7 @@ class OrderSchedulingServicePlacementTest {
                     eq(operationId), anyList(), anyBoolean()
             )).thenReturn(List.of(101L, 102L));
 
-            CalendarSnapshot snap = snapshotOf();
+            OrderSchedulingService.CalendarSnapshot snap = snapshotOf();
 
             Map<StageDayKey, BigDecimal> occupancy = new HashMap<>();
             occupancy.merge(new StageDayKey(operationId, LocalDate.of(2026, 10, 21)),
@@ -482,8 +482,8 @@ class OrderSchedulingServicePlacementTest {
 
     /* ======================== ВСПОМОГАТЕЛЬНЫЕ МЕТОДЫ ======================== */
 
-    private CalendarSnapshot snapshotOf() {
-        return new CalendarSnapshot(
+    private OrderSchedulingService.CalendarSnapshot snapshotOf() {
+        return new OrderSchedulingService.CalendarSnapshot(
                 LocalDate.of(2026, 9, 1),
                 LocalDate.of(2027, 1, 31),
                 Set.of(),
@@ -510,13 +510,13 @@ class OrderSchedulingServicePlacementTest {
      */
     private Object callPlaceOperation(Long operationId, TechProcessOperation node,
                                       LocalDate earliest, Map<StageDayKey, BigDecimal> occupancy,
-                                      int maxLoadPercent, CalendarSnapshot calendar)
+                                      int maxLoadPercent, OrderSchedulingService.CalendarSnapshot calendar)
             throws Exception {
         java.lang.reflect.Method m = OrderSchedulingService.class
                 .getDeclaredMethod("placeOperation",
                         Long.class, TechProcessOperation.class,
                         LocalDate.class, Map.class, int.class,
-                        OrderSchedulingService.CalendarSnapshot.class);
+                        OrderSchedulingService.OrderSchedulingService.CalendarSnapshot.class);
         m.setAccessible(true);
         return m.invoke(service,
                 operationId, node, earliest,

@@ -311,7 +311,39 @@
 
         </nav>
 
+        <!--
+            Блок уведомлений о новых делах склада.
+
+            Заполняет warehouse-notifications.js: он опрашивает
+            /warehouse/notifications/active и печатает строку только там,
+            где счётчик вырос с момента последней проверки. Серверной
+            отрисовкой список не заполняют намеренно: текущие счётчики
+            уже показаны бейджами меню, а здесь нужен именно прирост —
+            иначе при каждой загрузке страницы кладовщик слышал бы звук
+            о делах, которые видит не впервые.
+
+            Строки кликабельны и ведут в раздел; в свёрнутом меню блок
+            свёрнут до точки, как и прочие пункты.
+        -->
         <div class="warehouse-sidebar__footer">
+
+            <div class="warehouse-notifications"
+                 id="warehouseNotifications"
+                 hidden>
+
+                <div class="warehouse-notifications__head">
+                    <span class="warehouse-notifications__dot"
+                          aria-hidden="true"></span>
+
+                    <span class="warehouse-notifications__title">
+                        Новое
+                    </span>
+                </div>
+
+                <div class="warehouse-notifications__list"
+                     id="warehouseNotificationsList"></div>
+            </div>
+
             <form th:action="@{/logout}" method="post">
                 <input th:if="${_csrf != null}"
                        type="hidden"
@@ -429,6 +461,8 @@
     <script th:src="@{/warehouse/js/common.js}"></script>
     <!-- Прокрутка страницы в виде датчика ДУУ2М: один большой поплавок -->
     <script th:src="@{/js/float-scroll.js}"></script>
+    <!-- Фоновая проверка счётчиков: звук + строки при приросте -->
+    <script th:src="@{/warehouse/js/notifications.js}"></script>
 </th:block>
 
 </body>

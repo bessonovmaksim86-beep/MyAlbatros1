@@ -111,12 +111,17 @@ public class SerialMovementJournalService {
     }
 
     /**
-     * Ячейки приняты на склад после БВК.
+     * Позиции приняты на склад после БВК.
      *
-     * Разновидность ставят явно, а не выводят из acceptedAt: событие
-     * пишут сразу после отметки приёмки, а её bulk-UPDATE очищает
-     * контекст, и в загруженной строке колонка ещё старая. Смысл события
-     * — «подсборка стала ячейкой», и паспорт обязан показать это.
+     * Разновидность ставят явно, а не выводят из колонки реестра:
+     * событие пишут сразу после отметки приёмки, а её bulk-UPDATE
+     * очищает контекст, и в загруженной строке колонка ещё старая.
+     *
+     * С V75 смысл события — «позиция легла на склад», и она остаётся
+     * ПОДСБОРКОЙ: в ячейку её переводит отдельная отметка готовности
+     * (см. {@link #recordCellReady}). Паспорт показывает оба шага
+     * раздельно, иначе кладовщик не отличил бы «привезли» от «можно
+     * брать в комплектование».
      */
     @Transactional
     public void recordAccepted(List<ProductSerial> serials,
@@ -129,8 +134,38 @@ public class SerialMovementJournalService {
                     moment, actor, null, null, null);
 
             applySerialState(event, serial);
-            event.setCellKind(QuarantineCellKind.CELL);
+            event.setCellKind(QuarantineCellKind.SUBASSEMBLY);
 
+            journalRepository.save(event);
+        }
+    }
+
+    /**
+     * Ячейки отмечены готовыми ячейками (V75).
+     *
+     * Отличие от ACCEPTED: та отметка кладёт позицию на склад, но
+     * изделие остаётся подсборкой, пока кладовщик не подтвердит его
+     * готовность. Без отдельного события паспорт не показывал бы,
+     * когда именно подсборка стала ячейкой — а именно этот момент
+     * открывает ей путь в комплектование.
+     */
+    @Transactional
+    public void recordCellReady(List<ProductSerial> serials,
+                                AppUser actor,
+                                LocalDateTime moment) {
+        for (ProductSerial serial : serials) {
+            SerialMovementEvent event = newEvent(
+                    serial.getFullNumber(), serial.getId(),
+                    SerialMovementType.CELL_READY,
+                    moment, actor, null, null, null);
+
+            applySerialState(event, serial);
+            /*
+             * Разновидность ставят явно: bulk-UPDATE готовности уже
+             * очищал контекст, и в загруженной строке колонка ещё
+             * старая — applySerialState записал бы SUBASSEMBLY.
+             */
+            event.setCellKind(QuarantineCellKind.CELL);
             journalRepository.save(event);
         }
     }
@@ -477,8 +512,8 @@ public class SerialMovementJournalService {
      *
      * Статус и изделие копируют, а не читают по ссылке в паспорте:
      * {@code product_serials} перечёркивает следующее движение.
-     * Разновидность выводят по приёмке складом (см.
-     * {@link QuarantineCellKind}): непринятая партия — подсборка.
+     * Разновидность выводят по отметке готовности ячейки (V75):
+     * принятая партия — подсборка, пока не отмечена готовой ячейкой.
      */
     private static void applySerialState(SerialMovementEvent event,
                                          ProductSerial serial) {
@@ -486,7 +521,7 @@ public class SerialMovementJournalService {
         event.setSerialStatus(serial.getStatus());
         event.setProductClassifier(serial.getProductClassifier());
         event.setReceivingBatch(serial.getReceivingBatch());
-        event.setCellKind(QuarantineCellKind.ofAccepted(serial.isAccepted()));
+        event.setCellKind(QuarantineCellKind.ofCellReady(serial.isCellReady()));
     }
 
     /**
@@ -504,7 +539,7 @@ public class SerialMovementJournalService {
             event.setProductClassifier(batch.getCellClassifier());
             event.setReceivingBatch(batch);
             event.setCellKind(
-                    QuarantineCellKind.ofAccepted(batch.getAcceptedAt() != null));
+                    QuarantineCellKind.ofCellReady(batch.getCellReadyAt() != null));
         }
 
         event.setNote(truncate(reason, 500));

@@ -404,6 +404,35 @@
                             </dd>
                         </div>
 
+                        <!--
+                            Отметка готовности (V75): партию приняли на
+                            склад, но позиции остаются подсборками, пока
+                            при приёмке не стояла галочка готовности.
+                        -->
+                        <div class="warehouse-summary__row"
+                             th:if="${batch.accepted}">
+
+                            <dt>Статус на складе</dt>
+
+                            <dd th:if="${batch.cellReady}">
+                                готовые ячейки
+                            </dd>
+
+                            <dd th:unless="${batch.cellReady}">
+                                подсборки — в комплектование не выходят
+                            </dd>
+                        </div>
+
+                        <div class="warehouse-summary__row"
+                             th:if="${batch.accepted and batch.cellReady}">
+
+                            <dt>Отмечены ячейками</dt>
+
+                            <dd th:text="${batch.formattedCellReadyAt}">
+                                23.09.2026 14:05
+                            </dd>
+                        </div>
+
                         <div class="warehouse-summary__row">
 
                             <dt>Не принято на брак</dt>
@@ -553,6 +582,43 @@
                                 разделители «,» и «;» тоже подходят.
                                 Отмеченные зелёным уже приняты, красным —
                                 ячейки брака, они не принимаются
+                            </span>
+
+                            <!--
+                                Галочка готовности (V75): приёмка без неё
+                                кладёт партию на склад ПОДСБОРКОЙ — она
+                                числится на полках, но в комплектование,
+                                изолятор и отчёты выходит подсборкой.
+                                Только с этой отметкой принятые номера
+                                становятся ячейками.
+                            -->
+                            <div class="warehouse-field__row
+                                        warehouse-field__row--ready">
+
+                                <label class="warehouse-check
+                                             warehouse-check--ready"
+                                       for="cellReady">
+
+                                    <input type="checkbox"
+                                           id="cellReady"
+                                           name="cellReady"
+                                           value="true"
+                                           th:checked="${acceptanceForm.cellReady}">
+
+                                    отметить как готовые ячейки
+                                </label>
+
+                            </div>
+
+                            <span class="field-hint field-hint--ready">
+                                Без этой отметки принятые позиции лягут на
+                                склад <strong>подсборками</strong>: они
+                                будут числиться в приходе, но не выйдут в
+                                комплектование, изолятор брака и реестр
+                                наличия как ячейки. Отметка превращает
+                                принятые номера в <strong>готовые
+                                ячейки</strong> — именно она открывает им
+                                путь в заказ-комплектующий.
                             </span>
 
                             <span class="field-hint field-hint--warn"

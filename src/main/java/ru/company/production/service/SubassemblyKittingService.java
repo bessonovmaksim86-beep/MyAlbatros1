@@ -9,6 +9,7 @@ import ru.company.production.dto.SubassemblyKittingZnpRow;
 import ru.company.production.entity.AppUser;
 import ru.company.production.entity.Operation;
 import ru.company.production.entity.OrderScheduleRow;
+import ru.company.production.entity.ProductClassifier;
 import ru.company.production.entity.ProductSerial;
 import ru.company.production.entity.ProductSerialOperation;
 import ru.company.production.entity.ProductSerialOperationStatus;
@@ -17,6 +18,7 @@ import ru.company.production.entity.ProductionOrderStatus;
 import ru.company.production.entity.SerialProductionOrder;
 import ru.company.production.entity.TechProcess;
 import ru.company.production.entity.TechProcessOperation;
+import ru.company.production.repository.CellReceivingBatchRepository;
 import ru.company.production.repository.OrderScheduleRowRepository;
 import ru.company.production.repository.ProductSerialOperationRepository;
 import ru.company.production.repository.ProductSerialRepository;
@@ -82,6 +84,7 @@ public class SubassemblyKittingService {
     private static final int MESSAGE_NUMBER_LIMIT = 12;
 
     private final ProductionOrderRepository productionOrderRepository;
+    private final CellReceivingBatchRepository batchRepository;
     private final ProductSerialRepository serialRepository;
     private final SerialProductionOrderRepository linkRepository;
     private final TechProcessOperationRepository techProcessOpRepository;
@@ -150,6 +153,12 @@ public class SubassemblyKittingService {
         Map<Long, List<SubassemblyKittingCellRow>> attachedByOrder =
             attachedRowsByOrder(orderIds);
 
+        /*
+         * Номера изменений — одним запросом на страницу: изделие
+         * печатается у каждой строки, а запрос на заказ дал бы N+1.
+         */
+        Map<Long, String> changeNumbers = latestChangeNumbers(orders);
+
         List<SubassemblyKittingZnpRow> result = new ArrayList<>();
 
         for (ProductionOrder order : orders) {
@@ -172,7 +181,10 @@ public class SubassemblyKittingService {
                     order.getId(),
                     order.getNumber(),
                     order.getZnpKindDisplayName(),
-                    order.getProductTypeName(),
+                    order.getStockProductTypeName(),
+                    order.getClassifierLabelWithChange(
+                            changeNumbers.get(order.getClassifierId())
+                    ),
                     order.getKittingTypeDisplayName(),
                     order.getTechProcessCode(),
                     operationName(order, routeOperations),
@@ -222,7 +234,8 @@ public class SubassemblyKittingService {
                 free,
                 attachedRows(orderId),
                 quarantineCells(order),
-                operationName(order, routeOperationsByProcess(List.of(order)))
+                operationName(order, routeOperationsByProcess(List.of(order))),
+                latestChangeNumber(order)
         );
     }
 
@@ -1132,6 +1145,65 @@ public class SubassemblyKittingService {
     }
 
     /**
+     * Номер изменения изделия заказа — по последней партии прихода.
+     *
+     * Нужен подписи «5006 — ПВВЗ изм.3»: у одного классификатора партии
+     * бывают разных изменений, и без него кладовщик не отличит подсборку
+     * изменения 2 от изменения 3.
+     */
+    private String latestChangeNumber(ProductionOrder order) {
+
+        Long classifierId = order.getProductClassifier() == null
+                ? null
+                : order.getProductClassifier().getId();
+
+        if (classifierId == null) {
+            return null;
+        }
+
+        List<String> numbers =
+                batchRepository.findChangeNumbersOfClassifier(classifierId);
+
+        return numbers.isEmpty() ? null : numbers.get(0);
+    }
+
+    /**
+     * Номера изменений набора заказов — одним запросом на страницу.
+     *
+     * Ключ карты — идентификатор классификатора; запрос отсортирован от
+     * свежих партий к старым, поэтому первая встреченная строка и есть
+     * изменение последней партии ({@code putIfAbsent}).
+     */
+    private Map<Long, String> latestChangeNumbers(List<ProductionOrder> orders) {
+
+        List<Long> classifierIds = orders.stream()
+                .map(ProductionOrder::getProductClassifier)
+                .filter(Objects::nonNull)
+                .map(ProductClassifier::getId)
+                .filter(Objects::nonNull)
+                .distinct()
+                .toList();
+
+        if (classifierIds.isEmpty()) {
+            return Map.of();
+        }
+
+        Map<Long, String> result = new LinkedHashMap<>();
+
+        for (CellReceivingBatchRepository.ChangeNumberView view
+                : batchRepository.findChangeNumbersByClassifiers(
+                        classifierIds)) {
+
+            if (view.getClassifierId() != null) {
+                result.putIfAbsent(
+                        view.getClassifierId(), view.getChangeNumber());
+            }
+        }
+
+        return result;
+    }
+
+    /**
      * Экран комплектования: заказ, свободный склад, внесённый состав и
      * подпись операции приёмки.
      *
@@ -1139,16 +1211,46 @@ public class SubassemblyKittingService {
      * оформленная в ЗНП ячейка со склада снята, и показывать её в
      * доступных значило бы предлагать кладовщику провести её повторно.
      *
-     * @param cells     свободный остаток склада по изделию заказа
-     * @param attached  ячейки, уже оформленные в этот заказ (матрица V20)
+     * @param cells             свободный остаток склада по изделию заказа
+     * @param attached          ячейки, уже оформленные в этот заказ (матрица V20)
+     * @param quarantine        ячейки и подсборки изолятора брака
+     * @param operationName     наименование операции комплектования
+     * @param changeNumber      номер изменения изделия — для подписи
+     *                          «5006 — ПВВЗ изм.3»
      */
     public record SubassemblyKittingView(
             ProductionOrder order,
             List<SubassemblyKittingCellRow> cells,
             List<SubassemblyKittingCellRow> attached,
             List<QuarantineCellView> quarantine,
-            String operationName
+            String operationName,
+            String changeNumber
     ) {
+
+        /**
+         * Изделие заказа с номером изменения: «5006 — ПВВЗ изм.3».
+         *
+         * Номер изменения печатается по последней партии прихода того
+         * же классификатора — это значение кладовщик вводил при
+         * оприходовании. Пустое передаётся как есть.
+         */
+        public String getProductLabel() {
+            return order == null
+                    ? "—"
+                    : order.getClassifierLabelWithChange(changeNumber);
+        }
+
+        /**
+         * Термин «подсборки» вместо «ячейки» для экрана V72.
+         *
+         * Режим «изготовление ячеек из подсборок» работает с теми
+         * изделиями, которые ещё не приняты ячейками, и заголовок
+         * блока свободных позиций обязан говорить «подсборки», иначе
+         * кладовщик не поймёт, какие номера вводить.
+         */
+        public boolean showSubassemblyLabel() {
+            return order != null && order.isSubassemblyKitting();
+        }
 
         /** Ячеек уже внесено в заказ. */
         public long takenCount() {

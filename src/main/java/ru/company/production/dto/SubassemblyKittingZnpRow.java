@@ -15,12 +15,18 @@ import java.util.List;
  * Техпроцесс показан вместо родителя: групповой ЗНП заводят без выпуска
  * (V38), и колонка «Родитель» была бы в его строке прочерком, тогда как
  * маршрут заказа кладовщику полезен — по нему сверяют операцию приёмки.
+ *
+ * Тип изделия печатается в терминах склада ({@code productTypeName}):
+ * заказу режима V72 — «Подсборка», остальным — тип классификатора. Номер
+ * изменения ({@code classifierLabel}) берут из последней партии прихода
+ * того же изделия, чтобы кладовщик не перепутал изменения одного изделия.
  */
 public record SubassemblyKittingZnpRow(
         Long id,
         String number,
         String znpKindDisplayName,
         String productTypeName,
+        String classifierLabel,
         String kittingTypeDisplayName,
         String techProcessCode,
         String operationName,

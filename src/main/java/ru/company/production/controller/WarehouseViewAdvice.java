@@ -8,15 +8,13 @@ import org.springframework.web.bind.annotation.ControllerAdvice;
 import org.springframework.web.bind.annotation.ModelAttribute;
 import ru.company.production.entity.AppUser;
 import ru.company.production.repository.UserRepository;
-import ru.company.production.service.BvkAcceptanceService;
-import ru.company.production.service.CellReceivingService;
 import ru.company.production.service.ModuleRoutes;
-import ru.company.production.service.QuarantineTransferService;
-import ru.company.production.service.SubassemblyKittingService;
-import ru.company.production.service.WarehouseKittingService;
-import ru.company.production.service.ZnpAcceptanceService;
+import ru.company.production.service.WarehouseNotificationService;
 
+import java.util.List;
 import java.util.Locale;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 /**
  * Данные текущего сотрудника склада для всех страниц модуля:
@@ -24,9 +22,14 @@ import java.util.Locale;
  * ожидающих приёмки с БВК, в боковом меню.
  *
  * Счётчики нужны на каждой странице: партия, по которой номера
- * напечатаны, но ещё не отсканированы, оставляет в реестре резерв, а
+ * напечатаны, но ещё не отсканирована, оставляет в реестре резерв, а
  * партия, вернувшаяся от БВК, ждёт кладовщика — и увидеть это нужно,
  * не заходя в сам раздел.
+ *
+ * Дополнительно отдаёт JSON-эндпоинт {@code /warehouse/notifications/counters}
+ * для фоновой проверки счётчиков: клиент поллит раз в ~30 секунд,
+ * сравнивает с предыдущими значениями и при появлении новых
+ * уведомлений воспроизводит звук и показывает строки.
  */
 @ControllerAdvice(assignableTypes = {
         WarehouseController.class,
@@ -43,13 +46,16 @@ import java.util.Locale;
 public class WarehouseViewAdvice {
 
     private final UserRepository userRepository;
-    private final CellReceivingService receivingService;
-    private final BvkAcceptanceService acceptanceService;
-    private final ZnpAcceptanceService znpAcceptanceService;
-    private final QuarantineTransferService quarantineTransferService;
-    private final WarehouseKittingService kittingService;
-    private final SubassemblyKittingService subassemblyKittingService;
+    private final WarehouseNotificationService notificationService;
 
+    /*
+     * Счётчики считаются одним вызовом сервиса (см.
+     * WarehouseNotificationService): меню получает их из модели, а
+     * JSON-эндпоинт уведомлений читает тот же сервис — и второй запрос
+     * за теми же числами на страницу не приходится.
+     *
+     * Имена атрибутов сохранены прежние: шаблоны меню уже их печатают.
+     */
     @ModelAttribute
     public void addWarehouseContext(
             Authentication authentication,
@@ -58,65 +64,33 @@ public class WarehouseViewAdvice {
         model.addAttribute("userDisplayName", "Пользователь");
         model.addAttribute("userPosition", "Должность не указана");
 
-        model.addAttribute(
-                "pendingReceivingCount",
-                receivingService.countPending()
-        );
+        List<WarehouseNotificationService.CounterItem> counters =
+                notificationService.collectAll();
 
-        model.addAttribute(
-                "awaitingAcceptanceCount",
-                acceptanceService.countAwaiting()
-        );
-
-        /*
-         * Серийные ЗНП с непринятыми ячейками: приёмка ячеек стоит рядом
-         * с приёмкой с БВК и тоже ждёт кладовщика — счётчик держат на
-         * любой странице модуля, чтобы объём приёмки был виден сразу.
-         */
-        model.addAttribute(
-                "znpCellAcceptanceCount",
-                znpAcceptanceService.countPending()
-        );
+        Map<String, Long> byKey = counters.stream()
+                .collect(Collectors.toMap(
+                        WarehouseNotificationService.CounterItem::key,
+                        WarehouseNotificationService.CounterItem::count
+                ));
 
         /*
-         * Ячейки, перемещённые из изолятора брака: их тоже ждёт
-         * приёмка, и счётчик держат рядом со счётчиками прочей приёмки,
-         * чтобы кладовщик видел объём, не заходя в раздел.
+         * Имена атрибутов сохранены прежние — шаблоны меню уже их
+         * печатают. JSON-эндпоинт для JS читает тот же сервис напрямую.
          */
-        model.addAttribute(
-                "quarantineTransferCount",
-                quarantineTransferService.countPending()
-        );
-
-        /*
-         * Счётчики комплектования: незакрытые работы склада видно из
-         * любого раздела модуля, иначе кладовщик узнавал бы об объёме
-         * комплектования, только открыв сам раздел.
-         */
-        model.addAttribute(
-                "kittingZnpCount",
-                kittingService.countOperations(
-                        WarehouseKittingService.Section.ZNP
-                )
-        );
-
-        model.addAttribute(
-                "kittingSemiCount",
-                kittingService.countOperations(
-                        WarehouseKittingService.Section.SEMI_FINISHED
-                )
-        );
-
-        /*
-         * Заказы-комплектующие с операцией приёмки на склад
-         * полуфабрикатов: кладовщик обязан видеть объём комплектования,
-         * не заходя в сам раздел, — иначе счётчик терялся бы за
-         * переходом.
-         */
-        model.addAttribute(
-                "subassemblyKittingCount",
-                subassemblyKittingService.countPending()
-        );
+        model.addAttribute("pendingReceivingCount",
+                byKey.get("receiving"));
+        model.addAttribute("awaitingAcceptanceCount",
+                byKey.get("acceptance"));
+        model.addAttribute("quarantineTransferCount",
+                byKey.get("quarantine-transfer"));
+        model.addAttribute("znpCellAcceptanceCount",
+                byKey.get("znp-acceptance"));
+        model.addAttribute("subassemblyKittingCount",
+                byKey.get("subassembly-kitting"));
+        model.addAttribute("kittingZnpCount",
+                byKey.get("kitting-znp"));
+        model.addAttribute("kittingSemiCount",
+                byKey.get("kitting-semi"));
 
         if (authentication == null
                 || !authentication.isAuthenticated()

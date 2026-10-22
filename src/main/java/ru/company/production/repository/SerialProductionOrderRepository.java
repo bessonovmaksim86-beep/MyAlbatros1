@@ -345,6 +345,11 @@ public interface SerialProductionOrderRepository
      *
      * EXISTS, а не join: заказ обязан попасть в выдачу один раз, даже
      * если в его составе несколько непринятых ячеек.
+     *
+     * Граница «непринята» держится по cellReadyAt (V75), а не по
+     * acceptedAt: позиция, принятая после БВК, лежит на складе
+     * подсборкой, и приёмка по заказу — тот шаг, который переводит её
+     * в готовую ячейку.
      */
     @Query("""
             select distinct ord
@@ -361,7 +366,7 @@ public interface SerialProductionOrderRepository
                   where link.productionOrder.id = ord.id
                     and serial.productType =
                         ru.company.production.entity.ProductType.CELL
-                    and serial.acceptedAt is null
+                    and serial.cellReadyAt is null
               )
             order by ord.orderDate desc, ord.number desc
             """)
@@ -371,6 +376,9 @@ public interface SerialProductionOrderRepository
 
     /**
      * Число заказов, ожидающих приёмки ячеек: счётчик пункта меню.
+     *
+     * Отбор по cellReadyAt — тот же, что у {@link #findPendingCellZnp}:
+     * цифра меню обязана совпадать с длиной списка.
      */
     @Query("""
             select count(distinct ord.id)
@@ -387,7 +395,7 @@ public interface SerialProductionOrderRepository
                   where link.productionOrder.id = ord.id
                     and serial.productType =
                         ru.company.production.entity.ProductType.CELL
-                    and serial.acceptedAt is null
+                    and serial.cellReadyAt is null
               )
             """)
     long countPendingCellZnp(
@@ -418,7 +426,8 @@ public interface SerialProductionOrderRepository
     );
 
     /**
-     * Непринятые ячейки состава заказа: что принимает склад.     *
+     * Непринятые ячейки состава заказа: что принимает склад.
+     *
      * Fetch join обязателен: строка списка печатает полный номер
      * (getFullNumber() читает code классификатора), а open-in-view
      * выключен.
@@ -433,6 +442,9 @@ public interface SerialProductionOrderRepository
      * сохраняет смысл прежнего inner join: фильтр по типу «ячейка» и
      * непринятости держится в where, distinct не нужен — связи только
      * ManyToOne, строк связь не размножает.
+     *
+     * Отбор по cellReadyAt: позиция, принятая по заказу, становится
+     * готовой ячейкой, и приёмка закрывает именно непринятые.
      */
     @Query("""
             select link
@@ -443,7 +455,7 @@ public interface SerialProductionOrderRepository
             where link.productionOrder.id = :productionOrderId
               and serial.productType =
                   ru.company.production.entity.ProductType.CELL
-              and serial.acceptedAt is null
+              and serial.cellReadyAt is null
             order by serial.serial
             """)
     List<SerialProductionOrder> findPendingCellsByOrderId(
