@@ -143,6 +143,18 @@ public record AssignedOperationView(
         return plannedDate == null ? "—" : plannedDate.format(RU_DATE);
     }
 
+    /**
+     * Дата плана параметром запроса: ISO-формат, который читает
+     * контроллер, а не подпись для таблицы.
+     *
+     * Массив «операция + дата плана» — ключ группы (см.
+     * WorkshopDistributionService#groupAssigned), поэтому массовое
+     * проведение вызывается именно этой парой.
+     */
+    public String dateParam() {
+        return plannedDate == null ? "" : plannedDate.toString();
+    }
+
     /** Заказы группы одной строкой: «ЗП-12, ЗП-18». */
     public String ordersLabel() {
         return orderNumbers == null || orderNumbers.isEmpty()
@@ -199,5 +211,84 @@ public record AssignedOperationView(
         }
 
         return instances.stream().filter(OperationInstance::completed).count();
+    }
+
+    /**
+     * Закрыта ли группа целиком — по этому признаку она уходит из
+     * закреплённых работ в проведённые.
+     *
+     * Перенос считается группой, а не экземпляром, потому что строка
+     * списка — именно группа «операция + дата плана»: разрезать её
+     * между двумя половинами означало бы показать исполнителю строку без
+     * части её экземпляров, и остаток работы перестал бы сходиться с
+     * числом в шапке. Группа, где закрыт хотя бы один экземпляр,
+     * остаётся в закреплённых работах — там виден и прогресс, и то, что
+     * ещё осталось.
+     */
+    public boolean allCompleted() {
+        if (instances == null || instances.isEmpty()) {
+            return false;
+        }
+
+        return instances.stream().allMatch(OperationInstance::completed);
+    }
+
+    /**
+     * Сколько экземпляров группа позволяет закрыть массово.
+     *
+     * Считается по тому же праву, что рисует кнопку единичного
+     * проведения, но без экземпляров с контролируемыми параметрами:
+     * они закрываются только формой отметки, и массовое проведение их
+     * пропускает. Кнопка «Провести все» обязана обещать ровно то
+     * число, которое она закроет.
+     */
+    public long bulkCompletableCount() {
+        if (instances == null) {
+            return 0L;
+        }
+
+        return instances.stream().filter(OperationInstance::bulkCompletable).count();
+    }
+
+    /** Есть ли что закрывать массово — по этой цифре кнопка появляется. */
+    public boolean hasBulkCompletable() {
+        return bulkCompletableCount() > 0;
+    }
+
+    /**
+     * Проводимые массово экземпляры — их идентификаторы строк графика.
+     *
+     * Состав считает сервер по своему же списку (см.
+     * MyOperationsController#completeGroup), а не форма: чужой или уже
+     * закрытый экземпляр в запросе не появляется, потому что его просто
+     * нет в перечне, который видит этот пользователь.
+     */
+    public List<Long> bulkCompletableRowIds() {
+        if (instances == null) {
+            return List.of();
+        }
+
+        return instances.stream()
+                .filter(OperationInstance::bulkCompletable)
+                .map(OperationInstance::rowId)
+                .filter(java.util.Objects::nonNull)
+                .toList();
+    }
+
+    /**
+     * Сколько проводимых экземпляров требуют отметки параметров.
+     *
+     * Подпись рядом с массовой кнопкой: исполнитель видит, что часть
+     * работы останется незакрытой и почему, — иначе неполный результат
+     * выглядел бы как сбой кнопки.
+     */
+    public long controlParamCount() {
+        if (instances == null) {
+            return 0L;
+        }
+
+        return instances.stream()
+                .filter(inst -> inst.canComplete() && inst.needsControlParams())
+                .count();
     }
 }

@@ -63,7 +63,7 @@
 
                 <div class="page-head-actions">
 
-                    <a th:href="@{/my-operations}" class="btn secondary">
+                    <a th:href="@{/my-operations(mode=${operationMode != null ? operationMode : 'regular'})}" class="btn secondary">
                         К списку работ
                     </a>
 
@@ -111,6 +111,16 @@
                                type="hidden"
                                th:name="${_csrf.parameterName}"
                                th:value="${_csrf.token}">
+
+                        <!--
+                            Режим возвращается формой: закрытие последнего
+                            экземпляра переносит группу в проведённую
+                            половину, и исполнитель обязан вернуться туда же,
+                            откуда пришёл, а не в список незакрытых работ.
+                        -->
+                        <input type="hidden"
+                               name="mode"
+                               th:value="${operationMode}">
 
                         <!--
                             Порядок строк задаётся перечнем параметров, а индексы
@@ -272,7 +282,7 @@
                                 Провести операцию
                             </button>
 
-                            <a th:href="@{/my-operations}" class="btn secondary">
+                            <a th:href="@{/my-operations(mode=${operationMode != null ? operationMode : 'regular'})}" class="btn secondary">
                                 Отмена
                             </a>
 

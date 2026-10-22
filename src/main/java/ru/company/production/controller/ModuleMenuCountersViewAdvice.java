@@ -94,6 +94,16 @@ public class ModuleMenuCountersViewAdvice {
         model.addAttribute("myOperationsCount", 0L);
         model.addAttribute("myRegularOperationsCount", 0L);
         model.addAttribute("myGroupOperationsCount", 0L);
+        /*
+         * Цифры проведённых половин здесь не считаются: «закрыта вся
+         * группа» — свойство группы «операция + дата плана», а не
+         * строки плана, и счётчик повторял бы группировкой все шесть
+         * границ подборa. Ставится нулём, чтобы переключатель не упал
+         * на th:if над неопределённым атрибутом, и подменяется
+         * MyOperationsController для той половины, что открыта.
+         */
+        model.addAttribute("myRegularCompletedCount", 0L);
+        model.addAttribute("myGroupCompletedCount", 0L);
 
         /*
          * Доступность «Распределения работ» и ссылка возврата в свой

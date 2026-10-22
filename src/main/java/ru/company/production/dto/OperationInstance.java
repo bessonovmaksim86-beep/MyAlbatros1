@@ -33,6 +33,10 @@ import java.math.RoundingMode;
  * @param blockerLabel  название блокирующей операции для подписи
  * @param cellNumber    номер ячейки, внесённой складом в групповой ЗНП
  *                      (V20); для строк выпуска — пусто
+ * @param needsControlParams у операции экземпляра есть контролируемые
+ *                      параметры — проведение возможно только через форму
+ *                      отметки, массовое проведение такой экземпляр
+ *                      пропускает (проставляется контроллером списка)
  */
 public record OperationInstance(
         Long rowId,
@@ -47,7 +51,8 @@ public record OperationInstance(
         String itemFullName,
         boolean blocked,
         String blockerLabel,
-        String cellNumber
+        String cellNumber,
+        boolean needsControlParams
 ) {
 
     /**
@@ -114,6 +119,18 @@ public record OperationInstance(
         return cellNumber == null || cellNumber.isBlank()
                 ? "—"
                 : cellNumber.trim();
+    }
+
+    /**
+     * Проводится ли экземпляр массово: право и отсутствие
+     * предшественника есть, но контролируемые параметры не нужны.
+     *
+     * Отметку значений внесёт только форма проведения, поэтому такой
+     * экземпляр массовое проведение обходит — иначе работа закрылась
+     * бы без значений, которые требует техпроцесс.
+     */
+    public boolean bulkCompletable() {
+        return canComplete && !needsControlParams;
     }
 
     /** Полное наименование из позиции заказа («как в КД»). */

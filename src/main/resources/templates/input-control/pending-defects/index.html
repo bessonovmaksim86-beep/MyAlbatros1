@@ -1,0 +1,545 @@
+<!DOCTYPE html>
+<html lang="ru"
+      xmlns:th="http://www.thymeleaf.org">
+
+<head>
+    <meta charset="UTF-8">
+
+    <meta name="viewport"
+          content="width=device-width, initial-scale=1">
+
+    <title>Отбраковка с согласованием БВК</title>
+
+    <link rel="stylesheet"
+          th:href="@{/technology/css/technology.css}">
+
+    <link rel="stylesheet"
+          th:href="@{/technology/css/common.css}">
+
+    <link rel="stylesheet"
+          th:href="@{/input-control/css/input-control.css}">
+
+    <!-- Вкладки очереди/решений и таблица заявок -->
+    <link rel="stylesheet"
+          th:href="@{/input-control/css/quarantine.css}">
+
+    <link rel="stylesheet"
+          th:href="@{/input-control/css/pending-defects.css}">
+</head>
+
+<body>
+
+<div class="app-shell">
+
+    <aside th:replace="~{input-control/fragments/layout
+            :: sidebar('defects')}">
+    </aside>
+
+    <main class="main">
+
+        <header th:replace="~{input-control/fragments/layout
+                :: topbar}">
+        </header>
+
+        <div class="bvk-page">
+
+            <div class="page-head">
+
+                <div class="page-title">
+
+                    <h1>Отбраковка ячейки/подсборки</h1>
+
+                    <p>
+                        Ячейку или подсборку из цеха направляют в
+                        изолятор брака только через согласование бюро:
+                        заявка ожидает решения, а номер в это время
+                        остаётся там, где числится по журналу
+                    </p>
+
+                </div>
+
+                <div class="page-head-actions">
+
+                    <a class="btn secondary"
+                       th:href="@{/input-control/quarantine}">
+                        Изолятор брака
+                    </a>
+
+                </div>
+            </div>
+
+            <div class="alert success"
+                 th:if="${successMessage}"
+                 th:text="${successMessage}">
+            </div>
+
+            <div class="alert danger"
+                 th:if="${errorMessage}"
+                 th:text="${errorMessage}">
+            </div>
+
+            <!--
+                ============================================================
+                ФОРМА ЗАЯВКИ
+
+                Номер — единственные входные данные об изделии:
+                разновидность, изделие, партию и местоположение берёт
+                сервис по реестру и журналу. Оператор вводит то, чего
+                в базе нет: причину и этап, на котором брак выявлен.
+
+                Форма стоит над реестром, а не на отдельной странице:
+                создавая заявку, контролёр обязан видеть очередь —
+                иначе он не заметит, что на этот номер заявка уже ждёт
+                решения, и получит отказ, не понимая причины.
+                ============================================================
+            -->
+            <section class="card bvk-defect-form">
+
+                <div class="card-head">
+
+                    <div>
+
+                        <h2>Новая заявка на отбраковку</h2>
+
+                        <small>
+                            Местоположение бюро подставит само — по
+                            последнему событию журнала перемещений,
+                            поэтому вписывать цех или склад не нужно
+                        </small>
+
+                    </div>
+                </div>
+
+                <div class="card-body">
+
+                    <form class="bvk-form"
+                          th:action="@{/pending-defects/create}"
+                          th:object="${pendingDefectForm}"
+                          method="post">
+
+                        <input th:if="${_csrf != null}"
+                               type="hidden"
+                               th:name="${_csrf.parameterName}"
+                               th:value="${_csrf.token}">
+
+                        <div class="bvk-defect-form__grid">
+
+                            <div class="bvk-field">
+
+                                <span class="bvk-field__caption">
+                                    Номер ячейки или подсборки
+                                </span>
+
+                                <input class="bvk-numbers"
+                                       type="text"
+                                       id="pendingDefectNumber"
+                                       th:field="*{fullNumber}"
+                                       maxlength="20"
+                                       inputmode="numeric"
+                                       autocomplete="off"
+                                       placeholder="121200022"
+                                       aria-describedby="pendingDefectNumberHint">
+
+                                <small class="bvk-field__hint"
+                                       id="pendingDefectNumberHint">
+                                    Девять цифр: код изделия и серия.
+                                    Номер можно ввести со сканера —
+                                    дефисы и пробелы уберутся сами
+                                </small>
+
+                                <small class="bvk-field__hint bvk-field__hint--danger"
+                                       th:if="${#fields.hasErrors('fullNumber')}"
+                                       th:errors="*{fullNumber}">
+                                    На номер уже есть ожидающая заявка
+                                </small>
+
+                            </div>
+
+                            <div class="bvk-field">
+
+                                <span class="bvk-field__caption">
+                                    Этап отбраковки
+                                </span>
+
+                                <input class="bvk-numbers"
+                                       type="text"
+                                       th:field="*{defectStage}"
+                                       maxlength="100"
+                                       autocomplete="off"
+                                       placeholder="Сборка подсборки, позывной цеха или операции">
+
+                                <small class="bvk-field__hint"
+                                       th:if="${#fields.hasErrors('defectStage')}"
+                                       th:errors="*{defectStage}">
+                                    Укажите этап отбраковки
+                                </small>
+
+                            </div>
+
+                        </div>
+
+                        <div class="bvk-field bvk-field--spaced">
+
+                            <span class="bvk-field__caption">
+                                Причина отбраковки
+                            </span>
+
+                            <textarea class="bvk-note"
+                                      th:field="*{defectReason}"
+                                      rows="3"
+                                      maxlength="500"
+                                      placeholder="Что именно забраковано: повреждение, отклонение параметра, отсутствие комплектующего"></textarea>
+
+                            <small class="bvk-field__hint"
+                                   th:if="${#fields.hasErrors('defectReason')}"
+                                   th:errors="*{defectReason}">
+                                Укажите причину отбраковки
+                            </small>
+
+                        </div>
+
+                        <div class="bvk-actions">
+
+                            <button type="submit" class="btn primary">
+                                Отправить на согласование
+                            </button>
+
+                            <a class="btn secondary"
+                               th:href="@{/pending-defects/list}">
+                                Очистить
+                            </a>
+                        </div>
+
+                    </form>
+
+                </div>
+            </section>
+
+            <!--
+                ============================================================
+                ВКЛАДКИ РЕЕСТРА
+
+                Очередь согласования — рабочий список: по нему бюро
+                решает, верить ли браку. Решённые заявки остаются
+                доступны, потому что по ним сверяют, кто и когда
+                вынесел ячейку из цеха или вернул на склад.
+                ============================================================
+            -->
+            <div class="bvk-view-tabs">
+
+                <a class="bvk-view-tabs__tab"
+                   th:classappend="${tab != 'resolved'} ? ' is-active' : ''"
+                   th:href="@{/pending-defects/list(tab='pending')}">
+
+                    Ожидают решения
+
+                    <span class="bvk-view-tabs__count"
+                          th:if="${pending != null}"
+                          th:text="${#lists.size(pending)}">
+                        2
+                    </span>
+                </a>
+
+                <a class="bvk-view-tabs__tab"
+                   th:classappend="${tab == 'resolved'} ? ' is-active' : ''"
+                   th:href="@{/pending-defects/list(tab='resolved')}">
+
+                    Принятые решения
+
+                    <span class="bvk-view-tabs__count"
+                          th:if="${resolved != null}"
+                          th:text="${#lists.size(resolved)}">
+                        5
+                    </span>
+                </a>
+
+            </div>
+
+            <!--
+                ============================================================
+                ОЧЕРЕДЬ СОГЛАСОВАНИЯ
+                ============================================================
+            -->
+            <section class="card"
+                     th:if="${tab != 'resolved'}">
+
+                <div class="card-head">
+
+                    <div>
+
+                        <h2>Заявки, ожидающие решения</h2>
+
+                        <small>
+                            Пока заявка не решена, номер остаётся там,
+                            где числился: в изолятор брака он не попал,
+                            и склад не ждёт его приёмки
+                        </small>
+
+                    </div>
+                </div>
+
+                <div class="card-body">
+
+                    <div class="alert danger"
+                         th:if="${pending == null or #lists.isEmpty(pending)}">
+
+                        <p>
+                            Очередь пуста: оформите заявку формой выше,
+                            и она появится здесь до решения бюро
+                        </p>
+
+                    </div>
+
+                    <div class="table-wrap"
+                         th:unless="${pending == null or #lists.isEmpty(pending)}">
+
+                        <table class="data-table bvk-defect-table">
+
+                            <thead>
+
+                            <tr>
+                                <th>Номер ячейки</th>
+                                <th>Ячейка / подсборка</th>
+                                <th>Изделие</th>
+                                <th>Местоположение</th>
+                                <th>Причина брака</th>
+                                <th>Этап отбраковки</th>
+                                <th>Затребовал</th>
+                                <th>Дата</th>
+                                <th>Решение</th>
+                            </tr>
+
+                            </thead>
+
+                            <tbody>
+
+                            <tr th:each="defect : ${pending}">
+
+                                <td class="mono">
+                                    <a th:href="@{/passport/{number}(number=${defect.fullNumber})}"
+                                       th:text="${defect.fullNumber}"
+                                       title="История перемещений номера">
+                                        121200022
+                                    </a>
+                                </td>
+
+                                <td th:text="${defect.cellKindLabel}">
+                                    Ячейка
+                                </td>
+
+                                <td th:text="${defect.classifierLabel}">
+                                    1212 — Подсборка ЯПР56
+                                </td>
+
+                                <td th:text="${defect.currentLocation}">
+                                    Цех (выпуск)
+                                </td>
+
+                                <td th:text="${defect.defectReason}">
+                                    Скол корпуса
+                                </td>
+
+                                <td th:text="${defect.defectStage}">
+                                    Сборка подсборки
+                                </td>
+
+                                <td th:text="${defect.requestedByLabel}">
+                                    Иванов И. И.
+                                </td>
+
+                                <td class="mono"
+                                    th:text="${defect.formattedRequestedAt}">
+                                    22.10.2026 09:15
+                                </td>
+
+                                <td class="table-actions">
+
+                                    <!--
+                                        Два решения — две отдельные
+                                        формы: значение уходит
+                                        параметром, и сервер сам решает,
+                                        провести ячейку в изолятор или
+                                        вернуть на склад полуфабрикатов.
+                                    -->
+                                    <form th:action="@{/pending-defects/decide}"
+                                          method="post"
+                                          class="bvk-defect-table__decision">
+
+                                        <input th:if="${_csrf != null}"
+                                               type="hidden"
+                                               th:name="${_csrf.parameterName}"
+                                               th:value="${_csrf.token}">
+
+                                        <input type="hidden"
+                                               name="defectId"
+                                               th:value="${defect.id}">
+
+                                        <button type="submit"
+                                                name="decision"
+                                                value="APPROVED_TO_QUARANTINE"
+                                                class="btn danger compact"
+                                                formnovalidate>
+
+                                            В изолятор брака
+                                        </button>
+
+                                        <button type="submit"
+                                                name="decision"
+                                                value="REJECTED_TO_WH"
+                                                class="btn secondary compact"
+                                                formnovalidate>
+
+                                            Брак не подтверждён
+                                        </button>
+
+                                    </form>
+
+                                </td>
+
+                            </tr>
+
+                            </tbody>
+                        </table>
+
+                    </div>
+
+                </div>
+            </section>
+
+            <!--
+                ============================================================
+                ПРИНЯТЫЕ РЕШЕНИЯ
+                ============================================================
+            -->
+            <section class="card"
+                     th:if="${tab == 'resolved'}">
+
+                <div class="card-head">
+
+                    <div>
+
+                        <h2>Принятые решения</h2>
+
+                        <small>
+                            Решение необратимо: проведённую заявку
+                            правят новой, а не правкой этой строки —
+                            так же, как закрытую карточку проверки
+                        </small>
+
+                    </div>
+                </div>
+
+                <div class="card-body">
+
+                    <div class="alert danger"
+                         th:if="${resolved == null or #lists.isEmpty(resolved)}">
+
+                        <p>
+                            Решений нет: строки появятся, когда бюро
+                            подтвердит брак или отклонит заявку
+                        </p>
+
+                    </div>
+
+                    <div class="table-wrap"
+                         th:unless="${resolved == null or #lists.isEmpty(resolved)}">
+
+                        <table class="data-table bvk-defect-table">
+
+                            <thead>
+
+                            <tr>
+                                <th>Номер ячейки</th>
+                                <th>Ячейка / подсборка</th>
+                                <th>Изделие</th>
+                                <th>Местоположение</th>
+                                <th>Причина брака</th>
+                                <th>Этап отбраковки</th>
+                                <th>Затребовал</th>
+                                <th>Дата заявки</th>
+                                <th>Решение</th>
+                                <th>Решил</th>
+                            </tr>
+
+                            </thead>
+
+                            <tbody>
+
+                            <tr th:each="defect : ${resolved}">
+
+                                <td class="mono">
+                                    <a th:href="@{/passport/{number}(number=${defect.fullNumber})}"
+                                       th:text="${defect.fullNumber}">
+                                        121200022
+                                    </a>
+                                </td>
+
+                                <td th:text="${defect.cellKindLabel}">
+                                    Ячейка
+                                </td>
+
+                                <td th:text="${defect.classifierLabel}">
+                                    1212 — Подсборка ЯПР56
+                                </td>
+
+                                <td th:text="${defect.currentLocation}">
+                                    Цех (выпуск)
+                                </td>
+
+                                <td th:text="${defect.defectReason}">
+                                    Скол корпуса
+                                </td>
+
+                                <td th:text="${defect.defectStage}">
+                                    Сборка подсборки
+                                </td>
+
+                                <td th:text="${defect.requestedByLabel}">
+                                    Иванов И. И.
+                                </td>
+
+                                <td class="mono"
+                                    th:text="${defect.formattedRequestedAt}">
+                                    22.10.2026 09:15
+                                </td>
+
+                                <td>
+                                    <div class="bvk-cell-stack">
+
+                                        <span class="status"
+                                              th:classappend="' ' + ${defect.decisionBadgeClass}"
+                                              th:text="${defect.decisionLabel}">
+                                            Переместить в изолятор
+                                        </span>
+
+                                        <small class="mono"
+                                               th:text="${defect.formattedApprovedAt}">
+                                            22.10.2026 11:40
+                                        </small>
+                                    </div>
+                                </td>
+
+                                <td th:text="${defect.approvedByLabel}">
+                                    Петров П. П.
+                                </td>
+
+                            </tr>
+
+                            </tbody>
+                        </table>
+
+                    </div>
+
+                </div>
+            </section>
+
+        </div>
+    </main>
+</div>
+
+<th:block th:replace="~{input-control/fragments/layout
+        :: commonScripts}">
+</th:block>
+
+</body>
+</html>

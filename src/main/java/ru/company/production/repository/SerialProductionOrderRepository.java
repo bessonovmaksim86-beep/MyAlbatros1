@@ -7,6 +7,7 @@ import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 import ru.company.production.entity.ProductionOrder;
 import ru.company.production.entity.SerialProductionOrder;
+import ru.company.production.entity.ZnpKind;
 
 import java.util.Collection;
 import java.util.List;
@@ -318,21 +319,29 @@ public interface SerialProductionOrderRepository
      *
      * Попадают заказы двух родов:
      *
-     *   * серийные ЗНП (parent IS NOT NULL) — заказ внутрь выпуска
-     *       с комплектовочной операцией на самом заказе;
-     *   * групповые ЗНП (parent IS NULL, znpKind IS NOT NULL,
-     *       znpKind <> KITTING) — самостоятельные заказы-комплектующие,
-     *       которые ведутся по техпроцессу, а их ячейки привязаны
-     *       через матрицу комплектования (SerialProductionOrder),
-     *       где операция хранится в строке связи.
+     *   * серийные ЗНП (родитель задан) — заказ внутрь выпуска, его
+     *       комплектовочная операция живёт на самом заказе;
+     *   * групповые ЗНП (набор {@link ZnpKind#groupKinds()}) —
+     *       самостоятельные заказы, которые диспетчер заводит изделием
+     *       и количеством с выбором техпроцесса (карточка «Групповой
+     *       ЗНП на ячейки»). Их ячейка привязана к заказу операцией
+     *       комплектования в начале маршрута, то есть строкой матрицы
+     *       {@link SerialProductionOrder}, где и лежит эта операция.
      *
-     * Отсекаются только выпуски (parent IS NULL, znpKind IS NULL или
-     * KITTING) — они комплектующих не имеют и приёмки ячеек не
-     * проходят.
+     * Ремонтные виды в отбор не входят намеренно: их состав — ячейки,
+     * возвращённые из изолятора брака, а не заказанные на склад, и
+     * приёмку этих ячеек проводит комплектование ремонтных ЗНП, а не
+     * раздел приёмки.
+     *
+     * Количество принятых ячеек заграничено заказанным не здесь:
+     * потолок держит внесение состава (SubassemblyKittingService), а
+     * приёмка берёт ровно те номера, что дошли до склада и ещё не
+     * отмечены, — сколько дошло, столько и принимается.
      */
 
     /**
-     * Заказы с непринятыми ячейками: список раздела «Приёмка ячеек».
+     * Заказы-комплектующие с непринятыми ячейками: список раздела
+     * «Приёмка ячеек».
      *
      * EXISTS, а не join: заказ обязан попасть в выдачу один раз, даже
      * если в его составе несколько непринятых ячеек.
@@ -341,10 +350,9 @@ public interface SerialProductionOrderRepository
             select distinct ord
             from ProductionOrder ord
             where ord.active = true
-              and not (
-                  ord.parentProductionOrder is null
-                  and (ord.znpKind is null
-                       or ord.znpKind = 'KITTING')
+              and (
+                    ord.parentProductionOrder is not null
+                 or ord.znpKind in :groupKinds
               )
               and exists (
                   select 1
@@ -357,7 +365,9 @@ public interface SerialProductionOrderRepository
               )
             order by ord.orderDate desc, ord.number desc
             """)
-    List<ProductionOrder> findPendingCellZnp();
+    List<ProductionOrder> findPendingCellZnp(
+            @Param("groupKinds") Collection<ZnpKind> groupKinds
+    );
 
     /**
      * Число заказов, ожидающих приёмки ячеек: счётчик пункта меню.
@@ -366,10 +376,9 @@ public interface SerialProductionOrderRepository
             select count(distinct ord.id)
             from ProductionOrder ord
             where ord.active = true
-              and not (
-                  ord.parentProductionOrder is null
-                  and (ord.znpKind is null
-                       or ord.znpKind = 'KITTING')
+              and (
+                    ord.parentProductionOrder is not null
+                 or ord.znpKind in :groupKinds
               )
               and exists (
                   select 1
@@ -381,7 +390,9 @@ public interface SerialProductionOrderRepository
                     and serial.acceptedAt is null
               )
             """)
-    long countPendingCellZnp();
+    long countPendingCellZnp(
+            @Param("groupKinds") Collection<ZnpKind> groupKinds
+    );
 
     /**
      * Комплектовочные операции, которыми изделие уже закрыто

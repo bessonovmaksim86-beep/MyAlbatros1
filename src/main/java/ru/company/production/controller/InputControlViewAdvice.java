@@ -12,6 +12,7 @@ import ru.company.production.repository.UserRepository;
 import ru.company.production.service.InputControlService;
 import ru.company.production.service.RepairKittingService;
 import ru.company.production.service.WorkshopStaffService;
+import ru.company.production.service.PendingDefectService;
 
 import java.util.List;
 import java.util.Locale;
@@ -31,7 +32,10 @@ import java.util.Locale;
  * рисовалось меню исполнителя, и возвращаться к сотрудникам и
  * распределению приходилось через адресную строку.
  */
-@ControllerAdvice(assignableTypes = InputControlController.class)
+@ControllerAdvice(assignableTypes = {
+        InputControlController.class,
+        PendingDefectsController.class
+})
 @RequiredArgsConstructor
 public class InputControlViewAdvice {
 
@@ -39,6 +43,7 @@ public class InputControlViewAdvice {
     private final InputControlService inputControlService;
     private final RepairKittingService repairKittingService;
     private final WorkshopStaffService staffService;
+    private final PendingDefectService pendingDefectService;
 
     @ModelAttribute
     public void addInputControlContext(
@@ -77,6 +82,17 @@ public class InputControlViewAdvice {
         model.addAttribute(
                 "repairKittingCount",
                 repairKittingService.countRepairKittingOrders()
+        );
+
+        /*
+         * Счётчик отбраковки — заявки, а не ячейки: цифра отвечает на
+         * вопрос «сколько заявок бюро ещё не разобрало». Заявка без
+         * решения держит номер в цеху, и видеть очередь нужно, не
+         * заходя в раздел.
+         */
+        model.addAttribute(
+                "pendingDefectCount",
+                pendingDefectService.countPending()
         );
 
         if (authentication == null

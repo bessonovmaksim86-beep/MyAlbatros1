@@ -51,8 +51,84 @@
             });
         }
 
+        /*
+         * Выпадающие подменю: могут быть несколько (Подсборки,
+         * Комплектование). Каждый .warehouse-dropdown-trigger
+         * управляет следующим за ним .warehouse-submenu. Скрипт
+         * собирает все такие пары и обрабатывает независимо.
+         * Если пользователь зашёл на страницу подменю, оно
+         * автоматически раскрывается при загрузке.
+         */
+        initializeDropdowns(sidebar);
+
         updateDateTime();
         window.setInterval(updateDateTime, 1000);
+    }
+
+    function initializeDropdowns(sidebar) {
+        if (!sidebar) {
+            return;
+        }
+
+        const triggers = sidebar.querySelectorAll('.warehouse-dropdown-trigger');
+
+        triggers.forEach((trigger) => {
+            /*
+             * Каждый .warehouse-submenu идёт сразу после своего
+             * .warehouse-dropdown-trigger, поэтому берём nextElementSibling.
+             */
+            let submenu = trigger.nextElementSibling;
+            while (submenu && !submenu.classList.contains('warehouse-submenu')) {
+                submenu = submenu.nextElementSibling;
+            }
+
+            if (!submenu) {
+                return;
+            }
+
+            function setOpen(isOpen) {
+                trigger.classList.toggle('is-open', isOpen);
+                submenu.classList.toggle('is-open', isOpen);
+                trigger.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+            }
+
+            /*
+             * Раздел активен — подменю открыто. Признак берётся по
+             * подпункту с is-active.
+             */
+            if (submenu.querySelector('.warehouse-submenu__item.is-active')) {
+                setOpen(true);
+            }
+
+            trigger.addEventListener('click', (event) => {
+                event.preventDefault();
+                setOpen(!trigger.classList.contains('is-open'));
+            });
+
+            /*
+             * Клик вне подменю закрывает его.
+             */
+            document.addEventListener('click', (event) => {
+                if (trigger.contains(event.target) || submenu.contains(event.target)) {
+                    return;
+                }
+
+                if (trigger.classList.contains('is-open')) {
+                    setOpen(false);
+                }
+            });
+
+            document.addEventListener('keydown', (event) => {
+                if (event.key !== 'Escape') {
+                    return;
+                }
+
+                if (trigger.classList.contains('is-open')) {
+                    setOpen(false);
+                    trigger.focus();
+                }
+            });
+        });
     }
 
     if (document.readyState === 'loading') {

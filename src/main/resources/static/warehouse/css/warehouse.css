@@ -330,6 +330,138 @@ body {
     opacity: 1;
 }
 
+/*
+ * Родительский пункт «Подсборки»: стрелка-индикатор раскрытия.
+ */
+.warehouse-navigation__chevron {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+
+    width: 18px;
+    height: 18px;
+    margin-left: auto;
+    padding-left: 6px;
+
+    opacity: 0;
+    transform: translateX(-4px);
+
+    transition:
+        opacity 130ms ease,
+        transform 130ms ease;
+}
+
+.warehouse-navigation__chevron svg {
+    display: block;
+    width: 14px;
+    height: 14px;
+    fill: currentColor;
+}
+
+.warehouse-sidebar:hover .warehouse-navigation__chevron,
+.warehouse-sidebar:focus-within .warehouse-navigation__chevron {
+    opacity: 0.5;
+}
+
+.warehouse-navigation__item.is-open .warehouse-navigation__chevron {
+    opacity: 1;
+    transform: rotate(180deg);
+}
+
+/*
+ * Выпадающее подменю «Подсборки» — скрыто по умолчанию.
+ * Расположено прямо под родителем, выровнено по ширине пунктов.
+ */
+.warehouse-submenu {
+    display: flex;
+    flex-direction: column;
+
+    gap: 2px;
+
+    max-height: 0;
+    overflow: hidden;
+
+    opacity: 0;
+
+    transition:
+        max-height 240ms ease,
+        opacity 200ms ease;
+}
+
+.warehouse-submenu.is-open {
+    max-height: 420px;
+    opacity: 1;
+}
+
+.warehouse-submenu__item {
+    position: relative;
+
+    display: flex;
+    align-items: center;
+
+    box-sizing: border-box;
+    width: 266px;
+    min-height: 38px;
+    padding: 6px 13px 6px 36px;
+
+    overflow: hidden;
+
+    color: #c5d0da;
+    font-size: 13px;
+    font-weight: 500;
+    line-height: 1.25;
+    text-decoration: none;
+    white-space: nowrap;
+
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 8px;
+
+    transition:
+        color 160ms ease,
+        background-color 160ms ease,
+        border-color 160ms ease;
+}
+
+.warehouse-submenu__item:hover,
+.warehouse-submenu__item:focus-visible {
+    color: #ffffff;
+    text-decoration: none;
+    background: rgba(255, 255, 255, 0.06);
+}
+
+.warehouse-submenu__item.is-active {
+    color: #ffffff;
+    background: rgba(255, 255, 255, 0.1);
+    border-color: rgba(255, 255, 255, 0.06);
+    box-shadow: inset 3px 0 0 var(--warehouse-accent);
+}
+
+.warehouse-submenu__text {
+    min-width: 0;
+    overflow: hidden;
+
+    text-overflow: ellipsis;
+}
+
+.warehouse-submenu__counter {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+
+    min-width: 21px;
+    height: 21px;
+    margin-left: auto;
+    padding: 0 6px;
+
+    color: #ffffff;
+    font-size: 11px;
+    font-weight: 700;
+
+    background: #e44c4c;
+    border-radius: 20px;
+}
+
 .warehouse-sidebar__footer {
     padding: 14px 0 0;
 
@@ -1524,4 +1656,116 @@ body {
     background: #edf2f7;
     padding: 2px 10px;
     border-radius: 12px;
+}
+
+
+/* ============================================================
+   РЕЕСТР НАЛИЧИЯ СКЛАДА
+
+   Панель отбора повторяет механику фильтра изолятора брака: поля
+   выровнены по верхнему краю, потому что подписи и подсказки под
+   списками разной длины, — при выравнивании вниз ряд полей разъехался
+   бы по вертикали. Поля отбора уходят в две строки на узком экране,
+   иначе шесть условий сжимаются в нечитаемую полосу.
+   ============================================================ */
+
+.ws-filter {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+    gap: 14px 18px;
+
+    align-items: start;
+
+    margin-bottom: 20px;
+    padding: 18px 20px;
+
+    background: #fff;
+    border: 1px solid var(--line, #dce4eb);
+    border-radius: 14px;
+    box-shadow: 0 10px 28px rgba(16, 47, 75, .08);
+}
+
+.ws-filter__field {
+    display: grid;
+    gap: 7px;
+    min-width: 0;
+}
+
+.ws-filter__field > label {
+    min-height: 28px;
+    line-height: 1.25;
+
+    color: #172738;
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: 0.3px;
+    text-transform: uppercase;
+}
+
+.ws-filter__field select,
+.ws-filter__field input {
+    box-sizing: border-box;
+    width: 100%;
+    height: 42px;
+    padding: 11px 12px;
+
+    font: inherit;
+    font-size: 13px;
+    color: #172738;
+
+    background: #fff;
+    border: 1px solid var(--line, #dce4eb);
+    border-radius: 9px;
+}
+
+.ws-filter__field select:focus,
+.ws-filter__field input:focus {
+    outline: 2px solid rgba(239, 125, 0, 0.35);
+    border-color: var(--warehouse-accent);
+}
+
+.ws-filter__hint {
+    min-height: 30px;
+
+    color: var(--muted, #6c7b89);
+    font-size: 11px;
+    line-height: 1.4;
+}
+
+/* Кнопки держат на уровне списков: поле начинается подписью. */
+.ws-filter__actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+
+    padding-top: 35px;
+}
+
+/* Сводка реестра считает четыре признака, а не три. */
+.stats--stock {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+/*
+ * Даты в колонке поступления печатают двумя строками: дата крупнее,
+ * момент с минутами — подводкой, чтобы интервал читался быстрее,
+ * чем точный проводки.
+ */
+.warehouse-stock-table td small {
+    display: block;
+    margin-top: 2px;
+
+    color: var(--muted, #6c7b89);
+    font-size: 11px;
+}
+
+.warehouse-stock-table td .mono {
+    font-family: 'Consolas', 'Courier New', monospace;
+    font-weight: 700;
+}
+
+@media (max-width: 1050px) {
+    .stats--stock {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
 }

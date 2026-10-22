@@ -12,6 +12,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 import ru.company.production.entity.AppUser;
+import ru.company.production.dto.AssignedOperationView;
 import ru.company.production.dto.ControlParamCompletionForm;
 import ru.company.production.dto.ControlParamValueForm;
 import ru.company.production.dto.ControlParamView;
@@ -30,6 +31,8 @@ import ru.company.production.service.RepairKittingOperationService;
 import ru.company.production.service.WorkshopDistributionService;
 import ru.company.production.service.WorkshopStaffService;
 
+import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -63,6 +66,21 @@ public class MyOperationsController {
 
     /** Режим обычной половины — значение по умолчанию и для пустого параметра. */
     private static final String REGULAR_MODE = "regular";
+
+    /*
+     * Проведённая половина обычной половины — четвёртая кнопка
+     * переключателя.
+     *
+     * Основание то же, что разделило обычные работы и групповые ЗНП:
+     * строка списка остаётся строкой, но смысл у неё противоположный.
+     * Пока проведённая работа лежала в одном списке с незакрытой,
+     * исполнителю приходилось прокручивать сделанное, чтобы найти
+     * оставшееся, а счётчик шапки считал вместе закрытое и открытое.
+     */
+    private static final String COMPLETED_MODE = "completed";
+
+    /** Проведённая половина групповых ЗНП. */
+    private static final String GROUP_COMPLETED_MODE = "group-completed";
 
     private final WorkshopDistributionService distributionService;
     private final WorkshopStaffService staffService;
@@ -108,6 +126,13 @@ public class MyOperationsController {
      * их в одной таблице нельзя — колонка номера врёт либо там, либо
      * там, — поэтому вверху стоит переключатель, а адрес каждого режима
      * остаётся закладкой.
+     *
+     * Каждое основание имеет и проведённую половину: группа, у которой
+     * закрыты все экземпляры, уходит из закреплённых работ в список
+     * сделанного. Пока она лежала в одном списке, закрытая работа
+     * оставалась перед глазами и размывала остаток смены — а вырезать её
+     * из подборa совсем было нельзя, проведённый экземпляр обязан
+     * оставаться видимым с датой закрытия.
      */
     @GetMapping({"", "/"})
     public String index(
@@ -116,23 +141,61 @@ public class MyOperationsController {
             Model model
     ) {
         AppUser user = currentUser(authentication);
-        boolean groupMode = GROUP_MODE.equalsIgnoreCase(safeMode(mode));
+        String view = viewMode(mode);
 
-        model.addAttribute("groupMode", groupMode);
+        /*
+         * Основание строки — одно на пару кнопок «закреплённые +
+         * проведённые»: разрез по виду заказа не зависит от того,
+         * закрыта работа или нет.
+         */
+        boolean groupBase = GROUP_MODE.equals(view)
+                || GROUP_COMPLETED_MODE.equals(view);
+        boolean completedView = COMPLETED_MODE.equals(view)
+                || GROUP_COMPLETED_MODE.equals(view);
+
+        List<AssignedOperationView> assigned = groupBase
+                ? distributionService.findMyGroupOperations(user)
+                : distributionService.findMyOperations(user);
+
+        /*
+         * Перенос делается разрезом собранного подборa, а не записью в
+         * строке плана: у переноса нет собственного состояния —
+         * проведённая группа остаётся теми же строками графика, просто
+         * закрытыми. Собственное поле пришлось бы синхронизировать с
+         * completed_at при каждом проведении и снятии отметки, и оно
+         * расходилось бы с фактом при первой правке.
+         */
+        List<AssignedOperationView> pending = new ArrayList<>();
+        List<AssignedOperationView> completed = new ArrayList<>();
+
+        for (AssignedOperationView group : assigned) {
+            (group.allCompleted() ? completed : pending).add(group);
+        }
+
+        model.addAttribute("groupMode", groupBase);
         /*
          * Режим для переключателя отдельным атрибутом: фрагмент ждёт
-         * готовую строку 'regular' / 'group', и выбирать её в шаблоне
-         * тернарником значило бы держать условие режима в двух местах.
+         * готовую строку режимов, и выбирать её в шаблоне тернарником
+         * значило бы держать условие режима в двух местах.
          */
-        model.addAttribute(
-                "operationMode",
-                groupMode ? GROUP_MODE : REGULAR_MODE
-        );
+        model.addAttribute("operationMode", view);
+        model.addAttribute("completedView", completedView);
         model.addAttribute(
                 "operations",
-                groupMode
-                        ? distributionService.findMyGroupOperations(user)
-                        : distributionService.findMyOperations(user)
+                completedView ? completed : pending
+        );
+
+        /*
+         * Цифра проведённой половины считается по уже собранному списку,
+         * а не запросом: «закрыта вся группа» — свойство группы, а не
+         * строки плана, и запрос считал бы её группировкой по всем
+         * шести границам подборa (исполнитель, подразделение, личная
+         * работа руководителя — для каждого основания). Поэтому цифра
+         * стоит у той половины, чей список собран на этой странице.
+         */
+        model.addAttribute(
+                groupBase ? "myGroupCompletedCount" : "myRegularCompletedCount",
+                (long) completed.size()
         );
 
         /*
@@ -280,6 +343,20 @@ public class MyOperationsController {
                     "quarantineCount", inputControlService.countQuarantine()
             );
         }
+
+        /*
+         * Пункты модуля БТК в меню его сотрудников: БТК не имеет
+         * собственных реестров (аналогично /input-control для БВК),
+         * но контролёры работают в том же интерфейсе «Мои операции»,
+         * и признак нужен для корректного отображения бокового меню.
+         */
+        boolean btkModule =
+                user.getRole()
+                        == ru.company.production.entity.Role.BTK_MASTER
+                        || user.getRole()
+                        == ru.company.production.entity.Role.BTK_EXECUTOR;
+
+        model.addAttribute("btkModule", btkModule);
         /*
          * Верхняя панель общего модуля подписывает пользователя по
          * карточке (ФИО и специальность), а не по логину, поэтому
@@ -347,6 +424,7 @@ public class MyOperationsController {
     @GetMapping("/complete/{rowId}")
     public String completeForm(
             @PathVariable Long rowId,
+            @RequestParam(name = "mode", required = false) String mode,
             Authentication authentication,
             Model model,
             RedirectAttributes redirectAttributes
@@ -358,16 +436,23 @@ public class MyOperationsController {
             params = controlParamService.loadForRow(rowId);
         } catch (RuntimeException ex) {
             redirectError(redirectAttributes, ex);
-            return "redirect:/my-operations";
+            return redirectToList(mode);
         }
 
         if (params.isEmpty()) {
-            return "redirect:/my-operations";
+            return redirectToList(mode);
         }
 
         model.addAttribute("controlParams", params);
         model.addAttribute("rowId", rowId);
         model.addAttribute("completionForm", new ControlParamCompletionForm());
+        /*
+         * Режим возвращается на форму и обратно: закрытие последнего
+         * экземпляра переносит группу в проведённую половину, и человек,
+         * пришедший из групповых ЗНП, обязан попасть обратно в них, а не
+         * в обычную половину, где его работы нет.
+         */
+        model.addAttribute("operationMode", viewMode(mode));
 
         return decorate(user, "my-operations/complete", model);
     }
@@ -382,6 +467,7 @@ public class MyOperationsController {
     @PostMapping("/complete/{rowId}")
     public String completeWithControlParams(
             @PathVariable Long rowId,
+            @RequestParam(name = "mode", required = false) String mode,
             @ModelAttribute("completionForm") ControlParamCompletionForm completionForm,
             Authentication authentication,
             RedirectAttributes redirectAttributes
@@ -404,10 +490,10 @@ public class MyOperationsController {
             );
         } catch (RuntimeException ex) {
             redirectError(redirectAttributes, ex);
-            return "redirect:/my-operations/complete/" + rowId;
+            return "redirect:" + completeFormUrl(rowId, mode);
         }
 
-        return "redirect:/my-operations";
+        return redirectToList(mode);
     }
 
     /* Сообщение об отказе проведения — тем же списком, откуда
@@ -424,13 +510,26 @@ public class MyOperationsController {
         );
     }
 
+    /*
+     * Адрес формы отметки с сохранённым режимом: отказ не должен
+     * вырывать человека из его половины списка, иначе после ошибки он
+     * увидел бы чужую половину и потерял незакрытую работу из виду.
+     */
+    private static String completeFormUrl(Long rowId, String mode) {
+        String view = viewMode(mode);
+
+        return REGULAR_MODE.equals(view)
+                ? "/my-operations/complete/" + rowId
+                : "/my-operations/complete/" + rowId + "?mode=" + view;
+    }
+
     @PostMapping("/complete")
     public String complete(
             @RequestParam Long rowId,
+            @RequestParam(name = "mode", required = false) String mode,
             Authentication authentication,
             RedirectAttributes redirectAttributes
-    ) {
-        AppUser user = currentUser(authentication);
+    ) {        AppUser user = currentUser(authentication);
 
         /*
          * Операция с контролируемыми параметрами проводится только
@@ -440,7 +539,7 @@ public class MyOperationsController {
          * сервере, потому что ссылка формы известна и без кнопки.
          */
         if (controlParamService.hasControlParams(rowId)) {
-            return "redirect:/my-operations/complete/" + rowId;
+            return "redirect:" + completeFormUrl(rowId, mode);
         }
 
         try {
@@ -468,7 +567,169 @@ public class MyOperationsController {
             );
         }
 
-        return "redirect:/my-operations";
+        /*
+         * Возврат — в тот же режим: закрытие последнего экземпляра
+         * переносит группу в проведённую половину, и исполнитель,
+         * закрывавший работу из неё, обязан остаться там же.
+         */
+        return redirectToList(mode);
+    }
+
+    /**
+     * Массовое проведение всех экземпляров одной строки списка.
+     *
+     * Работает парой «операция + дата плана» — тем же ключом, которым
+     * сервис собирает группу (см.
+     * {@link WorkshopDistributionService#findMyGroupOperations}), и
+     * состав экземпляров берёт из своего же списка, а не из формы:
+     * проводиться могут только строки этого пользователя, поэтому
+     * чужая или уже закрытая работа в запросе не появляется вовсе.
+     *
+     * Экземпляры операции с контролируемыми параметрами здесь
+     * обходятся: их закрывает только форма отметки, и закрытие без
+     * значений исказило бы данные техпроцесса. Их число возвращается
+     * сообщением, чтобы неполный результат не выглядел отказом кнопки.
+     *
+     * Каждое проведение идёт своими проверками права, повторности,
+     * зависности маршрута и приостановки заказа, поэтому частичный
+     * успех возможен: сколько закрылось — столько и подписывается.
+     */
+    @PostMapping("/complete-group")
+    public String completeGroup(
+            @RequestParam Long operationId,
+            @RequestParam(name = "plannedDate", required = false) String plannedDate,
+            @RequestParam(name = "mode", required = false) String mode,
+            Authentication authentication,
+            RedirectAttributes redirectAttributes
+    ) {
+        AppUser user = currentUser(authentication);
+        LocalDate date = parseDate(plannedDate);
+
+        if (operationId == null || date == null) {
+            redirectAttributes.addFlashAttribute(
+                    "errorMessage",
+                    "Не удалось определить группу работ для проведения"
+            );
+            return redirectToList(mode);
+        }
+
+        boolean groupMode = GROUP_MODE.equals(viewMode(mode))
+                || GROUP_COMPLETED_MODE.equals(viewMode(mode));
+        List<AssignedOperationView> operations = groupMode
+                ? distributionService.findMyGroupOperations(user)
+                : distributionService.findMyOperations(user);
+
+        AssignedOperationView group = operations.stream()
+                .filter(op -> operationId.equals(op.operationId()))
+                .filter(op -> date.equals(op.plannedDate()))
+                .findFirst()
+                .orElse(null);
+
+        List<Long> rowIds = group == null
+                ? List.of()
+                : group.bulkCompletableRowIds();
+
+        if (rowIds.isEmpty()) {
+            redirectAttributes.addFlashAttribute(
+                    "errorMessage",
+                    group != null && group.controlParamCount() > 0
+                            ? "Провести сразу всю группу нельзя: операция требует "
+                              + "отметки контролируемых параметров, проведите "
+                              + "экземпляры по одному"
+                            : "Проводить нечего: все экземпляры уже закрыты либо "
+                              + "ждут предшествующую операцию"
+            );
+            return redirectToList(mode);
+        }
+
+        int completed = 0;
+        String failure = null;
+
+        for (Long rowId : rowIds) {
+            try {
+                suspensionService.assertRowOperable(rowId);
+                distributionService.completeRow(rowId, user);
+
+                /*
+                 * Хук СГП — как при единичном проведении: закрытие
+                 * заказа-комплектующего смотрит актуальное состояние
+                 * графика, поэтому вызывается после записи факта.
+                 */
+                closureService.onRowCompleted(rowId);
+                completed++;
+            } catch (RuntimeException ex) {
+                failure = ex.getMessage();
+            }
+        }
+
+        if (completed > 0) {
+            redirectAttributes.addFlashAttribute(
+                    "successMessage",
+                    "Проведено экземпляров: " + completed
+                            + " из " + rowIds.size()
+            );
+        }
+
+        if (completed < rowIds.size()) {
+            redirectAttributes.addFlashAttribute(
+                    "errorMessage",
+                    failure == null || failure.isBlank()
+                            ? "Не все экземпляры проведены: часть ждёт "
+                              + "предшествующую операцию или закрыта ранее"
+                            : failure
+            );
+        }
+
+        return redirectToList(mode);
+    }
+
+    /** Адрес списка того же режима — массовое проведение не уводит из него. */
+    private static String redirectToList(String mode) {
+        String view = viewMode(mode);
+
+        return REGULAR_MODE.equals(view)
+                ? "redirect:/my-operations"
+                : "redirect:/my-operations?mode=" + view;
+    }
+
+    /**
+     * Режим из параметра адреса.
+     *
+     * Пустое или неизвестное значение — обычная половина закреплённых
+     * работ: та же граница по умолчанию, что была у раздела до появления
+     * проведённых половин, поэтому старая закладка не ведёт в пустой
+     * список.
+     */
+    private static String viewMode(String mode) {
+        String value = safeMode(mode);
+
+        if (GROUP_MODE.equalsIgnoreCase(value)) {
+            return GROUP_MODE;
+        }
+
+        if (COMPLETED_MODE.equalsIgnoreCase(value)) {
+            return COMPLETED_MODE;
+        }
+
+        if (GROUP_COMPLETED_MODE.equalsIgnoreCase(value)) {
+            return GROUP_COMPLETED_MODE;
+        }
+
+        return REGULAR_MODE;
+    }
+
+    /** Дата плана из параметра формы; пустое или нечитаемое значение — null. */
+    private static LocalDate parseDate(String value) {
+
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+
+        try {
+            return LocalDate.parse(value.trim());
+        } catch (RuntimeException ignored) {
+            return null;
+        }
     }
 
     /**

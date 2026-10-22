@@ -7,12 +7,12 @@ import org.springframework.transaction.annotation.Transactional;
 import ru.company.production.dto.InputControlResult;
 import ru.company.production.entity.AppUser;
 import ru.company.production.entity.Operation;
-import ru.company.production.entity.OperationName;
 import ru.company.production.entity.ProductSerial;
 import ru.company.production.entity.ProductSerialOperation;
 import ru.company.production.entity.ProductSerialOperationStatus;
 import ru.company.production.entity.ProductionOrder;
 import ru.company.production.entity.SerialProductionOrder;
+import ru.company.production.entity.ZnpKind;
 import ru.company.production.repository.ProductSerialOperationRepository;
 import ru.company.production.repository.ProductSerialRepository;
 import ru.company.production.repository.ProductionOrderRepository;
@@ -31,7 +31,7 @@ import java.util.stream.Collectors;
  * и проходит входной контроль, а сюда попадает уже ячейкой, собранной
  * в состав конкретного ЗНП. Склад принимает не партию оприходования, а
  * заказ-комплектующий: единица приёмки — все непринятые ячейки состава
- * одного серийного ЗНП разом.
+ * одного ЗНП разом.
  *
  * Приёмка делает ровно два дела, и оба — события склада, а не
  * производства:
@@ -43,10 +43,17 @@ import java.util.stream.Collectors;
  *       для склада приёмка и есть подтверждение: ячейку укомплектовали
  *       и она на месте.
  *
- * Заказ выбирается по признаку серийного ЗНП (родитель + комплектовочная
- * операция заданы): групповые и ремонтные виды (V37/V38) приёмки ячеек
- * не имеют — у них нет ни выпуска-родителя, ни комплектовочной операции
- * (см. {@link ru.company.production.entity.ZnpKind#isSerialBased()}).
+ * Заказ выбирается по признаку комплектующего: серийный ЗНП (родитель
+ * задан) либо групповой вид из {@link ZnpKind#groupKinds()} — тот, что
+ * диспетчер заводит изделием и количеством с выбором техпроцесса.
+ * Ячейка привязана к такому заказу операцией комплектования в начале
+ * маршрута, то есть строкой матрицы {@link SerialProductionOrder}.
+ * Ремонтные виды в отбор не входят: их состав возвращён из изолятора,
+ * и приёмку этих ячеек проводит комплектование ремонтных ЗНП.
+ *
+ * Принимается ровно то, что дошло до склада: ячейка, отвалившаяся по
+ * ходу техпроцесса, в состав заказа не внесена, а значит, и в приёмку
+ * не попадёт — количество приёмки всегда не больше заказанного.
  *
  * Приёмку проводят один раз: повторное проведение отклоняется, а не
  * перетирает прежнюю отметку — иначе журнал перемещений заполнился бы
@@ -56,6 +63,9 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class ZnpAcceptanceService {
 
+    /** Виды, ведущие приёмку ячеек: набор считается от {@link ZnpKind}. */
+    private static final List<ZnpKind> ACCEPTED_KINDS = ZnpKind.groupKinds();
+
     private final ProductionOrderRepository productionOrderRepository;
     private final SerialProductionOrderRepository linkRepository;
     private final ProductSerialRepository serialRepository;
@@ -63,7 +73,7 @@ public class ZnpAcceptanceService {
     private final SerialMovementJournalService journal;
 
     /**
-     * Серийные ЗНП с непринятыми ячейками — список раздела.
+     * Заказы-комплектующие с непринятыми ячейками — список раздела.
      *
      * Число непринятых ячеек в строке не считается: для этого на экране
      * приёмки есть детальный перечень одного заказа, а пакетная разбивка
@@ -72,13 +82,13 @@ public class ZnpAcceptanceService {
      */
     @Transactional(readOnly = true)
     public List<ProductionOrder> findPendingOrders() {
-        return linkRepository.findPendingCellZnp();
+        return linkRepository.findPendingCellZnp(ACCEPTED_KINDS);
     }
 
     /** Заказов, ожидающих приёмки ячеек: счётчик пункта меню. */
     @Transactional(readOnly = true)
     public long countPending() {
-        return linkRepository.countPendingCellZnp();
+        return linkRepository.countPendingCellZnp(ACCEPTED_KINDS);
     }
 
     /**
@@ -92,7 +102,7 @@ public class ZnpAcceptanceService {
     @Transactional(readOnly = true)
     public ZnpAcceptanceView loadView(Long orderId) {
 
-        ProductionOrder order = requireSerialZnp(orderId);
+        ProductionOrder order = requireComponentZnp(orderId);
 
         List<SerialProductionOrder> cells =
                 linkRepository.findPendingCellsByOrderId(orderId);
@@ -100,7 +110,7 @@ public class ZnpAcceptanceService {
         return new ZnpAcceptanceView(
                 order,
                 cells,
-                operationName(order)
+                operationName(order, cells)
         );
     }
 
@@ -116,7 +126,7 @@ public class ZnpAcceptanceService {
     @Transactional
     public InputControlResult accept(Long orderId, AppUser receiver) {
 
-        ProductionOrder order = requireSerialZnp(orderId);
+        ProductionOrder order = requireComponentZnp(orderId);
 
         List<SerialProductionOrder> pending =
                 linkRepository.findPendingCellsByOrderId(orderId);
@@ -189,11 +199,10 @@ public class ZnpAcceptanceService {
     }
 
     /**
-     * Заказ обязан быть серийным комплектующим: только у него есть
-     * выпускающий родитель и комплектовочная операция, а значит — есть
-     * что принимать и чем закрывать приёмку.
+     * Заказ обязан быть комплектующим: серийным ЗНП с комплектовочной
+     * операцией на самом заказе либо групповым ЗНП с техпроцессом.
      */
-    private ProductionOrder requireSerialZnp(Long orderId) {
+    private ProductionOrder requireComponentZnp(Long orderId) {
 
         ProductionOrder order = productionOrderRepository
                 .findDetailedById(orderId)
@@ -201,9 +210,9 @@ public class ZnpAcceptanceService {
                         "Заказ на производство не найден"
                 ));
 
-        if (!order.isComponent() || !order.isSerialBasedKind()) {
+        if (!order.isComponent()) {
             throw new IllegalStateException(
-                    "Приёмка ячеек проходит по серийному заказу-комплектующему, "
+                    "Приёмка ячеек проходит по заказам-комплектующим, "
                             + "а заказ «" + order.getNumber() + "» им не является"
             );
         }
@@ -211,20 +220,34 @@ public class ZnpAcceptanceService {
         return order;
     }
 
-    /** Наименование комплектовочной операции заказа — текст вместо lazy. */
-    private static String operationName(ProductionOrder order) {
+    /**
+     * Наименование комплектовочной операции заказа — текст вместо lazy.
+     *
+     * Для серийного ЗНП операция берётся на самом заказе, для группового —
+     * из первой строки матрицы комплектования, где хранится операция,
+     * привязавшая ячейку к заказу.
+     */
+    private static String operationName(ProductionOrder order,
+                                        List<SerialProductionOrder> cells) {
 
         Operation operation = order.getProductionOperation();
 
-        if (operation == null) {
-            return "—";
+        if (operation != null
+                && operation.getOperationName() != null
+                && operation.getOperationName().getName() != null) {
+            return operation.getOperationName().getName();
         }
 
-        OperationName name = operation.getOperationName();
+        if (!cells.isEmpty()) {
+            Operation linkOp = cells.get(0).getOperation();
+            if (linkOp != null
+                    && linkOp.getOperationName() != null
+                    && linkOp.getOperationName().getName() != null) {
+                return linkOp.getOperationName().getName();
+            }
+        }
 
-        return name == null || name.getName() == null
-                ? "—"
-                : name.getName();
+        return "—";
     }
 
     /**

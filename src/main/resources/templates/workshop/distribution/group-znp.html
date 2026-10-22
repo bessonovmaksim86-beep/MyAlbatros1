@@ -527,11 +527,11 @@
 
                                                                                 <label class="executor-option"
                                                                                        th:each="e : ${op.executors()}"
-                                                                                       th:classappend="${e.absent()
+                                                                                       th:classappend="${e.absent()}
                                                                                            ? ' is-absent'
-                                                                                           : (${e.overloaded()
+                                                                                           : (${e.overloaded()}
                                                                                                 ? ' is-overloaded'
-                                                                                                : ''})}">
+                                                                                                : '')">
 
                                                                                     <input type="radio"
                                                                                            name="executorId"
@@ -848,11 +848,11 @@
 
                                                 <label class="executor-option"
                                                        th:each="e : ${batch.executors()}"
-                                                       th:classappend="${e.absent()
+                                                       th:classappend="${e.absent()}
                                                            ? ' is-absent'
-                                                           : (${e.overloaded()
+                                                           : (${e.overloaded()}
                                                                 ? ' is-overloaded'
-                                                                : ''})}">
+                                                                : '')">
 
                                                     <input type="radio"
                                                            name="executorId"

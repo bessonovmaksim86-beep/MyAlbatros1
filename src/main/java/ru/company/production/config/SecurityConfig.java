@@ -254,6 +254,22 @@ public class SecurityConfig {
                          */
                         .requestMatchers("/quality", "/quality/**")
                         .hasRole("SK_GENERAL")
+                        /*
+                         * Отбраковка ячейки/подсборки с согласованием
+                         * бюро. Раздел вынесен за /input-control/**,
+                         * потому что адресом пользуются обе роли бюро
+                         * одинаково: правило "/input-control/**" держит
+                         * POST только для исполнителя и отсекло бы
+                         * руководителя, а решать по заявке должен и он.
+                         *
+                         * Право на заявку есть только у бюро: заявка
+                         * рождается из цеха, но проводит её по журналу
+                         * и изолятору именно бюро входного контроля,
+                         * и решение обязан нести тот, кто отвечает за
+                         * качество.
+                         */
+                        .requestMatchers("/pending-defects", "/pending-defects/**")
+                        .hasAnyRole("BVK_EXECUTOR", "BVK_MASTER")
                         .anyRequest().authenticated()
                 )
                 .formLogin(form -> form

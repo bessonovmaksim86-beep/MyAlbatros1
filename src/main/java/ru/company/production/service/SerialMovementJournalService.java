@@ -259,6 +259,71 @@ public class SerialMovementJournalService {
         }
     }
 
+    /**
+     * Брак по заявке на отбраковку не подтверждён: ячейку возвращают
+     * со склада полуфабрикатов.
+     *
+     * Записывает событие перемещения на склад. Отличие от
+     * {@link #recordQuarantinedByRequest} — тип события и направление
+     * движения: ячейка не уходит в изолятор, а остаётся в производстве.
+     */
+    @Transactional
+    public void recordRejectedDefect(String fullNumber,
+                                     QuarantineCellKind cellKind,
+                                     ProductSerialStatus serialStatus,
+                                     ProductClassifier classifier,
+                                     CellReceivingBatch batch,
+                                     AppUser actor,
+                                     LocalDateTime moment,
+                                     String reason) {
+
+        SerialMovementEvent event = newEvent(
+                fullNumber, serialIdOf(fullNumber),
+                SerialMovementType.TRANSFERRED_TO_WAREHOUSE,
+                moment, actor, null, null, null);
+
+        event.setCellKind(cellKind);
+        event.setSerialStatus(serialStatus);
+        event.setProductClassifier(classifier);
+        event.setReceivingBatch(batch);
+        event.setNote(truncate(reason, 500));
+
+        journalRepository.save(event);
+    }
+
+    /**
+     * Ячейку отбраковали по заявке, которую согласовало бюро.
+     *
+     * Отличается от {@link #recordDefectDecision}: то событие — итог
+     * входного контроля партии и обязано иметь группу брака, а здесь
+     * ячейку бракуют поштучно прямо из цеха, и группы брака у неё нет.
+     * Причина живёт в note, а разновидность и изделие берут из заявки —
+     * паспорт обязан показать ту стадию, на которой номер забраковали.
+     */
+    @Transactional
+    public void recordQuarantinedByRequest(String fullNumber,
+                                           QuarantineCellKind cellKind,
+                                           ProductSerialStatus serialStatus,
+                                           ProductClassifier classifier,
+                                           CellReceivingBatch batch,
+                                           AppUser actor,
+                                           LocalDateTime moment,
+                                           String reason) {
+
+        SerialMovementEvent event = newEvent(
+                fullNumber, serialIdOf(fullNumber),
+                SerialMovementType.QUARANTINED,
+                moment, actor, null, null, null);
+
+        event.setCellKind(cellKind);
+        event.setSerialStatus(serialStatus);
+        event.setProductClassifier(classifier);
+        event.setReceivingBatch(batch);
+        event.setNote(truncate(reason, 500));
+
+        journalRepository.save(event);
+    }
+
     /** Ячейки включены в ремонтный ЗНП (состав — из строк заказа). */
     @Transactional
     public void recordRepairOrdered(RepairOrder order) {

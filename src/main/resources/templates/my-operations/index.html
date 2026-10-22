@@ -93,7 +93,7 @@
                 source — оно же подписывает блок.
             -->
             <div class="alert attention"
-                 th:if="${supervisor and !groupMode}">
+                 th:if="${supervisor and !groupMode and !completedView}">
 
                 <p>
                     Руководителю подразделения здесь показываются и его
@@ -120,19 +120,41 @@
 
                     <div>
 
-                        <h2>Закреплённые работы</h2>
+                        <h2 th:if="${!completedView}">Закреплённые работы</h2>
 
-                        <small>
-                            Горизонт — две недели от сегодня. Строка —
-                            операция на одну дату плана; позиция на
-                            десять изделий даёт десять экземпляров
-                            одной строки. Нажмите на операцию —
-                            раскроются изделия и кнопка «Провести
-                            операцию». Проводится каждое изделие
-                            отдельно. Работу, у которой не закрыта
-                            предшествующая по маршруту, провести
-                            нельзя — она помечена и кнопка закрыта.
-                        </small>
+                        <h2 th:if="${completedView}">Проведённые работы</h2>
+
+                        <small th:if="${!completedView}">
+                                Горизонт — две недели от сегодня. Строка —
+                                операция на одну дату плана; позиция на
+                                десять изделий даёт десять экземпляров
+                                одной строки. Нажмите на операцию —
+                                раскроются изделия и кнопка «Провести
+                                операцию». Проводится каждое изделие
+                                отдельно, а кнопка «Провести все
+                                операции» закрывает сразу все
+                                доступные экземпляры строки. Работу, у
+                                которой не закрыта предшествующая по
+                                маршруту, провести нельзя — она помечена
+                                и кнопка закрыта.
+                            </small>
+
+                        <!--
+                            В проведённой половине описывается правило
+                            переноса, а не проведения: здесь нечего
+                            закрывать, и подсказка про кнопку
+                            противоречила бы списку, из которого кнопка
+                            убрана.
+                        -->
+                        <small th:if="${completedView}">
+                                Горизонт — две недели от сегодня. Сюда
+                                попадают работы, у которых проведены все
+                                экземпляры: группа переходит целиком,
+                                потому что строка списка — вся операция
+                                на одну дату плана, а не её часть.
+                                Нажмите на операцию — раскроются изделия
+                                с датой проведения каждого.
+                            </small>
 
                     </div>
 
@@ -288,7 +310,75 @@
                                                      and !#lists.isEmpty(op.instances)
                                                  }">
 
-                                                <strong>Экземпляры операции</strong>
+                                                <div class="group-panel__instances-head">
+
+                                                    <strong>Экземпляры операции</strong>
+
+                                                    <!--
+                                                        Массовое проведение одной
+                                                        строки списка: закрывает все
+                                                        экземпляры группы, которым
+                                                        кнопка «Провести операцию»
+                                                        доступна по праву и по
+                                                        маршруту. Состав считает
+                                                        сервер по своему же списку,
+                                                        поэтому группа передаётся
+                                                        своей парой-ключом —
+                                                        «операция + дата плана».
+                                                        Экземпляры с контролируемыми
+                                                        параметрами остаются: их
+                                                        закрывает только форма отметки,
+                                                        и число таких подписывается
+                                                        рядом.
+
+                                                        В проведённой половине форма
+                                                        не рисуется — все экземпляры
+                                                        группы уже закрыты, и кнопка
+                                                        противоречила бы списку.
+                                                    -->
+                                                    <form th:if="${op.hasBulkCompletable() and !completedView}"
+                                                          method="post"
+                                                          th:action="@{/my-operations/complete-group}"
+                                                          class="inline-form"
+                                                          th:attr="data-confirm=${
+                                                              'Провести операцию по всем '
+                                                              + op.bulkCompletableCount()
+                                                              + ' экземплярам группы?'
+                                                          }"
+                                                          onsubmit="return confirm(this.getAttribute('data-confirm'));">
+
+                                                        <input th:if="${_csrf != null}"
+                                                               type="hidden"
+                                                               th:name="${_csrf.parameterName}"
+                                                               th:value="${_csrf.token}">
+
+                                                        <input type="hidden"
+                                                               name="operationId"
+                                                               th:value="${op.operationId()}">
+
+                                                        <input type="hidden"
+                                                               name="plannedDate"
+                                                               th:value="${op.dateParam()}">
+
+                                                        <input type="hidden"
+                                                               name="mode"
+                                                               th:value="${operationMode}">
+
+                                                        <button type="submit"
+                                                                class="btn primary compact">
+                                                            Провести все операции
+                                                            (<span th:text="${op.bulkCompletableCount()}">7</span>)
+                                                        </button>
+                                                    </form>
+
+                                                    <small class="group-panel__instances-hint"
+                                                           th:if="${op.controlParamCount() > 0}">
+                                                        отметки параметров: <span
+                                                            th:text="${op.controlParamCount()}">2</span>
+                                                        — проведите по одному
+                                                    </small>
+
+                                                </div>
 
                                                 <div class="table-wrap">
 
@@ -303,7 +393,7 @@
                                                             </th>
                                                             <th>Наименование</th>
                                                             <th>Статус</th>
-                                                            <th></th>
+                                                            <th th:if="${!completedView}"></th>
                                                         </tr>
                                                         </thead>
 
@@ -345,7 +435,7 @@
 
                                                             </td>
 
-                                                            <td>
+                                                            <td th:if="${!completedView}">
 
                                                                 <form th:if="${inst.canComplete()}"
                                                                       th:action="@{/my-operations/complete}"
@@ -360,6 +450,10 @@
                                                                     <input type="hidden"
                                                                            name="rowId"
                                                                            th:value="${inst.rowId}">
+
+                                                                    <input type="hidden"
+                                                                           name="mode"
+                                                                           th:value="${operationMode}">
 
                                                                     <button type="submit"
                                                                             class="btn primary compact">
@@ -411,8 +505,20 @@
                 что заказ бюро — не работа из графика: его планировщик
                 не назначал, его завёл диспетчер, и человеку сначала
                 нужно увидеть свою очередь, а уже затем состав ремонта.
+
+                В проведённой половине их нет: заказ в работе — это
+                незакрытая работа бюро, и перечислять её под заголовком
+                «Проведённые работы» значило бы показать невыполненное
+                как выполненное.
+
+                Условие держится внешним блоком: подключение фрагмента
+                (th:replace) выполняется раньше проверки условия
+                (th:unless), поэтому оба атрибута на одном теге вставили
+                бы список независимо от режима.
             -->
-            <th:block th:replace="~{my-operations/fragments/repair-kitting :: groups}">
+            <th:block th:unless="${completedView}">
+                <th:block th:replace="~{my-operations/fragments/repair-kitting :: groups}">
+                </th:block>
             </th:block>
 
             <!--
@@ -422,7 +528,26 @@
                 противоречило бы видимому под ним списку.
             -->
             <div class="alert success"
-                 th:if="${#lists.isEmpty(operations)
+                 th:if="${completedView and #lists.isEmpty(operations)}">
+
+                <p th:text="${
+                    groupMode
+                        ? 'Проведённых работ по групповым заказам за ближайшие '
+                          + 'две недели нет: как только вы закроете все экземпляры '
+                          + 'группы, она появится здесь.'
+                        : 'Проведённых работ за ближайшие две недели нет: '
+                          + 'группа попадает сюда, когда в ней проведены '
+                          + 'все экземпляры.'
+                }">
+                    Проведённых работ за ближайшие две недели нет: группа
+                    попадает сюда, когда в ней проведены все экземпляры.
+                </p>
+
+            </div>
+
+            <div class="alert success"
+                 th:if="${!completedView
+                         and #lists.isEmpty(operations)
                          and (kittingGroups == null or #lists.isEmpty(kittingGroups))}">
 
                 <p th:text="${

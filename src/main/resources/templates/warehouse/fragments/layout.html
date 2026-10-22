@@ -19,6 +19,23 @@
 
     <div class="warehouse-sidebar__inner">
 
+        <!--
+            Признак «мы внутри раздела Подсборки»: по нему подсвечивается
+            родительский пункт, а скрипт раскрывает подменю при загрузке.
+            Аналогично для раздела комплектования заказа покупателя.
+        -->
+        <th:block th:with="subassemblyActive=${
+                              activePage == 'receiving'
+                              or activePage == 'acceptance'
+                              or activePage == 'quarantine-transfer'
+                              or activePage == 'znp-acceptance'
+                              or activePage == 'subassembly-kitting'
+                          },
+                          kittingActive=${
+                              activePage == 'kitting-znp'
+                              or activePage == 'kitting-semi'
+                          }">
+
         <a class="department-brand"
            th:href="@{/warehouse/general}"
            title="Перейти на главную страницу склада">
@@ -63,110 +80,217 @@
                 </span>
             </a>
 
+            <!--
+                Реестр наличия: что лежит на полках прямо сейчас.
+                Счётчика у пункта нет намеренно: число позиций —
+                справочник, а не незакрытое дело, и считать его на
+                каждом экране модуля значило бы платить запросом ради
+                цифры, которую видят только в самом разделе.
+            -->
             <a class="warehouse-navigation__item"
-               th:classappend="${activePage == 'receiving'} ? ' is-active' : ''"
-               th:href="@{/warehouse/receiving}"
-               title="Оприходование ячеек">
+               th:classappend="${activePage == 'stock'} ? ' is-active' : ''"
+               th:href="@{/warehouse/stock}"
+               title="Ячейки и подсборки, которые лежат на складе: изделие, контрагент, дата поступления и размещение">
 
                 <span class="warehouse-navigation__icon">
                     <svg viewBox="0 0 24 24" aria-hidden="true">
-                        <path d="M12 2 3 6.5v11L12 22l9-4.5v-11L12 2Zm0 2.2 6.6 3.3L12 10.8 5.4 7.5 12 4.2ZM5 9.3l6 3v7.6l-6-3V9.3Zm8 10.6v-7.6l6-3v7.6l-6 3Z"/>
+                        <path d="M12 2 3 6.5v11L12 22l9-4.5v-11L12 2Zm0 2.2 6.6 3.3L12 10.8 5.4 7.5 12 4.2ZM5 9.3l6 3v7.2l-6-3V9.3Zm8 10.2v-7.2l6-3v7.2l-6 3Z"/>
                     </svg>
                 </span>
 
                 <span class="warehouse-navigation__text">
-                    Оприходование
-                </span>
-
-                <span class="warehouse-navigation__counter"
-                      th:if="${pendingReceivingCount != null and pendingReceivingCount > 0}"
-                      th:text="${pendingReceivingCount}">
-                    2
+                    Наличие на складе
                 </span>
             </a>
 
-            <a class="warehouse-navigation__item"
-               th:classappend="${activePage == 'acceptance'} ? ' is-active' : ''"
-               th:href="@{/warehouse/acceptance}"
-               title="Приёмка на склад подсборок, вернувшихся из БВК">
+            <a class="warehouse-navigation__item warehouse-dropdown-trigger"
+               th:classappend="${subassemblyActive} ? ' is-active' : ''"
+               href="#"
+               aria-expanded="false"
+               aria-haspopup="true"
+               title="Подсборки">
 
                 <span class="warehouse-navigation__icon">
                     <svg viewBox="0 0 24 24" aria-hidden="true">
-                        <path d="M20 6h-4V4a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2H4a2 2 0 0 0-2 2v11a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2Zm-8-2h4v2h-4V4Zm1.5 11.7-2.2 2.2-3.8-3.8 1.4-1.4 2.4 2.4 4.5-4.5 1.4 1.4-3.7 3.7Z"/>
+                        <path d="M22 10V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v4c0 1.1.9 2 2 2h18a2 2 0 0 0 2-2ZM4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8H4Zm12 2h-2v-2h2v2Zm0-4H4V8h12v2Z"/>
                     </svg>
                 </span>
 
                 <span class="warehouse-navigation__text">
-                    Приёмка с БВК
+                    Подсборки
                 </span>
 
-                <span class="warehouse-navigation__counter"
-                      th:if="${awaitingAcceptanceCount != null and awaitingAcceptanceCount > 0}"
-                      th:text="${awaitingAcceptanceCount}">
-                    1
+                <span class="warehouse-navigation__chevron" aria-hidden="true">
+                    <svg viewBox="0 0 24 24">
+                        <path d="M7 10l5 5 5-5Z"/>
+                    </svg>
+                </span>
+            </a>
+
+            <!-- Выпадающее подменю «Подсборки» -->
+            <div class="warehouse-submenu"
+                 role="menu"
+                 aria-label="Подсборки">
+
+                <a class="warehouse-submenu__item"
+                   th:classappend="${activePage == 'receiving'} ? ' is-active' : ''"
+                   th:href="@{/warehouse/receiving}"
+                   role="menuitem"
+                   title="Оприходование ячеек">
+
+                    <span class="warehouse-submenu__text">
+                        Оприходование ячеек
+                    </span>
+
+                    <span class="warehouse-submenu__counter"
+                          th:if="${pendingReceivingCount != null and pendingReceivingCount > 0}"
+                          th:text="${pendingReceivingCount}">
+                        2
+                    </span>
+                </a>
+
+                <a class="warehouse-submenu__item"
+                   th:classappend="${activePage == 'acceptance'} ? ' is-active' : ''"
+                   th:href="@{/warehouse/acceptance}"
+                   role="menuitem"
+                   title="Приёмка на склад подсборок, вернувшихся из БВК">
+
+                    <span class="warehouse-submenu__text">
+                        Приёмка с БВК
+                    </span>
+
+                    <span class="warehouse-submenu__counter"
+                          th:if="${awaitingAcceptanceCount != null and awaitingAcceptanceCount > 0}"
+                          th:text="${awaitingAcceptanceCount}">
+                        1
+                    </span>
+                </a>
+
+                <a class="warehouse-submenu__item"
+                   th:classappend="${activePage == 'quarantine-transfer'} ? ' is-active' : ''"
+                   th:href="@{/warehouse/quarantine-transfer}"
+                   role="menuitem"
+                   title="Приёмка ячеек, перемещённых из изолятора брака">
+
+                    <span class="warehouse-submenu__text">
+                        Перемещение из изолятора
+                    </span>
+
+                    <span class="warehouse-submenu__counter"
+                          th:if="${quarantineTransferCount != null and quarantineTransferCount > 0}"
+                          th:text="${quarantineTransferCount}">
+                        3
+                    </span>
+                </a>
+
+                <a class="warehouse-submenu__item"
+                   th:classappend="${activePage == 'znp-acceptance'} ? ' is-active' : ''"
+                   th:href="@{/warehouse/znp-acceptance}"
+                   role="menuitem"
+                   title="Приёмка ячеек, вошедших в состав ЗНП">
+
+                    <span class="warehouse-submenu__text">
+                        Приёмка ячеек
+                    </span>
+
+                    <span class="warehouse-submenu__counter"
+                          th:if="${znpCellAcceptanceCount != null and znpCellAcceptanceCount > 0}"
+                          th:text="${znpCellAcceptanceCount}">
+                        1
+                    </span>
+                </a>
+
+                <a class="warehouse-submenu__item"
+                   th:classappend="${activePage == 'subassembly-kitting'} ? ' is-active' : ''"
+                   th:href="@{/warehouse/subassembly-kitting}"
+                   role="menuitem"
+                   title="Комплектование подсборок в ЗНП">
+
+                    <span class="warehouse-submenu__text">
+                        Комплектование подсборок
+                    </span>
+
+                    <span class="warehouse-submenu__counter"
+                          th:if="${subassemblyKittingCount != null and subassemblyKittingCount > 0}"
+                          th:text="${subassemblyKittingCount}">
+                        1
+                    </span>
+                </a>
+
+            </div>
+
+            <a class="warehouse-navigation__item warehouse-dropdown-trigger"
+               th:classappend="${kittingActive} ? ' is-active' : ''"
+               href="#"
+               aria-expanded="false"
+               aria-haspopup="true"
+               title="Комплектование заказа покупателя">
+
+                <span class="warehouse-navigation__icon">
+                    <svg viewBox="0 0 24 24" aria-hidden="true">
+                        <path d="M3 13h8V3H3v10Zm0 8h8v-6H3v6Zm10 0h8V11h-8v10Zm0-18v6h8V3h-8Z"/>
+                    </svg>
+                </span>
+
+                <span class="warehouse-navigation__text">
+                    Комплектование заказа покупателя
+                </span>
+
+                <span class="warehouse-navigation__chevron" aria-hidden="true">
+                    <svg viewBox="0 0 24 24">
+                        <path d="M7 10l5 5 5-5Z"/>
+                    </svg>
                 </span>
             </a>
 
             <!--
-                Приёмка ячеек, перемещённых из изолятора брака. Бюро
-                входного контроля выносит ячейку из изолятора с указанием
-                причины, склад сверяет номера и принимает её на склад либо
-                возвращает обратно. Пункт стоит сразу за приёмкой с БВК:
-                жест тот же — принять то, что приехало из БВК, только
-                объектом выступает ячейка, ранее числившаяся браком.
+                Подменю комплектования заказа покупателя: ЗНП и
+                полуфабрикаты — два склада с разными операциями, но
+                один жест «собрать состав заказа».
             -->
-            <a class="warehouse-navigation__item"
-               th:classappend="${activePage == 'quarantine-transfer'} ? ' is-active' : ''"
-               th:href="@{/warehouse/quarantine-transfer}"
-               title="Приёмка на склад ячеек и подсборок, перемещённых из изолятора брака">
+            <div class="warehouse-submenu"
+                 role="menu"
+                 aria-label="Комплектование заказа покупателя">
 
-                <span class="warehouse-navigation__icon">
-                    <svg viewBox="0 0 24 24" aria-hidden="true">
-                        <path d="M4 3h16a1 1 0 0 1 1 1v4H3V4a1 1 0 0 1 1-1Zm-1 7h18v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V10Zm5.7 2.3-1.4 1.4L10 15.4l4.7-4.7 1.4 1.4-6.1 6.1-3.3-3.3Z"/>
-                    </svg>
-                </span>
+                <a class="warehouse-submenu__item"
+                   th:classappend="${activePage == 'kitting-znp'} ? ' is-active' : ''"
+                   th:href="@{/warehouse/kitting-znp}"
+                   role="menuitem"
+                   title="Комплектование ЗНП: операции склада комплектования">
 
-                <span class="warehouse-navigation__text">
-                    Перемещение из изолятора
-                </span>
+                    <span class="warehouse-submenu__text">
+                        Комплектование ЗНП
+                    </span>
 
-                <span class="warehouse-navigation__counter"
-                      th:if="${quarantineTransferCount != null and quarantineTransferCount > 0}"
-                      th:text="${quarantineTransferCount}">
-                    3
-                </span>
-            </a>
+                    <span class="warehouse-submenu__counter"
+                          th:if="${kittingZnpCount != null and kittingZnpCount > 0}"
+                          th:text="${kittingZnpCount}">
+                        2
+                    </span>
+                </a>
+
+                <a class="warehouse-submenu__item"
+                   th:classappend="${activePage == 'kitting-semi'} ? ' is-active' : ''"
+                   th:href="@{/warehouse/kitting-semi}"
+                   role="menuitem"
+                   title="Комплектование полуфабрикатов: операции склада полуфабрикатов">
+
+                    <span class="warehouse-submenu__text">
+                        Комплектование полуфабрикатов
+                    </span>
+
+                    <span class="warehouse-submenu__counter"
+                          th:if="${kittingSemiCount != null and kittingSemiCount > 0}"
+                          th:text="${kittingSemiCount}">
+                        1
+                    </span>
+                </a>
+
+            </div>
 
             <!--
-                Приёмка ячеек по серийным ЗНП. Диспетчер выпускает
-                групповой ЗНП на ячейки, склад собирает в него
-                подсборки, а ячейки, пришедшие из цеха, принимает на
-                склад. Пункт стоит рядом с приёмкой с БВК: жест тот же
-                — принять то, что приехало, только объектом приёмки
-                выступает сам ЗНП, а не возврат из контроля.
+                Поставщики и статистика приходов по ним.
             -->
-            <a class="warehouse-navigation__item"
-               th:classappend="${activePage == 'znp-acceptance'} ? ' is-active' : ''"
-               th:href="@{/warehouse/znp-acceptance}"
-               title="Приёмка на склад ячеек, собранных в серийные ЗНП">
-
-                <span class="warehouse-navigation__icon">
-                    <svg viewBox="0 0 24 24" aria-hidden="true">
-                        <path d="M19 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V5a2 2 0 0 0-2-2Zm-9.5 13.5-3.5-3.5 1.4-1.4 2.1 2.1 5.1-5.1 1.4 1.4-6.5 6.5Z"/>
-                    </svg>
-                </span>
-
-                <span class="warehouse-navigation__text">
-                    Приёмка ячеек
-                </span>
-
-                <span class="warehouse-navigation__counter"
-                      th:if="${znpCellAcceptanceCount != null and znpCellAcceptanceCount > 0}"
-                      th:text="${znpCellAcceptanceCount}">
-                    1
-                </span>
-            </a>
-
             <a class="warehouse-navigation__item"
                th:classappend="${activePage == 'suppliers'} ? ' is-active' : ''"
                th:href="@{/warehouse/suppliers}"
@@ -183,80 +307,7 @@
                 </span>
             </a>
 
-            <a class="warehouse-navigation__item"
-               th:classappend="${activePage == 'kitting-znp'} ? ' is-active' : ''"
-               th:href="@{/warehouse/kitting-znp}"
-               title="Комплектование ЗНП: операции склада комплектования">
-
-                <span class="warehouse-navigation__icon">
-                    <svg viewBox="0 0 24 24" aria-hidden="true">
-                        <path d="M3 13h8V3H3v10Zm0 8h8v-6H3v6Zm10 0h8V11h-8v10Zm0-18v6h8V3h-8Z"/>
-                    </svg>
-                </span>
-
-                <span class="warehouse-navigation__text">
-                    Комплектование ЗНП
-                </span>
-
-                <span class="warehouse-navigation__counter"
-                      th:if="${kittingZnpCount != null and kittingZnpCount > 0}"
-                      th:text="${kittingZnpCount}">
-                    2
-                </span>
-            </a>
-
-            <a class="warehouse-navigation__item"
-               th:classappend="${activePage == 'kitting-semi'} ? ' is-active' : ''"
-               th:href="@{/warehouse/kitting-semi}"
-               title="Комплектование полуфабрикатов: операции склада полуфабрикатов">
-
-                <span class="warehouse-navigation__icon">
-                    <svg viewBox="0 0 24 24" aria-hidden="true">
-                        <path d="M3 13h8V3H3v10Zm0 8h8v-6H3v6Zm10 0h8V11h-8v10Zm0-18v6h8V3h-8Z"/>
-                    </svg>
-                </span>
-
-                <span class="warehouse-navigation__text">
-                    Комплектование полуфабрикатов
-                </span>
-
-                <span class="warehouse-navigation__counter"
-                      th:if="${kittingSemiCount != null and kittingSemiCount > 0}"
-                      th:text="${kittingSemiCount}">
-                    1
-                </span>
-            </a>
-
-            <!--
-                Комплектование подсборок в ЗНП. Диспетчер заводит
-                заказ-комплектующий с операцией приёмки на склад
-                полуфабрикатов, а кладовщик вносит в него номера ячеек,
-                которые реально лежат на складе. Пункт стоит рядом с
-                прочими разделами комплектования: жест тот же — собрать
-                состав заказа, только объектом выступают принятые
-                подсборки, а не операции графика.
-            -->
-            <a class="warehouse-navigation__item"
-               th:classappend="${activePage == 'subassembly-kitting'} ? ' is-active' : ''"
-               th:href="@{/warehouse/subassembly-kitting}"
-               title="Комплектование подсборок в ЗНП: внесение ячеек склада полуфабрикатов в заказы-комплектующие">
-
-                <span class="warehouse-navigation__icon">
-                    <svg viewBox="0 0 24 24" aria-hidden="true">
-                        <path d="M20 6h-4V4a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2H4a2 2 0 0 0-2 2v11a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2Zm-8-2h4v2h-4V4Zm1.5 11.7-2.2 2.2-3.8-3.8 1.4-1.4 2.4 2.4 4.5-4.5 1.4 1.4-3.7 3.7Z"/>
-                    </svg>
-                </span>
-
-                <span class="warehouse-navigation__text">
-                    Комплектование подсборок в ЗНП
-                </span>
-
-                <span class="warehouse-navigation__counter"
-                      th:if="${subassemblyKittingCount != null and subassemblyKittingCount > 0}"
-                      th:text="${subassemblyKittingCount}">
-                    1
-                </span>
-            </a>
+            </th:block>
 
         </nav>
 

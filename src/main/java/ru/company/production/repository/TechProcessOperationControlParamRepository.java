@@ -61,4 +61,25 @@ public interface TechProcessOperationControlParamRepository
             @Param("operationId") Long operationId
     );
 
+    /**
+     * Узлы маршрута, у которых есть хотя бы один контролируемый параметр.
+     *
+     * Нужен списку закреплённых работ: массовое проведение закрывает
+     * только экземпляры без отметок, а обязательный параметр нельзя
+     * закрыть без значения. Возвращаются пары «техпроцесс · операция»
+     * одним запросом на весь список — по одной проверке на строку
+     * график подбор превратил бы раскрытие панели в десятки запросов.
+     */
+    @Query("""
+            select distinct node.techProcess.id, node.operation.id
+            from TechProcessOperationControlParam link
+            join link.techProcessOperation node
+            where node.techProcess.id in :processIds
+              and node.operation.id in :operationIds
+            """)
+    List<Object[]> findParametrisedNodes(
+            @Param("processIds") Collection<Long> processIds,
+            @Param("operationIds") Collection<Long> operationIds
+    );
+
 }

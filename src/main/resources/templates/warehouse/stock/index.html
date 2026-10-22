@@ -1,0 +1,461 @@
+<!DOCTYPE html>
+<html lang="ru"
+      xmlns:th="http://www.thymeleaf.org">
+
+<head>
+    <meta charset="UTF-8">
+
+    <meta name="viewport"
+          content="width=device-width, initial-scale=1">
+
+    <title>Наличие на складе</title>
+
+    <link rel="stylesheet"
+          th:href="@{/technology/css/technology.css}">
+
+    <link rel="stylesheet"
+          th:href="@{/technology/css/common.css}">
+
+    <link rel="stylesheet"
+          th:href="@{/warehouse/css/warehouse.css}">
+</head>
+
+<body>
+
+<div class="app-shell">
+
+    <aside th:replace="~{warehouse/fragments/layout
+            :: sidebar('stock')}">
+    </aside>
+
+    <main class="main">
+
+        <header th:replace="~{warehouse/fragments/layout
+                :: topbar}">
+        </header>
+
+        <div class="page-content warehouse-page">
+
+            <div class="page-head">
+
+                <div class="page-title">
+
+                    <h1>Наличие на складе</h1>
+
+                    <p>
+                        Все ячейки и подсборки, которые лежат на складе
+                        полуфабрикатов: изделие, контрагент, дата
+                        поступления и то, в какой заказ позиция уже
+                        оформлена
+                    </p>
+
+                </div>
+
+                <div class="page-head-actions">
+
+                    <a class="btn secondary"
+                       th:href="@{/warehouse/subassembly-kitting}">
+                        Комплектование подсборок
+                    </a>
+
+                    <a class="btn secondary"
+                       th:href="@{/warehouse/general}">
+                        Обзор склада
+                    </a>
+
+                </div>
+            </div>
+
+            <div class="alert success"
+                 th:if="${successMessage}"
+                 th:text="${successMessage}">
+            </div>
+
+            <div class="alert danger"
+                 th:if="${errorMessage}"
+                 th:text="${errorMessage}">
+            </div>
+
+            <!-- ============================================================
+                 ОТБОР РЕЕСТРА
+
+                 Фильтр уходит GET'ом: ссылку на «подсборки контрагента за
+                 неделю» передают коллеге, и выбор не должен сбрасываться
+                 от перехода по прочим пунктам меню. Значения возвращаются
+                 в модель, поэтому после применения форма не «забывает»
+                 отбор (тот же приём, что у перечня изолятора брака).
+
+                 Дата поступления — один момент на всю строку: приёмка
+                 склада, иначе подтверждение прихода, иначе дата партии.
+                 Интервал задают по нему же, поэтому отсортированные «по
+                 поступлению» строки совпадают с отобранными по датам.
+                 ============================================================ -->
+            <form class="ws-filter"
+                  method="get"
+                  th:action="@{/warehouse/stock}">
+
+                <div class="ws-filter__field">
+
+                    <label for="wsKind">
+                        Вид позиции
+                    </label>
+
+                    <select id="wsKind"
+                            name="kind"
+                            onchange="this.form.submit()">
+
+                        <option value=""
+                                th:selected="${filterKind == null}">
+                            Подсборки и ячейки
+                        </option>
+
+                        <option th:each="k : ${kinds}"
+                                th:value="${k.name()}"
+                                th:text="${k.displayName}"
+                                th:selected="${filterKind != null and filterKind == k}">
+                            Ячейка
+                        </option>
+
+                    </select>
+
+                    <span class="ws-filter__hint">
+                        Подсборка — позиция прихода, ещё не принятая
+                        складом полуфабрикатов
+                    </span>
+                </div>
+
+                <div class="ws-filter__field">
+
+                    <label for="wsProduct">
+                        Название изделия
+                    </label>
+
+                    <select id="wsProduct"
+                            name="classifierId"
+                            onchange="this.form.submit()">
+
+                        <option value=""
+                                th:selected="${filterClassifierId == null}">
+                            Все изделия
+                        </option>
+
+                        <option th:each="opt : ${productOptions}"
+                                th:value="${opt.id}"
+                                th:text="${opt.label}"
+                                th:selected="${filterClassifierId != null and filterClassifierId == opt.id}">
+                            5127 — ЯПР56М
+                        </option>
+
+                    </select>
+
+                    <span class="ws-filter__hint">
+                        В списке только те изделия, чьи позиции есть
+                        на складе
+                    </span>
+                </div>
+
+                <div class="ws-filter__field">
+
+                    <label for="wsSupplier">
+                        Контрагент
+                    </label>
+
+                    <select id="wsSupplier"
+                            name="supplier"
+                            onchange="this.form.submit()">
+
+                        <option value=""
+                                th:selected="${filterSupplier == null}">
+                            Все контрагенты
+                        </option>
+
+                        <option th:each="opt : ${supplierOptions}"
+                                th:value="${opt.key}"
+                                th:text="${opt.displayName}"
+                                th:selected="${filterSupplier != null and filterSupplier == opt.key}">
+                            ООО «Компонент»
+                        </option>
+
+                    </select>
+
+                    <span class="ws-filter__hint">
+                        Позиции без приходной партии в отбор по
+                        контрагенту не попадают
+                    </span>
+                </div>
+
+                <div class="ws-filter__field">
+
+                    <label for="wsDateFrom">
+                        Поступление с
+                    </label>
+
+                    <input id="wsDateFrom"
+                           type="date"
+                           name="dateFrom"
+                           th:value="${filterDateFrom}"
+                           onchange="this.form.submit()">
+
+                    <span class="ws-filter__hint">
+                        День поступления считается по приёмке склада,
+                        а при её отсутствии — по приходу партии
+                    </span>
+                </div>
+
+                <div class="ws-filter__field">
+
+                    <label for="wsDateTo">
+                        Поступление по
+                    </label>
+
+                    <input id="wsDateTo"
+                           type="date"
+                           name="dateTo"
+                           th:value="${filterDateTo}"
+                           onchange="this.form.submit()">
+
+                    <span class="ws-filter__hint">
+                        Указанный день включительно
+                    </span>
+                </div>
+
+                <div class="ws-filter__field">
+
+                    <label for="wsSort">
+                        Сортировка
+                    </label>
+
+                    <select id="wsSort"
+                            name="sort"
+                            onchange="this.form.submit()">
+
+                        <option th:each="s : ${sortings}"
+                                th:value="${s.param()}"
+                                th:text="${s.displayName}"
+                                th:selected="${s == filterSorting}">
+                            По номеру
+                        </option>
+
+                    </select>
+
+                    <span class="ws-filter__hint">
+                        Внутри равных позиций порядок — по номеру
+                    </span>
+                </div>
+
+                <div class="ws-filter__actions">
+
+                    <button type="submit" class="btn primary compact">
+                        Применить
+                    </button>
+
+                    <a class="btn secondary compact"
+                       th:if="${filter != null and filter.filtered}"
+                       th:href="@{/warehouse/stock}">
+                        Сбросить
+                    </a>
+                </div>
+
+            </form>
+
+            <div class="stats stats--stock">
+
+                <div class="stat">
+                    <small>Позиций в списке</small>
+
+                    <strong th:text="${summary != null ? summary.total : 0}">
+                        0
+                    </strong>
+
+                    <span class="trend">
+                        С учётом выбранного отбора
+                    </span>
+                </div>
+
+                <div class="stat">
+                    <small>Ячеек принято</small>
+
+                    <strong th:text="${summary != null ? summary.cells : 0}">
+                        0
+                    </strong>
+
+                    <span class="trend">
+                        Приёмку склада провели
+                    </span>
+                </div>
+
+                <div class="stat">
+                    <small>Подсборок</small>
+
+                    <strong th:text="${summary != null ? summary.subassemblies : 0}">
+                        0
+                    </strong>
+
+                    <span class="trend">
+                        Лежат на складе, приёмку ещё не провели
+                    </span>
+                </div>
+
+                <div class="stat">
+                    <small>Свободно к выдаче</small>
+
+                    <strong th:text="${summary != null ? summary.free : 0}">
+                        0
+                    </strong>
+
+                    <span class="trend">
+                        Не оформлены ни в один действующий заказ
+                    </span>
+                </div>
+            </div>
+
+            <section class="card">
+
+                <div class="card-head">
+
+                    <div>
+
+                        <h2>Реестр наличия</h2>
+
+                        <small>
+                            Строка — одна позиция склада; размещённой
+                            считается позиция, внесённая в действующий
+                            заказ-комплектующий, она с полок снята и
+                            второй раз выдана быть не может
+                        </small>
+
+                    </div>
+
+                </div>
+
+                <div class="card-body">
+
+                    <div class="alert danger"
+                         th:if="${rows != null and #lists.isEmpty(rows)}">
+
+                        <p>
+                            Под выбранный отбор позиций на складе нет:
+                            снимите часть условий — вид изделия,
+                            контрагента или интервал дат поступления
+                        </p>
+
+                    </div>
+
+                    <div class="table-wrap"
+                         th:unless="${rows == null or #lists.isEmpty(rows)}">
+
+                        <table class="data-table warehouse-batch-table warehouse-stock-table">
+
+                            <thead>
+
+                            <tr>
+                                <th>Номер</th>
+                                <th>Вид</th>
+                                <th>Изделие</th>
+                                <th>Контрагент</th>
+                                <th>Ордер</th>
+                                <th>Изм.</th>
+                                <th>Поступление</th>
+                                <th>Приёмка склада</th>
+                                <th>Размещение</th>
+                            </tr>
+
+                            </thead>
+
+                            <tbody>
+
+                            <!--
+                                Занятую позицию не подсвечивают фоном
+                                строки: is-blocked в прочих таблицах
+                                склада читается как «провести нельзя»,
+                                а здесь заказ — не ошибка, и довольно
+                                плашки размещения в своей колонке.
+                            -->
+                            <tr th:each="row : ${rows}">
+
+                                <td class="warehouse-number-cell">
+                                    <span class="mono" th:text="${row.fullNumber}">
+                                        512700022
+                                    </span>
+                                </td>
+
+                                <td>
+                                    <span class="status"
+                                          th:classappend="' ' + ${row.kindBadgeClass}"
+                                          th:text="${row.kindLabel}">
+                                        Ячейка
+                                    </span>
+                                </td>
+
+                                <td th:text="${row.cellLabel}">
+                                    5127 — Подсборка ЯПР56М
+                                </td>
+
+                                <td th:text="${row.supplierLabel}">
+                                    ООО «Компонент»
+                                </td>
+
+                                <td th:text="${row.incomingOrderLabel}">
+                                    ТОРГ-12/44
+                                </td>
+
+                                <td th:text="${row.changeLabel}">
+                                    Изм. 3
+                                </td>
+
+                                <td>
+                                    <span th:text="${row.receivedLabel}">
+                                        21.09.2026
+                                    </span>
+
+                                    <small class="text-muted"
+                                           th:text="${row.receivedDateTimeLabel}">
+                                        21.09.2026 09:14
+                                    </small>
+                                </td>
+
+                                <td th:text="${row.acceptedLabel}">
+                                    22.09.2026 14:10
+                                </td>
+
+                                <td>
+                                    <span class="status"
+                                          th:classappend="' ' + ${row.placementBadgeClass}"
+                                          th:text="${row.placementLabel}">
+                                        Свободна на складе
+                                    </span>
+
+                                    <!--
+                                        Номер ЗНП, вписанный в саму
+                                        позицию (V50), печатают только
+                                        когда матрица комплектования его
+                                        не подтвердила: иначе тот же заказ
+                                        стоял бы в строке дважды.
+                                    -->
+                                    <small class="text-muted"
+                                           th:if="${row.znpLabel != null and row.free}"
+                                           th:text="'ЗНП в позиции: ' + ${row.znpLabel}">
+                                        ЗНП в позиции: ЗНП-2026-114
+                                    </small>
+                                </td>
+
+                            </tr>
+
+                            </tbody>
+                        </table>
+
+                    </div>
+
+                </div>
+            </section>
+
+        </div>
+    </main>
+</div>
+
+<th:block th:replace="~{warehouse/fragments/layout
+        :: commonScripts}">
+</th:block>
+
+</body>
+</html>
