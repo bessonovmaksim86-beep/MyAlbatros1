@@ -172,7 +172,7 @@ public class ModuleMenuCountersViewAdvice {
                 regularOperations + groupOperations
         );
 
-        if (!distributionService.isSupervisor(user)) {
+        if (!distributionService.canDistribute(user)) {
             return;
         }
 

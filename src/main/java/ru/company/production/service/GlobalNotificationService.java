@@ -90,7 +90,7 @@ public class GlobalNotificationService {
             ));
         }
 
-        if (distributionService.isSupervisor(user)) {
+        if (distributionService.canDistribute(user)) {
             addDistributionQueue(result, user);
         }
 

@@ -107,6 +107,14 @@ public class SecurityConfig {
                          * комплектации) их подразделения планировщик
                          * закрепляет за ними, и распределять их больше
                          * некому.
+                         *
+                         * Руководителей БВК и БТК в списке нет намеренно:
+                         * в бюро работу не распределяют — планировщик
+                         * закрепляет строку за подразделением, и любой
+                         * контролёр берёт её из перечня бюро сам
+                         * (WorkshopDistributionService#isUnitPool).
+                         * Закрепление за человеком здесь только отрезало
+                         * бы работу от остальных сотрудников бюро.
                          */
                         .requestMatchers(
                                 "/workshop/distribution",
@@ -119,8 +127,6 @@ public class SecurityConfig {
                                 "SDP_ST_MASTER",
                                 "OMTSIK_MASTER",
                                 "OMTSIK_С_MASTER",
-                                "BVK_MASTER",
-                                "BTK_MASTER",
                                 "SGP_MASTER",
                                 "SGM_MASTER",
                                 "SK_GENERAL",

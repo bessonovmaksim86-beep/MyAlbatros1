@@ -175,6 +175,24 @@ public class WorkshopDistributionService {
             Role.SK_GENERAL
     );
 
+    /*
+     * Руководящие роли, которым раздел распределения не принадлежит.
+     *
+     * Набор уже покрыт {@link #UNIT_POOL_ROLES}, но вынесен отдельно и
+     * намеренно его уже: руководитель службы качества ведёт тот же
+     * перечень через собственный интерфейс, и отсекать ему вход значило
+     * бы убрать раздел у человека, который к бюро отношения не имеет.
+     *
+     * Основание закрытия то же, что у пула: работу бюро планировщик
+     * закрепляет за подразделением, и перекладывать её некому —
+     * очередь распределения здесь всегда пуста, а закрепление за
+     * конкретным контролёром только отрезает работу от остальных.
+     */
+    private static final Set<Role> NO_DISTRIBUTION_ROLES = Set.of(
+            Role.BVK_MASTER,
+            Role.BTK_MASTER
+    );
+
     private final OrderScheduleRowRepository scheduleRowRepo;
     private final WorkshopStaffBindingRepository bindingRepo;
     private final TechProcessRepository techProcessRepo;
@@ -2179,6 +2197,25 @@ public class WorkshopDistributionService {
         return user != null
                 && user.getRole() != null
                 && SUPERVISOR_ROLES.contains(user.getRole());
+    }
+
+    /**
+     * Открыт ли пользователю раздел распределения работ.
+     *
+     * Признак один на меню, уведомления и право проводить закрепление:
+     * пункт в меню и доступ к адресу задаются им же, иначе меню звало бы
+     * в 403 — ровно та причина, по которой {@code canDistribute} уже
+     * держит и меню, и счётчик.
+     *
+     * От {@link #isSupervisor} признак отличается на ролях бюро: они
+     * руководящие и свои личные работы получения комплектации ведут, но
+     * распределять им нечего — строку бюро планировщик закрепляет за
+     * подразделением, и любой контролёр берёт её сам.
+     */
+    public boolean canDistribute(AppUser user) {
+        return isSupervisor(user)
+                && user.getRole() != null
+                && !NO_DISTRIBUTION_ROLES.contains(user.getRole());
     }
 
     /**
