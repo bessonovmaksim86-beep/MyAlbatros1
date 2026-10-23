@@ -98,4 +98,18 @@ public record SubassemblyKittingZnpRow(
         long required = requiredCount();
         return required > 0 && doneCount() >= required;
     }
+
+    /**
+     * Заказ укомплектован не полностью: взято меньше заказанного.
+     *
+     * Обратная сторона {@link #completed()}, а не отдельный расчёт: по
+     * этому признаку считают счётчик меню, и цифра обязана равняться
+     * числу строк «Взято X из Y», где X меньше Y. Случай «заказано
+     * ноль» в счётчик не входит: заказывать нечего и брать нечего, и
+     * звать кладовщика в такую строку нечем.
+     */
+    public boolean incomplete() {
+        long required = requiredCount();
+        return required > 0 && doneCount() < required;
+    }
 }

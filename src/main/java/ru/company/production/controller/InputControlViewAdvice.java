@@ -59,6 +59,17 @@ public class InputControlViewAdvice {
                 inputControlService.countInWork()
         );
 
+        /*
+         * Новые заявки — партии со статусом «Ожидает проверки». Их
+         * держат отдельно от «в работе»: взятую в работу партию
+         * контролёр знает своей, а не взятую обязан увидеть, иначе
+         * заявка пролежала бы в списке до конца смены незамеченной.
+         */
+        model.addAttribute(
+                "awaitingControlCount",
+                inputControlService.countAwaiting()
+        );
+
         model.addAttribute(
                 "returnCount",
                 inputControlService.countReturns()

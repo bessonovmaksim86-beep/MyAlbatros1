@@ -87,6 +87,17 @@
 
                     </div>
 
+                    <span class="bvk-counter bvk-counter--danger"
+                          th:if="${awaitingControlCount != null
+                                  and awaitingControlCount > 0}">
+
+                        Ожидает проверки:
+
+                        <strong th:text="${awaitingControlCount}">
+                            3
+                        </strong>
+                    </span>
+
                     <span class="bvk-counter"
                           th:if="${inWorkCount != null and inWorkCount > 0}">
 

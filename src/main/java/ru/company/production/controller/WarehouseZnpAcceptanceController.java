@@ -6,11 +6,13 @@ import org.springframework.security.core.Authentication;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.ModelAttribute;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 import ru.company.production.dto.InputControlResult;
+import ru.company.production.dto.ZnpAcceptanceForm;
 import ru.company.production.entity.AppUser;
 import ru.company.production.repository.UserRepository;
 import ru.company.production.service.ZnpAcceptanceService;
@@ -25,10 +27,9 @@ import ru.company.production.service.ZnpAcceptanceService;
  * контроллер только читает экран и вызывает приёмку.
  *
  * Проведение идёт redirect'ом: заказ принимают один раз, и повторный F5
- * не должен отмечать ячейки второй раз. В отличие от приёмки после БВК,
- * здесь перечень вводить не нужно — состав приёмки задан самим заказом
- * (все его непринятые ячейки), поэтому форма — одна кнопка, а не поле
- * с номерами.
+ * не должен отмечать ячейки второй раз. Форма содержит поле ввода
+ * номеров ячеек (по одному в строке) с чекбоксом «отметить все» —
+ * аналогично БВК, чтобы кладовщик мог сверить и подтвердить состав.
  */
 @Controller
 @RequestMapping("/warehouse/znp-acceptance")
@@ -73,12 +74,14 @@ public class WarehouseZnpAcceptanceController {
     @PostMapping("/{id}")
     public String accept(
             @PathVariable Long id,
+            @ModelAttribute("znpForm") ZnpAcceptanceForm form,
             Authentication authentication,
             RedirectAttributes redirectAttributes
     ) {
         try {
             InputControlResult result = acceptanceService.accept(
                     id,
+                    form,
                     currentUser(authentication)
             );
 
@@ -135,6 +138,19 @@ public class WarehouseZnpAcceptanceController {
         model.addAttribute("cells", view.cells());
         model.addAttribute("cellNumbers", view.cellNumbers());
         model.addAttribute("operationName", view.operationName());
+        model.addAttribute("techProcessName", view.techProcessName());
+        model.addAttribute("znpForm", new ZnpAcceptanceForm());
+
+        /*
+         * Признак доступности нужен экрану так же, как списку: форма
+         * проведения не должна появляться там, где приёмка ещё не
+         * открылась, — иначе кладовщик жал бы кнопку, которую сервис
+         * отклоняет.
+         */
+        model.addAttribute(
+                "acceptanceAvailable",
+                view.acceptanceAvailable()
+        );
     }
 
     /**

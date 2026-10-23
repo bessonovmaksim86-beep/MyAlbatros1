@@ -81,6 +81,21 @@
                     Входной контроль
                 </span>
 
+                <!--
+                    Две цифры на одном пункте означают разное: красная —
+                    новые заявки, которые ещё никто не брал, обычная —
+                    проверки, уже взятые в работу. Слить их в одну
+                    нельзя: контролёр не отличил бы чужую новую партию
+                    от своей незавершённой.
+                -->
+                <span class="bvk-navigation__counter
+                             bvk-navigation__counter--new"
+                      th:if="${awaitingControlCount != null
+                              and awaitingControlCount > 0}"
+                      th:text="${awaitingControlCount}">
+                    3
+                </span>
+
                 <span class="bvk-navigation__counter"
                       th:if="${inWorkCount != null and inWorkCount > 0}"
                       th:text="${inWorkCount}">

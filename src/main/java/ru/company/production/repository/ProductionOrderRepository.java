@@ -169,6 +169,7 @@ public interface ProductionOrderRepository
             select distinct ord
             from ProductionOrder ord
             left join fetch ord.parentProductionOrder
+            left join fetch ord.productClassifier
             where ord.active = true
               and lower(ord.number) like lower(:pattern)
             order by ord.orderDate desc, ord.number desc
@@ -523,43 +524,13 @@ public interface ProductionOrderRepository
             @Param("unitCode") String unitCode
     );
 
-    /**
-     * Тот же отбор количеством: счётчик пункта меню. Отдельный запрос,
-     * а не size() списка — страница существует без загрузки заказа
-     * целиком, а fetch-join'ы счётчику не нужны.
+    /*
+     * Отдельного count-запроса для счётчика раздела здесь нет и быть
+     * не должно: счётчик «Комплектование подсборок» считает заказы с
+     * неполным составом, а это зависит от внесённого состава и
+     * складского остатка — одними полями заказа такое не выразить.
+     * Правило живёт в SubassemblyKittingZnpRow#incomplete(), и счётчик
+     * считает тот же список, что печатает экран, иначе цифра меню и
+     * строки «Взято X из Y» разошлись бы.
      */
-    @Query("""
-            select count(ord)
-            from ProductionOrder ord
-            where ord.active = true
-              and ord.status = :status
-              and (
-                    (
-                          ord.kittingType =
-                              ru.company.production.entity.KittingType.SUBASSEMBLY
-                    )
-                 or (
-                          ord.productionOperation is not null
-                      and ord.productionOperation.operationType.code
-                            in :typeCodes
-                      and ord.productionOperation.organizationUnit.code
-                            = :unitCode
-                    )
-                 or exists (
-                        select 1
-                        from TechProcessOperation node
-                        join node.operation routeOperation
-                        join routeOperation.operationType routeType
-                        join routeOperation.organizationUnit routeUnit
-                        where node.techProcess = ord.techProcess
-                          and routeType.code in :typeCodes
-                          and routeUnit.code = :unitCode
-                    )
-              )
-            """)
-    long countSubassemblyKittingOrders(
-            @Param("status") ProductionOrderStatus status,
-            @Param("typeCodes") List<String> typeCodes,
-            @Param("unitCode") String unitCode
-    );
 }

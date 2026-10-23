@@ -246,6 +246,55 @@ public interface OrderScheduleRowRepository
     );
 
     /*
+     * Строки плана списком заказов — ССУЩНОСТЯМИ, а не проекцией.
+     *
+     * Нужны тем, кто проверяет очередь операции: правило
+     * «дошла ли операция до своего шага» живёт в одном месте
+     * ({@code WorkshopDistributionService#blockerLabelsOf}) и работает
+     * с сущностью строки, а не с её проекцией. Держать второй вариант
+     * того же правила для проекции значило бы разъехаться двум экранам
+     * во мнении, можно ли проводить работу.
+     *
+     * Fetch обязателен: проверка читает техпроцесс, основание и
+     * операцию строки, а open-in-view выключен. Номер основания
+     * ({@code getNumber()}) — часть ключа экземпляра, поэтому связь
+     * основания зафетчена целиком, а не по идентификатору.
+     *
+     * Запрос один на ветвь основания (V56): `in` с пустой коллекцией
+     * Hibernate отвергает, а пустая ветвь — обычное дело.
+     */
+    @EntityGraph(attributePaths = {
+            "operation",
+            "techProcess",
+            "customerOrder",
+            "productionOrder"
+    })
+    @Query("""
+            select row
+            from OrderScheduleRow row
+            where row.productionOrder.id in :productionOrderIds
+            """)
+    List<OrderScheduleRow> findRouteRowEntitiesOfProductionOrders(
+            @Param("productionOrderIds") Collection<Long> productionOrderIds
+    );
+
+    /** Строки плана списка заказов покупателя — сущностями (см. выше). */
+    @EntityGraph(attributePaths = {
+            "operation",
+            "techProcess",
+            "customerOrder",
+            "productionOrder"
+    })
+    @Query("""
+            select row
+            from OrderScheduleRow row
+            where row.customerOrder.id in :orderIds
+            """)
+    List<OrderScheduleRow> findRouteRowEntitiesOfOrders(
+            @Param("orderIds") Collection<Long> orderIds
+    );
+
+    /*
      * Первая непроведённая строка операции заказа на производство —
      * тот экземпляр, который склад закрывает очередной внесённой ячейкой.
      *

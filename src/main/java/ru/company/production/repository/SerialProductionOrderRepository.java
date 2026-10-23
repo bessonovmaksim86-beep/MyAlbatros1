@@ -351,9 +351,19 @@ public interface SerialProductionOrderRepository
      * подсборкой, и приёмка по заказу — тот шаг, который переводит её
      * в готовую ячейку.
      */
+    /*
+     * Готовность приёмки меряется операцией заказа либо узлом его
+     * маршрута, а строки плана читаются по основанию — то есть по заказу
+     * или по заказу покупателя. Все три связи зафетчены: без них
+     * проверка очереди вытягивала бы их по одному запросу на заказ, а
+     * список и его счётчик кладовщик открывает за смену много раз.
+     */
     @Query("""
             select distinct ord
             from ProductionOrder ord
+            left join fetch ord.productionOperation
+            left join fetch ord.techProcess
+            left join fetch ord.customerOrder
             where ord.active = true
               and (
                     ord.parentProductionOrder is not null

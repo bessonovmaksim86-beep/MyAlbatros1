@@ -184,7 +184,7 @@
                                 <td>
                                     <span class="status"
                                           th:classappend="' ' + ${row.batch.statusBadgeClass}"
-                                          th:text="${row.batch.statusLabel}">
+                                          th:text="${row.statusLabel()}">
                                         Оприходовано
                                     </span>
 

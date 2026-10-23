@@ -92,7 +92,10 @@
                             операцией и групповые ЗНП, которые ведутся
                             по техпроцессу, а их ячейки привязаны к
                             заказу на операции комплектования. Принять
-                            можно только те ячейки, что дошли до склада
+                            можно только те заказы, чей маршрут дошёл до
+                            приёмки: остальные остаются в списке с
+                            пометкой «Ждёт своей очереди» и счётчик их
+                            не считает
                         </small>
 
                     </div>
@@ -151,33 +154,41 @@
                                 родителя и наименование операции — на
                                 экране приёмки, где заказ читается
                                 детальным запросом.
+
+                                Заказ из списка не убирают, пока у него
+                                есть непринятые ячейки, но кнопку дают
+                                только по своей очереди: пока
+                                предшествующие операции техпроцесса не
+                                проведены, принимать нечего. Счётчик
+                                сверху считает ровно те же строки, что
+                                и кнопки.
                             -->
                             <tr th:each="row : ${orders}">
 
                                 <td class="warehouse-number-cell">
                                     <a class="mono"
-                                       th:href="@{/warehouse/znp-acceptance/{id}(id=${row.id})}"
-                                       th:text="${row.number}">
+                                       th:href="@{/warehouse/znp-acceptance/{id}(id=${row.order.id})}"
+                                       th:text="${row.order.number}">
                                         ЗНП-2026-114
                                     </a>
                                 </td>
 
-                                <td th:text="${row.levelDisplayName}">
+                                <td th:text="${row.order.levelDisplayName}">
                                     ЗНП на комплектование
                                 </td>
 
-                                <td th:text="${row.formattedOrderDate}">
+                                <td th:text="${row.order.formattedOrderDate}">
                                     18.09.2026
                                 </td>
 
-                                <td th:text="${row.formattedDueDate}">
+                                <td th:text="${row.order.formattedDueDate}">
                                     30.09.2026
                                 </td>
 
                                 <td>
                                     <span class="status"
-                                          th:classappend="' ' + ${row.statusBadgeClass}"
-                                          th:text="${row.statusDisplayName}">
+                                          th:classappend="' ' + ${row.order.statusBadgeClass}"
+                                          th:text="${row.order.statusDisplayName}">
                                         В работе
                                     </span>
                                 </td>
@@ -185,9 +196,16 @@
                                 <td class="table-actions">
 
                                     <a class="btn primary compact"
-                                       th:href="@{/warehouse/znp-acceptance/{id}(id=${row.id})}">
+                                       th:if="${row.acceptanceAvailable}"
+                                       th:href="@{/warehouse/znp-acceptance/{id}(id=${row.order.id})}">
                                         Принять на склад
                                     </a>
+
+                                    <span class="badge"
+                                          th:unless="${row.acceptanceAvailable}"
+                                          title="Приёмка откроется, когда в техпроцессе будут проведены предшествующие операции">
+                                        Ждёт своей очереди
+                                    </span>
 
                                 </td>
 

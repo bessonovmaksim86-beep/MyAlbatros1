@@ -123,6 +123,44 @@ public interface TechProcessOperationRepository
     );
 
     /**
+     * Узлы маршрутов указанного подразделения по перечню типов операций.
+     *
+     * Отличие от {@link #findUnitKittingNodesForProcesses}: тип один, а
+     * не несколько. Нужен приёмке ячеек по заказу-комплектующему: склад
+     * принимает подсборку и по «Приёмке на склад» (V54), и по
+     * «Комплектованию подсборок» (V55), и отбор раздела обязан
+     * совпадать с отбором операции — иначе сервис не нашёл бы операцию
+     * у заказа, который список уже показал.
+     *
+     * Порядок — по маршруту, затем по позиции узла: приёмка берётся
+     * первой по маршруту, и без сортировки выбор зависел бы от того,
+     * в каком порядке строки вернула база.
+     */
+    @EntityGraph(attributePaths = {
+            "operation",
+            "operation.operationName",
+            "operation.operationType",
+            "operation.organizationUnit"
+    })
+    @Query("""
+            select node
+            from TechProcessOperation node
+            join node.techProcess techProcess
+            join node.operation operation
+            join operation.operationType operationType
+            join operation.organizationUnit unit
+            where techProcess.id in :processIds
+              and operationType.code in :typeCodes
+              and unit.code = :unitCode
+            order by techProcess.id asc, node.position asc
+            """)
+    List<TechProcessOperation> findUnitNodesForProcesses(
+            @Param("processIds") Collection<Long> processIds,
+            @Param("typeCodes") Collection<String> typeCodes,
+            @Param("unitCode") String unitCode
+    );
+
+    /**
      * Операции подразделений в составе действующих маршрутов —
      * пробы для отчёта «Неприсвоенные операции».
      *

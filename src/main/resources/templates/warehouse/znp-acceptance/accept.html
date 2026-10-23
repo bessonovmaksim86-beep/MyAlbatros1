@@ -170,6 +170,15 @@
 
                         <div class="warehouse-summary__row">
 
+                            <dt>Техпроцесс</dt>
+
+                            <dd th:text="${techProcessName}">
+                                ТП-ЯЧ-01
+                            </dd>
+                        </div>
+
+                        <div class="warehouse-summary__row">
+
                             <dt>Комплектовочная операция</dt>
 
                             <dd th:text="${operationName}">
@@ -300,14 +309,98 @@
 
                     </div>
 
+                    <!--
+                        Очередь операции важнее наличия ячеек: ячейку
+                        вносят в заказ в начале маршрута, а склад
+                        принимает её в конце. Пока предшествующие
+                        операции техпроцесса не проведены, форма не
+                        показывается — сервис такую приёмку отклоняет, и
+                        кнопка здесь только дразнила бы кладовщика.
+                    -->
+                    <div class="warehouse-problem"
+                         th:if="${acceptanceAvailable != null
+                                 and !acceptanceAvailable
+                                 and !#lists.isEmpty(cellNumbers)}">
+
+                        <h3>Приёмка ещё не открылась</h3>
+
+                        <p>
+                            Заказ «
+                            <span class="mono"
+                                  th:text="${order.number}">
+                                ЗНП-2026-114
+                            </span>
+                            » ждёт своей очереди: предшествующие
+                            операции техпроцесса не проведены, и
+                            принимать на склад пока нечего. Кнопка
+                            появится, когда очередь дойдёт до приёмки;
+                            заказ остаётся в списке, чтобы состав не
+                            потерялся из вида.
+                        </p>
+
+                    </div>
+
                     <form method="post"
-                          th:unless="${#lists.isEmpty(cellNumbers)}"
-                          th:action="@{/warehouse/znp-acceptance/{id}(id=${order.id})}">
+                          id="znpAcceptanceForm"
+                          th:if="${(acceptanceAvailable == null or acceptanceAvailable)
+                                  and !#lists.isEmpty(cellNumbers)}"
+                          th:action="@{/warehouse/znp-acceptance/{id}(id=${order.id})}"
+                          th:attr="data-cell-numbers=${#strings.listJoin(cellNumbers, ',')}">
 
                         <input th:if="${_csrf != null}"
                                type="hidden"
                                th:name="${_csrf.parameterName}"
                                th:value="${_csrf.token}">
+
+                        <div class="warehouse-field">
+
+                            <div class="warehouse-field__row">
+
+                                <label for="znpCellNumbersText">
+                                    Номера ячеек, принимаемых на склад
+                                </label>
+
+                                <label class="warehouse-check"
+                                       for="znpAllCells">
+
+                                    <input type="checkbox"
+                                           id="znpAllCells"
+                                           name="allCells"
+                                           value="true">
+
+                                    отметить все номера ячеек
+                                </label>
+
+                            </div>
+
+                            <textarea id="znpCellNumbersText"
+                                      name="cellNumbersText"
+                                      placeholder="121200022&#10;121200025"
+                                      autocomplete="off"
+                                      spellcheck="false"
+                                      th:text="${znpForm != null ? znpForm.cellNumbersText : ''}"></textarea>
+
+                            <span class="field-hint">
+                                По одному номеру в строке; сканер и
+                                разделители «,» и «;» тоже подходят.
+                                Отмеченные зелёным уже приняты, красным —
+                                ячейки брака, они не принимаются
+                            </span>
+
+                            <span class="field-hint field-hint--warn"
+                                  id="znpAllCellsHint"
+                                  hidden>
+                                Отметка «отметить все номера ячеек»
+                                принимает все ячейки заказа:
+                                <strong id="znpAllCellsCount"
+                                        th:text="${#lists.size(cellNumbers)}">
+                                    3
+                                </strong>
+                                яч. При проведении появится подтверждение —
+                                после него состав партии изменить нельзя.
+                            </span>
+
+                        </div>
 
                         <dl class="warehouse-summary">
 
@@ -358,7 +451,8 @@
                             </a>
 
                             <button type="submit"
-                                    class="btn primary">
+                                    class="btn primary"
+                                    id="znpAcceptButton">
                                 Провести приёмку на склад
                             </button>
 
@@ -432,9 +526,115 @@
     </main>
 </div>
 
+<!-- =============================================================
+     ПОДТВЕРЖДЕНИЕ ПРИёма ПО ОТМЕТКЕ «ОТМЕТИТЬ ВСЕ НОМЕРА ЯЧЕЕК»
+     ============================================================= -->
+<div class="warehouse-accept-dialog"
+     id="znpAcceptDialog"
+     hidden>
+
+    <div class="warehouse-accept-dialog__box"
+         role="alertdialog"
+         aria-modal="true"
+         aria-labelledby="znpAcceptDialogText"
+         aria-describedby="znpAcceptDialogNote">
+
+        <h2 id="znpAcceptDialogText">
+            Внимательно проверьте номера ячеек и их количество
+        </h2>
+
+        <p id="znpAcceptDialogNote">
+            После проведения информацию изменить будет невозможно.
+            Принимается
+            <strong id="znpAcceptDialogCount">0</strong>
+            яч. — все ячейки заказа.
+        </p>
+
+        <div class="warehouse-accept-dialog__actions">
+
+            <button type="button"
+                    class="btn secondary"
+                    id="znpAcceptDialogCancel">
+                Отмена
+            </button>
+
+            <button type="button"
+                    class="btn primary"
+                    id="znpAcceptDialogConfirm">
+                Подтверждаю
+            </button>
+
+        </div>
+    </div>
+</div>
+
 <th:block th:replace="~{warehouse/fragments/layout
         :: commonScripts}">
 </th:block>
+
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    var form = document.getElementById('znpAcceptanceForm');
+    if (!form) return;
+
+    var allCellsCheckbox = document.getElementById('znpAllCells');
+    var textarea = document.getElementById('znpCellNumbersText');
+    var hint = document.getElementById('znpAllCellsHint');
+    var hintCount = document.getElementById('znpAllCellsCount');
+    var allCellsCount = parseInt(hintCount.textContent, 10);
+    var dialog = document.getElementById('znpAcceptDialog');
+    var dialogCount = document.getElementById('znpAcceptDialogCount');
+    var confirmBtn = document.getElementById('znpAcceptDialogConfirm');
+    var cancelBtn = document.getElementById('znpAcceptDialogCancel');
+    var submitBtn = document.getElementById('znpAcceptButton');
+
+    /*
+     * Чекбокс «отметить все»: подставляет все номера из data-атрибута
+     * формы в textarea и показывает подсказку с количеством.
+     */
+    allCellsCheckbox.addEventListener('change', function () {
+        if (this.checked) {
+            var numbers = form.getAttribute('data-cell-numbers');
+            if (numbers) {
+                textarea.value = numbers.replace(/,/g, '\n');
+            }
+            hint.removeAttribute('hidden');
+            hintCount.textContent = allCellsCount;
+        } else {
+            hint.setAttribute('hidden', '');
+        }
+    });
+
+    /*
+     * Подтверждение по чекбоксу «отметить все»: форма не отправляется,
+     * пока кладовщик не нажмёт «Подтверждаю» в диалоге.
+     */
+    submitBtn.addEventListener('click', function (e) {
+        if (allCellsCheckbox.checked) {
+            e.preventDefault();
+            dialogCount.textContent = allCellsCount;
+            dialog.removeAttribute('hidden');
+        }
+    });
+
+    /*
+     * Кнопки диалога: «Подтверждаю» отправляет форму с отмеченным
+     * «отметить все» — сервис примет ровно состав заказа; «Отмена»
+     * снимает отметку и оставляет кладовщика вносить номера вручную.
+     */
+    confirmBtn.addEventListener('click', function () {
+        dialog.setAttribute('hidden', '');
+        form.submit();
+    });
+
+    cancelBtn.addEventListener('click', function () {
+        dialog.setAttribute('hidden', '');
+        allCellsCheckbox.checked = false;
+        textarea.value = '';
+        hint.setAttribute('hidden', '');
+    });
+});
+</script>
 
 </body>
 </html>

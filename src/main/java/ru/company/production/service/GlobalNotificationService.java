@@ -137,14 +137,11 @@ public class GlobalNotificationService {
                 )
         ));
 
-        result.add(new CounterItem(
-                "dispatcher-group-znp",
-                "Групповые ЗНП",
-                "/dispatcher/group-znp",
-                productionOrderRepository.countActiveByKinds(
-                        ZnpKind.groupKinds()
-                )
-        ));
+        /*
+         * Счётчик «Групповые ЗНП» убран: эти заказы живут по своей
+         * логике (не привязаны к выпуску), и общее число активных
+         * заказов вводит диспетчера в заблуждение.
+         */
     }
 
     /*
@@ -211,6 +208,13 @@ public class GlobalNotificationService {
 
     /** Бюро входного контроля: карточки контроля, изолятор, отбраковка. */
     private void addInputControlCounters(List<CounterItem> result) {
+
+        result.add(new CounterItem(
+                "bvk-awaiting",
+                "Новые заявки входного контроля",
+                "/input-control/control",
+                inputControlService.countAwaiting()
+        ));
 
         result.add(new CounterItem(
                 "bvk-in-work",

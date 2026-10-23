@@ -30,6 +30,31 @@ public interface CellReceivingBatchRepository
             """)
     List<CellReceivingBatch> findAllDetailed();
 
+    /*
+     * Новых заявок на входной контроль — счётчик пункта меню.
+     *
+     * Заявкой считают партию, по которой карточку не заводили ни разу:
+     * список раздела печатает такой партии «Ожидает проверки» и кнопку
+     * «Взять в работу», и цифра меню обязана равняться числу этих
+     * кнопок. Карточек в работе вместо этого недостаточно: своей
+     * незавершённой проверкой контролёр затёр бы чужую новую заявку.
+     *
+     * Условие confirmedAt is not null — та же граница, что у
+     * {@code InputControlService#findReceivedBatches()}: партия ждёт
+     * подтверждения номеров сканированием, и до него проверять нечего.
+     */
+    @Query("""
+            select count(batch)
+            from CellReceivingBatch batch
+            where batch.confirmedAt is not null
+              and not exists (
+                    select 1
+                    from InputControlCard card
+                    where card.batch.id = batch.id
+              )
+            """)
+    long countAwaitingControl();
+
     @Query("""
             select batch
             from CellReceivingBatch batch
@@ -85,35 +110,15 @@ public interface CellReceivingBatchRepository
             """)
     List<CellReceivingBatch> findBvkCheckedBatches();
 
-    /**
-     * Партий, ожидающих приёмки с БВК: приход закрыт, но склад партию
-     * ещё не принимал.
-     *
-     * Учитывают только партии с завершённой проверкой входного
-     * контроля: до её итога неизвестно, какие ячейки отсеяны на брак,
-     * и принимать на склад пока нечего.
+    /*
+     * Отдельного count-запроса для счётчика «Приёмка с БВК» здесь нет:
+     * счётчик не считает партии, которые БВК отбраковал целиком, а
+     * сколько ячеек партии отсеяно на брак — зависит от карточки
+     * контроля, то есть не выражается полями самой партии. Правило
+     * живёт в BvkAcceptanceService.AcceptanceBatchView#fullyRejected(),
+     * и счётчик считает тот же список, что печатает экран, иначе цифра
+     * меню и число кнопок «Принять на склад» разошлись бы.
      */
-    @Query("""
-            select count(batch.id)
-            from CellReceivingBatch batch
-            where batch.confirmedAt is not null
-              and batch.acceptedAt is null
-              and exists (
-                  select 1
-                  from InputControlCard card
-                  where card.batch.id = batch.id
-                    and card.status =
-                        ru.company.production.entity.InputControlStatus.COMPLETED
-              )
-              and not exists (
-                  select 1
-                  from InputControlCard card
-                  where card.batch.id = batch.id
-                    and card.status =
-                        ru.company.production.entity.InputControlStatus.IN_WORK
-              )
-            """)
-    long countAwaitingAcceptance();
 
     /**
      * Последний зарезервированный номер области нумерации.

@@ -419,14 +419,25 @@ public class SubassemblyKittingService {
                 .toList();
     }
 
-    /** Заказов, ожидающих комплектования: счётчик пункта меню. */
+    /**
+     * Заказов, где внесено меньше заказанного: счётчик пункта меню.
+     *
+     * Считается тем же списком и тем же признаком, что печатает экран
+     * ({@link SubassemblyKittingZnpRow#incomplete()}), а не отдельным
+     * запросом «сколько заказов в работе»: цифра меню обязана равняться
+     * числу строк «Взято X из Y», где X меньше Y, иначе кладовщик шёл
+     * бы по счётчику на экран, где брать уже нечего.
+     *
+     * У заказа без заданного количества (комплектование внутри выпуска)
+     * знаменатель — складской остаток плюс внесённое, поэтому такой заказ
+     * считается неполным, пока по его изделию на складе лежит хоть одна
+     * свободная ячейка. Именно так же его печатает список.
+     */
     @Transactional(readOnly = true)
     public long countPending() {
-        return productionOrderRepository.countSubassemblyKittingOrders(
-                ProductionOrderStatus.IN_WORK,
-                KITTING_TYPE_CODES,
-                WAREHOUSE_UNIT_CODE
-        );
+        return findOrders().stream()
+                .filter(SubassemblyKittingZnpRow::incomplete)
+                .count();
     }
 
     /**
