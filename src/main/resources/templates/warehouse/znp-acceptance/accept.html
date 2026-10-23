@@ -86,22 +86,28 @@
                  th:text="${errorMessage}">
             </div>
 
-            <ol class="warehouse-steps">
+            <!-- =====================================================
+                 ШАГИ МАРШРУТА ТЕХПРОЦЕССА ЗАКАЗА
 
-                <li class="warehouse-steps__item is-done">
-                    Выпуск ячеек и их приёмка с БВК
-                </li>
+                 Групповой ЗНП ведётся по маршруту техпроцесса,
+                 и кладовщик обязан видеть все операции пути:
+                 какие пройдены фактом, где заказ стоит сейчас,
+                 и какая операция — приёмка на склад.
 
-                <li class="warehouse-steps__item is-done">
-                    Вхождение ячеек в состав ЗНП
-                </li>
+                 Серийный ЗНП внутри выпуска маршрута не имеет
+                 (работы планирует выпуск), поэтому блок показывается
+                 только для групповых видов.
+                 ===================================================== -->
+            <ol class="warehouse-steps warehouse-steps--tp"
+                th:if="${!#lists.isEmpty(techProcessSteps)}">
 
-                <li class="warehouse-steps__item is-current">
+                <li class="warehouse-steps__item"
+                    th:each="step : ${techProcessSteps}"
+                    th:classappend="${step.done
+                        ? ' is-done'
+                        : (step.current ? ' is-current' : '')}"
+                    th:text="${step.name}">
                     Приёмка состава на склад
-                </li>
-
-                <li class="warehouse-steps__item">
-                    Комплектовочная операция закрыта
                 </li>
 
             </ol>

@@ -2439,6 +2439,23 @@ public class ProductionOrderService {
             );
         }
 
+        /*
+         * Маршрут группового заказа обязан вести к приёмке на склад:
+         * ей заказ завершается (см. ZnpAcceptanceService), и без неё
+         * состав завис бы на складе незакрытым. Проверяется до ветви
+         * с изделием — требование к маршруту от изделия не зависит.
+         */
+        if (kind.requiresTechProcess()
+                && !hasWarehouseReceiving(process.getId())) {
+            throw new IllegalArgumentException(
+                    "В техпроцессе «" + process.getCode()
+                            + "» нет операции приёмки на склад — "
+                            + "добавьте в маршрут операцию типа "
+                            + "«Приёмка на склад» склада полуфабрикатов, "
+                            + "иначе состав заказа нельзя принять"
+            );
+        }
+
         if (classifier == null) {
             return process;
         }
@@ -2470,6 +2487,26 @@ public class ProductionOrderService {
         }
 
         return process;
+    }
+
+    /**
+     * Есть ли в маршруте операция приёмки на склад.
+     *
+     * Приёмку опознают по той же паре «тип + подразделение», что и
+     * раздел склада ({@code RECEIVING} склада полуфабрикатов, V54):
+     * требование к маршруту и отбор заказов в приёмке обязаны
+     * совпадать, иначе диспетчер завёл бы заказ, который склад не
+     * увидит в своих операциях.
+     */
+    private boolean hasWarehouseReceiving(Long techProcessId) {
+
+        return !techProcessOperationRepository
+                .findUnitNodesForProcesses(
+                        List.of(techProcessId),
+                        List.of("RECEIVING"),
+                        "SEMI_FINISHED_PRODUCT_WAREHOUSE"
+                )
+                .isEmpty();
     }
 
     /**

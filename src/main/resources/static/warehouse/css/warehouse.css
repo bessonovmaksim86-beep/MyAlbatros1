@@ -721,6 +721,39 @@ body {
     list-style: none;
 }
 
+/*
+ * Вертикальный режим для шагов техпроцесса: их может быть 6-10,
+ * поэтому горизонтальная сетка не подходит — шагов ТП выводятся
+ * списком сверху вниз, один в колонку.
+ */
+.warehouse-steps--tp {
+    grid-template-columns: 1fr;
+    margin-bottom: 12px;
+}
+
+/*
+ * В вертикальном режиме счётчик идёт не через ::before (который
+ * позиционирован абсолютно и привязан к padding-left), а через
+ * data-атрибут — так не наследуются margin-top: -11px и padding-left
+ * от базового блока, и шаги не «съезжают» в колонку.
+ */
+.warehouse-steps--tp .warehouse-steps__item {
+    padding-left: 32px;
+}
+
+.warehouse-steps--tp .warehouse-steps__item::before {
+    position: static;
+
+    display: inline-flex;
+    margin-right: 8px;
+    margin-top: 0;
+    vertical-align: middle;
+
+    width: 20px;
+    height: 20px;
+    font-size: 10px;
+}
+
 .warehouse-steps__item {
     position: relative;
 

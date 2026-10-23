@@ -30,6 +30,7 @@ import ru.company.production.repository.TechProcessOperationRepository;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -92,10 +93,18 @@ public class ZnpAcceptanceService {
     /** Виды, ведущие приёмку ячеек: набор считается от {@link ZnpKind}. */
     private static final List<ZnpKind> ACCEPTED_KINDS = ZnpKind.groupKinds();
 
-    /** Типы операций, которыми склад принимает подсборки и ячейки. */
+    /**
+     * Тип операции, которой склад принимает состав заказа на склад.
+     *
+     * Только {@code RECEIVING}: комплектование подсборок
+     * ({@code KITTING_SUBASSEMBLY}) к приёмке отношения не имеет — это
+     * НАЧАЛЬНАЯ операция маршрута, той же операцией склад вносит ячейку
+     * в заказ. Считать её приёмкой означало бы открывать кнопку в тот
+     * же момент, когда состав только что внесён: заказ получал приёмку,
+     * не пройдя ни одной производственной операции техпроцесса.
+     */
     private static final List<String> ACCEPTANCE_TYPE_CODES = List.of(
-            "RECEIVING",
-            "KITTING_SUBASSEMBLY"
+            "RECEIVING"
     );
 
     /** Подразделение-владелец операций приёмки (миграция V2). */
@@ -171,13 +180,143 @@ public class ZnpAcceptanceService {
         List<SerialProductionOrder> cells =
                 linkRepository.findPendingCellsByOrderId(orderId);
 
+        AcceptanceContext context = contextOf(List.of(order));
+
         return new ZnpAcceptanceView(
                 order,
                 cells,
                 operationName(order, cells),
                 techProcessName(order),
-                isAcceptanceOpen(order, contextOf(List.of(order)))
+                isAcceptanceOpen(order, context),
+                techProcessSteps(order, context)
         );
+    }
+
+    /**
+     * Шаги маршрута заказа — путь ЗНП по операциям техпроцесса.
+     *
+     * Групповой ЗНП заводится с выбором техпроцесса, и кладовщик обязан
+     * видеть именно этот маршрут, а не общий список из четырёх строк:
+     * по нему понятно, сколько работ заказ ещё не прошёл и где он
+     * стоит сейчас.
+     *
+     * Этап меряется строками плана (order_schedule_rows, V56), а не
+     * попытками операций изделия: попытки заводятся только на
+     * комплектование, тогда как цех закрывает работы маршрута именно
+     * строками графика. Тем же источником пользуется и очередь приёмки
+     * ({@link #isAcceptanceOpen}), поэтому шаги и кнопка не могут
+     * разойтись во мнении, дошёл ли маршрут до склада.
+     *
+     * Этап закрыт, когда по нему есть строки плана и все они проведены:
+     * заказ на пять ячеек при трёх проведённых ещё не прошёл работу, и
+     * показывать её сделанной было бы неправдой.
+     *
+     * Текущим считается первый незакрытый шаг. Серийному ЗНП внутри
+     * выпуска маршрут на заказе не назначают (работы планирует выпуск),
+     * поэтому шагов нет и блок на экране не выводится.
+     */
+    private List<TechProcessStep> techProcessSteps(
+            ProductionOrder order,
+            AcceptanceContext context) {
+
+        TechProcess process = order.getTechProcess();
+
+        if (process == null || process.getId() == null) {
+            return List.of();
+        }
+
+        /*
+         * Строки плана только этого основания: у группового заказа их
+         * две ветви (свой план и план заказа покупателя), и чужая ветвь
+         * показала бы этапы, к заказу не относящиеся.
+         */
+        Long productionOrderId = order.getId();
+        Long customerOrderId = customerOrderIdOf(order);
+
+        Map<Long, List<OrderScheduleRow>> rowsByOperation =
+                context.rows().stream()
+                        .filter(row -> row.getOperation() != null
+                                && row.getOperation().getId() != null)
+                        .filter(row -> matchesBase(
+                                row, productionOrderId, customerOrderId))
+                        .collect(Collectors.groupingBy(
+                                row -> row.getOperation().getId()));
+
+        List<TechProcessStep> steps = new ArrayList<>();
+
+        for (TechProcessOperation node : routeNodes(process.getId())) {
+
+            Operation operation = node.getOperation();
+
+            if (operation == null || operation.getId() == null) {
+                continue;
+            }
+
+            List<OrderScheduleRow> planned =
+                    rowsByOperation.getOrDefault(
+                            operation.getId(), List.of());
+
+            boolean done = !planned.isEmpty()
+                    && planned.stream()
+                            .allMatch(row -> row.getCompletedAt() != null);
+
+            steps.add(new TechProcessStep(
+                    operation.getOperationName() == null
+                            || operation.getOperationName().getName() == null
+                            ? "—"
+                            : operation.getOperationName().getName(),
+                    done
+            ));
+        }
+
+        return markCurrentStep(steps);
+    }
+
+    /**
+     * Узлы маршрута в порядке его позиции — шаги читают сверху вниз.
+     *
+     * Порядок задаёт позиция узла, а не имя операции: алфавит показал бы
+     * кладовщику путь, которым заказ не шёл.
+     */
+    private List<TechProcessOperation> routeNodes(Long techProcessId) {
+
+        List<TechProcessOperation> nodes =
+                new ArrayList<>(techProcessOpRepository
+                        .findAllWithPredecessorsForProcesses(
+                                List.of(techProcessId)));
+
+        nodes.sort(Comparator.comparing(
+                node -> node.getPosition() == null
+                        ? Integer.MAX_VALUE
+                        : node.getPosition()
+        ));
+
+        return nodes;
+    }
+
+    /**
+     * Помечает первый непройденный шаг текущим.
+     *
+     * Запись неизменяема, поэтому шаг перезаписывается новым экземпляром
+     * с флагом «текущий», а не мутируется на месте.
+     */
+    private static List<TechProcessStep> markCurrentStep(
+            List<TechProcessStep> steps) {
+
+        List<TechProcessStep> result = new ArrayList<>(steps.size());
+        boolean currentChosen = false;
+
+        for (TechProcessStep step : steps) {
+            boolean current = !currentChosen && !step.done();
+
+            if (current) {
+                currentChosen = true;
+            }
+
+            result.add(new TechProcessStep(step.name(), step.done(), current));
+        }
+
+        return List.copyOf(result);
     }
 
     /*
@@ -385,6 +524,12 @@ public class ZnpAcceptanceService {
      * (маршрут такому заказу не назначают, его работу планирует выпуск);
      * у самостоятельного и группового — живёт внутри техпроцесса и
      * берётся из пакетного снимка маршрутов.
+     *
+     * Для серийного ЗНП операция на заказе — это RECEIVING, заданная
+     * выпуском-родителем. Если по какой-то причине productionOperation
+     * имеет другой тип (не RECEIVING), игнорируем её и ищем в маршруте —
+     * иначе сервис мог бы принять операцию комплектования за приёмку
+     * и открыть кнопку слишком рано.
      */
     private static Operation acceptanceOperationOf(
             ProductionOrder order,
@@ -392,7 +537,8 @@ public class ZnpAcceptanceService {
 
         Operation orderOperation = order.getProductionOperation();
 
-        if (orderOperation != null) {
+        if (orderOperation != null
+                && isReceivingOperation(orderOperation)) {
             return orderOperation;
         }
 
@@ -403,6 +549,22 @@ public class ZnpAcceptanceService {
         }
 
         return context.routeOperations().get(process.getId());
+    }
+
+    /**
+     * Является ли операция операцией приёмки на склад.
+     *
+     * Проверяет тип операции по коду: только RECEIVING считается
+     * приёмкой склада. Это защищает от ложного срабатывания, если
+     * productionOperation заполнен нерелевантной операцией.
+     */
+    private static boolean isReceivingOperation(Operation operation) {
+        if (operation.getOperationType() == null) {
+            return false;
+        }
+        return "RECEIVING".equals(
+                operation.getOperationType().getCode()
+        );
     }
 
     /**
@@ -825,19 +987,53 @@ public class ZnpAcceptanceService {
      * {@code operationName} и {@code techProcessName} отдаются строкой,
      * а не через связь заказа: open-in-view выключен, и обращение шаблона
      * к наименованию упало бы на ленивой связи.
+     *
+     * {@code techProcessSteps} — шаги маршрута техпроцесса заказа с
+     * отметками прохождения: кладовщик видит, через какие работы прошёл
+     * заказ и где стоит сейчас.
      */
     public record ZnpAcceptanceView(
             ProductionOrder order,
             List<SerialProductionOrder> cells,
             String operationName,
             String techProcessName,
-            boolean acceptanceAvailable
+            boolean acceptanceAvailable,
+            List<TechProcessStep> techProcessSteps
     ) {
 
         public List<String> cellNumbers() {
             return cells.stream()
                     .map(link -> link.getSerial().getFullNumber())
                     .collect(Collectors.toList());
+        }
+    }
+
+    /**
+     * Шаг маршрута техпроцесса — операция с отметками прохождения.
+     *
+     * Порядок в перечне задаёт позиция узла в маршруте (см.
+     * {@code techProcessSteps}), поэтому шаг остаётся простой записью
+     * без собственного сравнения.
+     *
+     * {@code current} проставляет {@link #markCurrentStep}: шаблон
+     * подсвечивает один шаг, а не все незакрытые, — иначе кладовщик не
+     * понял бы, на какой работе заказ стоит сейчас.
+     */
+    public record TechProcessStep(
+            String name,
+            boolean done,
+            boolean current
+    ) {
+
+        public TechProcessStep {
+            if (name == null || name.isBlank()) {
+                name = "—";
+            }
+        }
+
+        /** Шаг строится без признака текущего — его проставляет сервис. */
+        TechProcessStep(String name, boolean done) {
+            this(name, done, false);
         }
     }
 }

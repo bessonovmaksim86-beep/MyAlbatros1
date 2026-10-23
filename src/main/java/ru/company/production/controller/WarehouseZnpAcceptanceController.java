@@ -151,6 +151,12 @@ public class WarehouseZnpAcceptanceController {
                 "acceptanceAvailable",
                 view.acceptanceAvailable()
         );
+
+        /* Шаги маршрута техпроцесса заказа. */
+        model.addAttribute(
+                "techProcessSteps",
+                view.techProcessSteps()
+        );
     }
 
     /**
