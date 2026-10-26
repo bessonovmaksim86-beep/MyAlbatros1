@@ -1,0 +1,686 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Production System — Презентация</title>
+<style>
+  :root {
+    --bg: #0f1117;
+    --surface: #1a1d27;
+    --accent: #5c8aff;
+    --accent2: #36d6a5;
+    --accent3: #f5a623;
+    --text: #e4e6ed;
+    --muted: #8b8fa3;
+    --border: #2a2d3a;
+    --code-bg: #12141c;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    overflow: hidden;
+    height: 100vh;
+    width: 100vw;
+  }
+
+  /* Slides container */
+  .slides {
+    width: 100vw;
+    height: 100vh;
+    position: relative;
+  }
+  .slide {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    padding: 60px 100px;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.5s ease, transform 0.5s ease;
+    transform: scale(0.97);
+  }
+  .slide.active {
+    opacity: 1;
+    pointer-events: all;
+    transform: scale(1);
+  }
+
+  /* Title slide */
+  .slide-title {
+    text-align: center;
+    background: radial-gradient(ellipse at 50% 40%, rgba(92,138,255,0.12) 0%, transparent 70%);
+  }
+  .slide-title h1 {
+    font-size: 3.2rem;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    margin-bottom: 16px;
+    background: linear-gradient(135deg, var(--accent), var(--accent2));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+  .slide-title .subtitle {
+    font-size: 1.3rem;
+    color: var(--muted);
+    margin-bottom: 32px;
+  }
+  .slide-title .stack-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    justify-content: center;
+    max-width: 700px;
+  }
+  .tag {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    padding: 6px 16px;
+    border-radius: 20px;
+    font-size: 0.85rem;
+    color: var(--muted);
+  }
+  .tag strong { color: var(--text); }
+
+  /* Content slides */
+  .slide h2 {
+    font-size: 2.2rem;
+    font-weight: 700;
+    margin-bottom: 8px;
+    text-align: center;
+  }
+  .slide h2 .accent { color: var(--accent); }
+  .slide .section-line {
+    width: 60px;
+    height: 3px;
+    background: var(--accent);
+    border-radius: 2px;
+    margin-bottom: 36px;
+  }
+  .content-grid {
+    display: grid;
+    gap: 20px;
+    width: 100%;
+    max-width: 1100px;
+  }
+  .content-grid.two { grid-template-columns: 1fr 1fr; }
+  .content-grid.three { grid-template-columns: 1fr 1fr 1fr; }
+  .content-grid.four { grid-template-columns: 1fr 1fr 1fr 1fr; }
+
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 24px;
+  }
+  .card h3 {
+    font-size: 1.05rem;
+    margin-bottom: 10px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .card h3 .icon {
+    width: 28px;
+    height: 28px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.85rem;
+    font-weight: 700;
+    flex-shrink: 0;
+  }
+  .icon.blue { background: rgba(92,138,255,0.15); color: var(--accent); }
+  .icon.green { background: rgba(54,214,165,0.15); color: var(--accent2); }
+  .icon.orange { background: rgba(245,166,35,0.15); color: var(--accent3); }
+  .icon.purple { background: rgba(168,92,255,0.15); color: #a85cff; }
+  .card p, .card li {
+    font-size: 0.92rem;
+    color: var(--muted);
+    line-height: 1.6;
+  }
+  .card ul { list-style: none; padding: 0; }
+  .card ul li::before { content: '→ '; color: var(--accent); }
+
+  /* Stats row */
+  .stats-row {
+    display: flex;
+    gap: 24px;
+    justify-content: center;
+    flex-wrap: wrap;
+    margin-top: 20px;
+  }
+  .stat-box {
+    text-align: center;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px 32px;
+    min-width: 150px;
+  }
+  .stat-box .num {
+    font-size: 2rem;
+    font-weight: 800;
+    background: linear-gradient(135deg, var(--accent), var(--accent2));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+  .stat-box .label {
+    font-size: 0.8rem;
+    color: var(--muted);
+    margin-top: 4px;
+  }
+
+  /* Flow diagram */
+  .flow {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    justify-content: center;
+    margin: 24px 0;
+    flex-wrap: wrap;
+  }
+  .flow-step {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 12px 20px;
+    font-size: 0.9rem;
+    font-weight: 600;
+    text-align: center;
+  }
+  .flow-step .step-num {
+    display: block;
+    font-size: 0.7rem;
+    color: var(--accent);
+    margin-bottom: 4px;
+  }
+  .flow-arrow { color: var(--muted); font-size: 1.2rem; }
+
+  /* Code block */
+  .code-block {
+    background: var(--code-bg);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 18px 22px;
+    font-family: 'Consolas', 'Fira Code', monospace;
+    font-size: 0.82rem;
+    color: var(--muted);
+    line-height: 1.7;
+    width: 100%;
+    max-width: 800px;
+    overflow-x: auto;
+  }
+  .code-block .kw { color: var(--accent); }
+  .code-block .fn { color: var(--accent2); }
+  .code-block .cm { color: #555; font-style: italic; }
+
+  /* Timeline */
+  .timeline {
+    display: flex;
+    gap: 0;
+    width: 100%;
+    max-width: 1100px;
+    margin-top: 10px;
+  }
+  .timeline-item {
+    flex: 1;
+    text-align: center;
+    position: relative;
+    padding: 0 12px;
+  }
+  .timeline-item::before {
+    content: '';
+    position: absolute;
+    top: 14px;
+    left: 0;
+    right: 0;
+    height: 2px;
+    background: var(--border);
+    z-index: 0;
+  }
+  .timeline-item:first-child::before { left: 50%; }
+  .timeline-item:last-child::before { right: 50%; }
+  .timeline-dot {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    background: var(--accent);
+    margin: 0 auto 12px;
+    position: relative;
+    z-index: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.75rem;
+    font-weight: 700;
+  }
+  .timeline-item h4 {
+    font-size: 0.85rem;
+    margin-bottom: 4px;
+  }
+  .timeline-item p {
+    font-size: 0.75rem;
+    color: var(--muted);
+  }
+
+  /* QA */
+  .qa-item {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 18px 22px;
+    width: 100%;
+    max-width: 900px;
+  }
+  .qa-item .q {
+    font-weight: 700;
+    color: var(--accent);
+    margin-bottom: 6px;
+    font-size: 0.95rem;
+  }
+  .qa-item .a {
+    font-size: 0.88rem;
+    color: var(--muted);
+    line-height: 1.6;
+  }
+
+  /* Footer / nav */
+  .nav-bar {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 14px 40px;
+    background: rgba(15,17,23,0.85);
+    backdrop-filter: blur(10px);
+    border-top: 1px solid var(--border);
+    z-index: 100;
+  }
+  .nav-bar button {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 8px 20px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 0.85rem;
+    transition: background 0.2s;
+  }
+  .nav-bar button:hover { background: var(--border); }
+  .nav-bar button:disabled { opacity: 0.3; cursor: default; }
+  .slide-counter {
+    font-size: 0.85rem;
+    color: var(--muted);
+  }
+  .progress-bar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    height: 3px;
+    background: linear-gradient(90deg, var(--accent), var(--accent2));
+    transition: width 0.4s ease;
+    z-index: 101;
+  }
+
+  /* Highlight text */
+  .hl { color: var(--accent); font-weight: 600; }
+  .hl2 { color: var(--accent2); font-weight: 600; }
+  .hl3 { color: var(--accent3); font-weight: 600; }
+
+  /* Full-width card */
+  .full-card {
+    width: 100%;
+    max-width: 1100px;
+  }
+
+  /* Summary slide */
+  .summary-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 24px;
+    width: 100%;
+    max-width: 1000px;
+    margin-top: 10px;
+  }
+  .summary-grid .card { min-height: 120px; }
+
+  .end-slide {
+    text-align: center;
+  }
+  .end-slide h2 {
+    font-size: 2.8rem;
+    margin-bottom: 16px;
+  }
+  .end-slide p {
+    font-size: 1.1rem;
+    color: var(--muted);
+  }
+</style>
+</head>
+<body>
+
+<div class="progress-bar" id="progressBar"></div>
+
+<div class="slides" id="slides">
+
+  <!-- SLIDE 0: Title -->
+  <div class="slide slide-title active" data-index="0">
+    <h1>Production System</h1>
+    <p class="subtitle">Учётная система производства &middot; Веб-приложение</p>
+    <div class="stack-tags">
+      <span class="tag"><strong>Java</strong> 21</span>
+      <span class="tag"><strong>Spring Boot</strong> 3.4</span>
+      <span class="tag"><strong>Security</strong> 6</span>
+      <span class="tag"><strong>Thymeleaf</strong></span>
+      <span class="tag"><strong>MySQL</strong> 8</span>
+      <span class="tag"><strong>Flyway</strong></span>
+      <span class="tag"><strong>Apache POI</strong></span>
+      <span class="tag"><strong>Lombok</strong></span>
+    </div>
+    <div class="stats-row" style="margin-top:40px">
+      <div class="stat-box"><div class="num">~127K</div><div class="label">строк кода</div></div>
+      <div class="stat-box"><div class="num">25</div><div class="label">ролей</div></div>
+      <div class="stat-box"><div class="num">10</div><div class="label">модулей</div></div>
+      <div class="stat-box"><div class="num">70</div><div class="label">миграций</div></div>
+    </div>
+  </div>
+
+  <!-- SLIDE 1: Problem statement -->
+  <div class="slide" data-index="1">
+    <h2>Постановка <span class="accent">задачи</span></h2>
+    <div class="section-line"></div>
+    <div class="content-grid two">
+      <div class="card">
+        <h3><span class="icon orange">⚠</span> Проблема</h3>
+        <p>Разрозненные таблицы Excel и бумажные чек-листы. Невозможно отследить, кто, когда и по какой операции изготавливал конкретное серийное изделие. Данные теряются между подразделениями.</p>
+      </div>
+      <div class="card">
+        <h3><span class="icon green">✓</span> Решение</h3>
+        <p>Единая веб-система, в которой <span class="hl">заказ клиента прослеживается до конкретного серийного изделия</span> и обратно — из номера изделия видно исполнителя, дату и результат контроля.</p>
+      </div>
+    </div>
+    <div class="content-grid three" style="margin-top:20px">
+      <div class="card">
+        <h3><span class="icon blue">1</span> Справочники</h3>
+        <p>Классификаторы изделий, техпроцессы, маршруты операций</p>
+      </div>
+      <div class="card">
+        <h3><span class="icon blue">2</span> Планирование</h3>
+        <p>График выпуска, распределение по подразделениям и исполнителям</p>
+      </div>
+      <div class="card">
+        <h3><span class="icon blue">3</span> Исполнение</h3>
+        <p>Фиксация факта, контроль параметров, входной и тех. контроль</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- SLIDE 2: Architecture -->
+  <div class="slide" data-index="2">
+    <h2>Архитектура <span class="accent">системы</span></h2>
+    <div class="section-line"></div>
+    <div class="flow">
+      <div class="flow-step"><span class="step-num">Layer 0</span>Браузер</div>
+      <span class="flow-arrow">→</span>
+      <div class="flow-step"><span class="step-num">Layer 1</span>Controller</div>
+      <span class="flow-arrow">→</span>
+      <div class="flow-step"><span class="step-num">Layer 2</span>Service</div>
+      <span class="flow-arrow">→</span>
+      <div class="flow-step"><span class="step-num">Layer 3</span>Repository</div>
+      <span class="flow-arrow">→</span>
+      <div class="flow-step"><span class="step-num">DB</span>MySQL</div>
+    </div>
+    <div class="flow" style="margin-top:8px">
+      <span style="font-size:0.8rem;color:var(--muted)">Flyway</span>
+      <span class="flow-arrow">⟵</span>
+      <span style="font-size:0.8rem;color:var(--muted)">Migration Scripts</span>
+      <span style="margin-left:40px;font-size:0.8rem;color:var(--muted)">Spring Security</span>
+      <span class="flow-arrow">⟵</span>
+      <span style="font-size:0.8rem;color:var(--muted)">URL Rules</span>
+    </div>
+    <div class="content-grid three" style="margin-top:28px">
+      <div class="card">
+        <h3><span class="icon blue">DTO</span> Разделение слоёв</h3>
+        <p>Сущности не «текут» в шаблоны. DTO — промежуточный слой для форм и страниц</p>
+      </div>
+      <div class="card">
+        <h3><span class="icon green">Flyway</span> 70 версий</h3>
+        <p>ddl-auto: validate. Приложение не стартует, если сущность и таблица разошлись</p>
+      </div>
+      <div class="card">
+        <h3><span class="icon orange">🔒</span> Безопасность</h3>
+        <p>Spring Security по URL, пароли BCrypt. 25 ролей, 10 интерфейсных модулей</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- SLIDE 3: Full cycle -->
+  <div class="slide" data-index="3">
+    <h2>Сквозной <span class="accent">производственный цикл</span></h2>
+    <div class="section-line"></div>
+    <div class="flow">
+      <div class="flow-step"><span class="step-num">Шаг 1</span>Заказ<br>покупателя</div>
+      <span class="flow-arrow">→</span>
+      <div class="flow-step"><span class="step-num">Шаг 2</span>Тех.<br>процесс</div>
+      <span class="flow-arrow">→</span>
+      <div class="flow-step"><span class="step-num">Шаг 3</span>График<br>& план</div>
+      <span class="flow-arrow">→</span>
+      <div class="flow-step"><span class="step-num">Шаг 4</span>Распреде-<br>ление</div>
+      <span class="flow-arrow">→</span>
+      <div class="flow-step"><span class="step-num">Шаг 5</span>Испол-<br>нение</div>
+      <span class="flow-arrow">→</span>
+      <div class="flow-step"><span class="step-num">Шаг 6</span>Паспорт<br>изделия</div>
+    </div>
+    <div class="content-grid four" style="margin-top:24px">
+      <div class="card">
+        <h3><span class="icon blue">3.1</span> Аутентификация</h3>
+        <p>Форма Spring Security. После входа — переход в модуль своей роли</p>
+      </div>
+      <div class="card">
+        <h3><span class="icon blue">3.2</span> Заказ</h3>
+        <p>Ручной ввод или импорт из .xls через Apache POI с привязкой к классификатору</p>
+      </div>
+      <div class="card">
+        <h3><span class="icon blue">3.3</span> Маршрут</h3>
+        <p>Направленный граф операций с предшественниками и контролируемыми параметрами</p>
+      </div>
+      <div class="card">
+        <h3><span class="icon blue">3.4</span> График</h3>
+        <p>Расчёт по топологическому порядку, мощности и производственному календарю</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- SLIDE 4: Execution & Traceability -->
+  <div class="slide" data-index="4">
+    <h2>Исполнение и <span class="accent">прослеживаемость</span></h2>
+    <div class="section-line"></div>
+    <div class="content-grid two">
+      <div class="card">
+        <h3><span class="icon green">🔧</span> Исполнитель</h3>
+        <ul>
+          <li>Страница «Мои операции» — только закреплённые задачи</li>
+          <li>Заполнение контролируемых параметров (значения замеров)</li>
+          <li>Каждое действие попадает в <span class="hl">журнал перемещений</span></li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3><span class="icon orange">📋</span> Паспорт изделия</h3>
+        <ul>
+          <li>По серийному номеру — полный маршрут и факты</li>
+          <li>Подписи исполнителей и результаты контроля</li>
+          <li><span class="hl2">QR-код</span> для печати этикетки</li>
+          <li>Глобальный поиск по номеру изделия</li>
+        </ul>
+      </div>
+    </div>
+    <div class="code-block" style="margin-top:24px">
+      <span class="cm">// Журнал перемещений — единая точка записи</span><br>
+      <span class="kw">public void</span> <span class="fn">recordMovement</span>(SerialMovementDto dto) {<br>
+      &nbsp;&nbsp;<span class="cm">// Событие + реквизиты — в одном сервисе</span><br>
+      &nbsp;&nbsp;<span class="kw">var</span> entity = <span class="fn">toEntity</span>(dto);<br>
+      &nbsp;&nbsp;movementRepository.<span class="fn">save</span>(entity);<br>
+      &nbsp;&nbsp;statusTransition.<span class="fn">apply</span>(dto); <span class="cm">// в той же транзакции</span><br>
+      }
+    </div>
+  </div>
+
+  <!-- SLIDE 5: Non-trivial solutions -->
+  <div class="slide" data-index="5">
+    <h2>Нетривиальные <span class="accent">решения</span></h2>
+    <div class="section-line"></div>
+    <div class="content-grid three">
+      <div class="card">
+        <h3><span class="icon blue">📐</span> Планирование графика</h3>
+        <p>Обход маршрута в <span class="hl">топологическом порядке</span>. Операция не начнётся раньше предшественников + переходные дни. Мощность этапа — сотрудники × 8 ч. Загрузка считается по каждому экземпляру отдельно.</p>
+      </div>
+      <div class="card">
+        <h3><span class="icon green">📝</span> Журнал перемещений</h3>
+        <p><span class="hl2">Единая точка записи</span>. Модуль не обязан знать чужие детали — правило «какое событие и с какими реквизитами» живёт в одном сервисе.</p>
+      </div>
+      <div class="card">
+        <h3><span class="icon orange">🔒</span> Порядок правил Security</h3>
+        <p>Spring Security берёт <span class="hl3">первое совпадение</span>. Частные правила распределения работ стоят раньше общего блока цеха. Каждая граница описана комментарием в конфигурации.</p>
+      </div>
+    </div>
+    <div class="code-block" style="margin-top:24px">
+      <span class="cm">// SecurityConfig — порядок matcher'ов важен</span><br>
+      <span class="kw">http</span>.<span class="fn">authorizeHttpRequests</span>(auth -> auth<br>
+      &nbsp;&nbsp;.<span class="fn">requestMatchers</span>(<span class="fn">"/dispatcher/assign/**"</span>).<span class="fn">hasRole</span>(<span class="hl">"DISPATCHER"</span>)<br>
+      &nbsp;&nbsp;.<span class="fn">requestMatchers</span>(<span class="fn">"/workshop/**"</span>).<span class="fn">hasRole</span>(<span class="hl">"WORKSHOP"</span>) <span class="cm">// общий блок — ниже!</span><br>
+      );
+    </div>
+  </div>
+
+  <!-- SLIDE 6: Numbers -->
+  <div class="slide" data-index="6">
+    <h2>Проект в <span class="accent">цифрах</span></h2>
+    <div class="section-line"></div>
+    <div class="stats-row">
+      <div class="stat-box"><div class="num">330</div><div class="label">Java-файлов</div></div>
+      <div class="stat-box"><div class="num">~63 800</div><div class="label">строк Java</div></div>
+      <div class="stat-box"><div class="num">108</div><div class="label">шаблонов Thymeleaf</div></div>
+      <div class="stat-box"><div class="num">~35 500</div><div class="label">строк HTML</div></div>
+    </div>
+    <div class="stats-row" style="margin-top:16px">
+      <div class="stat-box"><div class="num">54</div><div class="label">CSS/JS файла</div></div>
+      <div class="stat-box"><div class="num">~22 500</div><div class="label">строк стилей/скриптов</div></div>
+      <div class="stat-box"><div class="num">70</div><div class="label">SQL-миграций (V1–V70)</div></div>
+      <div class="stat-box"><div class="num">~127K</div><div class="label">строк всего</div></div>
+    </div>
+    <div class="content-grid two" style="margin-top:28px;max-width:800px">
+      <div class="card">
+        <h3><span class="icon blue">📦</span> Зависимости</h3>
+        <p>Spring Boot 3.4.2, Spring Security 6, Spring Data JPA, Thymeleaf, MySQL 8, Flyway, Apache POI, Lombok</p>
+      </div>
+      <div class="card">
+        <h3><span class="icon green">👥</span> Роли и модули</h3>
+        <p>25 ролей. 10 ролевых интерфейсов: админ, диспетчер, технология, цех, исполнитель, «Мои операции», склад, входной контроль, качество, поиск</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- SLIDE 7: Summary & Plans -->
+  <div class="slide" data-index="7">
+    <h2>Итоги и <span class="accent">планы</span></h2>
+    <div class="section-line"></div>
+    <div class="summary-grid">
+      <div class="card">
+        <h3><span class="icon green">✅</span> Закрытый цикл</h3>
+        <p>Справочники → техпроцессы → планирование → распределение → исполнение → входной и тех. контроль → склады → ремонт → паспорт изделия. <span class="hl">70 миграций, 25 ролей.</span> Развёртывание одной командой.</p>
+      </div>
+      <div class="card">
+        <h3><span class="icon orange">🔮</span> Планы</h3>
+        <ul>
+          <li>Слой unit- и интеграционных тестов</li>
+          <li>Тесты расчёта графика и статусных переходов</li>
+          <li>Отчётность по загрузке подразделений</li>
+          <li>REST-интерфейс для обмена с внешними системами</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- SLIDE 8: QA -->
+  <div class="slide" data-index="8">
+    <h2>Вопросы <span class="accent">комиссии</span></h2>
+    <div class="section-line"></div>
+    <div class="qa-item">
+      <div class="q">«Зачем серверный рендеринг, а не SPA?»</div>
+      <div class="a">Операторы цеха на рабочих машинах. Одна деплой-артефакт, сессионная модель Spring Security из коробки. Тяжёлые взаимодействия закрыты собственными JS-модулями по разделам.</div>
+    </div>
+    <div class="qa-item" style="margin-top:12px">
+      <div class="q">«Почему Flyway, а не ddl-auto: update?»</div>
+      <div class="a">update не умеет переносить данные между классификаторами (V4, V5). Validate ловит расхождение сущности и таблицы на старте, а не в проде.</div>
+    </div>
+    <div class="qa-item" style="margin-top:12px">
+      <div class="q">«Как обеспечена целостность статусов?»</div>
+      <div class="a">Переходы живут в сервисах в одной транзакции (@Transactional). Смена статуса и запись в журнал — одним вызовом сервиса.</div>
+    </div>
+    <div class="qa-item" style="margin-top:12px">
+      <div class="q">«Где тесты?»</div>
+      <div class="a">Осознанный приоритет — сквозная функциональность по ТЗ. Следующая итерация — тесты расчёта графика и статусных переходов.</div>
+    </div>
+  </div>
+
+  <!-- SLIDE 9: End -->
+  <div class="slide end-slide" data-index="9">
+    <h2>Спасибо за <span class="accent">внимание!</span></h2>
+    <p>Готов ответить на вопросы</p>
+    <div class="stats-row" style="margin-top:36px">
+      <div class="stat-box"><div class="num">127K+</div><div class="label">строк кода</div></div>
+      <div class="stat-box"><div class="num">70</div><div class="label">версий схемы</div></div>
+      <div class="stat-box"><div class="num">25</div><div class="label">ролей</div></div>
+    </div>
+  </div>
+
+</div>
+
+<!-- Navigation -->
+<div class="nav-bar">
+  <button id="prevBtn" onclick="goSlide(-1)" disabled>← Назад</button>
+  <span class="slide-counter" id="counter">1 / 10</span>
+  <button id="nextBtn" onclick="goSlide(1)">Вперёд →</button>
+</div>
+
+<script>
+  let current = 0;
+  const slides = document.querySelectorAll('.slide');
+  const total = slides.length;
+  const counter = document.getElementById('counter');
+  const prevBtn = document.getElementById('prevBtn');
+  const nextBtn = document.getElementById('nextBtn');
+  const progressBar = document.getElementById('progressBar');
+
+  function goSlide(dir) {
+    const next = current + dir;
+    if (next < 0 || next >= total) return;
+    slides[current].classList.remove('active');
+    current = next;
+    slides[current].classList.add('active');
+    counter.textContent = `${current + 1} / ${total}`;
+    prevBtn.disabled = current === 0;
+    nextBtn.disabled = current === total - 1;
+    progressBar.style.width = `${((current + 1) / total) * 100}%`;
+  }
+
+  document.addEventListener('keydown', e => {
+    if (e.key === 'ArrowRight' || e.key === ' ') goSlide(1);
+    if (e.key === 'ArrowLeft') goSlide(-1);
+    if (e.key === 'Escape') { current = 0; slides.forEach((s,i) => s.classList.toggle('active', i===0)); counter.textContent=`1 / ${total}`; prevBtn.disabled=true; nextBtn.disabled=false; progressBar.style.width=`${(1/total)*100}%`; }
+  });
+
+  progressBar.style.width = `${(1/total)*100}%`;
+</script>
+</body>
+</html>
