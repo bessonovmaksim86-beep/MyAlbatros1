@@ -170,6 +170,74 @@ public class SerialMovementJournalService {
         }
     }
 
+    /**
+     * Позиции приняты складом из изолятора брака.
+     *
+     * Отличается от {@link #recordAccepted}: приёмка из изолятора —
+     * продолжение той же проводки перемещения, и паспорт обязан
+     * показать оба шага одной цепочкой. Поэтому событие несёт ссылку
+     * на строку перемещения, группу брака и причину, по которой ячейку
+     * вынесли из изолятора: без них «Принята на склад» висела бы
+     * отдельно от «Передана со склада изолятора», и читателю паспорта
+     * нечем было бы связать их в один маршрут.
+     *
+     * Разновидность задаёт вызывающий код, а не реестр: bulk-UPDATE
+     * приёмки уже очистил контекст, и в загруженной строке колонка
+     * готовности ещё старая.
+     *
+     * @param serials      принятые серийные номера
+     * @param transfers    строки перемещения каждого номера — источник
+     *                     причины и группы брака
+     * @param cellReady    принятые позиции стали готовыми ячейками
+     * @param actor        кладовщик, проведший приёмку
+     * @param moment       момент приёмки
+     */
+    @Transactional
+    public void recordAcceptedFromQuarantine(List<ProductSerial> serials,
+                                             Map<String, QuarantineTransfer> transfers,
+                                             boolean cellReady,
+                                             AppUser actor,
+                                             LocalDateTime moment) {
+
+        QuarantineCellKind kind = cellReady
+                ? QuarantineCellKind.CELL
+                : QuarantineCellKind.SUBASSEMBLY;
+
+        for (ProductSerial serial : serials) {
+
+            QuarantineTransfer transfer =
+                    transfers.get(serial.getFullNumber());
+
+            SerialMovementEvent event = newEvent(
+                    serial.getFullNumber(), serial.getId(),
+                    SerialMovementType.ACCEPTED,
+                    moment, actor, null, null,
+                    transfer == null ? null : transfer.getDefectGroup());
+
+            applySerialState(event, serial);
+            event.setCellKind(kind);
+            event.setQuarantineTransfer(transfer);
+            event.setNote(acceptanceNote(transfer));
+
+            journalRepository.save(event);
+        }
+    }
+
+    private static String acceptanceNote(QuarantineTransfer transfer) {
+
+        if (transfer == null) {
+            return null;
+        }
+
+        String reason = transfer.getReason();
+
+        if (reason == null || reason.isBlank()) {
+            return null;
+        }
+
+        return "Перемещена из изолятора брака: " + reason;
+    }
+
     /** Ячейки оприходованы складом по приходному ордеру. */
     @Transactional
     public void recordReceived(List<ProductSerial> serials,

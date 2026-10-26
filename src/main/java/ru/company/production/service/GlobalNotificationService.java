@@ -6,6 +6,7 @@ import org.springframework.transaction.annotation.Transactional;
 import ru.company.production.entity.AppUser;
 import ru.company.production.entity.ZnpKind;
 import ru.company.production.repository.ProductionOrderRepository;
+import ru.company.production.service.QuarantineTransferService.Section;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -168,9 +169,18 @@ public class GlobalNotificationService {
 
         result.add(new CounterItem(
                 "warehouse-quarantine-transfer",
-                "Перемещение из изолятора",
+                "Перемещение из изолятора (подсборки)",
                 "/warehouse/quarantine-transfer",
-                quarantineTransferService.countPending()
+                quarantineTransferService.countPending(
+                        Section.SUBASSEMBLY)
+        ));
+
+        result.add(new CounterItem(
+                "warehouse-quarantine-transfer-cells",
+                "Перемещение из изолятора (ячейки)",
+                "/warehouse/quarantine-transfer/cells",
+                quarantineTransferService.countPending(
+                        Section.CELL)
         ));
 
         result.add(new CounterItem(

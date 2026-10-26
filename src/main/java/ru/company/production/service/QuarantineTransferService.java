@@ -1,5 +1,6 @@
 package ru.company.production.service;
 
+import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -8,6 +9,7 @@ import ru.company.production.dto.QuarantineFilter;
 import ru.company.production.entity.AppUser;
 import ru.company.production.entity.ProductClassifier;
 import ru.company.production.entity.ProductSerial;
+import ru.company.production.entity.QuarantineCellKind;
 import ru.company.production.entity.QuarantineTransfer;
 import ru.company.production.repository.ProductClassifierRepository;
 import ru.company.production.repository.ProductSerialRepository;
@@ -60,6 +62,87 @@ public class QuarantineTransferService {
     /** Максимальная длина причины перемещения. */
     private static final int REASON_MAX_LENGTH = 500;
 
+    /*
+     * Раздел склада, принимающего перемещение.
+     *
+     * Бюро выносит из изолятора и подсборки, и готовые ячейки одним
+     * жестом, но склад разбирает их в разных разделах: подсборку ещё
+     * можно перевести в ячейку отметкой готовности, а ячейка подсборкой
+     * стать не способна. Граница держится на разновидности, скопированной
+     * строкой перемещения, — поэтому раздел и состав не разъедутся, даже
+     * если партию тем временем отметили готовой.
+     */
+    @Getter
+    @RequiredArgsConstructor
+    public enum Section {
+
+        /** Подсборки: приёмка с чекбоксом «отметить как готовые ячейки». */
+        SUBASSEMBLY(
+                QuarantineCellKind.SUBASSEMBLY,
+                "quarantine-transfer",
+                "",
+                "подсборки"
+        ),
+
+        /** Ячейки: приёмка без отметки — в подсборку ячейка не возвращается. */
+        CELL(
+                QuarantineCellKind.CELL,
+                "quarantine-transfer-cells",
+                "/cells",
+                "ячейки"
+        );
+
+        private final QuarantineCellKind kind;
+
+        /** Ключ активной страницы для бокового меню. */
+        private final String activePage;
+
+        /** Суффикс адреса раздела: подсборки держат корневой путь. */
+        private final String pathSuffix;
+
+        /** Подпись состава в заголовках и сообщениях. */
+        private final String caption;
+
+        /**
+         * Раздел обязан сам поставить отметку готовности.
+         *
+         * Имя с префиксом {@code is} — не формальность: шаблон читает
+         * признак как свойство, чтобы вывести или скрыть чекбокс.
+         */
+        public boolean isCellReadyForced() {
+            return this == CELL;
+        }
+
+        /** Адрес раздела внутри {@code /warehouse/quarantine-transfer}. */
+        public String path() {
+            return "/warehouse/quarantine-transfer" + pathSuffix;
+        }
+
+        /** Раздел по разновидности строки перемещения. */
+        public static Section ofKind(QuarantineCellKind kind) {
+            return kind == QuarantineCellKind.CELL ? CELL : SUBASSEMBLY;
+        }
+
+        /** Раздел по параметру адреса: неизвестное значение — подсборки. */
+        public static Section ofNullable(String value) {
+            if (value == null || value.isBlank()) {
+                return SUBASSEMBLY;
+            }
+
+            String normalized = value.trim();
+
+            for (Section section : values()) {
+                if (section.activePage.equals(normalized)
+                        || section.name().equalsIgnoreCase(normalized)
+                        || section.kind.name().equalsIgnoreCase(normalized)) {
+                    return section;
+                }
+            }
+
+            return SUBASSEMBLY;
+        }
+    }
+
     private final QuarantineTransferRepository transferRepository;
     private final InputControlService inputControlService;
     private final ProductClassifierRepository classifierRepository;
@@ -67,11 +150,13 @@ public class QuarantineTransferService {
     private final SerialMovementJournalService journal;
 
     /* ============================================================
-       ПЕРЕЧНИ
+       ПЕРЕЧНИ ПО РАЗДЕЛАМ
        ============================================================ */
 
     /**
-     * Ячейки, которые бюро передало, но склад ещё не принял.
+     * Ячейки, которые бюро передало, но склад ещё не принял —
+     * весь состав без разделения. Используются для сверок и
+     * изолятора, где отбор по виду не нужен.
      */
     @Transactional(readOnly = true)
     public List<TransferView> findPending() {
@@ -80,10 +165,28 @@ public class QuarantineTransferService {
                 .toList();
     }
 
-    /** Перемещённых ячеек, ожидающих приёмки: счётчик в боковом меню склада. */
+    /**
+     * Строки перемещения выбранного раздела склада.
+     *
+     * В разделе «Подсборки» кладовщик видит только те строки, чья
+     * разновидность — SUBASSEMBLY; в разделе «Ячейки» — только CELL.
+     * Разновидность считывается с самой строки перемещения и не
+     * зависит от того, отметила ли партию готовой после перемещения.
+     */
     @Transactional(readOnly = true)
-    public long countPending() {
-        return transferRepository.countByAcceptedFalse();
+    public List<TransferView> findPending(Section section) {
+        return findPending().stream()
+                .filter(view -> view.transfer.getCellKind() == section.getKind())
+                .toList();
+    }
+
+    /**
+     * Перемещённых ячеек выбранного раздела: счётчик в боковом меню.
+     */
+    @Transactional(readOnly = true)
+    public long countPending(Section section) {
+        return transferRepository.countByAcceptedFalseAndCellKind(
+                section.getKind());
     }
 
     /**
@@ -229,7 +332,7 @@ public class QuarantineTransferService {
        ============================================================ */
 
     /**
-     * Проводит приёмку переданных ячеек.
+     * Проводит приёмку переданных ячеек выбранного раздела склада.
      *
      * Номера сверяют с перечнем передачи: кладовщик подтверждает
      * сканером только то, что реально привезли, а всё, что не
@@ -238,10 +341,25 @@ public class QuarantineTransferService {
      * склад показывал бы принятую ячейку свободной, и её выдали бы
      * в производство повторно.
      *
+     * V75: раздел «Подсборки» принимает позиции подсборками, а чекбокс
+     * «отметить как готовые ячейки» переводит их в ячейки — без него
+     * {@code cell_ready_at} остаётся пустым, и позиция не выходит в
+     * комплектование. Раздел «Ячейки» чекбокса не предлагает: ячейка
+     * подсборкой стать не может, и готовность ей возвращает отметка,
+     * снятая при попадании в изолятор.
+     *
+     * Номер чужого раздела приёмку не пропустит, но и не потеряется:
+     * отказ называет раздел, где номер лежит, иначе кладовщик искал бы
+     * его вслепую.
+     *
+     * @param section        раздел склада, проводящий приёмку
      * @param scannedNumbers номера, подтверждённые кладовщиком
+     * @param cellReady      пометить принятые позиции готовыми ячейками
      */
     @Transactional
-    public InputControlResult accept(List<String> scannedNumbers,
+    public InputControlResult accept(Section section,
+                                     List<String> scannedNumbers,
+                                     boolean cellReady,
                                      AppUser receiver) {
 
         List<String> scanned = parseNumbers(scannedNumbers);
@@ -273,12 +391,42 @@ public class QuarantineTransferService {
             );
         }
 
+        List<String> foreign = scanned.stream()
+                .filter(number -> !belongs(number, pendingByNumber, section))
+                .toList();
+
+        if (!foreign.isEmpty()) {
+            return InputControlResult.rejected(
+                    "Эти номера перемещены в раздел «"
+                            + Section.ofKind(
+                            pendingByNumber.get(foreign.get(0))
+                                    .get(0).getCellKind()).getCaption()
+                            + "», а не в «" + section.getCaption() + "»: "
+                            + join(foreign)
+            );
+        }
+
+        /*
+         * Раздел ячеек восстанавливает готовность сам: в изолятор номер
+         * попал уже ячейкой, а приёмка БВК успела снять с него отметку.
+         * Чекбокс здесь не предлагали, поэтому решение берёт раздел.
+         */
+        boolean ready = section.isCellReadyForced() || cellReady;
+
         LocalDateTime moment = LocalDateTime.now();
 
+        /*
+         * Закрываются только строки своего раздела: один номер могли
+         * вынести из изолятора дважды, и строка чужого раздела обязана
+         * остаться ждать своего кладовщика. Иначе приёмка подсборок
+         * молча сняла бы ячейку с перечня «Ячеек».
+         */
         List<QuarantineTransfer> closing = new ArrayList<>();
 
         for (String number : scanned) {
-            pendingByNumber.getOrDefault(number, List.of())
+            pendingByNumber.getOrDefault(number, List.of()).stream()
+                    .filter(transfer ->
+                            transfer.getCellKind() == section.getKind())
                     .forEach(transfer -> {
                         transfer.setAccepted(true);
                         transfer.setAcceptedBy(receiver);
@@ -295,12 +443,45 @@ public class QuarantineTransferService {
                         .distinct()
                         .toList();
 
-        markWarehouseAccepted(acceptedNumbers, receiver, moment);
+        /*
+         * Для паспорта по каждому номеру хранят одно перемещение: если
+         * номер выносили из изолятора дважды, в журнал идёт то, которое
+         * склад закрыл этим сканом, — иначе причина в паспорте не
+         * соответствовала бы принятой позиции.
+         */
+        Map<String, QuarantineTransfer> transferByNumber =
+                new LinkedHashMap<>();
+
+        closing.forEach(transfer ->
+                transferByNumber.putIfAbsent(
+                        transfer.getFullNumber(), transfer));
+
+        markWarehouseAccepted(
+                acceptedNumbers, transferByNumber, receiver, moment, ready);
 
         return InputControlResult.accepted(
                 "Принято на склад из изолятора брака: "
-                        + acceptedNumbers.size() + " яч."
+                        + acceptedNumbers.size() + " яч. "
+                        + (ready
+                        ? "— отмечены готовыми ячейками"
+                        : "— остались подсборками")
         );
+    }
+
+    /**
+     * Отнесён ли номер к разделу хоть одним незакрытым перемещением.
+     *
+     * Один номер могли вынести из изолятора дважды по разным группам
+     * брака, и строки оказались в разных разделах: приёмка обязана
+     * пропустить такой номер, а не потребовать сначала закрыть чужую
+     * строку.
+     */
+    private static boolean belongs(String number,
+                                   Map<String, List<QuarantineTransfer>> pending,
+                                   Section section) {
+
+        return pending.getOrDefault(number, List.of()).stream()
+                .anyMatch(transfer -> transfer.getCellKind() == section.getKind());
     }
 
     /**
@@ -357,14 +538,26 @@ public class QuarantineTransferService {
      * партий прихода ещё до сканирования. Поэтому отсутствие строки —
      * не ошибка, а обычный случай, и приёмка от неё не отменяется.
      *
-     * V75: перемещённая из изолятора ячейка уже лежит на складе
-     * (acceptedAt стоит), но остаётся подсборкой, пока кладовщик не
-     * отметит её готовой. Приёмка из изолятора — тот шаг, который
-     * переводит её в ячейку.
+     * V75: перемещённая из изолятора позиция ложится на склад
+     * ({@code acceptedAt}) и остаётся подсборкой. В ячейку её переводит
+     * отметка готовности, которую кладовщик ставит чекбоксом при
+     * приёмке, — автоматически не переводим.
+     *
+     * Проводку в журнал ведут отдельным методом, а не общим
+     * {@code recordAccepted}: паспорт обязан связать приёмку с
+     * перемещением, из которого она выросла, — показать, что позиция
+     * была в изоляторе, кто и по какой причине её вынес и какой
+     * разновидностью она была на каждом из двух шагов.
+     *
+     * @param transfers строки перемещения принятых номеров: источник
+     *                  причины и группы брака для паспорта
+     * @param cellReady поставить {@code cellReadyAt} принятым позициям
      */
     private void markWarehouseAccepted(List<String> numbers,
+                                       Map<String, QuarantineTransfer> transfers,
                                        AppUser receiver,
-                                       LocalDateTime moment) {
+                                       LocalDateTime moment,
+                                       boolean cellReady) {
 
         if (numbers.isEmpty()) {
             return;
@@ -377,20 +570,23 @@ public class QuarantineTransferService {
             return;
         }
 
-        serialRepository.markAcceptedByIds(
-                serials.stream().map(ProductSerial::getId).toList(),
-                moment,
-                receiver
-        );
+        List<Long> ids = serials.stream().map(ProductSerial::getId).toList();
 
-        serialRepository.markCellReadyByIds(
-                serials.stream().map(ProductSerial::getId).toList(),
-                moment,
-                receiver
-        );
+        serialRepository.markAcceptedByIds(ids, moment, receiver);
 
-        journal.recordAccepted(serials, receiver, moment);
-        journal.recordCellReady(serials, receiver, moment);
+        journal.recordAcceptedFromQuarantine(
+                serials, transfers, cellReady, receiver, moment);
+
+        /*
+         * Готовность ставят отдельным событием, а не вместе с приёмкой:
+         * паспорт обязан показать и момент, когда позиция легла на
+         * склад, и момент, когда она стала ячейкой.
+         */
+        if (cellReady) {
+            serialRepository.markCellReadyByIds(ids, moment, receiver);
+
+            journal.recordCellReady(serials, receiver, moment);
+        }
     }
 
     /**

@@ -20,9 +20,14 @@
     <div class="warehouse-sidebar__inner">
 
         <!--
-            Признак «мы внутри раздела Подсборки»: по нему подсвечивается
+            Признак «мы внутри раздела»: по нему подсвечивается
             родительский пункт, а скрипт раскрывает подменю при загрузке.
-            Аналогично для раздела комплектования заказа покупателя.
+
+            «Подсборки» и «Ячейки» разведены намеренно: приёмка из
+            изолятора в подсборках даёт чекбокс готовности, а в ячейках
+            его быть не может — подсборка становится ячейкой, но не
+            наоборот. Поэтому у разделов разные пункты, и активный
+            признак обязан быть у каждого свой.
         -->
         <th:block th:with="subassemblyActive=${
                               activePage == 'receiving'
@@ -30,9 +35,10 @@
                               or activePage == 'quarantine-transfer'
                               or activePage == 'znp-acceptance'
                               or activePage == 'subassembly-kitting'
+                              or activePage == 'kitting-znp'
                           },
-                          kittingActive=${
-                              activePage == 'kitting-znp'
+                          cellActive=${
+                              activePage == 'quarantine-transfer-cells'
                               or activePage == 'kitting-semi'
                           }">
 
@@ -170,15 +176,15 @@
                    th:classappend="${activePage == 'quarantine-transfer'} ? ' is-active' : ''"
                    th:href="@{/warehouse/quarantine-transfer}"
                    role="menuitem"
-                   title="Приёмка ячеек, перемещённых из изолятора брака">
+                   title="Приёмка подсборок, перемещённых из изолятора брака">
 
                     <span class="warehouse-submenu__text">
                         Перемещение из изолятора
                     </span>
 
                     <span class="warehouse-submenu__counter"
-                          th:if="${quarantineTransferCount != null and quarantineTransferCount > 0}"
-                          th:text="${quarantineTransferCount}">
+                          th:if="${quarantineSubassemblyCount != null and quarantineSubassemblyCount > 0}"
+                          th:text="${quarantineSubassemblyCount}">
                         3
                     </span>
                 </a>
@@ -217,41 +223,11 @@
                     </span>
                 </a>
 
-            </div>
-
-            <a class="warehouse-navigation__item warehouse-dropdown-trigger"
-               th:classappend="${kittingActive} ? ' is-active' : ''"
-               href="#"
-               aria-expanded="false"
-               aria-haspopup="true"
-               title="Комплектование заказа покупателя">
-
-                <span class="warehouse-navigation__icon">
-                    <svg viewBox="0 0 24 24" aria-hidden="true">
-                        <path d="M3 13h8V3H3v10Zm0 8h8v-6H3v6Zm10 0h8V11h-8v10Zm0-18v6h8V3h-8Z"/>
-                    </svg>
-                </span>
-
-                <span class="warehouse-navigation__text">
-                    Комплектование заказа покупателя
-                </span>
-
-                <span class="warehouse-navigation__chevron" aria-hidden="true">
-                    <svg viewBox="0 0 24 24">
-                        <path d="M7 10l5 5 5-5Z"/>
-                    </svg>
-                </span>
-            </a>
-
-            <!--
-                Подменю комплектования заказа покупателя: ЗНП и
-                полуфабрикаты — два склада с разными операциями, но
-                один жест «собрать состав заказа».
-            -->
-            <div class="warehouse-submenu"
-                 role="menu"
-                 aria-label="Комплектование заказа покупателя">
-
+                <!--
+                    Комплектование ЗНП переехало в «Подсборки»: заказ-
+                    комплектующий собирают из подсборок, и кладовщик ищет
+                    его в том же разделе, где их принимают.
+                -->
                 <a class="warehouse-submenu__item"
                    th:classappend="${activePage == 'kitting-znp'} ? ' is-active' : ''"
                    th:href="@{/warehouse/kitting-znp}"
@@ -269,6 +245,66 @@
                     </span>
                 </a>
 
+            </div>
+
+            <!--
+                Раздел «Ячейки»: приёмка ячеек, перемещённых из изолятора.
+                В отличие от подсборок, чекбокс «готовые ячейки» не
+                предлагается — ячейка подсборкой стать не может, и
+                готовность ей не нужна: она уже ячейка.
+            -->
+            <a class="warehouse-navigation__item warehouse-dropdown-trigger"
+               th:classappend="${cellActive} ? ' is-active' : ''"
+               href="#"
+               aria-expanded="false"
+               aria-haspopup="true"
+               title="Ячейки">
+
+                <span class="warehouse-navigation__icon">
+                    <svg viewBox="0 0 24 24" aria-hidden="true">
+                        <path d="M22 10V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v4c0 1.1.9 2 2 2h18a2 2 0 0 0 2-2ZM4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8H4Zm12 2h-2v-2h2v2Zm0-4H4V8h12v2Z"/>
+                    </svg>
+                </span>
+
+                <span class="warehouse-navigation__text">
+                    Ячейки
+                </span>
+
+                <span class="warehouse-navigation__chevron" aria-hidden="true">
+                    <svg viewBox="0 0 24 24">
+                        <path d="M7 10l5 5 5-5Z"/>
+                    </svg>
+                </span>
+            </a>
+
+            <!-- Выпадающее подменю «Ячейки» -->
+            <div class="warehouse-submenu"
+                 role="menu"
+                 aria-label="Ячейки">
+
+                <a class="warehouse-submenu__item"
+                   th:classappend="${activePage == 'quarantine-transfer-cells'} ? ' is-active' : ''"
+                   th:href="@{/warehouse/quarantine-transfer/cells}"
+                   role="menuitem"
+                   title="Приёмка ячеек, перемещённых из изолятора брака">
+
+                    <span class="warehouse-submenu__text">
+                        Перемещение из изолятора
+                    </span>
+
+                    <span class="warehouse-submenu__counter"
+                          th:if="${quarantineCellCount != null and quarantineCellCount > 0}"
+                          th:text="${quarantineCellCount}">
+                        0
+                    </span>
+                </a>
+
+                <!--
+                    Комплектование полуфабрикатов переехало в «Ячейки»:
+                    склад отдаёт в сборку готовые ячейки, и работу по
+                    своему складу кладовщик ищет в разделе своего вида
+                    позиции.
+                -->
                 <a class="warehouse-submenu__item"
                    th:classappend="${activePage == 'kitting-semi'} ? ' is-active' : ''"
                    th:href="@{/warehouse/kitting-semi}"

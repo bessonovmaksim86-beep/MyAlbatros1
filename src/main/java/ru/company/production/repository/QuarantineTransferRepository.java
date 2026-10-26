@@ -5,6 +5,7 @@ import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
+import ru.company.production.entity.QuarantineCellKind;
 import ru.company.production.entity.QuarantineTransfer;
 
 import java.util.List;
@@ -30,6 +31,13 @@ public interface QuarantineTransferRepository
      * оставленная строка подталкивала бы кладовщика провести её
      * повторно. Порядок — по времени перемещения, чтобы склад разбирал
      * очередь сверху вниз.
+     *
+     * Разновидность ({@code cellKind}) в запросе не отбирают: перечень
+     * склада читают по разделам («Подсборки» и «Ячейки»), но незакрытых
+     * строк десятки, а не тысячи, поэтому срезку по виду делает сервис.
+     * JPQL-проверка {@code :kind is null or ...} над перечислением
+     * зависит от вывода типов диалекта, и ровный список с фильтрацией в
+     * памяти здесь дешевле расходящегося отбора.
      */
     @Query("""
             select transfer
@@ -57,9 +65,17 @@ public interface QuarantineTransferRepository
     List<String> findAcceptedFullNumbers();
 
     /**
-     * Перемещённых ячеек, ожидающих приёмки: счётчик в боковом меню склада.
+     * Перемещённых ячеек, ожидающих приёмки: общий счётчик склада.
      */
     long countByAcceptedFalse();
+
+    /**
+     * Незакрытых перемещений выбранной разновидности.
+     *
+     * Счётчик висит на пункте своего раздела: общий счётчик под двумя
+     * пунктами показал бы кладовщику работу, которой в разделе нет.
+     */
+    long countByAcceptedFalseAndCellKind(QuarantineCellKind kind);
 
     /**
      * Все незакрытые номера: проверка перед перемещением.

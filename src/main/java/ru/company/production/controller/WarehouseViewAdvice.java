@@ -12,6 +12,7 @@ import ru.company.production.service.BvkAcceptanceService;
 import ru.company.production.service.CellReceivingService;
 import ru.company.production.service.ModuleRoutes;
 import ru.company.production.service.QuarantineTransferService;
+import ru.company.production.service.QuarantineTransferService.Section;
 import ru.company.production.service.SubassemblyKittingService;
 import ru.company.production.service.WarehouseKittingService;
 import ru.company.production.service.ZnpAcceptanceService;
@@ -82,10 +83,21 @@ public class WarehouseViewAdvice {
          * Ячейки, перемещённые из изолятора брака: их тоже ждёт
          * приёмка, и счётчик держат рядом со счётчиками прочей приёмки,
          * чтобы кладовщик видел объём, не заходя в раздел.
+         *
+         * V75: раздел «Подсборки» и раздел «Ячейки» — разные пункты
+         * меню с отдельными счётчиками. Общие для обоих не держу:
+         * кладовщик видит работу только своего раздела.
          */
         model.addAttribute(
-                "quarantineTransferCount",
-                quarantineTransferService.countPending()
+                "quarantineSubassemblyCount",
+                quarantineTransferService.countPending(
+                        Section.SUBASSEMBLY)
+        );
+
+        model.addAttribute(
+                "quarantineCellCount",
+                quarantineTransferService.countPending(
+                        Section.CELL)
         );
 
         /*

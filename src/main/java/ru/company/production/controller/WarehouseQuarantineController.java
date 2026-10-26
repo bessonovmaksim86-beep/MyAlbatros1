@@ -26,6 +26,12 @@ import java.util.List;
  * причины, а склад сверяет номера с тем, что реально привезли, и
  * проводит приёмку.
  *
+ * V75: приёмка разделена на два раздела. Подсборки — чекбокс
+ * «отметить как готовые ячейки» по умолчанию снят, позиция ложится
+ * на склад, но остаётся подсборкой. Ячейки — чекбокс не предлагается:
+ * ячейка подсборкой стать не может, и готовность восстанавливается
+ * автоматически.
+ *
  * Проверку номеров держат отдельным полем, а не одной кнопкой:
  * перемещение — ещё не приёмка. Ячейку могли переместить списком, а
  * привезли не всё, и кладовщик обязан отметить только то, что лежит
@@ -44,18 +50,48 @@ public class WarehouseQuarantineController {
     private final UserRepository userRepository;
 
     /**
-     * Ячейки, переданные бюро, и поле приёмки.
+     * Подсборки, переданные бюро, и поле приёмки.
      *
      * Ожидающие номера отдают отдельным списком: страница подсвечивает
      * по ним введённые номера, и кладовщик видит, какие ячейки уже
      * подтверждены, а какие ещё нет.
+     *
+     * Границу задаёт сам адрес, а не параметр: раздел «Ячейки» —
+     * отдельный путь, и запросить чужой состав нельзя, потому что
+     * адрес выбирает и перечень, и признак готовности.
      */
     @GetMapping({"", "/"})
-    public String index(Model model) {
-        List<QuarantineTransferService.TransferView> pending =
-                transferService.findPending();
+    public String indexSubassemblies(Model model) {
+        return section(QuarantineTransferService.Section.SUBASSEMBLY, model);
+    }
 
-        model.addAttribute("activePage", "quarantine-transfer");
+    /**
+     * Ячейки, переданные бюро.
+     *
+     * Раздел отличается от «Подборок» отсутствием чекбокса готовности:
+     * ячейка подсборкой стать не может, а её готовность снимает
+     * попадание в изолятор — приёмка складом её возвращает.
+     */
+    @GetMapping("/cells")
+    public String indexCells(Model model) {
+        return section(QuarantineTransferService.Section.CELL, model);
+    }
+
+    /**
+     * Разметка раздела: свой состав, его номера и ключ активного пункта.
+     *
+     * Оба раздела рисуются одним шаблоном — разметка у них общая, и
+     * различаются только состав и наличие чекбокса, который шаблон
+     * выводит по признаку {@code section.cellReadyForced}.
+     */
+    private String section(QuarantineTransferService.Section section,
+                           Model model) {
+
+        List<QuarantineTransferService.TransferView> pending =
+                transferService.findPending(section);
+
+        model.addAttribute("activePage", section.getActivePage());
+        model.addAttribute("section", section);
         model.addAttribute("transfers", pending);
         model.addAttribute(
                 "cellNumbers",
@@ -69,22 +105,39 @@ public class WarehouseQuarantineController {
     }
 
     /**
-     * Проведение приёмки: отмеченные складом ячейки принимают на склад,
-     * их отметку ставят и в реестре, если номер там есть.
+     * Проведение приёмки: отмеченные складом ячейки принимают на склад.
      *
-     * Номера сверяют с перечнем передачи (см.
-     * {@link QuarantineTransferService#accept}): чужой номер приёмку не
-     * пропустит, а неподтверждённые ячейки останутся ждать.
+     * V75: раздел «Подсборки» принимает позиции подсборками, а чекбокс
+     * «отметить как готовые ячейки» переводит их в ячейки — без него
+     * {@code cell_ready_at} остаётся пустым, и позиция не выходит в
+     * комплектование. Раздел «Ячейки» чекбокса не предлагает: ячейка
+     * подсборкой стать не может, и готовность восстанавливается
+     * автоматически.
+     *
+     * Проведение идёт redirect'ом: приёмку проводят один раз, и повторный
+     * F5 не должен отметить ячейки второй раз. При отказе страница
+     * возвращается тем же методом с уже введёнными номерами.
      */
     @PostMapping("/accept")
     public String accept(
+            @RequestParam(name = "section", required = false) String sectionParam,
             @RequestParam(name = "scanned", required = false)
             List<String> scanned,
+            @RequestParam(name = "cellReady", required = false)
+            String cellReady,
             Authentication authentication,
             RedirectAttributes redirectAttributes
     ) {
+        QuarantineTransferService.Section section =
+                QuarantineTransferService.Section.ofNullable(sectionParam);
+
+        boolean cellReadyFlag = section.isCellReadyForced()
+                || "true".equalsIgnoreCase(cellReady);
+
         InputControlResult result = transferService.accept(
+                section,
                 scanned,
+                cellReadyFlag,
                 currentUser(authentication)
         );
 
@@ -93,7 +146,7 @@ public class WarehouseQuarantineController {
                 result.message()
         );
 
-        return "redirect:/warehouse/quarantine-transfer";
+        return "redirect:" + section.path();
     }
 
     /**
@@ -105,11 +158,15 @@ public class WarehouseQuarantineController {
      */
     @PostMapping("/return")
     public String returnToQuarantine(
+            @RequestParam(name = "section", required = false) String sectionParam,
             @RequestParam(name = "transfer", required = false)
             List<Long> transfers,
             Authentication authentication,
             RedirectAttributes redirectAttributes
     ) {
+        QuarantineTransferService.Section section =
+                QuarantineTransferService.Section.ofNullable(sectionParam);
+
         InputControlResult result = transferService.returnToQuarantine(
                 transfers,
                 currentUser(authentication)
@@ -120,7 +177,7 @@ public class WarehouseQuarantineController {
                 result.message()
         );
 
-        return "redirect:/warehouse/quarantine-transfer";
+        return "redirect:" + section.path();
     }
 
     /**

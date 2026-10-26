@@ -24,8 +24,13 @@
 
 <div class="app-shell">
 
+    <!--
+        Ключ активного пункта берётся из раздела, а не зашит в шаблон:
+        «Подсборки» и «Ячейки» рисуются одной разметкой, и у каждого из
+        них свой пункт меню.
+    -->
     <aside th:replace="~{warehouse/fragments/layout
-            :: sidebar('quarantine-transfer')}">
+            :: sidebar(${section.activePage})}">
     </aside>
 
     <main class="main">
@@ -40,22 +45,42 @@
 
                 <div class="page-title">
 
-                    <h1>Перемещение из изолятора брака</h1>
+                    <h1 th:text="'Перемещение из изолятора брака: '
+                                 + ${section.caption}">
+                        Перемещение из изолятора брака: подсборки
+                    </h1>
 
                     <p>
-                        Ячейки и подсборки, которые бюро входного
-                        контроля вынесло из изолятора брака и передало
-                        на приёмку: подтвердите сканером только те
-                        номера, что реально привезли
+                        <span th:text="${section.name() == 'SUBASSEMBLY'
+                                ? 'Подсборки'
+                                : 'Ячейки'}">
+                            Подсборки
+                        </span>
+                        , которые бюро входного контроля вынесло из
+                        изолятора брака и передало на приёмку:
+                        подтвердите сканером только те номера, что
+                        реально привезли
                     </p>
 
                 </div>
 
                 <div class="page-head-actions">
 
+                    <!--
+                        Ссылка на соседний раздел: один и тот же вынос из
+                        изолятора содержит и подсборки, и ячейки, и
+                        кладовщик разберёт их в двух разделах подряд.
+                    -->
                     <a class="btn secondary"
-                       th:href="@{/warehouse/acceptance}">
-                        Приёмка с БВК
+                       th:if="${section.name() == 'SUBASSEMBLY'}"
+                       th:href="@{/warehouse/quarantine-transfer/cells}">
+                        Ячейки из изолятора
+                    </a>
+
+                    <a class="btn secondary"
+                       th:unless="${section.name() == 'SUBASSEMBLY'}"
+                       th:href="@{/warehouse/quarantine-transfer}">
+                        Подсборки из изолятора
                     </a>
 
                     <a class="btn secondary"
@@ -151,6 +176,17 @@
                                th:name="${_csrf.parameterName}"
                                th:value="${_csrf.token}">
 
+                        <!--
+                            Раздел уезжает на сервер скрытым полем:
+                            адрес приёма один, а состав и признак
+                            готовности у разделов разные. Подделать его
+                            нельзя — сервис сверяет разновидность каждого
+                            номера со своим разделом и отвергает чужой.
+                        -->
+                        <input type="hidden"
+                               name="section"
+                               th:value="${section.name()}">
+
                         <div class="warehouse-scan-input">
 
                             <input type="text"
@@ -174,6 +210,51 @@
                         <p class="warehouse-scan-empty" id="scanEmpty">
                             Подтверждённых ячеек пока нет
                         </p>
+
+                        <!--
+                            Галочка готовности (V75) — только в разделе
+                            подсборок: принятое изделие ложится на склад
+                            подсборкой и становится ячейкой лишь с этой
+                            отметкой. В разделе «Ячейки» чекбокса нет:
+                            ячейка подсборкой стать не может, и её
+                            готовность приёмка возвращает сама.
+                        -->
+                        <div class="warehouse-field__row
+                                    warehouse-field__row--ready"
+                             th:unless="${section.cellReadyForced}">
+
+                            <label class="warehouse-check
+                                         warehouse-check--ready"
+                                   for="cellReady">
+
+                                <input type="checkbox"
+                                       id="cellReady"
+                                       name="cellReady"
+                                       value="true">
+
+                                принять как ячейки
+                            </label>
+
+                        </div>
+
+                        <span class="field-hint field-hint--ready"
+                              th:unless="${section.cellReadyForced}">
+                            Без этой отметки принятые позиции лягут на
+                            склад <strong>подсборками</strong>: они
+                            будут числиться в наличии, но не выйдут в
+                            комплектование как ячейки. Отметка
+                            превращает принятые номера в
+                            <strong>готовые ячейки</strong> — именно она
+                            открывает им путь в заказ-комплектующий.
+                        </span>
+
+                        <span class="field-hint field-hint--ready"
+                              th:if="${section.cellReadyForced}">
+                            Ячейки принимают как есть: в подсборку они
+                            не превращаются, а отметку готовности
+                            приёмка восстанавливает автоматически — её
+                            сняло попадание в изолятор брака.
+                        </span>
 
                         <div class="warehouse-actions">
 
@@ -308,6 +389,15 @@
                                    type="hidden"
                                    th:name="${_csrf.parameterName}"
                                    th:value="${_csrf.token}">
+
+                            <!--
+                                Раздел нужен и возврату: после снятия
+                                строки кладовщик обязан остаться в своём
+                                перечне, а не попасть на чужой состав.
+                            -->
+                            <input type="hidden"
+                                   name="section"
+                                   th:value="${section.name()}">
 
                             <div class="table-wrap">
 
