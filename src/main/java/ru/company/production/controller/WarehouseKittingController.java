@@ -164,6 +164,26 @@ public class WarehouseKittingController {
 
         try {
             suspensionService.assertRowOperable(rowId);
+
+            /*
+             * Состав заказа проверяется ДО закрытия строки: та же
+             * граница, что у «Внести». Кнопка обязана отличаться от
+             * привязки только результатом — «Внести» проверяет номер и
+             * пополняет состав, «Провести» проверяет весь состав и
+             * проводит операцию. Без проверки кладовщик мог бы закрыть
+             * работу заказом, в который попала чужая ячейка.
+             */
+            String compositionError =
+                    kittingService.validateAttachedCells(rowId);
+
+            if (compositionError != null) {
+                redirectAttributes.addFlashAttribute(
+                        "errorMessage", compositionError);
+                redirectAttributes.addFlashAttribute("errorRowId", rowId);
+
+                return "redirect:/warehouse/kitting-" + target.param();
+            }
+
             distributionService.completeRow(rowId, user);
 
             /*
@@ -185,6 +205,7 @@ public class WarehouseKittingController {
                             ? "Не удалось провести экземпляр"
                             : ex.getMessage()
             );
+            redirectAttributes.addFlashAttribute("errorRowId", rowId);
         }
 
         return "redirect:/warehouse/kitting-" + target.param();
@@ -230,6 +251,12 @@ public class WarehouseKittingController {
             } else {
                 redirectAttributes.addFlashAttribute(
                         "errorMessage", result.message());
+                /*
+                 * Строка, на которой кладовщик споткнулся: окно отказа
+                 * разворачивает её панель, чтобы причину не пришлось
+                 * искать по свёрнутому списку.
+                 */
+                redirectAttributes.addFlashAttribute("errorRowId", rowId);
             }
         } catch (RuntimeException ex) {
             redirectAttributes.addFlashAttribute(
@@ -238,6 +265,7 @@ public class WarehouseKittingController {
                             ? "Не удалось привязать ячейку"
                             : ex.getMessage()
             );
+            redirectAttributes.addFlashAttribute("errorRowId", rowId);
         }
 
         return "redirect:/warehouse/kitting-" + target.param();

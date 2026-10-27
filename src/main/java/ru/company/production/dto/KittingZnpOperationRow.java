@@ -22,6 +22,13 @@ import java.util.List;
  * (ячейки) уже вошли в этот заказ-комплектующий: кладовщик видит,
  * что уже укомплектовано, и сверяет состав до проведения операции.
  *
+ * Поле {@code expectedCellTypes} содержит наименования ячеек, которые
+ * операция вправе принять: их сервис находит в классификаторе по
+ * обозначению из наименования операции («Комплектование ЯПР20» →
+ * «ЯПР20М», «ЯПР20МД»). Пустой список означает, что наименование
+ * операции ячейку не называет и подбирать её не из чего — тогда
+ * состав заказа не ограничен видом изделия.
+ *
  * @param rowId          строка графика — ключ проведения
  * @param operationName  наименование операции («Комплектование»)
  * @param znpNumber      номер привязанного ЗНП (заказ в работе)
@@ -32,6 +39,7 @@ import java.util.List;
  * @param blockerLabel   наименование блокирующей операции
  * @param canComplete    провести можно сейчас (не закрыта, не ждёт)
  * @param attachedCellNumbers серийные номера ячеек, вошедших в ЗНП
+ * @param expectedCellTypes наименования ячеек, допускаемых операцией
  */
 public record KittingZnpOperationRow(
         Long rowId,
@@ -43,7 +51,8 @@ public record KittingZnpOperationRow(
         boolean blocked,
         String blockerLabel,
         boolean canComplete,
-        List<String> attachedCellNumbers
+        List<String> attachedCellNumbers,
+        List<String> expectedCellTypes
 ) {
 
     private static final DateTimeFormatter RU_DATE =
@@ -117,5 +126,30 @@ public record KittingZnpOperationRow(
      */
     public boolean canAttachCell() {
         return !completed && znpNumber != null && !znpNumber.isBlank();
+    }
+
+    /**
+     * Сколько типов ячеек допускает операция.
+     *
+     * Ноль — операция не называет тип ячейки, и сервис не будет
+     * проверять вид изделия при привязке.
+     */
+    public long expectedCellTypesCount() {
+        return expectedCellTypes == null ? 0L : expectedCellTypes.size();
+    }
+
+    /**
+     * Подпись ожидаемых типов: «Допускаются: ЯПР20М, ЯПР20МД».
+     *
+     * Показывается в раскрытии под полем ввода — кладовщик видит,
+     * какие ячейки можно внести, ещё до нажатия «Внести».
+     */
+    public String expectedCellTypesLabel() {
+        if (expectedCellTypes == null || expectedCellTypes.isEmpty()) {
+            return "—";
+        }
+
+        return "Допускаются: "
+                + String.join(", ", expectedCellTypes);
     }
 }

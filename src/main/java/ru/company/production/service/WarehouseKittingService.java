@@ -11,6 +11,7 @@ import ru.company.production.entity.AppUser;
 import ru.company.production.entity.Operation;
 import ru.company.production.entity.OperationTypeCode;
 import ru.company.production.entity.OrderScheduleRow;
+import ru.company.production.entity.ProductClassifier;
 import ru.company.production.entity.ProductSerial;
 import ru.company.production.entity.ProductType;
 import ru.company.production.entity.ProductionOrder;
@@ -19,6 +20,7 @@ import ru.company.production.repository.KittingZnpLinkView;
 import ru.company.production.repository.OrganizationUnitRepository;
 import ru.company.production.repository.OrderScheduleRowRepository;
 import ru.company.production.repository.ProductionOrderSerialProjection;
+import ru.company.production.repository.ProductClassifierRepository;
 import ru.company.production.repository.ProductSerialRepository;
 import ru.company.production.repository.SerialProductionOrderRepository;
 import ru.company.production.repository.ZnpCellLinkView;
@@ -32,6 +34,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.regex.Pattern;
 
 /**
  * Комплектование склада: операции, которые планировщик создал при
@@ -117,6 +120,7 @@ public class WarehouseKittingService {
     private final SerialProductionOrderRepository serialProductionOrderRepository;
     private final OrderScheduleRowRepository scheduleRowRepository;
     private final ProductSerialRepository serialRepository;
+    private final ProductClassifierRepository classifierRepository;
     private final SerialMovementJournalService journal;
 
     /** Подпись даты проведения в раскрытии изделия. */
@@ -265,6 +269,16 @@ public class WarehouseKittingService {
         Map<Long, String> numbers = new HashMap<>();
         Map<Long, String> names = new HashMap<>();
 
+        /*
+         * Кэш поиска по обозначению: одна операция встречается в
+         * списке десятки раз (по числу изделий), и ходить в
+         * классификатор каждый раз незачем. Ключ — пустая строка для
+         * операции без обозначения: её результат тоже кэшируется и
+         * остаётся пустым списком.
+         */
+        Map<String, List<ProductClassifier>> kindsByToken =
+                new HashMap<>();
+
         for (OrderScheduleRow row : rows) {
             ProductionOrderSerialProjection serial =
                     serials.get(row.getId());
@@ -286,6 +300,19 @@ public class WarehouseKittingService {
             boolean completed = row.getCompletedAt() != null;
             String blocker = blockers.get(row.getId());
 
+            String opName = row.getOperation().getOperationName() == null
+                    ? null
+                    : row.getOperation().getOperationName().getName();
+
+            /*
+             * Вид ячейки, который ждёт эта операция: обозначение из
+             * её наименования разворачивается в записи классификатора.
+             */
+            List<ProductClassifier> cellKinds = kindsByToken.computeIfAbsent(
+                    extractCellDesignation(opName),
+                    this::findCellKinds
+            );
+
             bySerial
                     .computeIfAbsent(
                             serial.getSerialId(),
@@ -293,10 +320,7 @@ public class WarehouseKittingService {
                     )
                     .add(new KittingZnpOperationRow(
                             row.getId(),
-                            row.getOperation().getOperationName() == null
-                                    ? null
-                                    : row.getOperation()
-                                            .getOperationName().getName(),
+                            opName,
                             znpNumber,
                             row.getPlannedDate(),
                             completed,
@@ -306,7 +330,10 @@ public class WarehouseKittingService {
                             blocker != null,
                             blocker,
                             !completed && blocker == null,
-                            cellsByZnp.getOrDefault(znpNumber, List.of())
+                            cellsByZnp.getOrDefault(znpNumber, List.of()),
+                            cellKinds.stream()
+                                    .map(ProductClassifier::getDisplayName)
+                                    .toList()
                     ));
 
             numbers.putIfAbsent(
@@ -332,6 +359,179 @@ public class WarehouseKittingService {
         ));
 
         return result;
+    }
+
+    /**
+     * Извлекает обозначение ячейки из наименования операции.
+     *
+     * Склад называет комплектовочную операцию по изделию, которое она
+     * собирает: «Комплектование ЯПР20», «Получение ЯПР21». Обозначение
+     * стоит последним словом, и именно оно отличает одну
+     * комплектовочную операцию от другой. Правило держится на этом:
+     * берётся последнее слово и принимается только то, в котором есть
+     * цифра.
+     *
+     * Пустой ответ для «Комплектование», «Комплектование штанг» и
+     * «Комплектование подсборок в групповой ЗНП»: наименование не
+     * называет изделие, и ограничивать вид ячейки нечем — проверка
+     * пропускается, а не отклоняет всё подряд.
+     */
+    static String extractCellDesignation(String operationName) {
+
+        if (operationName == null || operationName.isBlank()) {
+            return "";
+        }
+
+        String[] words = operationName.trim().split("\\s+");
+
+        String last = words[words.length - 1];
+
+        return CELL_DESIGNATION_PATTERN.matcher(last).matches()
+                ? last
+                : "";
+    }
+
+    /**
+     * Ищет типы ячеек, которые допускает операция.
+     *
+     * По обозначению из наименования операции («ЯПР20») в
+     * классификаторе берутся ячейки, содержащие его в наименовании:
+     * «ЯПР20М» и «ЯПР20МД». Пустой список — обозначение в
+     * классификаторе не найдено, и тогда вид ячейки не проверяется:
+     * справочник заполняет технолог, и раздел не имеет права
+     * блокировать работу из-за того, что в нём нет записи.
+     *
+     * Границу вхождения доводит здесь, а не запрос: «ЯПР2» —
+     * подстрока «ЯПР20М», и без границы операция на ЯПР2 приняла бы
+     * чужие ячейки. Наименование обязано содержать обозначение так,
+     * чтобы за ним не шла цифра.
+     */
+    private List<ProductClassifier> findCellKinds(String token) {
+
+        if (token == null || token.isBlank()) {
+            return List.of();
+        }
+
+        return classifierRepository
+                .findCellsByNameContaining(token)
+                .stream()
+                .filter(kind -> designationIn(kind.getDisplayName(), token))
+                .toList();
+    }
+
+    /** Наименование содержит обозначение, не продолженное цифрой. */
+    private static boolean designationIn(String name, String token) {
+
+        if (name == null) {
+            return false;
+        }
+
+        String lowerName = name.toLowerCase();
+        String lowerToken = token.toLowerCase();
+
+        for (int at = lowerName.indexOf(lowerToken);
+                at >= 0;
+                at = lowerName.indexOf(lowerToken, at + 1)) {
+
+            int end = at + lowerToken.length();
+
+            if (end >= lowerName.length()
+                    || !Character.isDigit(lowerName.charAt(end))) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Обозначение ячейки: слово, в котором есть цифра.
+     *
+     * Буква в начале обязательна — голая цифра или дата плана не
+     * должны быть прочитаны как наименование изделия.
+     */
+    private static final Pattern CELL_DESIGNATION_PATTERN =
+            Pattern.compile("[А-Яа-яA-Za-z][А-Яа-яA-Za-z0-9]*\\d+"
+                    + "[А-Яа-яA-Za-z0-9-]*");
+
+    /**
+     * Проверка состава заказа перед проведением операции.
+     *
+     * Раздел обязан отвергать проведение тем же набором причин, что и
+     * привязку: кладовщик вносит номер в поле, и если он обошёл
+     * проверку (страница устарела, номер подставлен напрямую), то
+     * проведение закрыло бы работу с чужим составом. Отличие двух
+     * кнопок только в результате: «Внести» проверяет номер и
+     * заполняет состав, «Провести» проверяет состав и закрывает
+     * строку графика.
+     *
+     * Проверяются ВСЕ внесённые ячейки, а не одна: заказ на три
+     * изделия собран из трёх номеров, и ошибочен любой из них.
+     *
+     * {@code null} — проверок нет или состав чист; текст — причина
+     * отказа, которую раздел показывает окном.
+     */
+    @Transactional(readOnly = true)
+    public String validateAttachedCells(Long rowId) {
+
+        OrderScheduleRow row = scheduleRowRepository
+                .findRowForAttachById(rowId)
+                .orElse(null);
+
+        if (row == null || row.getOperation() == null
+                || row.getProductionOrder() == null) {
+            return null;
+        }
+
+        List<ProductClassifier> kinds = findCellKinds(
+                extractCellDesignation(operationNameOf(row.getOperation()))
+        );
+
+        if (kinds.isEmpty()) {
+            return null;
+        }
+
+        Set<Long> allowedIds = new LinkedHashSet<>();
+
+        for (ProductClassifier kind : kinds) {
+            allowedIds.add(kind.getId());
+        }
+
+        for (SerialProductionOrder link
+                : serialProductionOrderRepository.findAttachedByOrderIds(
+                        List.of(row.getProductionOrder().getId()))) {
+
+            ProductSerial cell = link.getSerial();
+
+            if (cell == null || cell.getProductType() != ProductType.CELL
+                    || cell.getProductClassifier() == null) {
+                continue;
+            }
+
+            if (!allowedIds.contains(cell.getProductClassifier().getId())) {
+                return "Ячейка " + cell.getFullNumber() + " («"
+                        + cell.getDisplayName() + "») не подходит к операции «"
+                        + operationNameOf(row.getOperation())
+                        + "»: склад принимает " + namesOf(kinds)
+                        + " — проверьте состав заказа";
+            }
+        }
+
+        return null;
+    }
+
+    /** Перечень наименований для сообщения об отказе. */
+    private static String namesOf(List<ProductClassifier> kinds) {
+        return String.join(", ",
+                kinds.stream().map(ProductClassifier::getDisplayName).toList());
+    }
+
+    /** Наименование операции — подпись для сообщений и поиска обозначения. */
+    private static String operationNameOf(Operation operation) {
+        return operation.getOperationName() == null
+                || operation.getOperationName().getName() == null
+                ? ""
+                : operation.getOperationName().getName();
     }
 
     /** Ключ пары «серийник + операция» — общий с карточкой выпуска. */
@@ -439,6 +639,39 @@ public class WarehouseKittingService {
             return KittingResult.rejected(
                     number + " — не ячейка: в состав заказ-комплектующего "
                             + "кладут ячейку, а не датчик и не изделие целиком"
+            );
+        }
+
+        /*
+         * Проверка вида ячейки по обозначению из наименования операции.
+         *
+         * «Комплектование ЯПР20» → обозначение «ЯПР20» → классификатор
+         * возвращает «ЯПР20М» и «ЯПР20МД». Кладовщик вписывает номер —
+         * сервис сверяет, что классификатор вписанной ячейки стоит в
+         * этом списке. Пустой список (в классификаторе такой строки
+         * нет) проверку пропускает: справочник ведёт технолог, и
+         * раздел не вправе блокировать работу из-за незаполненной
+         * записи, а неполное наименование операции — обычное дело для
+         * работ, которые ячейку не называют («Комплектование
+         * штанг», «Комплектование» без суффикса).
+         */
+        List<ProductClassifier> kinds = findCellKinds(
+                extractCellDesignation(operationNameOf(operation))
+        );
+
+        if (!kinds.isEmpty()
+                && cell.getProductClassifier() != null
+                && kinds.stream().noneMatch(kind ->
+                        kind.getId().equals(cell.getProductClassifier().getId()))) {
+
+            return KittingResult.rejected(
+                    "Ячейка " + number + " не подходит к операции «"
+                            + operationNameOf(operation) + "»: склад принимает "
+                            + kinds.stream()
+                                    .map(ProductClassifier::getDisplayName)
+                                    .toList()
+                            + " — внесённый номер относится к «"
+                            + cell.getDisplayName() + "»"
             );
         }
 

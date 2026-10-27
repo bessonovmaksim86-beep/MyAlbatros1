@@ -129,6 +129,38 @@ public interface ProductClassifierRepository extends JpaRepository<ProductClassi
     );
 
     /**
+     * Коды датчиков одного рода, уже занятых таким исполнением.
+     *
+     * Нужен проверкой уникальности наименования при записи: два
+     * классификатора одного рода с одним product_name неразличимы,
+     * и подбор по полному обозначению (SensorClassifierMatcher)
+     * отказался бы на такой паре ошибкой «несколько изделий».
+     *
+     * Сравнение регистронезависимое и с обрезкой пробелов — ровно
+     * так же исполнение сравнивает матчинг.
+     *
+     * Пустое исполнение не проверяется: у рода без значимых
+     * параметров поиска исполнения может не быть, и несколько таких
+     * записей различаются самим фактом отсутствия маски.
+     */
+    @Query("""
+            select classifier.code
+            from ProductClassifier classifier
+            where classifier.productType =
+                    ru.company.production.entity.ProductType.SENSOR
+              and classifier.sensorCatalog.id = :sensorClassId
+              and classifier.name is not null
+              and lower(trim(classifier.name)) = lower(trim(:execution))
+              and (:excludedId is null or classifier.id <> :excludedId)
+            order by classifier.code
+            """)
+    List<Integer> findSensorCodesByExecution(
+            @Param("sensorClassId") Long sensorClassId,
+            @Param("execution") String execution,
+            @Param("excludedId") Long excludedId
+    );
+
+    /**
      * Изделия для каскадного выбора изделия техпроцесса.
      */
     @Query("""
@@ -167,6 +199,37 @@ public interface ProductClassifierRepository extends JpaRepository<ProductClassi
 
     boolean existsByCode(Integer code);
     boolean existsByCodeAndIdNot(Integer code, Long id);
+
+    /**
+     * Ячейки классификатора, в наименовании которых встречается
+     * обозначение из наименования операции.
+     *
+     * Нужен разделу комплектования: операция склада называется
+     * «Комплектование ЯПР20», и по этому обозначению склад обязан
+     * понять, какие ячейки к ней подходят, — в классификаторе за
+     * «ЯПР20» стоят «ЯПР20М» и «ЯПР20МД».
+     *
+     * Тип CELL задан в запросе, а не берётся с вызывающей стороны:
+     * обозначение операции обязано называть ячейку, а попадание в
+     * выдачу датчика или системы смысла бы не имело — привязать их к
+     * заказ-комплектующему нельзя и раньше.
+     *
+     * Границу вхождения (после обозначения не должно стоять цифры)
+     * доводит сервис: «ЯПР2» — подстрока «ЯПР20», и без границы
+     * операция на ЯПР2 приняла бы ячейки ЯПР20.
+     */
+    @Query("""
+            select classifier
+            from ProductClassifier classifier
+            where classifier.productType =
+                    ru.company.production.entity.ProductType.CELL
+              and lower(classifier.name)
+                  like lower(concat('%', :token, '%'))
+            order by classifier.code asc
+            """)
+    List<ProductClassifier> findCellsByNameContaining(
+            @Param("token") String token
+    );
 
     /*
      * Глобальный поиск изделий классификатора.

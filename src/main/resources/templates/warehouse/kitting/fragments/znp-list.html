@@ -61,13 +61,47 @@
     </div>
 
     <div class="alert success"
-         th:if="${successMessage}"
-         th:text="${successMessage}">
+             th:if="${successMessage}"
+             th:text="${successMessage}">
     </div>
 
-    <div class="alert danger"
+    <!--
+        Отказ показывается окном, а не баннером над таблицей: номер
+        кладовщик вводит в раскрытии, и строка вместе с причиной
+        уезжает за прокрутку, когда список длинный. Окно закрывает
+        причину, а скрипт вслед за тем разворачивает панель операции,
+        на которой кладовщик споткнулся, — иначе он искал бы её заново.
+    -->
+    <div class="warehouse-accept-dialog"
+         id="kittingRejectDialog"
+         th:attr="data-error-row=${errorRowId}"
          th:if="${errorMessage}"
-         th:text="${errorMessage}">
+         hidden>
+
+        <div class="warehouse-accept-dialog__box"
+             role="alertdialog"
+             aria-modal="true"
+             aria-labelledby="kittingRejectDialogText">
+
+            <h2 id="kittingRejectDialogText">
+                Номер не прошёл проверку
+            </h2>
+
+            <p th:text="${errorMessage}">
+                Ячейка 121200022 не подходит к операции «Комплектование
+                ЯПР20»: склад принимает ЯПР20М, ЯПР20МД
+            </p>
+
+            <div class="warehouse-accept-dialog__actions">
+
+                <button type="button"
+                        class="btn primary"
+                        id="kittingRejectDialogClose">
+                    Понятно
+                </button>
+
+            </div>
+        </div>
     </div>
 
     <section class="card">
@@ -296,6 +330,23 @@
                                                                 class="btn secondary compact">
                                                             Внести
                                                         </button>
+
+                                                        <!--
+                                                            Подсказка допустимых
+                                                            типов ячеек:
+                                                            «Допускаются:
+                                                            ЯПР20М, ЯПР20МД».
+                                                            Пустая строка —
+                                                            операция не называет
+                                                            тип, и сервис не
+                                                            будет проверять вид
+                                                            изделия.
+                                                        -->
+                                                        <small class="cell-types-hint"
+                                                               th:if="${operation.expectedCellTypesCount() > 0}"
+                                                               th:text="${operation.expectedCellTypesLabel()}">
+                                                            Допускаются: ЯПР20М, ЯПР20МД
+                                                        </small>
                                                     </form>
                                                 </td>
 
@@ -400,6 +451,112 @@
 
         </div>
     </section>
+
+    <!--
+        Скрипты живут во фрагменте, а не в родительских страницах:
+        разделов у разреза два («Комплектование ЗНП» и «Комплектование
+        полуфабрикатов»), и оба вставляют эту разметку. Прежний порядок
+        — функция toggleZnp в znp.html — оставлял раздел полуфабрикатов
+        без раскрытия: клик по строке изделия в нём не реагировал.
+
+        Порядок внутри фрагмента важен: объявление идёт после таблицы,
+        поэтому на момент выполнения DOM ещё не готов, и сворачивание
+        панелей и показ окна отказа отложены до DOMContentLoaded.
+    -->
+    <script>
+        /*
+         * Раскрытие панели изделия — тот же приём, что в
+         * «Мои операции»: ключ — индекс строки списка, а не id
+         * изделия, потому что индекс остаётся единственным
+         * устойчивым идентификатором разметки.
+         */
+        function toggleZnp(index) {
+            var panel = document.getElementById('znp-panel-' + index);
+            var caret = document.getElementById('znp-caret-' + index);
+
+            if (!panel) {
+                return;
+            }
+
+            var hidden = panel.style.display === 'none';
+
+            panel.style.display = hidden ? '' : 'none';
+
+            if (caret) {
+                caret.textContent = hidden ? '▲' : '▼';
+            }
+        }
+
+        document.addEventListener('DOMContentLoaded', function () {
+            /*
+             * Панели свёрнуты по умолчанию: кладовщик выбирает изделие
+             * по серийному номеру и наименованию, а проведение живёт в
+             * раскрытии.
+             */
+            document
+                .querySelectorAll('.kitting-znp-panel')
+                .forEach(function (panel) {
+                    panel.style.display = 'none';
+                });
+
+            openKittingRejectDialog();
+        });
+
+        /*
+         * Окно отказа открывается само: flash-атрибут живёт один
+         * запрос, и кладовщик обязан увидеть причину сразу. Панель
+         * операции, на номер из которой сервис ответил отказом,
+         * разворачивается до показа окна — иначе кладовщик искал бы
+         * строку заново по свёрнутому списку.
+         */
+        function openKittingRejectDialog() {
+            var dialog = document.getElementById('kittingRejectDialog');
+
+            if (!dialog) {
+                return;
+            }
+
+            revealFailedPanel(dialog.getAttribute('data-error-row'));
+
+            dialog.removeAttribute('hidden');
+
+            var close = document.getElementById('kittingRejectDialogClose');
+
+            if (close) {
+                close.addEventListener('click', function () {
+                    dialog.setAttribute('hidden', '');
+                });
+            }
+        }
+
+        /** Разворачивает панель строки графика, указанную в flash-атрибуте. */
+        function revealFailedPanel(rowId) {
+            if (!rowId) {
+                return;
+            }
+
+            var field = document.querySelector(
+                    'input[name="rowId"][value="' + rowId + '"]');
+
+            if (!field) {
+                return;
+            }
+
+            var panel = field.closest('.kitting-znp-panel');
+
+            if (!panel) {
+                return;
+            }
+
+            panel.style.display = '';
+
+            var caret = panel.querySelector('.kitting-znp-caret');
+
+            if (caret) {
+                caret.textContent = '▲';
+            }
+        }
+    </script>
 
 </th:block>
 

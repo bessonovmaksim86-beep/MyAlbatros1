@@ -52,45 +52,6 @@
                 :: commonScripts}">
         </th:block>
 
-        <script>
-            /*
-             * Раскрытие панели изделия — тот же приём, что в
-             * «Мои операции»: ключ — индекс строки списка, а не id
-             * изделия, потому что индекс остаётся единственным
-             * устойчивым идентификатором разметки.
-             */
-            function toggleZnp(index) {
-                const panel = document.getElementById('znp-panel-' + index);
-                const caret = document.getElementById('znp-caret-' + index);
-
-                if (!panel) {
-                    return;
-                }
-
-                const hidden = panel.style.display === 'none';
-
-                panel.style.display = hidden ? '' : 'none';
-                if (caret) {
-                    caret.textContent = hidden ? '▲' : '▼';
-                }
-            }
-
-            /*
-             * Панели свёрнуты по умолчанию: кладовщик выбирает изделие
-             * по серийному номеру и наименованию, а проведение живёт в
-             * раскрытии. Кнопка в скрытой панели не теряется — строка
-             * сразу показывает число операций и то, можно ли провести
-             * хоть одну.
-             */
-            (function collapseZnpPanels() {
-                document
-                    .querySelectorAll('.kitting-znp-panel')
-                    .forEach(panel => {
-                        panel.style.display = 'none';
-                    });
-            })();
-        </script>
-
     </main>
 </div>
 
