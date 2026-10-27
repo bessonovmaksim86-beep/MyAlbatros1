@@ -34,6 +34,7 @@ public class PendingDefectService {
     private final ProductSerialRepository serialRepository;
     private final QuarantineTransferRepository transferRepository;
     private final SerialMovementJournalService journal;
+    private final WorkshopScrapService scrapService;
 
     /**
      * Создать заявку на отбраковку.
@@ -154,15 +155,30 @@ public class PendingDefectService {
     }
 
     /**
-     * Принять решение по заявке.
+     * Принять решение контроллера по подтверждению дефекта.
      *
-     * @param decision APPROVED_TO_QUARANTINE или REJECTED_TO_WH
-     * @param user     представитель БВК, принимающий решение
+     * ОБА варианта кладут ячейку в изолятор брака: подтверждённый дефект
+     * — потому что брак нашли, неподтверждённый — потому что цех уже снял
+     * её с изделия, и на сборку она вернуться не может. Разница только в
+     * подписи для анализа брака, поэтому направление (изолятор) у обоих
+     * одно, а {@link DefectConfirmed} отвечает на вопрос «верить ли
+     * заявке цеха».
+     *
+     * Кроме перемещения в изолятор подтверждённая заявка снимает ячейку с
+     * комплектования ЗНП: строка связи удаляется, проведённые операции
+     * остаются в паспорте, а заказ остаётся на складе недоукомплектованным
+     * — по тому же признаку склад ведёт счётчик доукомплектования.
+     *
+     * @param defectId ID заявки
+     * @param decision CONFIRMED либо DENIED
+     * @param comment  комментарий контроллера
+     * @param user     представитель бюро, принимающий решение
      */
     @Transactional
-    public PendingDefect applyDecision(Long defectId,
-                                       PendingDefectDecision decision,
-                                       AppUser user) {
+    public PendingDefect applyDefectDecision(Long defectId,
+                                             DefectConfirmed decision,
+                                             String comment,
+                                             AppUser user) {
         PendingDefect defect = pendingDefectRepository.findById(defectId)
                 .orElseThrow(() -> new IllegalStateException(
                         "Заявка на отбраковку не найдена: " + defectId
@@ -174,18 +190,26 @@ public class PendingDefectService {
             );
         }
 
-        defect.setDecision(decision);
+        LocalDateTime now = LocalDateTime.now();
+
+        defect.setDefectConfirmed(decision);
+        defect.setControllerComment(comment == null || comment.isBlank()
+                ? null
+                : comment.trim());
+        defect.setDecision(PendingDefectDecision.APPROVED_TO_QUARANTINE);
         defect.setApprovedBy(user);
-        defect.setApprovedAt(LocalDateTime.now());
+        defect.setApprovedAt(now);
 
         PendingDefect saved = pendingDefectRepository.save(defect);
 
-        // Выполняем действие по решению
-        if (decision == PendingDefectDecision.APPROVED_TO_QUARANTINE) {
-            moveToQuarantine(defect, user);
-        } else {
-            moveToWarehouse(defect, user);
-        }
+        moveToQuarantine(saved, user, now);
+
+        /*
+         * Снятие ЗНП — домен цеха и склада, поэтому живёт в
+         * WorkshopScrapService: там известны связи матрицы комплектования
+         * и порядок сохранения истории операций.
+         */
+        scrapService.releaseZnpQuota(saved, user);
 
         return saved;
     }
@@ -193,25 +217,29 @@ public class PendingDefectService {
     /**
      * Переместить в изолятор брака.
      *
-     * Создаёт QuarantineTransfer и записывает событие в журнал.
+     * Создаёт строку перемещения и записывает событие журнала. Причина
+     * несёт и дефект, и вывод контроллера: паспорт ячейки обязан показать
+     * оба, иначе решение «дефект не подтверждён» выглядело бы как
+     * перемещение без основания.
      */
-    private void moveToQuarantine(PendingDefect defect, AppUser user) {
-        LocalDateTime now = LocalDateTime.now();
+    private void moveToQuarantine(PendingDefect defect,
+                                  AppUser user,
+                                  LocalDateTime moment) {
 
-        // Создаём перемещение в QuarantineTransfer
+        String reason = defectReasonLabel(defect);
+
         QuarantineTransfer transfer = new QuarantineTransfer();
         transfer.setFullNumber(defect.getFullNumber());
         transfer.setCellKind(defect.getCellKind());
         transfer.setProductClassifier(defect.getProductClassifier());
         transfer.setReceivingBatch(defect.getReceivingBatch());
-        transfer.setReason(defect.getDefectReason());
+        transfer.setReason(reason);
         transfer.setTransferredBy(user);
-        transfer.setTransferredAt(now);
+        transfer.setTransferredAt(moment);
         transfer.setAccepted(false);
 
         transferRepository.save(transfer);
 
-        // Записываем событие в журнал перемещений
         journal.recordQuarantinedByRequest(
                 defect.getFullNumber(),
                 defect.getCellKind(),
@@ -219,28 +247,29 @@ public class PendingDefectService {
                 defect.getProductClassifier(),
                 defect.getReceivingBatch(),
                 user,
-                now,
-                defect.getDefectReason()
+                moment,
+                reason
         );
     }
 
     /**
-     * Направить на склад полуфабрикатов (отклонение брака).
-     *
-     * Записывает событие в журнал — логика приёмки складом будет
-     * добавлена позже.
+     * Причина для журнала и перемещения: дефект плюс вывод контроллера.
      */
-    private void moveToWarehouse(PendingDefect defect, AppUser user) {
-        journal.recordRejectedDefect(
-                defect.getFullNumber(),
-                defect.getCellKind(),
-                defect.getSerialStatus(),
-                defect.getProductClassifier(),
-                defect.getReceivingBatch(),
-                user,
-                LocalDateTime.now(),
-                "Возврат из отбраковки: " + defect.getDefectReason()
-        );
+    private static String defectReasonLabel(PendingDefect defect) {
+        StringBuilder label = new StringBuilder();
+
+        if (defect.getDefectConfirmed() != null) {
+            label.append(defect.getDefectConfirmed().getDisplayName())
+                    .append(". ");
+        }
+
+        label.append(defect.getDefectReason());
+
+        if (defect.getControllerComment() != null) {
+            label.append(" · ").append(defect.getControllerComment());
+        }
+
+        return label.toString();
     }
 
     /**

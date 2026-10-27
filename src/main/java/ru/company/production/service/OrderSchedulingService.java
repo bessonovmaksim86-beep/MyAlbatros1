@@ -1211,8 +1211,15 @@ public class OrderSchedulingService {
         return text == null ? "—" : text;
     }
 
-    /* Пара «операция + дата» — ключ накопления загрузки этапа. */
-    private record StageDay(Long operationId, LocalDate date) {
+    /*
+     * Пара «операция + дата» — ключ накопления загрузки этапа.
+     *
+     * Доступна пакету: карту занятости передают в приватный
+     * placeOperation, и тесты того же пакета обязаны строить настоящие
+     * ключи — подставной класс с теми же полями не совпал бы с этим
+     * по equals, и занятость этапа перестала бы влиять на расчёт.
+     */
+    record StageDay(Long operationId, LocalDate date) {
     }
 
     private record Placement(
@@ -1234,8 +1241,12 @@ public class OrderSchedulingService {
     /*
      * Календарный снимок окна расчёта: праздничные даты и отсутствия
      * сотрудников, загруженные по одному запросу.
+     *
+     * Доступен пакету: расчёт даты размещения операции проверяют
+     * тесты того же пакета, и им нужен тип параметра приватного
+     * placeOperation.
      */
-    private record CalendarSnapshot(
+    record CalendarSnapshot(
             LocalDate windowFrom,
             LocalDate windowTo,
             Set<LocalDate> holidays,

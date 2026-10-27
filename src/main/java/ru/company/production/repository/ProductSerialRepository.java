@@ -827,6 +827,14 @@ public interface ProductSerialRepository
      * (тот же приём, что у сводки поставщиков): поставщик в партии —
      * свободный текст, и «Компонент » с пробелом — тот же контрагент.
      *
+     * Граница «лежит на складе» держится по отметке приёмки позиции
+     * ({@code serial.acceptedAt}), а не по факту прихода: приходную
+     * позицию, которую склад ещё не принял, на полке нет — она либо
+     * ещё не вернулась от БВК (этап входного контроля), либо осталась
+     * в изоляторе брака и возвращена поставщику. Такие номера из
+     * реестра исключены: кладовщик считает на нём остаток, и позиция,
+     * которой физически нет на складе, удваивала бы ему картину.
+     *
      * Порядок по умолчанию — изделие, затем номер: реестр читают как
      * перечень полок, и он обязан оставаться предсказуемым от
      * открытия к открытию, пока пользователь не выбрал сортировку.
@@ -865,6 +873,8 @@ public interface ProductSerialRepository
             left join serial.receivingBatch batch
             where serial.productType =
                   ru.company.production.entity.ProductType.CELL
+              and (serial.acceptedAt is not null
+                   or serial.receivingBatch is null)
               and (:kind is null
                    or (:kind = 'CELL' and serial.cellReadyAt is not null)
                    or (:kind = 'SUBASSEMBLY' and serial.cellReadyAt is null))

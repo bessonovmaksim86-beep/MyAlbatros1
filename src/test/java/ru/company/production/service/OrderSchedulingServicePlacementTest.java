@@ -96,7 +96,7 @@ class OrderSchedulingServicePlacementTest {
         }
 
         @Test
-        @DisplayName("maxLoadPercent = 80 при 100% загрузки → сдвиг на следующий день")
+        @DisplayName("maxLoadPercent = 80 при 100% загрузки → сдвиг за горизонт")
         void shiftOnOverload() throws Exception {
             Long operationId = 1L;
             int maxLoadPercent = 80;
@@ -115,9 +115,19 @@ class OrderSchedulingServicePlacementTest {
                     maxLoadPercent, snap
             );
 
-            // 100% > 80% → сдвиг на 22.10
-            assertEquals(LocalDate.of(2026, 10, 22),
-                    getPlacementDate(placement));
+            /*
+             * Один исполнитель — это 8 часов мощности, а операция тоже 8
+             * часов: 100% в любой день. Порог 80% такой этап не принимает
+             * никогда, и сдвиг ни к чему не приводит. Прежний тест ждал
+             * 22.10 — он считал, что перегруз лечится переносом на день,
+             * хотя вылечить его может только ещё один исполнитель либо
+             * меньшая трудоёмкость. План уходит за горизонт, и обязан
+             * быть помечен: молча поставить дату — значит выдать
+             * невыполнимый график за выполнимый.
+             */
+            assertTrue(getShiftedPastHorizon(placement));
+            assertTrue(getLoadPercent(placement) > maxLoadPercent);
+            assertFalse(getPlacementDate(placement).isBefore(LocalDate.of(2026, 10, 21)));
         }
 
         @Test
@@ -191,8 +201,8 @@ class OrderSchedulingServicePlacementTest {
             OrderSchedulingService.CalendarSnapshot snap = snapshotOf();
 
             // Существующая занятость: 8ч в этот день (чужой заказ)
-            Map<StageDayKey, BigDecimal> occupancy = new HashMap<>();
-            occupancy.merge(new StageDayKey(operationId, LocalDate.of(2026, 10, 21)),
+            Map<OrderSchedulingService.StageDay, BigDecimal> occupancy = new HashMap<>();
+            occupancy.merge(new OrderSchedulingService.StageDay(operationId, LocalDate.of(2026, 10, 21)),
                     new BigDecimal("8"), BigDecimal::add);
 
             Object placement = callPlaceOperation(
@@ -221,7 +231,7 @@ class OrderSchedulingServicePlacementTest {
             OrderSchedulingService.CalendarSnapshot snap = snapshotOf();
 
             // 22.10 нет загрузки → помещается
-            Map<StageDayKey, BigDecimal> occupancy = new HashMap<>();
+            Map<OrderSchedulingService.StageDay, BigDecimal> occupancy = new HashMap<>();
 
             Object placement = callPlaceOperation(
                     operationId, node,
@@ -247,7 +257,7 @@ class OrderSchedulingServicePlacementTest {
 
             OrderSchedulingService.CalendarSnapshot snap = snapshotOf();
 
-            Map<StageDayKey, BigDecimal> occupancy = new HashMap<>();
+            Map<OrderSchedulingService.StageDay, BigDecimal> occupancy = new HashMap<>();
 
             // Первый экземпляр: 8/8 = 100%
             Object first = callPlaceOperation(
@@ -259,7 +269,7 @@ class OrderSchedulingServicePlacementTest {
             assertEquals(LocalDate.of(2026, 10, 21), getPlacementDate(first));
 
             // Обновляем occupancy как это делает реальный алгоритм
-            occupancy.merge(new StageDayKey(operationId, LocalDate.of(2026, 10, 21)),
+            occupancy.merge(new OrderSchedulingService.StageDay(operationId, LocalDate.of(2026, 10, 21)),
                     new BigDecimal("8"), BigDecimal::add);
 
             // Второй экземпляр: (8+8)/8 = 200% → сдвиг
@@ -307,7 +317,7 @@ class OrderSchedulingServicePlacementTest {
         }
 
         @Test
-        @DisplayName("Все исполнители отсутствуют → условная мощность")
+        @DisplayName("Все исполнители отсутствуют → сдвиг за горизонт")
         void allExecutorsAbsent() throws Exception {
             Long operationId = 1L;
             int maxLoadPercent = 100;
@@ -335,9 +345,14 @@ class OrderSchedulingServicePlacementTest {
                     maxLoadPercent, snap
             );
 
-            // power = 8 (условно, present=0), load = 100%
-            assertEquals(LocalDate.of(2026, 10, 21),
+            /*
+             * 21.10 — исполнитель absent, present=0 → capacity=0 →
+             * percent(8, 0) = 1000 > 100 → сдвиг. 22.10 — absent пуст,
+             * present=1, capacity=8, percent=100% ≤ 100 → помещается.
+             */
+            assertEquals(LocalDate.of(2026, 10, 22),
                     getPlacementDate(placement));
+            assertFalse(getShiftedPastHorizon(placement));
         }
     }
 
@@ -351,7 +366,7 @@ class OrderSchedulingServicePlacementTest {
         @DisplayName("Многозагруженный этап: размещает через несколько дней")
         void shiftMultipleDays() throws Exception {
             Long operationId = 1L;
-            int maxLoadPercent = 80;
+            int maxLoadPercent = 100;
 
             TechProcessOperation node = techProcessOperationNode(operationId, new BigDecimal("8"));
             when(staffBindingRepository.findCapableEmployeeIds(
@@ -361,12 +376,12 @@ class OrderSchedulingServicePlacementTest {
             OrderSchedulingService.CalendarSnapshot snap = snapshotOf();
 
             // 21.10: 8ч, 22.10: 8ч, 23.10: 8ч
-            Map<StageDayKey, BigDecimal> occupancy = new HashMap<>();
-            occupancy.merge(new StageDayKey(operationId, LocalDate.of(2026, 10, 21)),
+            Map<OrderSchedulingService.StageDay, BigDecimal> occupancy = new HashMap<>();
+            occupancy.merge(new OrderSchedulingService.StageDay(operationId, LocalDate.of(2026, 10, 21)),
                     new BigDecimal("8"), BigDecimal::add);
-            occupancy.merge(new StageDayKey(operationId, LocalDate.of(2026, 10, 22)),
+            occupancy.merge(new OrderSchedulingService.StageDay(operationId, LocalDate.of(2026, 10, 22)),
                     new BigDecimal("8"), BigDecimal::add);
-            occupancy.merge(new StageDayKey(operationId, LocalDate.of(2026, 10, 23)),
+            occupancy.merge(new OrderSchedulingService.StageDay(operationId, LocalDate.of(2026, 10, 23)),
                     new BigDecimal("8"), BigDecimal::add);
 
             Object placement = callPlaceOperation(
@@ -376,10 +391,14 @@ class OrderSchedulingServicePlacementTest {
                     maxLoadPercent, snap
             );
 
-            // 21: 16/8=200%, 22: 16/8=200%, 23: 16/8=200%, 26: 8/8=100% > 80
+            // 21: 16/8=200%, 22: 16/8=200%, 23: 16/8=200%, 26: 8/8=100% ≤ 100
             // 26.10 — понедельник
+            // Порог 100, а не 80: один исполнитель даёт 8 часов, операция
+            // занимает все 8 — при 80% не помещается ни один день, и
+            // вместо проверки сдвига получили бы просто уход за горизонт.
             assertEquals(LocalDate.of(2026, 10, 26),
                     getPlacementDate(placement));
+            assertFalse(getShiftedPastHorizon(placement));
         }
 
         @Test
@@ -396,8 +415,8 @@ class OrderSchedulingServicePlacementTest {
             OrderSchedulingService.CalendarSnapshot snap = snapshotOf();
 
             // 23.10 (ПТ) полностью загружена
-            Map<StageDayKey, BigDecimal> occupancy = new HashMap<>();
-            occupancy.merge(new StageDayKey(operationId, LocalDate.of(2026, 10, 23)),
+            Map<OrderSchedulingService.StageDay, BigDecimal> occupancy = new HashMap<>();
+            occupancy.merge(new OrderSchedulingService.StageDay(operationId, LocalDate.of(2026, 10, 23)),
                     new BigDecimal("8"), BigDecimal::add);
 
             Object placement = callPlaceOperation(
@@ -433,8 +452,8 @@ class OrderSchedulingServicePlacementTest {
             OrderSchedulingService.CalendarSnapshot snap = snapshotOf();
 
             // Существующая загрузка: 10ч из 16ч
-            Map<StageDayKey, BigDecimal> occupancy = new HashMap<>();
-            occupancy.merge(new StageDayKey(operationId, LocalDate.of(2026, 10, 21)),
+            Map<OrderSchedulingService.StageDay, BigDecimal> occupancy = new HashMap<>();
+            occupancy.merge(new OrderSchedulingService.StageDay(operationId, LocalDate.of(2026, 10, 21)),
                     new BigDecimal("10"), BigDecimal::add);
 
             Object placement = callPlaceOperation(
@@ -463,8 +482,8 @@ class OrderSchedulingServicePlacementTest {
 
             OrderSchedulingService.CalendarSnapshot snap = snapshotOf();
 
-            Map<StageDayKey, BigDecimal> occupancy = new HashMap<>();
-            occupancy.merge(new StageDayKey(operationId, LocalDate.of(2026, 10, 21)),
+            Map<OrderSchedulingService.StageDay, BigDecimal> occupancy = new HashMap<>();
+            occupancy.merge(new OrderSchedulingService.StageDay(operationId, LocalDate.of(2026, 10, 21)),
                     new BigDecimal("10"), BigDecimal::add);
 
             Object placement = callPlaceOperation(
@@ -495,10 +514,10 @@ class OrderSchedulingServicePlacementTest {
         TechProcessOperation node = new TechProcessOperation();
         node.setId(id);
         node.setLaborHours(laborHours);
-        node.setPredecessors(List.of());
+        node.setPredecessors(Set.of());
         WorkPlace wp = new WorkPlace();
         wp.setId(1L);
-        node.setWorkPlaces(List.of(wp));
+        node.setWorkPlaces(Set.of(wp));
         Operation op = new Operation();
         op.setId(id);
         node.setOperation(op);
@@ -507,29 +526,28 @@ class OrderSchedulingServicePlacementTest {
 
     /**
      * Вызывает приватный метод placeOperation через reflection.
+     *
+     * Ключи занятости передаются настоящие — Service#StageDay: фальшивая
+     * обёртка с теми же полями в map сервиса не совпалась бы ни с одной
+     * строкой, и накопленная занятость перестала бы влиять на сдвиг,
+     * оставив проверку пройденной.
      */
-    private Object callPlaceOperation(Long operationId, TechProcessOperation node,
-                                      LocalDate earliest, Map<StageDayKey, BigDecimal> occupancy,
-                                      int maxLoadPercent, OrderSchedulingService.CalendarSnapshot calendar)
-            throws Exception {
+    private Object callPlaceOperation(
+            Long operationId,
+            TechProcessOperation node,
+            LocalDate earliest,
+            Map<OrderSchedulingService.StageDay, BigDecimal> occupancy,
+            int maxLoadPercent,
+            OrderSchedulingService.CalendarSnapshot calendar) throws Exception {
         java.lang.reflect.Method m = OrderSchedulingService.class
                 .getDeclaredMethod("placeOperation",
                         Long.class, TechProcessOperation.class,
                         LocalDate.class, Map.class, int.class,
-                        OrderSchedulingService.OrderSchedulingService.CalendarSnapshot.class);
+                        OrderSchedulingService.CalendarSnapshot.class);
         m.setAccessible(true);
         return m.invoke(service,
                 operationId, node, earliest,
-                convertOccupancy(occupancy), maxLoadPercent, calendar);
-    }
-
-    private Map<Object, BigDecimal> convertOccupancy(Map<StageDayKey, BigDecimal> input) {
-        Map<Object, BigDecimal> result = new HashMap<>();
-        for (var entry : input.entrySet()) {
-            result.put(new StageDayKeyWrapper(entry.getKey().operationId(),
-                    entry.getKey().date()), entry.getValue());
-        }
-        return result;
+                occupancy, maxLoadPercent, calendar);
     }
 
     private LocalDate getPlacementDate(Object placement) throws Exception {
@@ -550,43 +568,9 @@ class OrderSchedulingServicePlacementTest {
         return (boolean) f.get(placement);
     }
 
-    /** Ключ для occupancy-мапы (совпадает с внутренним StageDay). */
-    private record StageDayKey(Long operationId, LocalDate date) {
-        @Override
-        public boolean equals(Object o) {
-            if (this == o) return true;
-            if (!(o instanceof StageDayKey that)) return false;
-            return Objects.equals(operationId, that.operationId)
-                    && Objects.equals(date, that.date);
-        }
-
-        @Override
-        public int hashCode() {
-            return Objects.hash(operationId, date);
-        }
-    }
-
-    /** Обёртка для StageDay — reflection не видит приватный record. */
-    private static class StageDayKeyWrapper {
-        private final Long operationId;
-        private final LocalDate date;
-
-        StageDayKeyWrapper(Long operationId, LocalDate date) {
-            this.operationId = operationId;
-            this.date = date;
-        }
-
-        @Override
-        public boolean equals(Object o) {
-            if (this == o) return true;
-            if (!(o instanceof StageDayKeyWrapper that)) return false;
-            return Objects.equals(operationId, that.operationId)
-                    && Objects.equals(date, that.date);
-        }
-
-        @Override
-        public int hashCode() {
-            return Objects.hash(operationId, date);
-        }
+    private boolean getShiftedPastHorizon(Object placement) throws Exception {
+        java.lang.reflect.Field f = placement.getClass().getDeclaredField("shiftedPastHorizon");
+        f.setAccessible(true);
+        return (boolean) f.get(placement);
     }
 }

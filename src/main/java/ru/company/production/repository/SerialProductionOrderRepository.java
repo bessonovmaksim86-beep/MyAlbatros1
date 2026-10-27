@@ -280,10 +280,74 @@ public interface SerialProductionOrderRepository
             @Param("serialIds") Collection<Long> serialIds
     );
 
+    /**
+     * Ячейки, привязанные к заказам по их НОМЕРАМ.
+     *
+     * Обратное направление к {@link #findZnpLinksBySerialIds}: тот
+     * запрос отвечает на вопрос «какой заказ вошёл в это изделие»,
+     * этот — «какие ячейки вошли в этот заказ». Раздел комплектования
+     * ЗНП разрезан «изделие → операции», и карточка операции знает
+     * только номер ЗНП, напечатанный в её ячейке; читать ради состава
+     * сначала заказ по номеру, а потом его связки было бы два обращения
+     * к базе там, где достаточно одного.
+     *
+     * Отфильтровано по {@code productType = CELL}: строка той же
+     * матрицы связывает заказ и с датчиком, в который он вошёл, а
+     * датчик — главная строка той же таблицы, и печатать его составом
+     * значило бы показать кладовщику изделие как часть его самого.
+     *
+     * Снятые с работы заказы (active = false) исключены тем же
+     * признаком, что и во всех запросах раздела: заказ, отозванный
+     * диспетчером, перестаёт требовать ячейки.
+     */
+    @Query("""
+            select
+                ord.number as znpNumber,
+                cell.id as serialId,
+                cast(classifier.code * 100000 + cell.serial as string)
+                    as cellNumber
+            from SerialProductionOrder link
+            join link.serial cell
+            join cell.productClassifier classifier
+            join link.productionOrder ord
+            where ord.number in :znpNumbers
+              and ord.active = true
+              and cell.productType =
+                  ru.company.production.entity.ProductType.CELL
+            order by ord.number asc, classifier.code asc, cell.serial asc
+            """)
+    List<ZnpCellLinkView> findCellsByZnpNumbers(
+            @Param("znpNumbers") Collection<String> znpNumbers
+    );
+
     Optional<SerialProductionOrder> findBySerial_IdAndProductionOrder_Id(
             Long serialId,
             Long productionOrderId
     );
+
+    /**
+     * Занято ли изделие действующим заказом — граница «свободна на
+     * складе» для точечной привязки ячейки комплектованием ЗНП.
+     *
+     * Отличие от {@link #existsBySerial_IdAndProductionOrder_Id}: здесь
+     * вопрос «вошёл ли номер хоть куда-нибудь», а не «вошёл ли он в
+     * этот заказ». Внесённая в один заказ ячейка со свободных полок
+     * снята, и повторить её в другом — значит выдать один прибор двумя
+     * одинаковыми номерами; проверка по одной паре эту ошибку пропускала
+     * бы, потому что ключ матрицы уникален лишь внутри заказа.
+     *
+     * Снятый с работы заказ (active = false) не держит номер: отменённый
+     * заказ обязан вернуть ячейку на склад — то же правило, что в
+     * складском перечне {@code findFreeOnWarehouse}.
+     */
+    @Query("""
+            select count(link) > 0
+            from SerialProductionOrder link
+            join link.productionOrder ord
+            where link.serial.id = :serialId
+              and ord.active = true
+            """)
+    boolean existsActiveLinkBySerialId(@Param("serialId") Long serialId);
 
     /**
      * Сколько заказов вошло в изделие — счётчик состава карточки.

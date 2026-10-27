@@ -13,6 +13,7 @@ import ru.company.production.entity.ZnpKind;
 import java.time.LocalDate;
 import java.util.Collection;
 import java.util.List;
+import java.util.Optional;
 
 /**
  * Строки графика заказов покупателя.
@@ -244,6 +245,73 @@ public interface OrderScheduleRowRepository
             Long productionOrderId,
             ScheduleRowStatus status
     );
+
+    /*
+     * Дата окончания плана заказа на производство — максимум плановой
+     * даты его строк.
+     *
+     * Нужна складу: срок комплектования подсборок кладовщик читает не из
+     * карточки заказа (групповой ЗНП заводят без внешнего срока), а из
+     * расчёта, который план уже содержит. Пакетный запрос на страницу
+     * списков держит выборку одним обращением к базе.
+     *
+     * Статус передают параметром: черновик плана ничего не занимает и
+     * цеху не виден, поэтому сроком считать его нельзя.
+     */
+    @Query("""
+            select row.productionOrder.id as orderId,
+                   max(row.plannedDate)   as endDate
+            from OrderScheduleRow row
+            where row.status = :status
+              and row.productionOrder.id in :orderIds
+            group by row.productionOrder.id
+            """)
+    List<PlanEndDateView> findPlanEndDatesOfProductionOrders(
+            @Param("status") ScheduleRowStatus status,
+            @Param("orderIds") Collection<Long> orderIds
+    );
+
+    /**
+     * Дата окончания плана вложенного ЗНП: строки его комплектовочной
+     * операции в графике заказа покупателя.
+     *
+     * Заказ-комплектующий, вложенный в выпуск, собственной ветви плана
+     * не имеет (V56) — его работу планирует заказ покупателя, и ключом
+     * служат пара «заказ покупателя + операция заказа».
+     */
+    @Query("""
+            select row.customerOrder.id as orderId,
+                   row.operation.id     as operationId,
+                   max(row.plannedDate) as endDate
+            from OrderScheduleRow row
+            where row.status = :status
+              and row.customerOrder.id in :customerOrderIds
+              and row.operation.id in :operationIds
+            group by row.customerOrder.id, row.operation.id
+            """)
+    List<PlanOperationEndDateView> findPlanEndDatesOfOrderOperations(
+            @Param("status") ScheduleRowStatus status,
+            @Param("customerOrderIds") Collection<Long> customerOrderIds,
+            @Param("operationIds") Collection<Long> operationIds
+    );
+
+    /** «Основание плана → дата его окончания». */
+    interface PlanEndDateView {
+
+        Long getOrderId();
+
+        java.time.LocalDate getEndDate();
+    }
+
+    /** «Заказ покупателя + операция → дата окончания их плана». */
+    interface PlanOperationEndDateView {
+
+        Long getOrderId();
+
+        Long getOperationId();
+
+        java.time.LocalDate getEndDate();
+    }
 
     /*
      * Строки плана списком заказов — ССУЩНОСТЯМИ, а не проекцией.
@@ -1883,7 +1951,69 @@ public interface OrderScheduleRowRepository
             @Param("productionOrderId") Long productionOrderId
     );
 
-    /** Закрытые строки заказа — количество для предупреждения. */
+    /**
+     * Одна строка графика со связями для записи — привязка ячейки к
+     * заказу-комплектующему в разделе комплектования.
+     *
+     * FETCH, а не {@code findById}: запись читает операцию (её тип и
+     * наименование нужны для отказа) и заказ-комплектующий, а
+     * open-in-view выключен — без fetch первая же навигация упала бы на
+     * ленивой связи вне транзакции.
+     *
+     * Запрос написан явно, а не именем метода: производное имя вида
+     * «findWithOperationAndOrderById» Spring Data разобрал бы как
+     * обращение к свойствам {@code operation} и {@code order}, и падал
+     * бы не экран, а старт контекста — то есть весь сервис.
+     *
+     * Фильтр по активному основанию здесь сознательно не нужен:
+     * проверка сама обязана назвать причину отказа («заказ снят с
+     * работы»), а не выдать пустой результат из-за скрытого условия.
+     */
+    @Query("""
+            select row
+            from OrderScheduleRow row
+            left join fetch row.operation operation
+            left join fetch operation.operationName
+            left join fetch operation.operationType
+            left join fetch row.productionOrder productionOrder
+            left join fetch row.customerOrder customerOrder
+            where row.id = :rowId
+            """)
+    Optional<OrderScheduleRow> findRowForAttachById(
+            @Param("rowId") Long rowId
+    );
+
+    /**
+     * Сколько экземпляров заложено планом в операцию заказа — потолок
+     * состава при точечной привязке ячейки комплектованием ЗНП.
+     *
+     * Считаются ВСЕ строки операции заказа, а не только незакрытые:
+     * размер комплектования не меняется от того, что склад половину
+     * работы уже провёл, иначе кладовщик довнёс бы ячейки сверх
+     * заказанного, прикрывшись закрытыми экземплярами.
+     *
+     * Удалённые строки исключены — заказ, снятый с работы, оставляет
+     * план, и его строки не должны держать потолок чужой работы.
+     *
+     * Ноль означает «планом размер не задан» (заказ без строк этой
+     * операции), и вызывающий код тогда потолка не применяет — тот же
+     * смысл, что у пустого количества в разделе комплектования
+     * подсборок.
+     */
+    @Query("""
+            select count(row.id)
+            from OrderScheduleRow row
+            where row.productionOrder.id = :productionOrderId
+              and row.operation.id = :operationId
+              and row.status <>
+                  ru.company.production.entity.ScheduleRowStatus.DELETED
+            """)
+    long countRowsOfProductionOrderAndOperation(
+            @Param("productionOrderId") Long productionOrderId,
+            @Param("operationId") Long operationId
+    );
+
+    /** Ð£ÐºÑ€Ñ‹Ñ‚Ñ‹Ðµ ÑÑ‚Ñ€Ð¾ÐºÐ¸ Ð·Ð°ÐºÐ°Ð·Ð° â€” ÐºÐ¾Ð»Ð¸Ñ‡ÐµÑÑ‚Ð²Ð¾ Ð´Ð»Ñ Ð¿Ñ€ÐµÐ´ÑƒÐ¿Ñ€ÐµÐ¶Ð´ÐµÐ½Ð¸Ñ. */
     @Query("""
             select count(row)
             from OrderScheduleRow row

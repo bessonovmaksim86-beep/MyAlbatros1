@@ -2,6 +2,7 @@ package ru.company.production.dto;
 
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
+import java.util.List;
 
 /**
  * Одна операция комплектования внутри раскрытой строки изделия.
@@ -17,6 +18,10 @@ import java.time.format.DateTimeFormatter;
  * {@code rowId} — ключ существующего {@code POST /warehouse/kitting/
  * complete}; отдельного write-пути раздел не заводит.
  *
+ * Поле {@code attachedCellNumbers} показывает, какие серийные номера
+ * (ячейки) уже вошли в этот заказ-комплектующий: кладовщик видит,
+ * что уже укомплектовано, и сверяет состав до проведения операции.
+ *
  * @param rowId          строка графика — ключ проведения
  * @param operationName  наименование операции («Комплектование»)
  * @param znpNumber      номер привязанного ЗНП (заказ в работе)
@@ -26,6 +31,7 @@ import java.time.format.DateTimeFormatter;
  * @param blocked        есть незакрытая предшествующая по маршруту
  * @param blockerLabel   наименование блокирующей операции
  * @param canComplete    провести можно сейчас (не закрыта, не ждёт)
+ * @param attachedCellNumbers серийные номера ячеек, вошедших в ЗНП
  */
 public record KittingZnpOperationRow(
         Long rowId,
@@ -36,7 +42,8 @@ public record KittingZnpOperationRow(
         String completedLabel,
         boolean blocked,
         String blockerLabel,
-        boolean canComplete
+        boolean canComplete,
+        List<String> attachedCellNumbers
 ) {
 
     private static final DateTimeFormatter RU_DATE =
@@ -73,5 +80,42 @@ public record KittingZnpOperationRow(
         return blockerLabel == null || blockerLabel.isBlank()
                 ? "ждёт предшественника"
                 : "ждёт: " + blockerLabel.trim();
+    }
+
+    /**
+     * Сколько ячеек уже вошло в заказ-комплектующий.
+     *
+     * Кладовщик видит это число, чтобы сверить состав ЗНП до
+     * проведения: если операция закрыта фактом, но ячеек в составе
+     * нет — значит, ЗНП был поднят вручную, без реестра.
+     */
+    public long attachedCount() {
+        return attachedCellNumbers == null ? 0L : attachedCellNumbers.size();
+    }
+
+    /**
+     * Подпись ячеек: «Ячеек вошло: 3».
+     *
+     * Пустое значение — прочерк, если ячеек не было или их не
+     * удалось прочитать: шаблон должен показывать прочерк, а не
+     * нуль, чтобы кладовщик не счёл это ошибкой.
+     */
+    public String attachedLabel() {
+        long count = attachedCount();
+        return count > 0 ? "Ячеек вошло: " + count : "—";
+    }
+
+    /**
+     * Можно ли вписать в этот заказ ещё одну ячейку.
+     *
+     * Заказ обязан быть живым и не закрытым фактом: внесённая после
+     * проведения ячейка означала бы, что склад доукомплектовал уже
+     * сданную работу, — и спор о составе остался бы неразрешимым.
+     * Потолок состава (заказанное количество) проверяет сервис, а не
+     * разметка: цифра состава ему известна точнее, потому что она
+     * читается из графика вместе с заказом.
+     */
+    public boolean canAttachCell() {
+        return !completed && znpNumber != null && !znpNumber.isBlank();
     }
 }

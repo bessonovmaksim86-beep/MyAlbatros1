@@ -1,0 +1,398 @@
+<!DOCTYPE html>
+<html lang="ru"
+      xmlns:th="http://www.thymeleaf.org">
+
+<head>
+    <meta charset="UTF-8">
+
+    <meta name="viewport"
+          content="width=device-width, initial-scale=1">
+
+    <title>Забраковать ячейку</title>
+
+    <link rel="stylesheet"
+          th:href="@{/technology/css/technology.css}">
+
+    <link rel="stylesheet"
+          th:href="@{/workshop/css/workshop.css}">
+
+    <link rel="stylesheet"
+          th:href="@{/workshop/css/scrap.css}">
+</head>
+
+<body>
+
+<div class="app-shell">
+
+    <aside th:replace="${isSKGeneral}
+            ? ~{quality/fragments/layout :: sidebar(${activePage})}
+            : ~{workshop/fragments/layout :: sidebar('scrap')}">
+    </aside>
+
+    <main class="main">
+
+        <header th:replace="${isSKGeneral}
+                ? ~{quality/fragments/layout :: topbar}
+                : ~{workshop/fragments/layout :: topbar}">
+        </header>
+
+        <div class="page-content workshop-page">
+
+            <div class="page-head">
+
+                <div class="page-title">
+
+                    <h1>Забраковать ячейку</h1>
+
+                    <p>
+                        Ячейку или подсборку бракуют, пока она числится в
+                        этом цеху: заявка уходит бюро контроля, а до её
+                        решения номер остаётся там, где лежит
+                    </p>
+
+                </div>
+
+                <div class="page-head-actions">
+
+                    <a class="btn secondary"
+                       th:href="@{/pending-defects/list}">
+                        Раздел «Отбраковка»
+                    </a>
+
+                </div>
+
+            </div>
+
+            <div class="alert success"
+                 th:if="${successMessage}"
+                 th:text="${successMessage}">
+            </div>
+
+            <div class="alert danger"
+                 th:if="${errorMessage}"
+                 th:text="${errorMessage}">
+            </div>
+
+            <!--
+                ============================================================
+                ФОРМА
+
+                Мастер вводит номер ячейки и причину. ЗНП, разновидность
+                и местоположение сервер берёт из матрицы комплектования:
+                заявка обязана зафиксировать тот заказ, из которого ячейку
+                забраковали, а не тот, который вписал человек.
+                ============================================================
+            -->
+            <section class="card">
+
+                <div class="card-head">
+
+                    <h2>Новая заявка на браковку</h2>
+
+                </div>
+
+                <div class="card-body">
+
+                    <form th:action="@{/workshop/scrap/create}"
+                          th:object="${scrapForm}"
+                          method="post"
+                          id="scrapForm">
+
+                        <input th:if="${_csrf != null}"
+                               type="hidden"
+                               th:name="${_csrf.parameterName}"
+                               th:value="${_csrf.token}">
+
+                        <div class="form-grid">
+
+                            <div class="field">
+
+                                <label for="fullNumber">
+                                    Номер ячейки или подсборки
+                                </label>
+
+                                <input type="text"
+                                       id="fullNumber"
+                                       th:field="*{fullNumber}"
+                                       maxlength="20"
+                                       inputmode="numeric"
+                                       autocomplete="off"
+                                       placeholder="121200022"
+                                       aria-describedby="fullNumberHint">
+
+                                <small class="field-hint"
+                                       id="fullNumberHint">
+                                    Девять цифр: код изделия и серия.
+                                    Можно ввести со сканера — дефисы и
+                                    пробелы уберутся сами
+                                </small>
+
+                                <small class="field-error"
+                                       th:if="${#fields.hasErrors('fullNumber')}"
+                                       th:errors="*{fullNumber}">
+                                    Укажите номер ячейки
+                                </small>
+
+                            </div>
+
+                            <div class="field">
+
+                                <label for="deviceNumber">
+                                    Номер изделия, в которое она установлена
+                                </label>
+
+                                <input type="text"
+                                       id="deviceNumber"
+                                       th:field="*{deviceNumber}"
+                                       maxlength="20"
+                                       inputmode="numeric"
+                                       autocomplete="off"
+                                       placeholder="119200111">
+
+                                <small class="field-hint">
+                                    По нему проверяют, что изделие ещё не
+                                    убрали из цеха. Если ячейку забраковали
+                                    до установки — оставьте поле пустым
+                                </small>
+
+                                <small class="field-error"
+                                       th:if="${#fields.hasErrors('deviceNumber')}"
+                                       th:errors="*{deviceNumber}">
+                                    Номер изделия слишком длинный
+                                </small>
+
+                            </div>
+
+                        </div>
+
+                        <!--
+                            Предпросмотр ячейки: что сервер нашёл по
+                            введённому номеру. Пока он пустой, форма не
+                            понимает, какую ячейку оформляет мастер, —
+                            поэтому панель показывается сразу при вводе,
+                            а не после отказа.
+                        -->
+                        <div class="scrap-preview"
+                             id="scrapPreview"
+                             hidden>
+
+                            <div class="scrap-preview__grid">
+
+                                <div class="scrap-preview__item">
+                                    <small>Изделие</small>
+                                    <strong id="previewCell">—</strong>
+                                </div>
+
+                                <div class="scrap-preview__item">
+                                    <small>Вид</small>
+                                    <strong id="previewKind">—</strong>
+                                </div>
+
+                                <div class="scrap-preview__item">
+                                    <small>ЗНП</small>
+                                    <strong class="mono"
+                                            id="previewZnp">—</strong>
+                                </div>
+
+                                <div class="scrap-preview__item">
+                                    <small>Где числится</small>
+                                    <strong id="previewLocation">—</strong>
+                                </div>
+
+                            </div>
+
+                            <ul class="scrap-preview__problems"
+                                id="previewProblems"
+                                hidden></ul>
+
+                        </div>
+
+                        <div class="form-grid">
+
+                            <div class="field span-2">
+
+                                <label for="defectReason">
+                                    Причина брака
+                                </label>
+
+                                <!--
+                                    Список подсказок даёт справочник
+                                    причин: свободный ввод собрал бы
+                                    «царапина», «Царапина» и «царапина на
+                                    корпусе» в три разные строки отчёта,
+                                    а по причинам считают рекламации.
+                                    Своё написать можно — datalist не
+                                    запрещает.
+                                -->
+                                <input type="text"
+                                       id="defectReason"
+                                       list="defectReasonOptions"
+                                       th:field="*{defectReason}"
+                                       maxlength="500"
+                                       autocomplete="off"
+                                       placeholder="Скол корпуса, отклонение параметра, обрыв вывода">
+
+                                <datalist id="defectReasonOptions">
+                                    <option th:each="reason : ${defectReasons}"
+                                            th:value="${reason.name}">
+                                    </option>
+                                </datalist>
+
+                                <small class="field-hint">
+                                    Выберите причину из справочника или
+                                    опишите свою — написанное попадает в
+                                    паспорт ячейки и в статистику брака
+                                </small>
+
+                                <small class="field-error"
+                                       th:if="${#fields.hasErrors('defectReason')}"
+                                       th:errors="*{defectReason}">
+                                    Укажите причину брака
+                                </small>
+
+                            </div>
+
+                            <div class="field span-2">
+
+                                <label for="defectStage">
+                                    Этап, на котором брак выявлен
+                                </label>
+
+                                <input type="text"
+                                       id="defectStage"
+                                       th:field="*{defectStage}"
+                                       maxlength="100"
+                                       autocomplete="off"
+                                       placeholder="Сборка подсборки, монтаж платы, настройка">
+
+                                <small class="field-hint">
+                                    Пустое поле подпишет «Браковка в цеху»
+                                </small>
+
+                                <small class="field-error"
+                                       th:if="${#fields.hasErrors('defectStage')}"
+                                       th:errors="*{defectStage}">
+                                    Этап слишком длинный
+                                </small>
+
+                            </div>
+
+                        </div>
+
+                        <div class="form-actions">
+
+                            <a class="btn secondary"
+                               th:href="@{/workshop/scrap}">
+                                Очистить
+                            </a>
+
+                            <button type="submit" class="btn danger">
+                                Забраковать
+                            </button>
+
+                        </div>
+
+                    </form>
+
+                </div>
+
+            </section>
+
+            <!--
+                ============================================================
+                ОЧЕРЕДЬ ЗАЯВОК ЦЕХА
+
+                Мастер обязан видеть, что на номер заявка уже оформлена:
+                иначе он оформил бы вторую и получил отказ, не понимая
+                причины.
+                ============================================================
+            -->
+            <section class="card"
+                     th:if="${pending != null and !#lists.isEmpty(pending)}">
+
+                <div class="card-head">
+
+                    <h2>Заявки, ожидающие решения бюро</h2>
+
+                </div>
+
+                <div class="card-body">
+
+                    <div class="table-wrap">
+
+                        <table class="data-table">
+
+                            <thead>
+
+                            <tr>
+                                <th>Номер ячейки</th>
+                                <th>Вид</th>
+                                <th>Изделие</th>
+                                <th>ЗНП</th>
+                                <th>Изделие в цеху</th>
+                                <th>Причина брака</th>
+                                <th>Дата заявки</th>
+                            </tr>
+
+                            </thead>
+
+                            <tbody>
+
+                            <tr th:each="defect : ${pending}">
+
+                                <td class="mono">
+                                    <a th:href="@{/passport/{number}(number=${defect.fullNumber})}"
+                                       th:text="${defect.fullNumber}">
+                                        121200022
+                                    </a>
+                                </td>
+
+                                <td th:text="${defect.cellKindLabel}">
+                                    Ячейка
+                                </td>
+
+                                <td th:text="${defect.classifierLabel}">
+                                    1212 — Подсборка ЯПР56
+                                </td>
+
+                                <td class="mono"
+                                    th:text="${defect.znpNumberLabel}">
+                                    ЗНП-2026-014
+                                </td>
+
+                                <td class="mono"
+                                    th:text="${defect.deviceNumberLabel}">
+                                    119200111
+                                </td>
+
+                                <td th:text="${defect.defectReason}">
+                                    Скол корпуса
+                                </td>
+
+                                <td th:text="${defect.formattedRequestedAt}">
+                                    22.10.2026 09:15
+                                </td>
+
+                            </tr>
+
+                            </tbody>
+
+                        </table>
+
+                    </div>
+
+                </div>
+
+            </section>
+
+        </div>
+    </main>
+</div>
+
+<th:block th:replace="~{workshop/fragments/layout :: commonScripts}">
+</th:block>
+
+<script th:src="@{/workshop/js/scrap.js}"></script>
+
+</body>
+</html>

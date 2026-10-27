@@ -59,6 +59,15 @@ public class CellReceivingBatch {
     @Column(name = "supplier_name", nullable = false, length = 255)
     private String supplierName;
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(
+            name = "supplier_id",
+            foreignKey = @ForeignKey(
+                    name = "fk_cell_receiving_supplier"
+            )
+    )
+    private WarehouseSupplier supplier;
+
     @Column(name = "incoming_order_number", nullable = false, length = 100)
     private String incomingOrderNumber;
 

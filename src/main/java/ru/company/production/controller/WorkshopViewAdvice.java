@@ -9,6 +9,7 @@ import org.springframework.web.bind.annotation.ModelAttribute;
 import ru.company.production.entity.AppUser;
 import ru.company.production.repository.UserRepository;
 import ru.company.production.service.InputControlService;
+import ru.company.production.service.PendingDefectService;
 import ru.company.production.service.WorkshopStaffService;
 
 import java.util.List;
@@ -29,6 +30,12 @@ import java.util.List;
                 WorkshopCalendarController.class,
                 WorkshopUnitOperationsController.class,
                 WorkshopDistributionController.class,
+                /*
+                 * Форма браковки рисуется внутри цехового модуля: у неё
+                 * то же боковое меню и та же верхняя панель, поэтому
+                 * подписи рода подразделения и его граница нужны и здесь.
+                 */
+                WorkshopScrapController.class,
                 /*
                  * Раздел распределения групповых заказов рисует то же
                  * боковое меню и ту же верхнюю панель, поэтому ему
@@ -66,6 +73,7 @@ public class WorkshopViewAdvice {
     private final UserRepository userRepository;
     private final WorkshopStaffService staffService;
     private final InputControlService inputControlService;
+    private final PendingDefectService pendingDefectService;
 
     @ModelAttribute
     public void addWorkshopContext(
@@ -181,12 +189,32 @@ public class WorkshopViewAdvice {
                 supervisor.getRole()
                         == ru.company.production.entity.Role.BVK_MASTER;
 
+        /*
+         * Пункт «Отбраковка» нужен и руководителю БТК, и контролёру:
+         * заявку цеха решает тот, кто проводит её по журналу, а это
+         * исполнитель бюро. Руководитель читает очередь, чтобы видеть
+         * работу подчинённого, поэтому признак общий для обеих ролей.
+         */
         boolean btkModule =
                 supervisor.getRole()
-                        == ru.company.production.entity.Role.BTK_MASTER;
+                        == ru.company.production.entity.Role.BTK_MASTER
+                        || supervisor.getRole()
+                        == ru.company.production.entity.Role.BTK_EXECUTOR;
 
         model.addAttribute("bvkModule", bvkModule);
         model.addAttribute("btkModule", btkModule);
+
+        /*
+         * Право браковать ячейку — у руководителя цеха: заявку
+         * оформляет тот, у кого ячейка лежит на столе, то есть мастер
+         * производственного цеха. Склад и бюро ячейку не получают в
+         * работу, и пункт привёл бы их к форме, которая всегда
+         * отказывает: ячейка склада в цеху не числится.
+         */
+        boolean canScrap = staffService.unitKind(supervisor)
+                == WorkshopStaffService.UnitKind.WORKSHOP;
+
+        model.addAttribute("canScrap", canScrap);
 
         if (bvkModule) {
             model.addAttribute(
@@ -197,6 +225,18 @@ public class WorkshopViewAdvice {
             );
             model.addAttribute(
                     "quarantineCount", inputControlService.countQuarantine()
+            );
+        }
+
+        /*
+         * Очередь отбраковки общая для двух бюро: цех присылает заявку,
+         * а решает её тот, кто отвечает за качество, — и БВК, и БТК.
+         * Счётчик поэтому читается для обоих, иначе бюро не увидело бы
+         * присланных заявок до перехода в раздел.
+         */
+        if (bvkModule || btkModule) {
+            model.addAttribute(
+                    "pendingDefectCount", pendingDefectService.countPending()
             );
         }
 

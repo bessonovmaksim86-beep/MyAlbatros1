@@ -335,14 +335,14 @@ public class WarehouseReceivingController {
         model.addAttribute("classifiers", receivingService.findCellClassifiers());
 
         /*
-         * Написания из справочника — подсказкой к полю поставщика:
-         * имя в партии остаётся свободной строкой, но вводить его
-         * стоит как в справочнике, иначе сводка по поставщику
-         * разделится на несколько строк.
+         * Поставщик выбирается только из справочника: свободный ввод
+         * возвращает ту самую проблему, из-за которой справочник и
+         * заведён — одно и то же наименование в нескольких написаниях
+         * раскалывает сводку по поставщику.
          */
         model.addAttribute(
-                "supplierNames",
-                supplierService.findSupplierNames()
+                "suppliers",
+                supplierService.findAll()
         );
     }
 

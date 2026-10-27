@@ -203,6 +203,7 @@
                                             <tr>
                                                 <th>Операция</th>
                                                 <th>Заказ-комплектующий</th>
+                                                <th>Состав ЗНП</th>
                                                 <th>План</th>
                                                 <th>Статус</th>
                                                 <th></th>
@@ -226,6 +227,76 @@
                                                 <td class="instance-table__serial"
                                                     th:text="${operation.znpLabel()}">
                                                         ЗК-2026-014
+                                                </td>
+
+                                                <!--
+                                                    Состав заказ-
+                                                    комплектующего: что
+                                                    уже вошло в заказ и
+                                                    поле, которым
+                                                    кладовщик вписывает
+                                                    следующую ячейку.
+                                                    Номера читаются
+                                                    матрицей комплекто-
+                                                    вания (V20) прямо
+                                                    по номеру ЗНП,
+                                                    поэтому состав
+                                                    виден до проведения
+                                                    операции — иначе
+                                                    сверять его пришлось
+                                                    бы в карточке заказа.
+                                                -->
+                                                <td class="znp-composition">
+
+                                                    <div class="znp-composition__numbers"
+                                                         th:if="${operation.attachedCount() > 0}">
+
+                                                        <span class="znp-composition__number"
+                                                              th:each="cellNumber : ${operation.attachedCellNumbers()}"
+                                                              th:text="${cellNumber}">
+                                                            121200022
+                                                        </span>
+                                                    </div>
+
+                                                    <small class="znp-composition__empty"
+                                                           th:unless="${operation.attachedCount() > 0}">
+                                                        ячеек не внесено
+                                                    </small>
+
+                                                    <form th:if="${operation.canAttachCell()}"
+                                                          method="post"
+                                                          th:action="@{/warehouse/kitting/attach-cell}"
+                                                          class="attach-cell-form">
+
+                                                        <input th:if="${_csrf != null}"
+                                                               type="hidden"
+                                                               th:name="${_csrf.parameterName}"
+                                                               th:value="${_csrf.token}">
+
+                                                        <input type="hidden"
+                                                               name="rowId"
+                                                               th:value="${operation.rowId()}">
+
+                                                        <input type="hidden"
+                                                               name="section"
+                                                               th:value="${sectionKey}">
+
+                                                        <input type="text"
+                                                               name="cellNumber"
+                                                               inputmode="numeric"
+                                                               class="attach-cell-input"
+                                                               th:placeholder="${operation.attachedLabel() == '—'
+                                                                       ? 'Ячейка: 9 цифр'
+                                                                       : 'Ещё ячейка: 9 цифр'}"
+                                                               maxlength="12"
+                                                               autocomplete="off"
+                                                               aria-label="Серийный номер ячейки для заказа">
+
+                                                        <button type="submit"
+                                                                class="btn secondary compact">
+                                                            Внести
+                                                        </button>
+                                                    </form>
                                                 </td>
 
                                                 <td th:text="${operation.formattedDate()}">

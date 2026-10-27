@@ -47,10 +47,15 @@ class ProductionOrderServiceStatusTransitionsTest {
     @Mock private SerialIssueService serialIssueService;
     @Mock private SerialMovementJournalService journal;
     @Mock private OrderSchedulingService orderSchedulingService;
-    @Mock private WorkshopStaffBindingRepository staffBindingRepository;
 
     private ProductionOrderService service;
 
+    /*
+     * Порядок аргументов повторяет порядок полей ProductionOrderService,
+     * который задаёт Lombok @RequiredArgsConstructor: конструктор
+     * позиционный, и переставленные репозитории молча дали бы сервису
+     * чужие заглушки вместо проверяемых.
+     */
     @BeforeEach
     void setUp() {
         service = new ProductionOrderService(
@@ -65,12 +70,11 @@ class ProductionOrderServiceStatusTransitionsTest {
                 techProcessClassifierRepository,
                 techProcessOperationRepository,
                 orderScheduleRowRepository,
-                serialProductionOrderRepository,
+                orderSchedulingService,
                 serialKittingService,
                 serialIssueService,
                 journal,
-                orderSchedulingService,
-                staffBindingRepository
+                serialProductionOrderRepository
         );
     }
 
@@ -84,6 +88,7 @@ class ProductionOrderServiceStatusTransitionsTest {
         @DisplayName("plan: «Новый» → «В работе»")
         void planNewToInWork() {
             ProductionOrder order = createOrder(1L, ProductionOrderStatus.NEW);
+            order.addItem(createItem(1L, 1L, ProductionItemStatus.NEW));
 
             when(productionOrderRepository.findDetailedById(1L))
                     .thenReturn(Optional.of(order));
@@ -94,13 +99,19 @@ class ProductionOrderServiceStatusTransitionsTest {
             when(productionOrderItemRepository.countWithoutZnpByOrderId(1L))
                     .thenReturn(0L);
 
-            ProductionOrderStatus before = order.getStatus();
             service.plan(1L);
 
             assertEquals(ProductionOrderStatus.IN_WORK, order.getStatus());
-            assertEquals(1, order.getItems().size());
-            assertEquals(ProductionItemStatus.IN_WORK,
-                    order.getItems().get(0).getStatus());
+            /*
+             * Позиции и серийники переводятся bulk-запросом по
+             * идентификатору заказа (см. ProductionOrderService#applyStatus),
+             * а не перебором загруженной коллекции, поэтому проверяется сам
+             * запрос: in-memory статус позиции в тесте остался бы прежним.
+             */
+            verify(productionOrderItemRepository)
+                    .updateStatusByOrderId(1L, ProductionItemStatus.IN_WORK);
+            verify(productSerialRepository)
+                    .updateStatusByOrderId(1L, ProductSerialStatus.IN_WORK);
         }
 
         @Test
@@ -152,8 +163,11 @@ class ProductionOrderServiceStatusTransitionsTest {
 
             when(productionOrderRepository.findDetailedById(1L))
                     .thenReturn(Optional.of(order));
-            when(productionOrderRepository.save(any()))
-                    .thenAnswer(i -> i.getArgument(0));
+            /*
+             * save не стабится: отказ из-за неполных ЗНП обязан вернуться
+             * до любых изменений статуса, и вызов save здесь означал бы,
+             * что страж сработал слишком поздно.
+             */
             when(productionOrderItemRepository.countByOrderId(1L))
                     .thenReturn(3L);
             when(productionOrderItemRepository.countWithoutZnpByOrderId(1L))
@@ -188,7 +202,9 @@ class ProductionOrderServiceStatusTransitionsTest {
             service.complete(1L);
 
             assertEquals(ProductionOrderStatus.DONE, order.getStatus());
-            assertEquals(ProductionItemStatus.DONE, item.getStatus());
+            // Статус позиции — тоже bulk-запрос, см. planNewToInWork.
+            verify(productionOrderItemRepository)
+                    .updateStatusByOrderId(1L, ProductionItemStatus.DONE);
         }
 
         @Test
@@ -267,8 +283,7 @@ class ProductionOrderServiceStatusTransitionsTest {
 
             when(productionOrderRepository.findDetailedById(1L))
                     .thenReturn(Optional.of(order));
-            when(productionOrderRepository.save(any()))
-                    .thenAnswer(i -> i.getArgument(0));
+            // См. planMissingZnpThrows: отказ «закрывать нечего» — до save.
             when(productionOrderItemRepository.countByOrderId(1L))
                     .thenReturn(0L);
 
@@ -454,8 +469,11 @@ class ProductionOrderServiceStatusTransitionsTest {
                     .thenReturn(Optional.of(parent));
             when(productionOrderRepository.findActiveChildren(1L))
                     .thenReturn(List.of(closedChild));
-            when(productionOrderRepository.findActiveChildren(2L))
-                    .thenReturn(List.of());
+            /*
+             * findActiveChildren(2L) не стабится: закрытый заказ не
+             * обходится ни проверкой плана, ни каскадом, лишний стаб только
+             * закрыл бы это поведение.
+             */
             when(productionOrderRepository.save(any()))
                     .thenAnswer(i -> i.getArgument(0));
             when(productionOrderItemRepository.countByOrderId(1L))
@@ -468,6 +486,7 @@ class ProductionOrderServiceStatusTransitionsTest {
             assertEquals(ProductionOrderStatus.IN_WORK, parent.getStatus());
             // Закрытый ребёнок не должен быть переведён
             assertEquals(ProductionOrderStatus.DONE, closedChild.getStatus());
+            verify(productionOrderRepository, never()).save(closedChild);
         }
     }
 

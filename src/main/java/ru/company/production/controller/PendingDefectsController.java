@@ -14,25 +14,25 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 import ru.company.production.dto.PendingDefectForm;
 import ru.company.production.entity.AppUser;
+import ru.company.production.entity.DefectConfirmed;
 import ru.company.production.entity.PendingDefect;
-import ru.company.production.entity.PendingDefectDecision;
 import ru.company.production.repository.UserRepository;
 import ru.company.production.service.PendingDefectService;
 
 /**
- * Отбраковка ячейки/подсборки с согласованием бюро входного контроля.
+ * Отбраковка ячейки/подсборки: заявки цеха и решения бюро.
  *
- * Раздел открыт обеим ролям бюро и на создание заявки, и на решение:
- * по условию задачи полный функционал нужен и контролёру, и
- * руководителю. Разделение по ролям здесь только в счётчике меню —
- * очередь согласования видна обоим.
+ * Раздел открыт ролям бюро входного и технического контроля: заявку
+ * создаёт цех, а решает её тот, кто отвечает за качество. Разделение
+ * по ролям здесь только в счётчике меню — очередь видна всем.
  *
  * Сохранение и решение идут redirect'ом: повторный F5 не должен
  * провести заявку второй раз и задвоить событие в журнале перемещений.
  *
  * Реквизиты ячейки (разновидность, изделие, партия, местоположение)
- * страница не передаёт — их берёт сервис по номеру. Форма несёт только
- * то, что знает оператор: номер, причину и этап.
+ * страница не передаёт — их берёт сервис по номеру. Форма решения
+ * несёт ровно два поля: верит ли контролёр заявке цеха, и что он
+ * пишет об этом в паспорт ячейки.
  */
 @Controller
 @RequestMapping("/pending-defects")
@@ -132,18 +132,24 @@ public class PendingDefectsController {
     }
 
     /**
-     * Решение по заявке: изолятор брака либо склад полуфабрикатов.
+     * Решение по заявке: подтверждён дефект или не подтверждён.
+     *
+     * Оба варианта ведут ячейку в изолятор брака — различие только в
+     * подписи для анализа брака, поэтому направление сервер не спрашивает.
+     * Комментарий обязателен по смыслу раздела, но не по базе: паспорт
+     * обязан объяснить, почему ячейку признали годной или нет.
      */
     @PostMapping("/decide")
     public String decide(@RequestParam Long defectId,
                          @RequestParam String decision,
+                         @RequestParam(required = false) String comment,
                          Authentication authentication,
                          RedirectAttributes redirectAttributes) {
 
-        PendingDefectDecision chosen;
+        DefectConfirmed chosen;
 
         try {
-            chosen = PendingDefectDecision.valueOf(decision);
+            chosen = DefectConfirmed.valueOf(decision);
         } catch (IllegalArgumentException e) {
             redirectAttributes.addFlashAttribute(
                     "errorMessage",
@@ -154,13 +160,17 @@ public class PendingDefectsController {
         }
 
         try {
-            PendingDefect defect = pendingDefectService.applyDecision(
-                    defectId, chosen, currentUser(authentication));
+            PendingDefect defect = pendingDefectService.applyDefectDecision(
+                    defectId,
+                    chosen,
+                    comment,
+                    currentUser(authentication));
 
             redirectAttributes.addFlashAttribute(
                     "successMessage",
                     defect.getFullNumber() + ": "
                             + chosen.getDisplayName().toLowerCase()
+                            + ", ячейка передана складу изолятора"
             );
         } catch (IllegalStateException e) {
             redirectAttributes.addFlashAttribute("errorMessage",

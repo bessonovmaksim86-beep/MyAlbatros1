@@ -8,7 +8,7 @@
     <meta name="viewport"
           content="width=device-width, initial-scale=1">
 
-    <title>Отбраковка с согласованием БВК</title>
+    <title>Отбраковка с согласованием бюро</title>
 
     <link rel="stylesheet"
           th:href="@{/technology/css/technology.css}">
@@ -18,6 +18,14 @@
 
     <link rel="stylesheet"
           th:href="@{/input-control/css/input-control.css}">
+
+    <!--
+        Цеховая панель БТК рисуется классами workshop-*: без своего
+        файла стилей она потеряла бы и ширину, и палитру меню.
+    -->
+    <link rel="stylesheet"
+          th:if="${isBtkModule}"
+          th:href="@{/workshop/css/workshop.css}">
 
     <!-- Вкладки очереди/решений и таблица заявок -->
     <link rel="stylesheet"
@@ -29,16 +37,29 @@
 
 <body>
 
+<!--
+    ============================================================
+    МЕНЮ РАЗДЕЛА
+
+    Раздел адресован обоим бюро, а меню у них разные: у бюро входного
+    контроля — свои реестры партий, у бюро технического контроля их
+    нет, и меню БВК показало бы ему пункты, закрытые перед его ролью.
+    БТК поэтому получает цеховую панель — тот же набор разделов, через
+    который он работает обычно («Мои операции», распределение).
+    ============================================================
+-->
 <div class="app-shell">
 
-    <aside th:replace="~{input-control/fragments/layout
-            :: sidebar('defects')}">
+    <aside th:replace="${isBtkModule}
+            ? ~{workshop/fragments/layout :: sidebar('defects')}
+            : ~{input-control/fragments/layout :: sidebar('defects')}">
     </aside>
 
     <main class="main">
 
-        <header th:replace="~{input-control/fragments/layout
-                :: topbar}">
+        <header th:replace="${isBtkModule}
+                ? ~{workshop/fragments/layout :: topbar}
+                : ~{input-control/fragments/layout :: topbar}">
         </header>
 
         <div class="bvk-page">
@@ -60,7 +81,13 @@
 
                 <div class="page-head-actions">
 
+                    <!--
+                        Реестр изолятора ведёт бюро входного контроля:
+                        у БТК нет своих карточек партий, и ссылка
+                        привела бы контролёра БТК к 403.
+                    -->
                     <a class="btn secondary"
+                       th:unless="${isBtkModule}"
                        th:href="@{/input-control/quarantine}">
                         Изолятор брака
                     </a>
@@ -301,6 +328,8 @@
                                 <th>Номер ячейки</th>
                                 <th>Ячейка / подсборка</th>
                                 <th>Изделие</th>
+                                <th>ЗНП</th>
+                                <th>Изделие в цеху</th>
                                 <th>Местоположение</th>
                                 <th>Причина брака</th>
                                 <th>Этап отбраковки</th>
@@ -331,6 +360,20 @@
                                     1212 — Подсборка ЯПР56
                                 </td>
 
+                                <td class="mono"
+                                    th:text="${defect.znpNumberLabel}">
+                                    ЗНП-2026-014
+                                </td>
+
+                                <td class="mono">
+                                    <a th:if="${defect.deviceNumber != null}"
+                                       th:href="@{/passport/{number}(number=${defect.deviceNumber})}"
+                                       th:text="${defect.deviceNumber}">
+                                        119200111
+                                    </a>
+                                    <span th:unless="${defect.deviceNumber != null}">—</span>
+                                </td>
+
                                 <td th:text="${defect.currentLocation}">
                                     Цех (выпуск)
                                 </td>
@@ -355,11 +398,12 @@
                                 <td class="table-actions">
 
                                     <!--
-                                        Два решения — две отдельные
-                                        формы: значение уходит
-                                        параметром, и сервер сам решает,
-                                        провести ячейку в изолятор или
-                                        вернуть на склад полуфабрикатов.
+                                        Вердикт и комментарий: направление
+                                        сервер выбирает сам (оба варианта
+                                        ведут в изолятор брака), поэтому
+                                        форма спрашивает только, верить ли
+                                        заявке цеха. Комментарий попадает
+                                        в паспорт ячейки.
                                     -->
                                     <form th:action="@{/pending-defects/decide}"
                                           method="post"
@@ -374,24 +418,32 @@
                                                name="defectId"
                                                th:value="${defect.id}">
 
+                                        <select name="decision"
+                                                class="bvk-defect-table__select"
+                                                aria-label="Решение по дефекту">
+
+                                            <option value="CONFIRMED">
+                                                Дефект подтверждён
+                                            </option>
+
+                                            <option value="DENIED">
+                                                Дефект не подтверждён
+                                            </option>
+                                        </select>
+
+                                        <input type="text"
+                                               name="comment"
+                                               maxlength="1000"
+                                               class="bvk-defect-table__comment"
+                                               placeholder="Комментарий контроллера"
+                                               aria-label="Комментарий контроллера">
+
                                         <button type="submit"
-                                                name="decision"
-                                                value="APPROVED_TO_QUARANTINE"
-                                                class="btn danger compact"
+                                                class="btn primary compact"
                                                 formnovalidate>
 
                                             В изолятор брака
                                         </button>
-
-                                        <button type="submit"
-                                                name="decision"
-                                                value="REJECTED_TO_WH"
-                                                class="btn secondary compact"
-                                                formnovalidate>
-
-                                            Брак не подтверждён
-                                        </button>
-
                                     </form>
 
                                 </td>
@@ -452,12 +504,14 @@
                                 <th>Номер ячейки</th>
                                 <th>Ячейка / подсборка</th>
                                 <th>Изделие</th>
+                                <th>ЗНП</th>
+                                <th>Изделие в цеху</th>
                                 <th>Местоположение</th>
                                 <th>Причина брака</th>
                                 <th>Этап отбраковки</th>
                                 <th>Затребовал</th>
                                 <th>Дата заявки</th>
-                                <th>Решение</th>
+                                <th>Вывод контроллера</th>
                                 <th>Решил</th>
                             </tr>
 
@@ -482,6 +536,20 @@
                                     1212 — Подсборка ЯПР56
                                 </td>
 
+                                <td class="mono"
+                                    th:text="${defect.znpNumberLabel}">
+                                    ЗНП-2026-014
+                                </td>
+
+                                <td class="mono">
+                                    <a th:if="${defect.deviceNumber != null}"
+                                       th:href="@{/passport/{number}(number=${defect.deviceNumber})}"
+                                       th:text="${defect.deviceNumber}">
+                                        119200111
+                                    </a>
+                                    <span th:unless="${defect.deviceNumber != null}">—</span>
+                                </td>
+
                                 <td th:text="${defect.currentLocation}">
                                     Цех (выпуск)
                                 </td>
@@ -503,14 +571,25 @@
                                     22.10.2026 09:15
                                 </td>
 
+                                <!--
+                                    Направление у обоих решений одно
+                                    (изолятор брака), поэтому в перечне
+                                    показывают вердикт и комментарий:
+                                    именно они объясняют ячейку в паспорте.
+                                -->
                                 <td>
                                     <div class="bvk-cell-stack">
 
                                         <span class="status"
-                                              th:classappend="' ' + ${defect.decisionBadgeClass}"
-                                              th:text="${defect.decisionLabel}">
-                                            Переместить в изолятор
+                                              th:classappend="' ' + ${defect.defectConfirmedBadgeClass}"
+                                              th:text="${defect.defectConfirmedLabel}">
+                                            Дефект подтверждён
                                         </span>
+
+                                        <small th:if="${defect.controllerComment != null}"
+                                               th:text="${defect.controllerComment}">
+                                            Скол виден невооружённым глазом
+                                        </small>
 
                                         <small class="mono"
                                                th:text="${defect.formattedApprovedAt}">
@@ -537,8 +616,9 @@
     </main>
 </div>
 
-<th:block th:replace="~{input-control/fragments/layout
-        :: commonScripts}">
+<th:block th:replace="${isBtkModule}
+        ? ~{workshop/fragments/layout :: commonScripts}
+        : ~{input-control/fragments/layout :: commonScripts}">
 </th:block>
 
 </body>

@@ -58,6 +58,15 @@ import ru.company.production.service.WorkshopStaffService;
                 WarehouseAcceptanceController.class,
                 WarehouseSupplierController.class,
                 InputControlController.class,
+                /*
+                 * Раздел «Отбраковка»: бюро технического контроля рисует
+                 * в нём цеховое меню (у БТК нет своих реестров партий),
+                 * поэтому пунктам «Мои операции» и «Распределение работ»
+                 * нужны счётчики и ссылка возврата в свой модуль — без
+                 * них цеховая панель показала бы БТК пустые цифры, а
+                 * возврат повёл бы на закрытый /workshop/staff.
+                 */
+                PendingDefectsController.class,
                 /* Сам раздел «Мои операции». */
                 MyOperationsController.class,
                 /*

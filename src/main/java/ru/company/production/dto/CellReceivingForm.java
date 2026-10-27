@@ -25,9 +25,8 @@ import lombok.Setter;
 @NoArgsConstructor
 public class CellReceivingForm {
 
-    @NotBlank(message = "Укажите поставщика")
-    @Size(max = 255, message = "Поставщик: не более 255 символов")
-    private String supplierName;
+    @NotNull(message = "Выберите поставщика из списка")
+    private Long supplierId;
 
     @NotBlank(message = "Укажите номер приходного ордера")
     @Size(max = 100, message = "Номер ордера: не более 100 символов")

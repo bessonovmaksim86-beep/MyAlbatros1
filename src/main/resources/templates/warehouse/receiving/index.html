@@ -147,31 +147,23 @@
 
                             <div class="field">
 
-                                <label for="supplierName">Поставщик</label>
+                                <label for="supplierId">Поставщик</label>
 
-                                <input id="supplierName"
-                                       type="text"
-                                       maxlength="255"
-                                       autocomplete="off"
-                                       list="supplierNamesList"
-                                       placeholder="ООО «Компонент»"
-                                       th:field="*{supplierName}">
+                                <select id="supplierId"
+                                        th:field="*{supplierId}">
 
-                                <!--
-                                    Написания из справочника поставщиков:
-                                    имя по-прежнему вводится свободно, но
-                                    сверка с ним не раскалывает сводку по
-                                    поставщику на несколько строк.
-                                -->
-                                <datalist id="supplierNamesList">
-                                    <option th:each="supplierName : ${supplierNames}"
-                                            th:value="${supplierName}">
+                                    <option value="">— выберите —</option>
+
+                                    <option th:each="supplier : ${suppliers}"
+                                            th:value="${supplier.id}"
+                                            th:text="${supplier.name}">
                                     </option>
-                                </datalist>
+
+                                </select>
 
                                 <span class="field-error"
-                                      th:if="${#fields.hasErrors('supplierName')}"
-                                      th:errors="*{supplierName}">
+                                      th:if="${#fields.hasErrors('supplierId')}"
+                                      th:errors="*{supplierId}">
                                 </span>
 
                             </div>

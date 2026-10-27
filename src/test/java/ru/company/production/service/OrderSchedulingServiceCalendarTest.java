@@ -82,8 +82,8 @@ class OrderSchedulingServiceCalendarTest {
                     LocalDate.of(2026, 10, 22));
             LocalDate wed = LocalDate.of(2026, 10, 21);
 
-            // +1→23(вт), +2→24(ср), +3→25(чт)
-            assertEquals(LocalDate.of(2026, 10, 25),
+            // +1→23(ПТ, 22.10—ЧТ праздник), +2→26(ПН, 24-25 СБ/ВС), +3→27(ВТ)
+            assertEquals(LocalDate.of(2026, 10, 27),
                     plusWorkingDays(wed, 3, snap));
         }
     }
@@ -124,7 +124,7 @@ class OrderSchedulingServiceCalendarTest {
 
         @Test
         @DisplayName("minusWorkingDays → шаг назад на N рабочих дней")
-        void minusWorkingDays() {
+        void minusThreeDays() {
             CalendarSnapshot snap = snapshotOf();
             LocalDate friday = LocalDate.of(2026, 10, 23);
 
@@ -200,12 +200,12 @@ class OrderSchedulingServiceCalendarTest {
         @Test
         @DisplayName("nextWorkingDay пропускает праздник и выходные")
         void nextWorkingDaySkipsHolidayAndWeekend() {
+            // 23.10.2026 — ПТ; объявлен праздником, дальше СБ/ВС
             CalendarSnapshot snap = snapshotOf(
-                    LocalDate.of(2026, 10, 22));
-            // 22(ПН-праздн)
+                    LocalDate.of(2026, 10, 23));
             LocalDate friday = LocalDate.of(2026, 10, 23);
 
-            // 23(ПТ)→+1→24(СБ)→25(ВС)→26(ПН)
+            // 23(ПТ-праздн)→24(СБ)→25(ВС)→26(ПН)
             assertEquals(LocalDate.of(2026, 10, 26),
                     nextWorkingDay(friday, snap));
         }
@@ -263,15 +263,15 @@ class OrderSchedulingServiceCalendarTest {
 
     /* ======================== ВСПОМОГАТЕЛЬНЫЕ МЕТОДЫ ======================== */
 
-    private CalendarSnapshot snapshotOf() {
+    private static CalendarSnapshot snapshotOf() {
         return snapshotOf(Set.of());
     }
 
-    private CalendarSnapshot snapshotOf(LocalDate... holidays) {
+    private static CalendarSnapshot snapshotOf(LocalDate... holidays) {
         return snapshotOf(new HashSet<>(Arrays.asList(holidays)));
     }
 
-    private CalendarSnapshot snapshotOf(Set<LocalDate> holidays) {
+    private static CalendarSnapshot snapshotOf(Set<LocalDate> holidays) {
         return new CalendarSnapshot(
                 LocalDate.of(2026, 9, 1),
                 LocalDate.of(2027, 1, 31),
@@ -305,7 +305,7 @@ class OrderSchedulingServiceCalendarTest {
         return candidate;
     }
 
-    private LocalDate minusWorkingDays(LocalDate from, int workingDays, CalendarSnapshot snap) {
+    private static LocalDate minusWorkingDays(LocalDate from, int workingDays, CalendarSnapshot snap) {
         LocalDate candidate = previousWorkingDay(from);
         for (int day = 0; day < workingDays; day++) {
             candidate = previousWorkingDay(candidate.minusDays(1));

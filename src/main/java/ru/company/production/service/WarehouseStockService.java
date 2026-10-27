@@ -3,6 +3,7 @@ package ru.company.production.service;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import ru.company.production.dto.QuarantineFilter;
 import ru.company.production.dto.WarehouseStockFilter;
 import ru.company.production.dto.WarehouseStockRow;
 import ru.company.production.entity.QuarantineCellKind;
@@ -12,6 +13,7 @@ import ru.company.production.repository.SerialProductionOrderRepository;
 import java.text.Collator;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -19,6 +21,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 /**
  * Наличие на складе полуфабрикатов: реестр ячеек и подсборок, которые
@@ -30,6 +33,14 @@ import java.util.Set;
  * принята ли складом (ячейка) или ещё нет (подсборка) — различие
  * выводят из отметки приёмки, как и изолятор брака
  * ({@link QuarantineCellKind#ofAccepted}).
+ *
+ * Из реестра исключены позиции, которых на полке физически нет:
+ * приходная позиция до приёмки складом (она ещё на этапе входного
+ * контроля или не вернулась от БВК) и позиция, отобранная в изолятор
+ * брака. Первую отсекает запрос реестра по отметке приёмки, вторую —
+ * {@link #quarantinedNumbers()}: изолятор описан карточками БВК и их
+ * перечнями номеров, и реестр обязан вычитать из него позиции, которые
+ * склад уже принял обратно.
  *
  * Размещение берётся из матрицы комплектования (V20), а не из
  * признака приёмки: ячейку внесли в действующий ЗНП — со полки она
@@ -64,6 +75,17 @@ public class WarehouseStockService {
     private final ProductSerialRepository serialRepository;
     private final SerialProductionOrderRepository linkRepository;
 
+    /*
+     * Изолятор брака описан карточками БВК, а не полем позиции, и
+     * реестр обязан вычитать из него номера: ячейку, отобранную в
+     * изолятор, кладовщик на полке не найдёт. Принятые складом
+     * перемещения вычитаются обратно — с приёмкой позиция возвращается
+     * на склад и обязана снова появиться в реестре (тот же перечень,
+     * который снимает строку из экрана изолятора).
+     */
+    private final InputControlService inputControlService;
+    private final QuarantineTransferService quarantineTransferService;
+
     /**
      * Позиции склада по фильтру — строки реестра в выбранном порядке.
      *
@@ -87,6 +109,12 @@ public class WarehouseStockService {
                         applied.fromMoment(),
                         applied.toMoment()
                 );
+
+        if (rows.isEmpty()) {
+            return List.of();
+        }
+
+        rows = withoutQuarantine(rows);
 
         if (rows.isEmpty()) {
             return List.of();
@@ -153,6 +181,60 @@ public class WarehouseStockService {
                 .count();
 
         return new StockSummary(rows.size(), cells, rows.size() - cells, free);
+    }
+
+    /**
+     * Позиции изолятора брака, снятые с перечня реестра.
+     *
+     * Номер сверяется по полному написанию: карточка БВК хранит
+     * перечень строкой, а реестр печатает номер из кода классификатора
+     * и серии — сверять их по отдельным полям значило бы путать
+     * изделия с одинаковой серией.
+     *
+     * Принятые складом перемещения вычитаются из изолятора тем же
+     * приёмом, что и экран изолятора: кладовщик принял ячейку — она
+     * легла на полку, и держать её в двух перечнях нельзя.
+     */
+    private List<ProductSerialRepository.WarehouseStockProjection>
+    withoutQuarantine(
+            List<ProductSerialRepository.WarehouseStockProjection> rows) {
+
+        Set<String> quarantined = quarantinedNumbers();
+
+        if (quarantined.isEmpty()) {
+            return rows;
+        }
+
+        return rows.stream()
+                .filter(row -> !quarantined.contains(fullNumber(row)))
+                .toList();
+    }
+
+    /**
+     * Номера, лежащие в изоляторе брака: перечень контроля за вычетом
+     * тех, что склад уже принял обратно.
+     */
+    private Set<String> quarantinedNumbers() {
+
+        Set<String> numbers = inputControlService
+                .findQuarantineCells(QuarantineFilter.empty()).stream()
+                .map(QuarantineCellView::getFullNumber)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toCollection(HashSet::new));
+
+        numbers.removeAll(quarantineTransferService.findAcceptedNumbers());
+
+        return numbers;
+    }
+
+    /** Полный номер позиции: код классификатора и пятизначная серия. */
+    private static String fullNumber(
+            ProductSerialRepository.WarehouseStockProjection row) {
+
+        return (row.getClassifierCode() == null
+                ? "" : row.getClassifierCode())
+                + String.format("%05d", row.getSerial() == null
+                        ? 0 : row.getSerial());
     }
 
     /** Опции фильтра «изделие»: только те, чьи позиции лежат на складе. */

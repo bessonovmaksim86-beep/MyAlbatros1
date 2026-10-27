@@ -1802,3 +1802,89 @@ body {
         grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 }
+
+/* =============================================================
+   ПРИВЯЗКА ЯЧЕЙКИ К ЗАКАЗУ-КОМПЛЕКТУЮЩЕМУ (КОМПЛЕКТОВАНИЕ ЗНП)
+
+   Состав заказа живёт в той же строке, что и операция: кладовщик
+   обязан видеть, что уже вошло, ДО того как впишет очередной номер,
+   иначе заказ собирался бы наугад. Поэтому колонка шире прочих и
+   держит две вещи — перечень вошедших номеров и поле ввода.
+
+   Поле принимает и сканер, который печатает номер вместе с переводом
+   строки, и вставку из буфера с дефисами: цифры отбирает сервер,
+   разметка лишь подсказывает формат.
+
+   Кнопка скрыта у проведённой операции: вписать ячейку в уже сданную
+   работу — значит испортить состав, который склад подписал фактом.
+   ============================================================= */
+
+.kitting-znp-table .instance-table__cells {
+    width: 320px;
+    white-space: normal;
+}
+
+.znp-composition {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.znp-composition__numbers {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 6px;
+}
+
+.znp-composition__number {
+    padding: 1px 6px;
+    border: 1px solid var(--line, #dce4eb);
+    border-radius: 4px;
+    background: #f4f7f9;
+    font-family: 'Consolas', 'Courier New', monospace;
+    font-size: 11px;
+    font-variant-numeric: tabular-nums;
+    color: #24424a;
+}
+
+.znp-composition__empty {
+    color: var(--muted, #6c7b89);
+    font-size: 11px;
+}
+
+.attach-cell-form {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+}
+
+.attach-cell-form .attach-cell-input {
+    flex: 1 1 130px;
+    min-width: 120px;
+    padding: 5px 8px;
+    border: 1px solid var(--line, #c9d6e0);
+    border-radius: 6px;
+    background: #fff;
+    font-family: 'Consolas', 'Courier New', monospace;
+    font-size: 12px;
+    letter-spacing: 0.04em;
+}
+
+.attach-cell-form .attach-cell-input:focus {
+    outline: none;
+    border-color: #35514a;
+    box-shadow: 0 0 0 3px rgba(53, 81, 74, 0.12);
+}
+
+.attach-cell-form .btn.compact {
+    padding: 5px 10px;
+    font-size: 12px;
+    white-space: nowrap;
+}
+
+@media (max-width: 820px) {
+    .kitting-znp-table .instance-table__cells {
+        width: auto;
+    }
+}

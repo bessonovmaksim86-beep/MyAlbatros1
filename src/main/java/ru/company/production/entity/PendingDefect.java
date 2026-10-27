@@ -25,7 +25,7 @@ import java.time.format.DateTimeFormatter;
  * Заявка на отбраковку ячейки/подсборки с согласованием БВК.
  *
  * Когда ячейку или подсборку, находящуюся в цеху/отделе, нужно
- * направить в изолятор брака, оператор БВК создаёт заявку.
+ * направить в изолятор брака, оператор цеха создаёт заявку.
  * Заявка попадает на согласование представителю БВК (BVK_MASTER),
  * который принимает решение:
  * - подтвердить перемещение в изолятор,
@@ -38,7 +38,17 @@ import java.time.format.DateTimeFormatter;
  * current_location — «снимок» местоположения на момент создания,
  * вычисляется из последнего события SerialMovementEvent.
  *
- * Соответствует таблице pending_defects (миграция V74).
+ * znp_number — номер ЗНП, из которого забракована ячейка. Нужен
+ * для доукомплектования заказа: при подтверждении брака строка
+ * SerialProductionOrder снимается, а ячейка возвращается на склад
+ * для повторного комплектования.
+ *
+ * controller_comment — комментарий контроллера при принятии решения.
+ *
+ * defect_confirmed — подтверждён ли дефект: CONFIRMED → изолятор,
+ * DENIED → возврат на склад. NULL = решение ещё не принято.
+ *
+ * Соответствует таблице pending_defects (миграции V74, V80).
  */
 @Getter
 @Setter
@@ -138,6 +148,65 @@ public class PendingDefect {
     @Column(name = "approved_at")
     private LocalDateTime approvedAt;
 
+    /*
+     * Полный номер изделия, в которое была установлена ячейка.
+     *
+     * Вводится руководителем цеха вручную: по нему проверка убеждается,
+     * что прибор/датчик вместе с ячейкой ещё числится в этом цеху.
+     * Если изделие уже перемещено — заявка отклоняется.
+     */
+    @Column(name = "device_number", length = 20)
+    private String deviceNumber;
+
+    /*
+     * Номер ЗНП, из которого забракована ячейка.
+     *
+     * Заполняется автоматически при создании заявки из цеха:
+     * сервис ищет SerialProductionOrder по номеру ячейки и
+     * возвращает номер ЗНП. Нужен для доукомплектования заказа:
+     * при подтверждении брака строка снимается, ячейка возвращается
+     * на склад для повторного комплектования.
+     */
+    @Column(name = "znp_number", length = 100)
+    private String znpNumber;
+
+    /*
+     * Комментарий контроллера при принятии решения.
+     *
+     * Заполняется представителем БВК при подтверждении или отклонении
+     * брака. Сохраняется в истории заявки и попадает в паспорт ячейки.
+     */
+    @Column(name = "controller_comment", length = 1000)
+    private String controllerComment;
+
+    /*
+     * Подтверждён ли дефект: CONFIRMED → изолятор брака,
+     * DENIED → возврат на склад полуфабрикатов.
+     *
+     * NULL — решение ещё не принято. Заменяет собой PendingDefectDecision
+     * на уровне бизнес-логики отбраковки: это внутренний статус заявки,
+     * а PendingDefectDecision — решение по согласованию.
+     */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "defect_confirmed", length = 20)
+    private DefectConfirmed defectConfirmed;
+
+    /*
+     * Связанный серийный номер — для быстрых проверок.
+     *
+     * При создании заявки из цеха сервис резолвит full_number в
+     * ProductSerial и сохраняет ссылку. У номеров прихода (ещё не
+     * в реестре) остаётся null.
+     */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(
+            name = "serial_id",
+            foreignKey = @ForeignKey(
+                    name = "fk_pending_defect_serial"
+            )
+    )
+    private ProductSerial serial;
+
     /** Заявка ожидает решения. */
     @Transient
     public boolean isPending() {
@@ -181,6 +250,35 @@ public class PendingDefect {
             return "warning";
         }
         return decision.getBadgeClass();
+    }
+
+    /**
+     * Вывод контроллера: подтверждён дефект или нет.
+     *
+     * Читается шаблоном вместо {@link #getDecisionLabel()}: направление
+     * у обоих решений одно (изолятор брака), поэтому для перечня значим
+     * именно вердикт, а не маршрут.
+     */
+    @Transient
+    public String getDefectConfirmedLabel() {
+        return defectConfirmed == null ? "Ожидает" : defectConfirmed.getDisplayName();
+    }
+
+    @Transient
+    public String getDefectConfirmedBadgeClass() {
+        return defectConfirmed == null ? "warning" : defectConfirmed.getBadgeClass();
+    }
+
+    /** Номер изделия, с которого сняли ячейку. */
+    @Transient
+    public String getDeviceNumberLabel() {
+        return deviceNumber == null || deviceNumber.isBlank() ? "—" : deviceNumber;
+    }
+
+    /** Заказ, из которого забракована ячейка. */
+    @Transient
+    public String getZnpNumberLabel() {
+        return znpNumber == null || znpNumber.isBlank() ? "—" : znpNumber;
     }
 
     /** Наименование изделия без обращения к ленивой связи вне сессии. */

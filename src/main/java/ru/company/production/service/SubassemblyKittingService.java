@@ -15,6 +15,7 @@ import ru.company.production.entity.ProductSerialOperation;
 import ru.company.production.entity.ProductSerialOperationStatus;
 import ru.company.production.entity.ProductionOrder;
 import ru.company.production.entity.ProductionOrderStatus;
+import ru.company.production.entity.ScheduleRowStatus;
 import ru.company.production.entity.SerialProductionOrder;
 import ru.company.production.entity.TechProcess;
 import ru.company.production.entity.TechProcessOperation;
@@ -30,6 +31,7 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
@@ -159,6 +161,13 @@ public class SubassemblyKittingService {
          */
         Map<Long, String> changeNumbers = latestChangeNumbers(orders);
 
+        /*
+         * Сроки плана — одним пакетом на страницу: у группового ЗНПа
+         * своя ветвь графика, у вложенного работу планирует заказ
+         * покупателя, и запрос на заказ дал бы два N+1 на экране.
+         */
+        Map<Long, LocalDate> planEndDates = planEndDates(orders);
+
         List<SubassemblyKittingZnpRow> result = new ArrayList<>();
 
         for (ProductionOrder order : orders) {
@@ -181,7 +190,6 @@ public class SubassemblyKittingService {
                     order.getId(),
                     order.getNumber(),
                     order.getZnpKindDisplayName(),
-                    order.getStockProductTypeName(),
                     order.getClassifierLabelWithChange(
                             changeNumbers.get(order.getClassifierId())
                     ),
@@ -189,7 +197,7 @@ public class SubassemblyKittingService {
                     order.getTechProcessCode(),
                     operationName(order, routeOperations),
                     order.getFormattedOrderDate(),
-                    order.getFormattedDueDate(),
+                    planDueDate(order, planEndDates),
                     order.getStatusDisplayName(),
                     order.getStatusBadgeClass(),
                     order.getNote(),
@@ -235,7 +243,13 @@ public class SubassemblyKittingService {
                 attachedRows(orderId),
                 quarantineCells(order),
                 operationName(order, routeOperationsByProcess(List.of(order))),
-                latestChangeNumber(order)
+                latestChangeNumber(order),
+                /*
+                 * Срок карточки читается из того же плана, что и список:
+                 * два экрана одного заказа не должны показывать разные
+                 * даты окончания.
+                 */
+                planDueDate(order, planEndDates(List.of(order)))
         );
     }
 
@@ -1009,11 +1023,156 @@ public class SubassemblyKittingService {
         return order;
     }
 
+    /*
+     * Срок раздела читается из плана, а не из карточки заказа.
+     *
+     * Даты в списке и в карточке печатаются тем же форматом, что и
+     * реквизиты заказа, чтобы кладовщик не сверял два вида записи.
+     */
+    private static final DateTimeFormatter PLAN_DATE_FORMATTER =
+            DateTimeFormatter.ofPattern("dd.MM.yyyy");
+
     /**
-     * Наименование операции, по которой склад принимает подсборки.
+     * Дата окончания плана всех заказов страницы — одним пакетом.
+     *
+     * Выборка разбита по ветвям графика (V56), и обе нужны всегда:
+     * в списке у кладовщика стоят и групповые заказы со своей ветвью,
+     * и вложенные, чью работу планирует заказ покупателя. Запрос на
+     * каждую строку дал бы по два обращения к базе на заказ.
+     *
+     * Пустая коллекция для {@code in} — отказ Hibernate, поэтому каждая
+     * ветвь проверяется отдельно, а не отдаётся репозиторию наугад.
+     */
+    private Map<Long, LocalDate> planEndDates(List<ProductionOrder> orders) {
+
+        Map<Long, LocalDate> byOrder = new LinkedHashMap<>();
+
+        Set<Long> ownRouteIds = new LinkedHashSet<>();
+        Set<Long> customerOrderIds = new LinkedHashSet<>();
+        Set<Long> operationIds = new LinkedHashSet<>();
+
+        /*
+         * Заказы вложенной ветви сгруппированы по ключу плана заранее:
+         * сопоставление результата с заказом внутри перебора строк
+         * дало бы quadratic-обход списка, а список на странице —
+         * десятки заказов.
+         */
+        Map<String, List<Long>> nestedIdsByKey = new LinkedHashMap<>();
+
+        for (ProductionOrder order : orders) {
+            if (scheduleOwnRoute(order)) {
+                if (order.getId() != null) {
+                    ownRouteIds.add(order.getId());
+                }
+                continue;
+            }
+
+            Long customerOrderId = order.getCustomerOrder() == null
+                    ? null
+                    : order.getCustomerOrder().getId();
+            Long operationId = order.getProductionOperation() == null
+                    ? null
+                    : order.getProductionOperation().getId();
+
+            if (customerOrderId == null || operationId == null) {
+                continue;
+            }
+
+            customerOrderIds.add(customerOrderId);
+            operationIds.add(operationId);
+
+            if (order.getId() != null) {
+                nestedIdsByKey
+                        .computeIfAbsent(
+                                pairKey(customerOrderId, operationId),
+                                key -> new ArrayList<>())
+                        .add(order.getId());
+            }
+        }
+
+        if (!ownRouteIds.isEmpty()) {
+            for (OrderScheduleRowRepository.PlanEndDateView row
+                    : scheduleRowRepository.findPlanEndDatesOfProductionOrders(
+                            ScheduleRowStatus.CONFIRMED, ownRouteIds)) {
+                byOrder.put(row.getOrderId(), row.getEndDate());
+            }
+        }
+
+        if (customerOrderIds.isEmpty() || operationIds.isEmpty()) {
+            return byOrder;
+        }
+
+        for (OrderScheduleRowRepository.PlanOperationEndDateView row
+                : scheduleRowRepository.findPlanEndDatesOfOrderOperations(
+                        ScheduleRowStatus.CONFIRMED,
+                        customerOrderIds,
+                        operationIds)) {
+
+            /*
+             * Ключ ветви — пара «заказ покупателя + операция», и одна
+             * пара плана относится ко всем вложенным заказам того же
+             * изделия: график их не различает. Дата у пары одна,
+             * поэтому её пишут всем заказам ключа.
+             */
+            for (Long orderId : nestedIdsByKey.getOrDefault(
+                    pairKey(row.getOrderId(), row.getOperationId()),
+                    List.of())) {
+                byOrder.put(orderId, row.getEndDate());
+            }
+        }
+
+        return byOrder;
+    }
+
+    private static String pairKey(Long left, Long right) {
+        return left + ":" + right;
+    }
+
+    /*
+     * Срок одной строки: дата окончания его плана, а если плана нет —
+     * срок из карточки заказа.
+     *
+     * Заказ мог уйти в работу до V56, когда строк графика у склада ещё
+     * не было; прочерк вместо привычного срока кладовщик прочёл бы как
+     * сорванный план, поэтому остаётся то, что заказ показывает сам.
+     */
+    private String planDueDate(
+            ProductionOrder order,
+            Map<Long, LocalDate> planEndDates
+    ) {
+
+        LocalDate endDate = order.getId() == null
+                ? null
+                : planEndDates.get(order.getId());
+
+        return formatDate(endDate == null ? order.getDueDate() : endDate);
+    }
+
+    /**
+     * Ведёт ли заказ работу по собственному техпроцессу, то есть есть ли
+     * у него план второй ветви графика (V56).
+     *
+     * Признак берётся у вида заказа, а не из непустоты техпроцесса:
+     * маршрутом задаются групповые и ремонтные виды, а комплектованию их
+     * ставит выпуск, внутрь которого заказ входит.
+     */
+    private static boolean scheduleOwnRoute(ProductionOrder order) {
+
+        return order.getZnpKind() != null
+                && order.getZnpKind().requiresTechProcess();
+    }
+
+    private static String formatDate(LocalDate date) {
+        return date == null
+                ? "—"
+                : date.format(PLAN_DATE_FORMATTER);
+    }
+
+    /**
+     * Склад принимает подсборки.
      *
      * Для заказа-комплектующего — операция самого заказа; для группового
-     * ЗНП — операция из техпроцесса с подходящим типом и подразделением.
+     * ЗНП — из техпроцесса с подходящим типом и подразделением.
      *
      * Справочник операций маршрута передан одним мапом — N+1 не строим.
      */
@@ -1235,7 +1394,8 @@ public class SubassemblyKittingService {
             List<SubassemblyKittingCellRow> attached,
             List<QuarantineCellView> quarantine,
             String operationName,
-            String changeNumber
+            String changeNumber,
+            String formattedDueDate
     ) {
 
         /**

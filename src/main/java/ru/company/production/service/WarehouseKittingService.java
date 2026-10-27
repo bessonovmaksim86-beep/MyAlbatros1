@@ -7,12 +7,21 @@ import org.springframework.transaction.annotation.Transactional;
 import ru.company.production.dto.AssignedOperationView;
 import ru.company.production.dto.KittingZnpOperationRow;
 import ru.company.production.dto.KittingZnpSerialRow;
+import ru.company.production.entity.AppUser;
+import ru.company.production.entity.Operation;
 import ru.company.production.entity.OperationTypeCode;
 import ru.company.production.entity.OrderScheduleRow;
+import ru.company.production.entity.ProductSerial;
+import ru.company.production.entity.ProductType;
+import ru.company.production.entity.ProductionOrder;
+import ru.company.production.entity.SerialProductionOrder;
 import ru.company.production.repository.KittingZnpLinkView;
 import ru.company.production.repository.OrganizationUnitRepository;
+import ru.company.production.repository.OrderScheduleRowRepository;
 import ru.company.production.repository.ProductionOrderSerialProjection;
+import ru.company.production.repository.ProductSerialRepository;
 import ru.company.production.repository.SerialProductionOrderRepository;
+import ru.company.production.repository.ZnpCellLinkView;
 
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
@@ -106,10 +115,24 @@ public class WarehouseKittingService {
     private final WorkshopDistributionService distributionService;
     private final WorkshopDistributionSerialService serialService;
     private final SerialProductionOrderRepository serialProductionOrderRepository;
+    private final OrderScheduleRowRepository scheduleRowRepository;
+    private final ProductSerialRepository serialRepository;
+    private final SerialMovementJournalService journal;
 
     /** Подпись даты проведения в раскрытии изделия. */
     private static final DateTimeFormatter RU_DATE_TIME =
             DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm");
+
+    /**
+     * Длина полного номера изделия: код классификатора (4 цифры) плюс
+     * серия (5 цифр) — тот же расчёт, что в реестре и глобальном
+     * поиске (V17).
+     */
+    private static final int FULL_NUMBER_LENGTH = 9;
+
+    /** Подпись внесения в матрицу — общая с разделом подсборок. */
+    private static final String LINK_NOTE =
+            "Комплектование ЗНП на складе";
 
     /**
      * Операции комплектования раздела за горизонт планирования.
@@ -200,6 +223,7 @@ public class WarehouseKittingService {
          * операция», тот же, что в карточке выпуска.
          */
         Map<String, String> znpByPair = new HashMap<>();
+        Set<String> znpNumbers = new LinkedHashSet<>();
 
         for (KittingZnpLinkView link
                 : serialProductionOrderRepository
@@ -209,6 +233,30 @@ public class WarehouseKittingService {
                     pairKey(link.getSerialId(), link.getOperationId()),
                     link.getZnpNumber()
             );
+            znpNumbers.add(link.getZnpNumber());
+        }
+
+        /*
+         * Состав ЗНП — ячейки, привязанные к заказу по номеру.
+         *
+         * Один запрос: номер ЗНП известен из карточки операции, и
+         * прямо по нему читаем ячейки матрицы, отфильтровав датчики.
+         * Кладовщик видит, что уже вошло в заказ, до проведения.
+         */
+        Map<String, List<String>> cellsByZnp = new HashMap<>();
+
+        if (!znpNumbers.isEmpty()) {
+            for (ZnpCellLinkView cell
+                    : serialProductionOrderRepository
+                            .findCellsByZnpNumbers(znpNumbers)) {
+
+                cellsByZnp
+                        .computeIfAbsent(
+                                cell.getZnpNumber(),
+                                key -> new ArrayList<>()
+                        )
+                        .add(cell.getCellNumber());
+            }
         }
 
         Map<Long, List<KittingZnpOperationRow>> bySerial =
@@ -257,7 +305,8 @@ public class WarehouseKittingService {
                                     : null,
                             blocker != null,
                             blocker,
-                            !completed && blocker == null
+                            !completed && blocker == null,
+                            cellsByZnp.getOrDefault(znpNumber, List.of())
                     ));
 
             numbers.putIfAbsent(
@@ -289,6 +338,202 @@ public class WarehouseKittingService {
     private static String pairKey(Long serialId, Long operationId) {
         return Objects.toString(serialId, "0")
                 + "|" + Objects.toString(operationId, "0");
+    }
+
+    /**
+     * Привязка одной ячейки к заказу-комплектующему работы склада.
+     *
+     * До этого момента состав ЗНП собирал только раздел «Комплектование
+     * подсборок», да и то для режима V72 — «изготовление ячеек из
+     * подсборок». Обычное комплектование ЗНП ячейку принять было нечем:
+     * кладовщик видел номер ЗНП в карточке операции и обязан был идти
+     * искать другой экран, чтобы вписать в него изделие, — а того экрана
+     * у его роли часто не было вовсе.
+     *
+     * Границы держатся те же, что у {@code SubassemblyKittingService
+     * .attachCells}, потому что два раздела выписывают одну и ту же
+     * матрицу (V20) и не имеют права расходиться в том, что в неё
+     * впускать:
+     *
+     *   * изделие обязано быть ячейкой, а не датчиком и не системой;
+     *   * оно обязано лежать на складе принятым и готовым, иначе в
+     *     заказ попадёт позиция, которой склад ещё не располагает;
+     *   * свободным номер считает отсутствие АКТИВНОЙ связи: снятый с
+     *     работы заказ ячейку не держит, внесённый в живой заказ —
+     *     держит, и второй заказ получил бы тот же номер;
+     *   * потолок состава — заказанное количество, а его даёт число
+     *     открытых экземпляров строки графика: заказ без плана
+     *     количества не имеет.
+     *
+     * Проведение строки графика здесь не производится: привязка
+     * заполняет состав, а закрывает работу кладовщик отдельно —
+     * существующим {@code POST /warehouse/kitting/complete}, который
+     * проверяет и право, и блокировку по маршруту.
+     */
+    @Transactional
+    public KittingResult attachCellToZnp(Long rowId,
+                                         String cellNumberText,
+                                         AppUser executor) {
+
+        OrderScheduleRow row = scheduleRowRepository
+                .findRowForAttachById(rowId)
+                .orElse(null);
+
+        if (row == null || row.getOperation() == null
+                || row.getProductionOrder() == null) {
+            return KittingResult.rejected(
+                    "Строка плана не найдена — привязать ячейку не к чему"
+            );
+        }
+
+        ProductionOrder order = row.getProductionOrder();
+
+        if (!order.isActive()) {
+            return KittingResult.rejected(
+                    "Заказ «" + order.getNumber() + "» снят с работы — "
+                            + "в него ничего не вносят"
+            );
+        }
+
+        Operation operation = row.getOperation();
+
+        /*
+         * Привязывать разрешено только комплектовочную операцию: её
+         * тип раздел читает теми же кодами, что и границу своего
+         * списка, иначе ячейка могла бы войти в заказ цеховым этапом.
+         */
+        String typeCode = operation.getOperationType() == null
+                || operation.getOperationType().getCode() == null
+                ? null
+                : operation.getOperationType().getCode().trim()
+                        .toUpperCase();
+
+        if (typeCode == null || !KITTING_TYPE_CODES.contains(typeCode)) {
+            return KittingResult.rejected(
+                    "Ячейку вносят только под комплектовочную операцию, "
+                            + "а здесь работа «"
+                            + (operation.getOperationName() == null
+                                    ? "без наименования"
+                                    : operation.getOperationName().getName())
+                            + "»"
+            );
+        }
+
+        String number = normalizeNumber(cellNumberText);
+
+        if (number == null) {
+            return KittingResult.rejected(
+                    "Введите серийный номер ячейки — девять цифр"
+            );
+        }
+
+        ProductSerial cell = findCellByFullNumber(number);
+
+        if (cell == null) {
+            return KittingResult.rejected(
+                    "Номер " + number + " не найден в реестре изделий"
+            );
+        }
+
+        if (cell.getProductType() != ProductType.CELL) {
+            return KittingResult.rejected(
+                    number + " — не ячейка: в состав заказ-комплектующего "
+                            + "кладут ячейку, а не датчик и не изделие целиком"
+            );
+        }
+
+        if (!cell.isAccepted() || !cell.isCellReady()) {
+            return KittingResult.rejected(
+                    "Ячейка " + number + " ещё не лежит на складе "
+                            + "готовой — принять её в заказ нельзя"
+            );
+        }
+
+        if (serialProductionOrderRepository.existsActiveLinkBySerialId(
+                cell.getId())) {
+            return KittingResult.rejected(
+                    "Ячейка " + number + " уже вошла в действующий заказ "
+                            + "— со свободных полок она снята"
+            );
+        }
+
+        /*
+         * Потолок состава меряется ВСЕМИ строками операции заказа:
+         * заказ на три изделия даёт три строки графика, и четвёртая
+         * ячейка означала бы, что склад переложил заказ.
+         */
+        long required = scheduleRowRepository
+                .countRowsOfProductionOrderAndOperation(
+                        order.getId(), operation.getId());
+
+        long already = serialProductionOrderRepository
+                .countByProductionOrder_Id(order.getId());
+
+        if (required > 0 && already >= required) {
+            return KittingResult.rejected(
+                    "В заказ «" + order.getNumber() + "» уже вошло "
+                            + already + " яч. — заказано " + required
+                            + ", лишних номеров не принимаем"
+            );
+        }
+
+        SerialProductionOrder link = new SerialProductionOrder();
+
+        link.setSerial(cell);
+        link.setProductionOrder(order);
+        link.setOperation(operation);
+        link.setCreatedBy(executor);
+        link.setNote(LINK_NOTE);
+
+        serialProductionOrderRepository.save(link);
+
+        /*
+         * ЖУРНАЛ: событие хранит состояние номера НА МОМЕНТ записи
+         * (serialStatus в снимке), поэтому запись идёт после смены
+         * статуса — иначе история показала бы ячейку всё ещё лежащей
+         * на складе.
+         */
+        journal.recordInProduction(List.of(cell), order, executor);
+
+        return KittingResult.accepted(
+                "Ячейка " + number + " вошла в заказ «" + order.getNumber()
+                        + "»"
+        );
+    }
+
+    /**
+     * Номер из поля ввода: только цифры, ровно девять.
+     *
+     * Поле принимает вставку из буфера и сканер, поэтому пробелы,
+     * дефисы и перевод строки срезаются, а всё, что не стало девятью
+     * цифрами, отклоняется — иначе кладовщик привязал бы ячейку по
+     * неполному номеру и заметил бы это на сборке.
+     */
+    private static String normalizeNumber(String text) {
+
+        if (text == null || text.isBlank()) {
+            return null;
+        }
+
+        String digits = text.replaceAll("\\D", "");
+
+        return digits.length() == FULL_NUMBER_LENGTH ? digits : null;
+    }
+
+    /**
+     * Ячейка из реестра по полному номеру.
+     *
+     * Поиск арифметикой «код × 100000 + серия» — тот же, что в
+     * глобальном поиске и в складском перечне: номер печатают именно
+     * так, и разбор его на две части держит согласованность экрана с
+     * реестром. Классификатор подтянут fetch join'ом: open-in-view
+     * выключен, а наименование изделие печатает само.
+     */
+    private ProductSerial findCellByFullNumber(String fullNumber) {
+        return serialRepository.findDetailsByFullNumbers(List.of(fullNumber))
+                .stream()
+                .findFirst()
+                .orElse(null);
     }
 
     /**
@@ -333,5 +578,24 @@ public class WarehouseKittingService {
                 .findByCodeIgnoreCase(section.getUnitCode())
                 .map(unit -> List.of(unit.getId()))
                 .orElse(List.of());
+    }
+
+    /**
+     * Итог привязки ячейки: проведено или отвергнуто и почему.
+     *
+     * Форма {@code SubassemblyKittingService.KittingResult} здесь не
+     * переиспользуется намеренно: та несёт размер внесённого состава,
+     * а разделу нужен только ответ кладовщику — одна ячейка за раз, и
+     * число в сообщении ничего бы не добавило.
+     */
+    public record KittingResult(boolean completed, String message) {
+
+        public static KittingResult accepted(String message) {
+            return new KittingResult(true, message);
+        }
+
+        public static KittingResult rejected(String message) {
+            return new KittingResult(false, message);
+        }
     }
 }

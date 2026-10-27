@@ -190,6 +190,59 @@ public class WarehouseKittingController {
         return "redirect:/warehouse/kitting-" + target.param();
     }
 
+    /**
+     * Привязка ячейки к заказу-комплектующему.
+     *
+     * Кладовщик вводит номер в поле под раскрытием операции —
+     * сервис проверяет, что номер лежит на складе, не вошёл в
+     * другой заказ и не превышает состав — и вносит запись в матрицу.
+     * Раздел возвращается параметром section: после привязки
+     * кладовщик обязан остаться в том же списке, а не попасть на
+     * другой склад.
+     */
+    @PostMapping("/kitting/attach-cell")
+    public String attachCell(
+            @RequestParam Long rowId,
+            @RequestParam String cellNumber,
+            @RequestParam(required = false) String section,
+            Authentication authentication,
+            RedirectAttributes redirectAttributes
+    ) {
+        WarehouseKittingService.Section target =
+                WarehouseKittingService.ofNullable(section);
+
+        AppUser user = userRepository
+                .findWithUnitsByUsernameIgnoreCase(
+                        authentication.getName()
+                )
+                .orElseThrow(() -> new IllegalStateException(
+                        "Учётная запись пользователя не найдена"
+                ));
+
+        try {
+            WarehouseKittingService.KittingResult result =
+                    kittingService.attachCellToZnp(
+                            rowId, cellNumber, user);
+
+            if (result.completed()) {
+                redirectAttributes.addFlashAttribute(
+                        "successMessage", result.message());
+            } else {
+                redirectAttributes.addFlashAttribute(
+                        "errorMessage", result.message());
+            }
+        } catch (RuntimeException ex) {
+            redirectAttributes.addFlashAttribute(
+                    "errorMessage",
+                    ex.getMessage() == null
+                            ? "Не удалось привязать ячейку"
+                            : ex.getMessage()
+            );
+        }
+
+        return "redirect:/warehouse/kitting-" + target.param();
+    }
+
     /*
      * Список раздела: операции комплектования его подразделения плюс
      * подписи заголовка. Горизонт планирования и набор типов операций

@@ -1,0 +1,127 @@
+/* ============================================================
+   ПРЕДПРОСМОТР ЯЧЕЙКИ В ФОРМЕ БРАКОВКИ
+   ============================================================ */
+
+/*
+ * Панель предпросмотра показывает мастеру, что сервер нашёл по
+ * введённому номеру: изделие, ЗНП, разновидность и помехи.
+ *
+ * Форма не ждёт нажатия кнопки — мастер видит чужую ячейку или
+ * уже ушедшую со склада до отправки, а не по отказу.
+ */
+
+.scrap-preview {
+    margin: 16px 0;
+    padding: 14px 16px;
+    background: #f8fafc;
+    border: 1px solid var(--line, #dce4eb);
+    border-radius: 10px;
+}
+
+/*
+ * Сетка реквизитов: четыре строки, каждая — подпись + значение.
+ * Использует тот же grid, что и форма, но в одну колонку.
+ */
+.scrap-preview__grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 14px;
+}
+
+.scrap-preview__item small {
+    display: block;
+    margin-bottom: 4px;
+    color: var(--muted, #6c7b89);
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.scrap-preview__item strong {
+    display: block;
+    color: var(--navy, #073e75);
+    font-size: 13px;
+    font-weight: 600;
+}
+
+/*
+ * Помехи: если есть хоть одна, заявка будет отклонена.
+ * Красная полоса слева — как danger-уведомление в форме.
+ */
+.scrap-preview__problems {
+    margin: 12px 0 0;
+    padding: 10px 14px;
+    background: #fff0f1;
+    border-left: 3px solid var(--red, #c73a43);
+    border-radius: 0 8px 8px 0;
+    list-style: none;
+    font-size: 12px;
+    color: var(--red, #c73a43);
+}
+
+.scrap-preview__problems li {
+    margin: 4px 0;
+}
+
+.scrap-preview__problems li::before {
+    content: "⚠ ";
+    font-size: 11px;
+}
+
+/*
+ * Успех: всё ок, заявка пройдёт. Зелёная полоса слева.
+ */
+.scrap-preview.is-ok {
+    background: #f0faf4;
+    border-color: #b9dec9;
+}
+
+.scrap-preview.is-ok .scrap-preview__problems {
+    display: none;
+}
+
+/*
+ * Пусто: номер ещё не доведён — панель не показываем.
+ * hidden атрибут управляет видимостью, а .is-ok — цвет.
+ */
+.scrap-preview[hidden] {
+    display: none;
+}
+
+/*
+ * Mono-шрифт для номеров — тот же, что в таблице реестра.
+ */
+.mono {
+    font-family: "JetBrains Mono", "Fira Code", Consolas, monospace;
+    font-size: 12px;
+}
+
+/*
+ * Кнопка danger — оранжевая, как primary в технологии,
+ * но с красным оттенком для критических действий.
+ */
+.btn.danger {
+    background: var(--red, #c73a43);
+    color: #fff;
+}
+
+.btn.danger:hover {
+    background: #a12d35;
+}
+
+/*
+ * Адаптив: на узком экране сетка предпросмотра переходит
+ * в одну колонку, как и форма.
+ */
+@media (max-width: 760px) {
+    .scrap-preview__grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
+
+@media (max-width: 480px) {
+    .scrap-preview__grid {
+        grid-template-columns: 1fr;
+    }
+}

@@ -7,6 +7,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import ru.company.production.dto.ScheduleRowView;
 import ru.company.production.entity.*;
 import ru.company.production.repository.*;
 
@@ -79,7 +80,7 @@ class OrderSchedulingServiceDagAndResultTest {
             TechProcessOperation node = new TechProcessOperation();
             node.setId(10L);
             node.setOperation(op);
-            node.setPredecessors(List.of());
+            node.setPredecessors(Set.of());
             node.setLaborHours(BigDecimal.TEN);
 
             process.setOperations(List.of(node));
@@ -87,7 +88,7 @@ class OrderSchedulingServiceDagAndResultTest {
             when(techProcessRepository.findFullById(1L))
                     .thenReturn(Optional.of(process));
 
-            List<OrderSchedulingService.PlannedRow> result = callOrderedRoute(1L);
+            List<TechProcessOperation> result = callOrderedRoute(1L);
 
             assertEquals(1, result.size());
         }
@@ -105,24 +106,24 @@ class OrderSchedulingServiceDagAndResultTest {
             TechProcessOperation nodeA = new TechProcessOperation();
             nodeA.setId(10L);
             nodeA.setOperation(opA);
-            nodeA.setPredecessors(List.of());
+            nodeA.setPredecessors(Set.of());
 
             TechProcessOperation nodeB = new TechProcessOperation();
             nodeB.setId(20L);
             nodeB.setOperation(opB);
-            nodeB.setPredecessors(List.of(nodeA));
+            nodeB.setPredecessors(Set.of(nodeA));
 
             TechProcessOperation nodeC = new TechProcessOperation();
             nodeC.setId(30L);
             nodeC.setOperation(opC);
-            nodeC.setPredecessors(List.of(nodeB));
+            nodeC.setPredecessors(Set.of(nodeB));
 
             process.setOperations(List.of(nodeA, nodeB, nodeC));
 
             when(techProcessRepository.findFullById(1L))
                     .thenReturn(Optional.of(process));
 
-            List<OrderSchedulingService.PlannedRow> result = callOrderedRoute(1L);
+            List<TechProcessOperation> result = callOrderedRoute(1L);
 
             assertEquals(3, result.size());
         }
@@ -140,28 +141,28 @@ class OrderSchedulingServiceDagAndResultTest {
             TechProcessOperation nodeA = new TechProcessOperation();
             nodeA.setId(10L);
             nodeA.setOperation(opA);
-            nodeA.setPredecessors(List.of());
+            nodeA.setPredecessors(Set.of());
 
             TechProcessOperation nodeB = new TechProcessOperation();
             nodeB.setId(20L);
             nodeB.setOperation(opB);
-            nodeB.setPredecessors(List.of(nodeA));
+            nodeB.setPredecessors(Set.of(nodeA));
 
             TechProcessOperation nodeC = new TechProcessOperation();
             nodeC.setId(30L);
             nodeC.setOperation(opC);
-            nodeC.setPredecessors(List.of(nodeA));
+            nodeC.setPredecessors(Set.of(nodeA));
 
             process.setOperations(List.of(nodeA, nodeB, nodeC));
 
             when(techProcessRepository.findFullById(1L))
                     .thenReturn(Optional.of(process));
 
-            List<OrderSchedulingService.PlannedRow> result = callOrderedRoute(1L);
+            List<TechProcessOperation> result = callOrderedRoute(1L);
 
             assertEquals(3, result.size());
             // Первая операция всегда А (без предшественников)
-            assertEquals(10L, (long) result.get(0).nodeId);
+            assertEquals(10L, (long) result.get(0).getId());
         }
 
         @Test
@@ -174,7 +175,7 @@ class OrderSchedulingServiceDagAndResultTest {
             when(techProcessRepository.findFullById(1L))
                     .thenReturn(Optional.of(process));
 
-            List<OrderSchedulingService.PlannedRow> result = callOrderedRoute(1L);
+            List<TechProcessOperation> result = callOrderedRoute(1L);
 
             assertTrue(result.isEmpty());
         }
@@ -185,7 +186,7 @@ class OrderSchedulingServiceDagAndResultTest {
             when(techProcessRepository.findFullById(999L))
                     .thenReturn(Optional.empty());
 
-            List<OrderSchedulingService.PlannedRow> result = callOrderedRoute(999L);
+            List<TechProcessOperation> result = callOrderedRoute(999L);
 
             assertTrue(result.isEmpty());
         }
@@ -378,8 +379,8 @@ class OrderSchedulingServiceDagAndResultTest {
             unit.setName("Участок 1");
 
             ProductClassifier classifier = new ProductClassifier();
-            classifier.setCode("8888");
-            classifier.setDisplayName("Датчик ДУУ-М");
+            classifier.setCode(8888);
+            classifier.setName("Датчик ДУУ-М");
 
             CustomerOrderItem item = new CustomerOrderItem();
             item.setPosition(1);
@@ -409,7 +410,11 @@ class OrderSchedulingServiceDagAndResultTest {
             assertEquals("TP-001", view.techProcessCode());
             assertEquals(1, view.seq());
             assertEquals("Тест", view.operationName());
-            assertEquals("8.00", view.laborHours());
+            /*
+             * Трудоёмкость в представлении — тот же BigDecimal, что и в
+             * расчёте: «8», а не «8.00» — масштаб здесь не добавляют.
+             */
+            assertEquals("8", view.laborHours().toString());
             assertEquals(50, view.loadPercent());
         }
 
@@ -465,13 +470,17 @@ class OrderSchedulingServiceDagAndResultTest {
 
     /**
      * Вызывает приватный метод orderedRoute через reflection.
+     *
+     * orderedRoute возвращает узлы маршрута — те же TechProcessOperation,
+     * но в топологическом порядке. Строки расчёта (PlannedRow) появляются
+     * позже, когда маршрут уже упорядочен.
      */
     @SuppressWarnings("unchecked")
-    private List<OrderSchedulingService.PlannedRow> callOrderedRoute(Long processId)
+    private List<TechProcessOperation> callOrderedRoute(Long processId)
             throws Exception {
         java.lang.reflect.Method m = OrderSchedulingService.class
                 .getDeclaredMethod("orderedRoute", Long.class);
         m.setAccessible(true);
-        return (List<OrderSchedulingService.PlannedRow>) m.invoke(service, processId);
+        return (List<TechProcessOperation>) m.invoke(service, processId);
     }
 }

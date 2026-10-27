@@ -101,6 +101,18 @@ public class WarehouseSupplierService {
                 .toList();
     }
 
+    /**
+     * Поставщики справочника для выбора в форме прихода.
+     *
+     * Форма принимает идентификатор, а не написание: приход обязан
+     * ссылаться на заведённого поставщика, иначе свободный ввод
+     * вернул бы ту самую проблему, из-за которой справочник и завели.
+     */
+    @Transactional(readOnly = true)
+    public List<WarehouseSupplier> findAll() {
+        return supplierRepository.findAllByOrderByNameAsc();
+    }
+
     @Transactional
     public WarehouseSupplier create(SupplierForm form, AppUser author) {
         String name = form.getName() == null ? "" : form.getName().trim();

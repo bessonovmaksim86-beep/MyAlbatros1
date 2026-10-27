@@ -145,6 +145,31 @@
             </a>
 
             <!--
+                Браковка доступна руководителю цеха (canScrap): заявку
+                оформляет тот, у кого ячейка в работе, — мастер
+                производственного цеха. Складу и бюро пункт не рисуют,
+                потому что их ячейка в цеху не числится и форма всегда
+                отклонила бы заявку. Адрес открыт тем же набором ролей,
+                что и признак, — меню и доступ расходятся не могут.
+            -->
+            <a class="workshop-navigation__item"
+               th:if="${canScrap}"
+               th:classappend="${activePage == 'scrap'} ? ' is-active' : ''"
+               th:href="@{/workshop/scrap}"
+               title="Забраковать ячейку или полуфабрикат этого цеха">
+
+                <span class="workshop-navigation__icon">
+                    <svg viewBox="0 0 24 24" aria-hidden="true">
+                        <path d="M9 3v1H5v2h14V4h-4V3H9Zm-3.6 4L4 19.1C4 20.1 4.9 21 6 21h12c1.1 0 2-.9 2-1.9L18.6 7H5.4Zm5.6 3h2v7h-2v-7Zm-4 0h2v7H7v-7Zm8 0h2v7h-2v-7Z"/>
+                    </svg>
+                </span>
+
+                <span class="workshop-navigation__text">
+                    Забраковать
+                </span>
+            </a>
+
+            <!--
                 Пункты модуля бюро: рисуются только руководителю бюро
                 входного контроля (bvkModule), см.
                 workshop/fragments/bvk-menu.

@@ -23,4 +23,29 @@ public interface OperationControlParamRepository
     List<OperationControlParam> findByScheduleRowId(
             @Param("rowId") Long rowId
     );
+
+    /**
+     * Проведённые отметки, где значением внесён этот номер ячейки.
+     *
+     * Нужен браковке из цеха: пока ячейку уже внесли в контролируемую
+     * операцию, отбраковать её нельзя — операция осталась бы с отметкой
+     * о ячейке, которой в изделии больше нет. Параметр «Номер ячейки»
+     * текстовый ({@link ru.company.production.entity.ControlParamType#TEXT_INPUT}),
+     * поэтому номер ищется по {@code text_value}, а не по ссылке.
+     *
+     * Контролёр обязан видеть НЕ только факт отметки, но и по какому
+     * параметру она стоит, поэтому справочник подтянут fetch-join'ом:
+     * open-in-view выключен.
+     */
+    @Query("""
+            select ocp
+            from OperationControlParam ocp
+            join fetch ocp.controlParam param
+            where ocp.completedAt is not null
+              and trim(ocp.textValue) = :cellNumber
+            order by ocp.completedAt desc
+            """)
+    List<OperationControlParam> findCompletedByCellNumber(
+            @Param("cellNumber") String cellNumber
+    );
 }

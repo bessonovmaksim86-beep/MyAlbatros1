@@ -479,12 +479,15 @@ public interface ProductionOrderRepository
      * номер родителя, вид заказа, наименование операции и автор в
      * шаблоне читались бы через ленивую связь вне сессии. Техпроцесс
      * дочитан затем же: когда операции заказа нет, сервис смотрит
-     * наименование приёмки в маршруте.
+     * наименование приёмки в маршруте. Заказы покупателя дочитаны по
+     * той же причине: срок вложенного ЗНП ищут в его графике, а ключом
+     * графика служит пара «заказ покупателя + операция заказа».
      */
     @Query("""
             select distinct ord
             from ProductionOrder ord
             left join fetch ord.parentProductionOrder parent
+            left join fetch ord.customerOrder customerOrder
             left join fetch ord.productClassifier
             left join fetch ord.createdBy
             left join fetch ord.priority

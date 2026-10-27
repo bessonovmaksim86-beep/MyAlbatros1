@@ -12,9 +12,11 @@ import ru.company.production.entity.ProductClassifier;
 import ru.company.production.entity.ProductSerial;
 import ru.company.production.entity.ProductSerialStatus;
 import ru.company.production.entity.ProductType;
+import ru.company.production.entity.WarehouseSupplier;
 import ru.company.production.repository.CellReceivingBatchRepository;
 import ru.company.production.repository.ProductClassifierRepository;
 import ru.company.production.repository.ProductSerialRepository;
+import ru.company.production.repository.WarehouseSupplierRepository;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -57,6 +59,7 @@ public class CellReceivingService {
     private final CellReceivingBatchRepository batchRepository;
     private final ProductSerialRepository productSerialRepository;
     private final ProductClassifierRepository classifierRepository;
+    private final WarehouseSupplierRepository supplierRepository;
 
     /* Журнал перемещений: приход — начало истории каждого номера. */
     private final SerialMovementJournalService journal;
@@ -138,7 +141,10 @@ public class CellReceivingService {
 
         CellReceivingBatch batch = new CellReceivingBatch();
 
-        batch.setSupplierName(form.getSupplierName().trim());
+        WarehouseSupplier supplier = requireSupplier(form.getSupplierId());
+
+        batch.setSupplier(supplier);
+        batch.setSupplierName(supplier.getName());
         batch.setIncomingOrderNumber(form.getIncomingOrderNumber().trim());
         batch.setChangeNumber(form.getChangeNumber().trim());
         batch.setQuantity(quantity);
@@ -487,6 +493,17 @@ public class CellReceivingService {
         }
 
         return value.trim();
+    }
+
+    /**
+     * Поставщик из формы обязан существовать в справочнике:
+     * идентификатор приходит из запроса и может быть передан вручную.
+     */
+    private WarehouseSupplier requireSupplier(Long id) {
+        return supplierRepository.findById(id)
+                .orElseThrow(() -> new IllegalArgumentException(
+                        "Поставщик не найден"
+                ));
     }
 
     /** Номера партии в порядке печати — список для шага QR. */
