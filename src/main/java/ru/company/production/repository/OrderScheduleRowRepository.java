@@ -1992,8 +1992,12 @@ public interface OrderScheduleRowRepository
      * работы уже провёл, иначе кладовщик довнёс бы ячейки сверх
      * заказанного, прикрывшись закрытыми экземплярами.
      *
-     * Удалённые строки исключены — заказ, снятый с работы, оставляет
-     * план, и его строки не должны держать потолок чужой работы.
+     * Статусом строки не фильтруются: отдельного статуса «удалено» у
+     * строки графика нет (ScheduleRowStatus знает только DRAFT и
+     * CONFIRMED, и он же закреплён chk_osr_status из V43) — план
+     * снятого или удалённого заказа снимается запросами delete выше,
+     * а живой заказ держит строки ровно в том объёме, в котором он
+     * заказан.
      *
      * Ноль означает «планом размер не задан» (заказ без строк этой
      * операции), и вызывающий код тогда потолка не применяет — тот же
@@ -2005,8 +2009,6 @@ public interface OrderScheduleRowRepository
             from OrderScheduleRow row
             where row.productionOrder.id = :productionOrderId
               and row.operation.id = :operationId
-              and row.status <>
-                  ru.company.production.entity.ScheduleRowStatus.DELETED
             """)
     long countRowsOfProductionOrderAndOperation(
             @Param("productionOrderId") Long productionOrderId,
