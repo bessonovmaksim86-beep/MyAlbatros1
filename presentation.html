@@ -388,10 +388,10 @@
       <span class="tag"><strong>Lombok</strong></span>
     </div>
     <div class="stats-row" style="margin-top:40px">
-      <div class="stat-box"><div class="num">~127K</div><div class="label">строк кода</div></div>
-      <div class="stat-box"><div class="num">25</div><div class="label">ролей</div></div>
-      <div class="stat-box"><div class="num">10</div><div class="label">модулей</div></div>
-      <div class="stat-box"><div class="num">70</div><div class="label">миграций</div></div>
+      <div class="stat-box"><div class="num">~146K</div><div class="label">строк кода</div></div>
+      <div class="stat-box"><div class="num">25</div><div class="label">ролей</div></div>        
+      <div class="stat-box"><div class="num">10</div><div class="label">модулей</div></div>      
+      <div class="stat-box"><div class="num">80</div><div class="label">миграций</div></div>
     </div>
   </div>
 
@@ -454,7 +454,7 @@
         <p>Сущности не «текут» в шаблоны. DTO — промежуточный слой для форм и страниц</p>
       </div>
       <div class="card">
-        <h3><span class="icon green">Flyway</span> 70 версий</h3>
+        <h3><span class="icon green">Flyway</span> 80 версий</h3>
         <p>ddl-auto: validate. Приложение не стартует, если сущность и таблица разошлись</p>
       </div>
       <div class="card">
@@ -535,8 +535,50 @@
     </div>
   </div>
 
-  <!-- SLIDE 5: Non-trivial solutions -->
+  <!-- SLIDE 5: Quality gate — scrap & ZNP composition -->
   <div class="slide" data-index="5">
+    <h2>Контроль качества: <span class="accent">брак и состав ЗНП</span></h2>
+    <div class="section-line"></div>
+    <div class="flow">
+      <div class="flow-step"><span class="step-num">Цех</span>«Забраковать»:заявка<br>с причиной</div>
+      <span class="flow-arrow">→</span>
+      <div class="flow-step"><span class="step-num">БВК / БТК</span>дефект подтверждён /<br>не подтверждён</div>
+      <span class="flow-arrow">→</span>
+      <div class="flow-step"><span class="step-num">Изолятор</span>ячейка<br>в браке</div>
+      <span class="flow-arrow">→</span>
+      <div class="flow-step"><span class="step-num">Склад</span>ЗНП снова<br>незакрыт</div>
+    </div>
+    <div class="content-grid two" style="margin-top:24px">
+      <div class="card">
+        <h3><span class="icon orange">⛔</span> Официальная браковка</h3>
+        <ul>
+          <li>Раньше дефект снимали с работы «на словах» — след терялся</li>
+          <li>Причина брака тренируется через <span class="hl">справочник дефектов</span></li>
+          <li>Факт контролируемого параметра «про ячейку» блокирует браковку</li>
+          <li>Оба решения уводят ячейку в <span class="hl2">изолятор брака</span></li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3><span class="icon green">📦</span> Состав заказ-комплектующего</h3>
+        <ul>
+          <li>Кладовщик вписывает номер ячейки прямо в карточку операции</li>
+          <li>Проверки: лежит на складе, не в чужом заказе, не сверх плана</li>
+          <li>Состав читается <span class="hl">одним пакетным запросом</span> — без N+1</li>
+          <li>Снятие фактов: <span class="hl2">REWORKED</span> с пустой датой — история цела</li>
+        </ul>
+      </div>
+    </div>
+    <div class="code-block" style="margin-top:24px">
+      <span class="cm">// Снятие фактов с ЗНП: история сохраняется, счётчик доукомплектования поднимается сам</span><br>
+      <span class="kw">for</span> (ProductSerialOperation row : performedRows) {<br>
+      &nbsp;&nbsp;row.setStatus(ProductSerialOperationStatus.<span class="hl">REWORKED</span>);<br>
+      &nbsp;&nbsp;row.setActualDate(<span class="kw">null</span>); <span class="cm">// chk_pso_reworked_has_no_actual</span><br>
+      } <span class="cm">// связь матрицы удаляется ПОСЛЕ снятия фактов</span>
+    </div>
+  </div>
+
+  <!-- SLIDE 6: Non-trivial solutions -->
+  <div class="slide" data-index="6">
     <h2>Нетривиальные <span class="accent">решения</span></h2>
     <div class="section-line"></div>
     <div class="content-grid three">
@@ -562,21 +604,21 @@
     </div>
   </div>
 
-  <!-- SLIDE 6: Numbers -->
-  <div class="slide" data-index="6">
+  <!-- SLIDE 7: Numbers -->
+  <div class="slide" data-index="7">
     <h2>Проект в <span class="accent">цифрах</span></h2>
     <div class="section-line"></div>
     <div class="stats-row">
-      <div class="stat-box"><div class="num">330</div><div class="label">Java-файлов</div></div>
-      <div class="stat-box"><div class="num">~63 800</div><div class="label">строк Java</div></div>
-      <div class="stat-box"><div class="num">108</div><div class="label">шаблонов Thymeleaf</div></div>
-      <div class="stat-box"><div class="num">~35 500</div><div class="label">строк HTML</div></div>
+      <div class="stat-box"><div class="num">364</div><div class="label">Java-файлов</div></div>
+      <div class="stat-box"><div class="num">~75 000</div><div class="label">строк Java</div></div>
+      <div class="stat-box"><div class="num">114</div><div class="label">шаблонов Thymeleaf</div></div>
+      <div class="stat-box"><div class="num">~39 000</div><div class="label">строк HTML</div></div>
     </div>
     <div class="stats-row" style="margin-top:16px">
-      <div class="stat-box"><div class="num">54</div><div class="label">CSS/JS файла</div></div>
-      <div class="stat-box"><div class="num">~22 500</div><div class="label">строк стилей/скриптов</div></div>
-      <div class="stat-box"><div class="num">70</div><div class="label">SQL-миграций (V1–V70)</div></div>
-      <div class="stat-box"><div class="num">~127K</div><div class="label">строк всего</div></div>
+      <div class="stat-box"><div class="num">59</div><div class="label">CSS/JS файла</div></div>
+      <div class="stat-box"><div class="num">~24 000</div><div class="label">строк стилей/скриптов</div></div>
+      <div class="stat-box"><div class="num">78</div><div class="label">SQL-миграций (V1–V80)</div></div>
+      <div class="stat-box"><div class="num">~146K</div><div class="label">строк всего</div></div>
     </div>
     <div class="content-grid two" style="margin-top:28px;max-width:800px">
       <div class="card">
@@ -590,29 +632,29 @@
     </div>
   </div>
 
-  <!-- SLIDE 7: Summary & Plans -->
-  <div class="slide" data-index="7">
+  <!-- SLIDE 8: Summary & Plans -->
+  <div class="slide" data-index="8">
     <h2>Итоги и <span class="accent">планы</span></h2>
     <div class="section-line"></div>
     <div class="summary-grid">
       <div class="card">
         <h3><span class="icon green">✅</span> Закрытый цикл</h3>
-        <p>Справочники → техпроцессы → планирование → распределение → исполнение → входной и тех. контроль → склады → ремонт → паспорт изделия. <span class="hl">70 миграций, 25 ролей.</span> Развёртывание одной командой.</p>
+        <p>Справочники → техпроцессы → планирование → распределение → исполнение → входной и тех. контроль → цеховая браковка с решением БВК/БТК → склады → ремонт → паспорт изделия. <span class="hl">80 миграций, 25 ролей.</span> Развёртывание одной командой.</p>
       </div>
       <div class="card">
         <h3><span class="icon orange">🔮</span> Планы</h3>
         <ul>
-          <li>Слой unit- и интеграционных тестов</li>
-          <li>Тесты расчёта графика и статусных переходов</li>
+          <li>Интеграционные тесты JPQL и веб-слоя</li>
           <li>Отчётность по загрузке подразделений</li>
           <li>REST-интерфейс для обмена с внешними системами</li>
+          <li>Отчёты по изолятору брака и доукомплектованию</li>
         </ul>
       </div>
     </div>
   </div>
 
-  <!-- SLIDE 8: QA -->
-  <div class="slide" data-index="8">
+  <!-- SLIDE 9: QA -->
+  <div class="slide" data-index="9">
     <h2>Вопросы <span class="accent">комиссии</span></h2>
     <div class="section-line"></div>
     <div class="qa-item">
@@ -629,17 +671,17 @@
     </div>
     <div class="qa-item" style="margin-top:12px">
       <div class="q">«Где тесты?»</div>
-      <div class="a">Осознанный приоритет — сквозная функциональность по ТЗ. Следующая итерация — тесты расчёта графика и статусных переходов.</div>
+      <div class="a">Есть 4 класса unit-тестов (~2 000 строк) на расчёт графика и статусные переходы. Покрытия JPQL и веб-слоя пока нет — приоритет первой итерации был закрыть сквозную функциональность. Следующий шаг — интеграционные тесты на новых экранах.</div>
     </div>
   </div>
 
-  <!-- SLIDE 9: End -->
-  <div class="slide end-slide" data-index="9">
+  <!-- SLIDE 10: End -->
+  <div class="slide end-slide" data-index="10">
     <h2>Спасибо за <span class="accent">внимание!</span></h2>
     <p>Готов ответить на вопросы</p>
     <div class="stats-row" style="margin-top:36px">
-      <div class="stat-box"><div class="num">127K+</div><div class="label">строк кода</div></div>
-      <div class="stat-box"><div class="num">70</div><div class="label">версий схемы</div></div>
+      <div class="stat-box"><div class="num">146K+</div><div class="label">строк кода</div></div>
+      <div class="stat-box"><div class="num">80</div><div class="label">версий схемы</div></div>
       <div class="stat-box"><div class="num">25</div><div class="label">ролей</div></div>
     </div>
   </div>
@@ -649,7 +691,7 @@
 <!-- Navigation -->
 <div class="nav-bar">
   <button id="prevBtn" onclick="goSlide(-1)" disabled>← Назад</button>
-  <span class="slide-counter" id="counter">1 / 10</span>
+  <span class="slide-counter" id="counter">1 / 11</span>
   <button id="nextBtn" onclick="goSlide(1)">Вперёд →</button>
 </div>
 
