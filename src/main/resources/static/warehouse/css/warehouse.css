@@ -1641,6 +1641,74 @@ body {
 }
 
 /* =============================================================
+   Комплектование без заказа: плоский список операций
+
+   Аналогичные znp-классы, но таблица шире — без изделия,
+   с колонками даты, заказов, исполнителя и часов.
+   ============================================================= */
+.kitting-plain-table {
+    table-layout: fixed;
+}
+
+.kitting-plain-table col.col-op     { width: 28%; }
+.kitting-plain-table col.col-date   { width: 9%; }
+.kitting-plain-table col.col-orders { width: 14%; }
+.kitting-plain-table col.col-executor { width: 15%; }
+.kitting-plain-table col.col-hours  { width: 7%; }
+.kitting-plain-table col.col-toggle { width: 27%; }
+
+.kitting-plain-row {
+    cursor: pointer;
+}
+
+.kitting-plain-row:hover {
+    background: #f7faf8;
+}
+
+.kitting-plain-row.is-blocked {
+    background: #fffaf3;
+    box-shadow: inset 3px 0 0 #d98324;
+}
+
+.kitting-plain-row.is-blocked:hover {
+    background: #fdf3e6;
+}
+
+.kitting-plain-toggle {
+    text-align: right;
+    white-space: nowrap;
+}
+
+.kitting-plain-caret {
+    margin-left: 8px;
+}
+
+.kitting-plain-panel > td {
+    padding: 0;
+    background: #f6faf8;
+}
+
+.kitting-plain-panel__inner {
+    padding: 14px 16px 16px;
+    border-top: 1px solid rgba(18, 58, 46, 0.12);
+}
+
+.kitting-plain-panel__inner > strong {
+    display: block;
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: #35514a;
+    margin-bottom: 8px;
+}
+
+@media (max-width: 820px) {
+    .kitting-plain-panel__inner {
+        padding: 12px 10px 14px;
+    }
+}
+
+/* =============================================================
    Раскрывающиеся блоки
    ============================================================= */
 

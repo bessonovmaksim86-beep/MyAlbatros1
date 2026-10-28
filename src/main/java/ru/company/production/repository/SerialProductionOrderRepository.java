@@ -320,6 +320,39 @@ public interface SerialProductionOrderRepository
             @Param("znpNumbers") Collection<String> znpNumbers
     );
 
+    /**
+     * Заказ-комплектующий, заведённый под операцию конкретного изделия.
+     *
+     * Нужен привязке ячейки: основание строки графика — заказ
+     * покупателя (V43), а заказ-комплектующий живёт в матрице как связь
+     * «серийник + операция» (V20). Строка, спланированная планировщиком
+     * заказа, обязана находить свой ЗНП тем же ключом, что и список
+     * раздела, иначе экран показывал бы заказ в колонке и отказывал в
+     * привязке под предлогом «заказа нет».
+     *
+     * Снятые с работы заказы НЕ исключены: вызывающий код обязан
+     * различить «заказа нет вовсе» и «заказ отозван» — второй случай
+     * требует другой подписи, чем отсутствие заказа.
+     *
+     * Порядок — свежие связи вперёд: под одну пару заказ мог быть
+     * заведён дважды (старый снят, новый поднят), и брать надо
+     * последний.
+     */
+    @Query("""
+            select ord
+            from SerialProductionOrder link
+            join link.serial serial
+            join link.operation operation
+            join link.productionOrder ord
+            where serial.id = :serialId
+              and operation.id = :operationId
+            order by link.id desc
+            """)
+    List<ProductionOrder> findZnpOrdersBySerialAndOperation(
+            @Param("serialId") Long serialId,
+            @Param("operationId") Long operationId
+    );
+
     Optional<SerialProductionOrder> findBySerial_IdAndProductionOrder_Id(
             Long serialId,
             Long productionOrderId

@@ -1,0 +1,365 @@
+<!DOCTYPE html>
+<html lang="ru"
+      xmlns:th="http://www.thymeleaf.org">
+
+<body>
+
+<!-- =========================================================
+     КОМПЛЕКТОВАНИЕ БЕЗ ЗАКАЗА: ПЛОСКИЙ СПИСОК ОПЕРАЦИЙ
+
+     Строки плана планировщик создаёт при планировании заказа
+     покупателя, а заказ-комплектующий диспетчер заводит позже и не
+     для каждой позиции. Пока заказа нет, кладовщик операцию не
+     видел: в разделе «Комплектование ЗНП» она не появляется.
+
+     Этот раздел показывает именно такие строки — без ЗНП. Состав
+     здесь неведом: вносить номер не в какой заказ, поэтому работа
+     закрывается одним фактом проведения, без проверки ячеек и
+     состава.
+     ========================================================= -->
+<th:block th:fragment="list(sectionKey)">
+
+    <div class="page-head">
+
+        <div class="page-title">
+
+            <h1 th:text="${sectionTitle}">
+                Комплектование без заказа
+            </h1>
+
+            <p th:text="${sectionDescription}">
+                Операции комплектования склада, под которые
+                заказ-комплектующий ещё не поднят
+            </p>
+
+        </div>
+
+        <div class="page-head-actions">
+
+            <!--
+                Ссылки на другие разделы комплектования: кладовщик
+                ведёт оба раздела, и переключение между ними —
+                обычная работа.
+            -->
+            <a class="btn secondary"
+               th:href="@{/warehouse/kitting-znp}">
+                Комплектование ЗНП
+            </a>
+
+            <a class="btn secondary"
+               th:href="@{/warehouse/kitting-semi}">
+                Комплектование полуфабрикатов
+            </a>
+
+            <a class="btn secondary"
+               th:href="@{/warehouse/general}">
+                Обзор склада
+            </a>
+
+        </div>
+    </div>
+
+    <div class="alert success"
+             th:if="${successMessage}"
+             th:text="${successMessage}">
+    </div>
+
+    <!--
+        Причина отказа — баннером, а не окном: в этом разделе нет поля
+        ввода, и проводить кладовщик может из раскрытия любой строки.
+        Окно отказа придумано для внесения номера, где строка уезжает
+        за прокрутку; здесь список плоский и баннер остаётся на виду.
+    -->
+    <div class="alert danger"
+         th:if="${errorMessage}"
+         th:text="${errorMessage}">
+    </div>
+
+    <section class="card">
+
+        <div class="card-head">
+
+            <div>
+
+                <h2>Операции без заказа</h2>
+
+                <small>
+                    Операции комплектования, под которые диспетчер
+                    ещё не поднял заказ-комплектующий. Проводятся
+                    одним фактом, без внесения состава
+                </small>
+
+            </div>
+
+            <span class="badge"
+                  th:if="${operations != null and !#lists.isEmpty(operations)}">
+
+                Групп:
+
+                <strong th:text="${#lists.size(operations)}">
+                    0
+                </strong>
+            </span>
+        </div>
+
+        <div class="card-body">
+
+            <div class="alert danger"
+                 th:if="${operations == null or #lists.isEmpty(operations)}">
+
+                <p>
+                    Операций без заказ-комплектующего у этого склада пока
+                    нет: все работы уже подхватились под заказы или
+                    планирование ещё не создало новых позиций
+                </p>
+
+            </div>
+
+            <div class="table-wrap"
+                 th:unless="${operations == null or #lists.isEmpty(operations)}">
+
+                <table class="data-table kitting-plain-table">
+
+                    <colgroup>
+                        <col class="col-op">
+                        <col class="col-date">
+                        <col class="col-orders">
+                        <col class="col-executor">
+                        <col class="col-hours">
+                        <col class="col-toggle">
+                    </colgroup>
+
+                    <thead>
+
+                    <tr>
+                        <th>Операция</th>
+                        <th>План</th>
+                        <th>Заказы</th>
+                        <th>Исполнитель</th>
+                        <th>Часы</th>
+                        <th></th>
+                    </tr>
+
+                    </thead>
+
+                    <tbody>
+
+                    <th:block th:each="operation, stat : ${operations}">
+
+                        <tr class="kitting-plain-row"
+                            th:classappend="${operation.hasBlocked()}
+                                    ? ' is-blocked' : ''"
+                            th:onclick="|togglePlain(${stat.index})|">
+
+                            <td class="cell-op">
+                                <strong th:text="${operation.title()}">
+                                    Комплектование
+                                </strong>
+                            </td>
+
+                            <td th:text="${operation.formattedDate()}">
+                                12.02.2026
+                            </td>
+
+                            <td th:text="${operation.ordersLabel()}">
+                                ЗП-12, ЗП-18
+                            </td>
+
+                            <td th:text="${operation.executorLabel()}">
+                                не назначен
+                            </td>
+
+                            <td th:text="${operation.hoursLabel()}">
+                                2.5
+                            </td>
+
+                            <td class="kitting-plain-toggle">
+
+                                <span class="badge"
+                                      th:text="${operation.rowCount()
+                                              + ' экз.'}">
+                                    3 экз.
+                                </span>
+
+                                <span class="badge badge--success"
+                                      th:if="${operation.allCompleted()}">
+                                    проведена
+                                </span>
+
+                                <small class="kitting-plain-caret"
+                                       th:id="'plain-caret-' + ${stat.index}">
+                                    ▼
+                                </small>
+                            </td>
+
+                        </tr>
+
+                        <!--
+                            Раскрытие: экземпляры операции. Ключ — индекс
+                            строки списка, а не id операции: один и тот же
+                            идентификатор операции встречается на несколько
+                            дат.
+                        -->
+                        <tr class="kitting-plain-panel"
+                            th:id="'plain-panel-' + ${stat.index}">
+
+                            <td colspan="6">
+
+                                <div class="kitting-plain-panel__inner">
+
+                                    <strong>Экземпляры операции</strong>
+
+                                    <div class="table-wrap">
+
+                                        <table class="data-table instance-table">
+
+                                            <thead>
+                                            <tr>
+                                                <th>Изделие</th>
+                                                <th>Заказ</th>
+                                                <th>Часы</th>
+                                                <th>Статус</th>
+                                                <th></th>
+                                            </tr>
+                                            </thead>
+
+                                            <tbody>
+
+                                            <tr th:each="inst : ${operation.instances}"
+                                                th:classappend="${inst.blocked()}
+                                                        ? ' is-blocked' : ''">
+
+                                                <td class="instance-table__serial"
+                                                    th:text="${inst.serialNumber
+                                                            != null and !inst.serialNumber.isBlank()
+                                                            ? inst.serialNumber
+                                                            : 'поз. ' + inst.itemPosition
+                                                              + ' · экз. ' + (inst.instanceIndex + 1)}">
+                                                    121200022
+                                                </td>
+
+                                                <td th:text="${inst.orderNumber}">
+                                                    ЗП-12
+                                                </td>
+
+                                                <td th:text="${inst.hoursLabel()}">
+                                                    0.5
+                                                </td>
+
+                                                <td>
+
+                                                    <span class="badge badge--success"
+                                                          th:if="${inst.completed()}"
+                                                          th:text="'Проведён ' + ${inst.completedLabel()}">
+                                                        Проведён 12.02.2026 14:05
+                                                    </span>
+
+                                                    <span class="badge badge--attention"
+                                                          th:if="${!inst.completed() and inst.blocked()}"
+                                                          th:text="${inst.blockedLabel()}">
+                                                        ждёт: Сборка узла
+                                                    </span>
+
+                                                    <span class="badge"
+                                                          th:if="${!inst.completed() and !inst.blocked()}">
+                                                        В работе
+                                                    </span>
+
+                                                </td>
+
+                                                <td>
+
+                                                    <form th:if="${inst.canComplete()}"
+                                                          method="post"
+                                                          th:action="@{/warehouse/kitting/complete}"
+                                                          class="inline-form">
+
+                                                        <input th:if="${_csrf != null}"
+                                                               type="hidden"
+                                                               th:name="${_csrf.parameterName}"
+                                                               th:value="${_csrf.token}">
+
+                                                        <input type="hidden"
+                                                               name="rowId"
+                                                               th:value="${inst.rowId}">
+
+                                                        <input type="hidden"
+                                                               name="section"
+                                                               th:value="${sectionKey}">
+
+                                                        <button type="submit"
+                                                                class="btn primary compact">
+                                                            Провести операцию
+                                                        </button>
+                                                    </form>
+
+                                                    <span th:unless="${inst.canComplete()}">
+                                                        —
+                                                    </span>
+                                                </td>
+
+                                            </tr>
+
+                                            </tbody>
+                                        </table>
+
+                                    </div>
+
+                                </div>
+
+                            </td>
+                        </tr>
+
+                    </th:block>
+
+                    </tbody>
+                </table>
+
+            </div>
+
+        </div>
+    </section>
+
+    <!--
+        Скрипты: раскрытие панели и окно отказа.
+    -->
+    <script>
+        /*
+         * Раскрытие панели экземпляров — тот же приём, что в
+         * «Мои операции»: ключ — индекс строки списка, а не id
+         * операции, потому что одна операция встречается на
+         * несколько дат.
+         */
+        function togglePlain(index) {
+            var panel = document.getElementById('plain-panel-' + index);
+            var caret = document.getElementById('plain-caret-' + index);
+
+            if (!panel) {
+                return;
+            }
+
+            var hidden = panel.style.display === 'none';
+
+            panel.style.display = hidden ? '' : 'none';
+
+            if (caret) {
+                caret.textContent = hidden ? '▲' : '▼';
+            }
+        }
+
+        document.addEventListener('DOMContentLoaded', function () {
+            /*
+             * Панели свёрнуты по умолчанию.
+             */
+            document
+                .querySelectorAll('.kitting-plain-panel')
+                .forEach(function (panel) {
+                    panel.style.display = 'none';
+                });
+        });
+    </script>
+
+</th:block>
+
+</body>
+</html>

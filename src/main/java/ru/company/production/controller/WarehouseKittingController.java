@@ -120,6 +120,33 @@ public class WarehouseKittingController {
     }
 
     /**
+     * Комплектование без заказ-комплектующего — работы склада, под
+     * которые диспетчер ещё не поднимал заказ.
+     *
+     * Плоский список операций его подразделения, без ЗНП и без
+     * проверки состава: работа закрывается одним фактом проведения.
+     * Раздел использует тот же шаблон-фрагмент znp-list.html, но
+     * без колонок состава и поля ввода — логика показа этих полей
+     * уже в шаблоне (namesCell).
+     */
+    @GetMapping({"/kitting-plain", "/kitting-plain/"})
+    public String plain(Model model) {
+        WarehouseKittingService.Section section =
+                WarehouseKittingService.Section.PLAIN;
+
+        List<AssignedOperationView> operations =
+                kittingService.findPlainOperations(section);
+
+        addSectionAttributes(section, model);
+
+        model.addAttribute("operations", operations);
+
+        model.addAttribute("instanceCount", countInstances(operations));
+
+        return section.getView();
+    }
+
+    /**
      * Проведение экземпляра операции комплектования.
      *
      * Проводится экземпляр, а не группа: позиция на десять изделий

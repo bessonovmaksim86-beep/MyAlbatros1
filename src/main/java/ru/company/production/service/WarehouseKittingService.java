@@ -40,13 +40,15 @@ import java.util.regex.Pattern;
  * Комплектование склада: операции, которые планировщик создал при
  * планировании заказа покупателя.
  *
- * Разделов два, и оба видны каждой роли склада, потому что склады
+ * Раздела три, и все видны каждой роли склада, потому что склады
  * работают по одному маршруту и различаются только подразделением:
  * склад комплектования собирает ЗНП, склад полуфабрикатов отдаёт
- * полуфабрикаты. Содержимое при этом всегда берётся по подразделению
- * самого раздела, а не по роли вошедшего: кладовщик, открывший чужой
- * раздел, видит работу того склада, на который смотрит, — так реестр
- * складов остаётся читаемым для обоих.
+ * полуфабрикаты, а третий раздел добирает работу того же склада
+ * комплектования, под которую заказ-комплектующий ещё не поднят.
+ * Содержимое при этом всегда берётся по подразделению самого раздела, а
+ * не по роли вошедшего: кладовщик, открывший чужой раздел, видит работу
+ * того склада, на который смотрит, — так реестр складов остаётся
+ * читаемым для обоих.
  *
  * Работой склада считаются получение комплектации и комплектовочная
  * операция: их планировщик закрепляет за подразделением, а не за
@@ -57,7 +59,7 @@ import java.util.regex.Pattern;
 public class WarehouseKittingService {
 
     /**
-     * Раздел комплектования: его подразделение склада и подписи.
+     * Раздел комплектования: его подразделение склада, адрес и подписи.
      *
      * Код подразделения — единственный признак границы. Он берётся из
      * справочника, а не из учётной записи вошедшего: раздел обязан
@@ -75,7 +77,8 @@ public class WarehouseKittingService {
                 "Заказы-комплектующие склада комплектования: изделия, "
                         + "которые нужно собрать из комплектации выпуска",
                 "kitting-znp",
-                "warehouse/kitting/znp"
+                "warehouse/kitting/znp",
+                "znp"
         ),
 
         /** Склад полуфабрикатов отдаёт полуфабрикаты в сборку. */
@@ -85,7 +88,35 @@ public class WarehouseKittingService {
                 "Полуфабрикаты склада: изделия, которые склад выдаёт "
                         + "в сборку по плану заказа покупателя",
                 "kitting-semi",
-                "warehouse/kitting/semi"
+                "warehouse/kitting/semi",
+                "semi"
+        ),
+
+        /**
+         * Комплектование без заказ-комплектующего: работа склада, под
+         * которую диспетчер заказа не поднимал.
+         *
+         * Раздел обязан существовать, потому что прежняя граница
+         * списка — «есть поднятый заказ» — прятала от склада всю
+         * остальную его работу: строку плана планировщик создаёт при
+         * планировании заказа покупателя, а заказ-комплектующий
+         * диспетчер заводит позже и не для каждой позиции. Пока заказа
+         * нет, кладовщик операцию не видел вовсе и не мог её провести,
+         * а загрузка склада выглядела нулевой.
+         *
+         * Состав здесь неведом: вносить номер не в какой заказ, поэтому
+         * колонки состава и поля ввода у раздела нет, а работа
+         * закрывается одним фактом.
+         */
+        PLAIN(
+                "ASSEMBLY_WAREHOUSE",
+                "Комплектование без заказа",
+                "Операции комплектования склада, под которые "
+                        + "заказ-комплектующий ещё не поднят: проводятся "
+                        + "одним фактом, без внесения состава",
+                "kitting-plain",
+                "warehouse/kitting/plain",
+                "plain"
         );
 
         private final String unitCode;
@@ -94,9 +125,18 @@ public class WarehouseKittingService {
         private final String activePage;
         private final String view;
 
-        /** Идентификатор раздела для адресной строки. */
+        /**
+         * Идентификатор раздела в адресной строке.
+         *
+         * Поле, а не вычисление от числа разделов: адрес обязан
+         * оставаться прежним при добавлении следующего раздела, иначе
+         * закладки кладовщиков и ссылки шапки перестанут открывать
+         * нужный склад.
+         */
+        private final String param;
+
         public String param() {
-            return this == ZNP ? "znp" : "semi";
+            return param;
         }
     }
 
@@ -154,6 +194,113 @@ public class WarehouseKittingService {
                 : distributionService.findKittingOperations(
                         unitIds, KITTING_TYPE_CODES
                 );
+    }
+
+    /**
+     * Операции комплектования без заказ-комплектующего.
+     *
+     * Строки плана планировщик создаёт при планировании заказа
+     * покупателя, а заказ-комплектующий диспетчер заводит позже и не
+     * для каждой позиции. Пока заказа нет, кладовщик операцию не
+     * видел: в разделе «Комплектование ЗНП» она не появляется, потому
+     * что там отбор идёт по наличию привязки «серийник + операция →
+     * ЗНП».
+     *
+     * Этот раздел показывает именно такие строки — без ЗНП. Состав
+     * здесь неведом: вносить номер не в какой заказ, поэтому работа
+     * закрывается одним фактом проведения, без проверки ячеек и
+     * состава.
+     *
+     * Отбор тот же — горизонт, подразделение, типы операций — но
+     * исключаются строки, у которых уже есть привязка к ЗНП.
+     */
+    @Transactional(readOnly = true)
+    public List<AssignedOperationView> findPlainOperations(Section section) {
+        return distributionService.groupKittingRows(plainRows(section));
+    }
+
+    /*
+     * Строки комплектования раздела, под которые заказ-комплектующий
+     * ещё не поднят.
+     *
+     * Один отбор на список и на счётчик меню: две границы одной
+     * половины разошлись бы, и кладовщик шёл бы по цифре, которая не
+     * сходится с тем, что он увидит на экране.
+     */
+    private List<OrderScheduleRow> plainRows(Section section) {
+
+        List<Long> unitIds = unitIds(section);
+
+        if (unitIds.isEmpty()) {
+            return List.of();
+        }
+
+        List<OrderScheduleRow> rows = distributionService.findKittingRows(
+                unitIds, KITTING_TYPE_CODES
+        );
+
+        if (rows.isEmpty()) {
+            return List.of();
+        }
+
+        /*
+         * Ключи «серийник + операция», под которые диспетчер уже
+         * поднял заказ. Серийник строке графика даёт состав выпуска:
+         * заказ планируется до выпуска, и строка номера не хранит.
+         */
+        Map<Long, ProductionOrderSerialProjection> serials =
+                serialService.resolve(rows);
+
+        Set<Long> serialIds = new LinkedHashSet<>();
+
+        for (ProductionOrderSerialProjection serial : serials.values()) {
+            if (serial != null && serial.getSerialId() != null) {
+                serialIds.add(serial.getSerialId());
+            }
+        }
+
+        Set<String> znpKeys = new LinkedHashSet<>();
+
+        if (!serialIds.isEmpty()) {
+            for (KittingZnpLinkView link
+                    : serialProductionOrderRepository
+                            .findZnpLinksBySerialIds(serialIds)) {
+
+                znpKeys.add(pairKey(
+                        link.getSerialId(), link.getOperationId()
+                ));
+            }
+        }
+
+        /*
+         * Строки без привязки: у строки без серийника или без заказа
+         * привязки быть не может, поэтому она остаётся в разделе —
+         * это и есть работа, поднятая планированием, но не заказом.
+         */
+        List<OrderScheduleRow> plain = new ArrayList<>();
+
+        for (OrderScheduleRow row : rows) {
+
+            if (row.getOperation() == null) {
+                continue;
+            }
+
+            ProductionOrderSerialProjection serial =
+                    serials.get(row.getId());
+
+            if (serial == null || serial.getSerialId() == null) {
+                plain.add(row);
+                continue;
+            }
+
+            if (!znpKeys.contains(
+                    pairKey(serial.getSerialId(),
+                            row.getOperation().getId()))) {
+                plain.add(row);
+            }
+        }
+
+        return plain;
     }
 
     /**
@@ -304,12 +451,15 @@ public class WarehouseKittingService {
                     ? null
                     : row.getOperation().getOperationName().getName();
 
+            String designation = extractCellDesignation(opName);
+
             /*
-             * Вид ячейки, который ждёт эта операция: обозначение из
-             * её наименования разворачивается в записи классификатора.
+             * Кэш делит работу на две ветки: обозначение пустое —
+             * операция ячейку не называет, и в классификатор нечего
+             * искать; непустое — вид ячейки ограничен списком записей.
              */
             List<ProductClassifier> cellKinds = kindsByToken.computeIfAbsent(
-                    extractCellDesignation(opName),
+                    designation,
                     this::findCellKinds
             );
 
@@ -333,7 +483,8 @@ public class WarehouseKittingService {
                             cellsByZnp.getOrDefault(znpNumber, List.of()),
                             cellKinds.stream()
                                     .map(ProductClassifier::getDisplayName)
-                                    .toList()
+                                    .toList(),
+                            designation
                     ));
 
             numbers.putIfAbsent(
@@ -465,6 +616,16 @@ public class WarehouseKittingService {
      * заполняет состав, «Провести» проверяет состав и закрывает
      * строку графика.
      *
+     * Операция, которая ячейку не называет («Комплектование поплавков
+     * для датчика»), проверок не проходит вовсе: у неё нет ни поля
+     * ввода, ни состава, и требовать от неё внесённых номеров было бы
+     * выдуманным условием.
+     *
+     * Операция, называющая ячейку, не проводится с пустым составом:
+     * закрытая без номеров работа означает, что склад сдал заказ, ни
+     * одной ячейки в него не положив, — а восстановить, что именно там
+     * лежало, после этого нечем.
+     *
      * Проверяются ВСЕ внесённые ячейки, а не одна: заказ на три
      * изделия собран из трёх номеров, и ошибочен любой из них.
      *
@@ -478,14 +639,35 @@ public class WarehouseKittingService {
                 .findRowForAttachById(rowId)
                 .orElse(null);
 
-        if (row == null || row.getOperation() == null
-                || row.getProductionOrder() == null) {
+        if (row == null || row.getOperation() == null) {
             return null;
         }
 
-        List<ProductClassifier> kinds = findCellKinds(
-                extractCellDesignation(operationNameOf(row.getOperation()))
-        );
+        String designation =
+                extractCellDesignation(operationNameOf(row.getOperation()));
+
+        if (designation.isBlank()) {
+            return null;
+        }
+
+        ProductionOrder order = findZnpOrderOfRow(row);
+
+        if (order == null) {
+            return null;
+        }
+
+        List<SerialProductionOrder> attached =
+                serialProductionOrderRepository.findAttachedByOrderIds(
+                        List.of(order.getId()));
+
+        if (attached.isEmpty()) {
+            return "Операция «" + operationNameOf(row.getOperation())
+                    + "» ждёт ячеек «" + designation + "»: в заказ «"
+                    + order.getNumber() + "» не вошло ни одного номера — "
+                    + "сначала внесите состав";
+        }
+
+        List<ProductClassifier> kinds = findCellKinds(designation);
 
         if (kinds.isEmpty()) {
             return null;
@@ -497,9 +679,7 @@ public class WarehouseKittingService {
             allowedIds.add(kind.getId());
         }
 
-        for (SerialProductionOrder link
-                : serialProductionOrderRepository.findAttachedByOrderIds(
-                        List.of(row.getProductionOrder().getId()))) {
+        for (SerialProductionOrder link : attached) {
 
             ProductSerial cell = link.getSerial();
 
@@ -579,14 +759,33 @@ public class WarehouseKittingService {
                 .findRowForAttachById(rowId)
                 .orElse(null);
 
-        if (row == null || row.getOperation() == null
-                || row.getProductionOrder() == null) {
+        if (row == null || row.getOperation() == null) {
             return KittingResult.rejected(
                     "Строка плана не найдена — привязать ячейку не к чему"
             );
         }
 
-        ProductionOrder order = row.getProductionOrder();
+        /*
+         * Заказ-комплектующий ищется тем же путём, что и в списке
+         * раздела, а не по основанию строки графика.
+         *
+         * Прежний код читал row.getProductionOrder(), и для строк,
+         * спланированных планировщиком заказа покупателя, он пуст:
+         * основание такой строки — заказ покупателя (V43), а
+         * заказ-комплектующий живёт в матрице (V20) как связь
+         * «серийник + операция». Кладовщик видел «Строка плана не
+         * найдена — привязать ячейку не к чему» на живой строке,
+         * у которой заказ есть и он виден в той же колонке таблицы.
+         */
+        ProductionOrder order = findZnpOrderOfRow(row);
+
+        if (order == null) {
+            return KittingResult.rejected(
+                    "Под работу «" + operationNameOf(row.getOperation())
+                            + "» нет заказ-комплектующего — вносить ячейку "
+                            + "не в состав чего"
+            );
+        }
 
         if (!order.isActive()) {
             return KittingResult.rejected(
@@ -770,6 +969,64 @@ public class WarehouseKittingService {
     }
 
     /**
+     * Заказ-комплектующий, под который поднята данная строка графика.
+     *
+     * Ищется так же, как список раздела: строка графика находит свой
+     * серийник по паре «заказ покупателя + позиция + индекс
+     * экземпляра» (V43), а заказ-комплектующий — по паре «серийник +
+     * операция» в матрице (V20). Основание строки для этого не годится:
+     * у строк, спланированных планировщиком заказа покупателя,
+     * productionOrder пуст, и прежний поиск по нему отклонял живую
+     * работу с подписью «привязать ячейку не к чему».
+     *
+     * Среди найденных заказов предпочтён действующий: снятый с работы
+     * заказ возвращается вызывающему коду отдельно, чтобы он подписал
+     * отказ иначе, чем отсутствие заказа.
+     */
+    private ProductionOrder findZnpOrderOfRow(OrderScheduleRow row) {
+
+        if (row.getOperation() == null) {
+            return null;
+        }
+
+        /*
+         * Строки группового ЗНП (V56) планируются самим заказом: у них
+         * основание и есть заказ-комплектующий, и матрица к моменту
+         * привязки ещё пуста — искать по серийнику нечего.
+         */
+        if (row.isProductionOrderBased()) {
+            return row.getProductionOrder();
+        }
+
+        ProductionOrderSerialProjection serial =
+                serialService.resolve(List.of(row)).get(row.getId());
+
+        if (serial == null || serial.getSerialId() == null) {
+            /*
+             * Выпуск ещё не создан либо экземпляр не обеспечен номером:
+             * у строки нет изделия, а значит, нет и пары, по которой
+             * матрица связала бы её с заказом.
+             */
+            return row.getProductionOrder();
+        }
+
+        List<ProductionOrder> orders =
+                serialProductionOrderRepository
+                        .findZnpOrdersBySerialAndOperation(
+                                serial.getSerialId(),
+                                row.getOperation().getId()
+                        );
+
+        for (ProductionOrder candidate : orders) {
+            if (candidate.isActive()) {
+                return candidate;
+            }
+        }
+
+        return orders.isEmpty() ? null : orders.get(0);
+    }
+
+    /**
      * Незакрытые операции комплектования раздела — для счётчика меню.
      */
     @Transactional(readOnly = true)
@@ -781,6 +1038,78 @@ public class WarehouseKittingService {
                 : distributionService.countKittingOperations(
                         unitIds, KITTING_TYPE_CODES
                 );
+    }
+
+    /**
+     * Незакрытые операции комплектования без заказ-комплектующего —
+     * для счётчика меню.
+     *
+     * Считается запросом, а не размером списка: меню рисуется на
+     * каждой странице модуля, а подбор серийников и экземпляров
+     * ради одной цифры стоил бы десятков запросов. Граница — та же,
+     * что у {@link #findPlainOperations}: строки, под которые
+     * диспетчер ещё не поднял заказ-комплектующий.
+     */
+    @Transactional(readOnly = true)
+    public long countPlainOperations(Section section) {
+        List<OrderScheduleRow> plain = plainRows(section);
+
+        if (plain.isEmpty()) {
+            return 0L;
+        }
+
+        /*
+         * Собираю серийники строк и читаю ЗНП-связи — та же
+         * логика, что в списке, но без группировки: нужно только
+         * число строк, которые пройдут отсев.
+         */
+        Map<Long, ProductionOrderSerialProjection> serials =
+                serialService.resolve(plain);
+
+        Set<Long> serialIds = new LinkedHashSet<>();
+
+        for (ProductionOrderSerialProjection serial : serials.values()) {
+            if (serial != null && serial.getSerialId() != null) {
+                serialIds.add(serial.getSerialId());
+            }
+        }
+
+        Set<String> znpKeys = new LinkedHashSet<>();
+
+        if (!serialIds.isEmpty()) {
+            for (KittingZnpLinkView link
+                    : serialProductionOrderRepository
+                            .findZnpLinksBySerialIds(serialIds)) {
+
+                znpKeys.add(pairKey(
+                        link.getSerialId(), link.getOperationId()
+                ));
+            }
+        }
+
+        long count = 0L;
+
+        for (OrderScheduleRow row : plain) {
+            if (row.getOperation() == null) {
+                continue;
+            }
+
+            ProductionOrderSerialProjection serial =
+                    serials.get(row.getId());
+
+            if (serial == null || serial.getSerialId() == null) {
+                count++;
+                continue;
+            }
+
+            if (!znpKeys.contains(
+                    pairKey(serial.getSerialId(),
+                            row.getOperation().getId()))) {
+                count++;
+            }
+        }
+
+        return count;
     }
 
     /** Раздел по параметру адреса; неизвестное значение — ЗНП. */

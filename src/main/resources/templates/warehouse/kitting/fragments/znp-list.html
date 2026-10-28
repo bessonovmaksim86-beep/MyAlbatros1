@@ -279,75 +279,104 @@
                                                     операции — иначе
                                                     сверять его пришлось
                                                     бы в карточке заказа.
+
+                                                    Поле ввода показывается
+                                                    только там, где
+                                                    наименование операции
+                                                    называет ячейку: под
+                                                    «Комплектование
+                                                    поплавков для датчика»
+                                                    вносить нечего, и
+                                                    предложение «Ячейка: 9
+                                                    цифр» вело бы кладовщика
+                                                    внести в заказ изделие,
+                                                    которое в его состав не
+                                                    входит.
                                                 -->
                                                 <td class="znp-composition">
 
-                                                    <div class="znp-composition__numbers"
-                                                         th:if="${operation.attachedCount() > 0}">
+                                                    <th:block th:if="${operation.namesCell()}">
 
-                                                        <span class="znp-composition__number"
-                                                              th:each="cellNumber : ${operation.attachedCellNumbers()}"
-                                                              th:text="${cellNumber}">
-                                                            121200022
-                                                        </span>
-                                                    </div>
+                                                        <div class="znp-composition__numbers"
+                                                             th:if="${operation.attachedCount() > 0}">
 
-                                                    <small class="znp-composition__empty"
-                                                           th:unless="${operation.attachedCount() > 0}">
-                                                        ячеек не внесено
-                                                    </small>
+                                                            <span class="znp-composition__number"
+                                                                  th:each="cellNumber : ${operation.attachedCellNumbers()}"
+                                                                  th:text="${cellNumber}">
+                                                                121200022
+                                                            </span>
+                                                        </div>
 
-                                                    <form th:if="${operation.canAttachCell()}"
-                                                          method="post"
-                                                          th:action="@{/warehouse/kitting/attach-cell}"
-                                                          class="attach-cell-form">
-
-                                                        <input th:if="${_csrf != null}"
-                                                               type="hidden"
-                                                               th:name="${_csrf.parameterName}"
-                                                               th:value="${_csrf.token}">
-
-                                                        <input type="hidden"
-                                                               name="rowId"
-                                                               th:value="${operation.rowId()}">
-
-                                                        <input type="hidden"
-                                                               name="section"
-                                                               th:value="${sectionKey}">
-
-                                                        <input type="text"
-                                                               name="cellNumber"
-                                                               inputmode="numeric"
-                                                               class="attach-cell-input"
-                                                               th:placeholder="${operation.attachedLabel() == '—'
-                                                                       ? 'Ячейка: 9 цифр'
-                                                                       : 'Ещё ячейка: 9 цифр'}"
-                                                               maxlength="12"
-                                                               autocomplete="off"
-                                                               aria-label="Серийный номер ячейки для заказа">
-
-                                                        <button type="submit"
-                                                                class="btn secondary compact">
-                                                            Внести
-                                                        </button>
-
-                                                        <!--
-                                                            Подсказка допустимых
-                                                            типов ячеек:
-                                                            «Допускаются:
-                                                            ЯПР20М, ЯПР20МД».
-                                                            Пустая строка —
-                                                            операция не называет
-                                                            тип, и сервис не
-                                                            будет проверять вид
-                                                            изделия.
-                                                        -->
-                                                        <small class="cell-types-hint"
-                                                               th:if="${operation.expectedCellTypesCount() > 0}"
-                                                               th:text="${operation.expectedCellTypesLabel()}">
-                                                            Допускаются: ЯПР20М, ЯПР20МД
+                                                        <small class="znp-composition__empty"
+                                                               th:unless="${operation.attachedCount() > 0}">
+                                                            ячеек не внесено
                                                         </small>
-                                                    </form>
+
+                                                        <form th:if="${operation.canAttachCell()}"
+                                                              method="post"
+                                                              th:action="@{/warehouse/kitting/attach-cell}"
+                                                              class="attach-cell-form">
+
+                                                            <input th:if="${_csrf != null}"
+                                                                   type="hidden"
+                                                                   th:name="${_csrf.parameterName}"
+                                                                   th:value="${_csrf.token}">
+
+                                                            <input type="hidden"
+                                                                   name="rowId"
+                                                                   th:value="${operation.rowId()}">
+
+                                                            <input type="hidden"
+                                                                   name="section"
+                                                                   th:value="${sectionKey}">
+
+                                                            <input type="text"
+                                                                   name="cellNumber"
+                                                                   inputmode="numeric"
+                                                                   class="attach-cell-input"
+                                                                   th:placeholder="${operation.attachedLabel() == '—'
+                                                                           ? 'Ячейка: 9 цифр'
+                                                                           : 'Ещё ячейка: 9 цифр'}"
+                                                                   maxlength="12"
+                                                                   autocomplete="off"
+                                                                   aria-label="Серийный номер ячейки для заказа">
+
+                                                            <button type="submit"
+                                                                    class="btn secondary compact">
+                                                                Внести
+                                                            </button>
+
+                                                            <!--
+                                                                Подсказка допустимых
+                                                                типов ячеек:
+                                                                «Допускаются:
+                                                                ЯПР20М, ЯПР20МД».
+                                                                Пустая —
+                                                                обозначение не
+                                                                найдено в
+                                                                классификаторе, и
+                                                                вид изделия не
+                                                                проверяется.
+                                                            -->
+                                                            <small class="cell-types-hint"
+                                                                   th:if="${operation.expectedCellTypesCount() > 0}"
+                                                                   th:text="${operation.expectedCellTypesLabel()}">
+                                                                Допускаются: ЯПР20М, ЯПР20МД
+                                                            </small>
+                                                        </form>
+
+                                                    </th:block>
+
+                                                    <!--
+                                                        Операция не называет
+                                                        ячейку: состава по видам
+                                                        у неё нет, и поля ввода
+                                                        тоже нет — вносить в
+                                                        заказ нечего. Прочерк
+                                                        честнее нуля ячеек.
+                                                    -->
+                                                    <span th:unless="${operation.namesCell()}">—</span>
+
                                                 </td>
 
                                                 <td th:text="${operation.formattedDate()}">
@@ -381,9 +410,26 @@
                                                         ждёт: Сборка узла
                                                     </span>
 
+                                                    <!--
+                                                        Пустой состав — тоже
+                                                        причина не проводить:
+                                                        без этой подписи строка
+                                                        читалась бы как «В
+                                                        работе» при отсутствии
+                                                        кнопки, и кладовщик
+                                                        искал бы поломку
+                                                        интерфейса вместо
+                                                        невнесённого номера.
+                                                    -->
+                                                    <span class="badge badge--attention"
+                                                          th:if="${operation.awaitComposition()}">
+                                                        ждёт состав
+                                                    </span>
+
                                                     <span class="badge"
                                                           th:if="${!operation.completed()
-                                                                  and !operation.blocked()}">
+                                                                  and !operation.blocked()
+                                                                  and !operation.awaitComposition()}">
                                                         В работе
                                                     </span>
                                                 </td>

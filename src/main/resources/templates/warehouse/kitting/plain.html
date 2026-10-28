@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="ru"
+      xmlns:th="http://www.thymeleaf.org">
+
+<head>
+    <meta charset="UTF-8">
+
+    <meta name="viewport"
+          content="width=device-width, initial-scale=1">
+
+    <title>Комплектование без заказа</title>
+
+    <link rel="stylesheet"
+          th:href="@{/technology/css/technology.css}">
+
+    <link rel="stylesheet"
+          th:href="@{/technology/css/common.css}">
+
+    <link rel="stylesheet"
+          th:href="@{/warehouse/css/warehouse.css}">
+</head>
+
+<body>
+
+<div class="app-shell">
+
+    <aside th:replace="~{warehouse/fragments/layout
+            :: sidebar('kitting-plain')}">
+    </aside>
+
+    <main class="main">
+
+        <header th:replace="~{warehouse/fragments/layout
+                :: topbar}">
+        </header>
+
+        <div class="page-content warehouse-page">
+
+            <!--
+                Раздел «Комплектование без заказа»: плоский список
+                операций, под которые диспетчер ещё не поднял
+                заказ-комплектующий. Работы закрываются одним фактом
+                проведения — без проверки состава и ячеек.
+            -->
+            <th:block th:replace="~{warehouse/kitting/fragments/plain-list
+                    :: list('plain')}">
+            </th:block>
+
+        </div>
+
+        <th:block th:replace="~{warehouse/fragments/layout
+                :: commonScripts}">
+        </th:block>
+
+    </main>
+</div>
+
+</body>
+</html>

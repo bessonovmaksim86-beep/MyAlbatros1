@@ -119,6 +119,13 @@ public class WarehouseViewAdvice {
                 )
         );
 
+        model.addAttribute(
+                "kittingPlainCount",
+                kittingService.countPlainOperations(
+                        WarehouseKittingService.Section.PLAIN
+                )
+        );
+
         /*
          * Заказы-комплектующие с операцией приёмки на склад
          * полуфабрикатов: кладовщик обязан видеть объём комплектования,

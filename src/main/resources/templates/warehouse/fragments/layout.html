@@ -35,11 +35,13 @@
                               or activePage == 'quarantine-transfer'
                               or activePage == 'znp-acceptance'
                               or activePage == 'subassembly-kitting'
-                              or activePage == 'kitting-znp'
                           },
                           cellActive=${
                               activePage == 'quarantine-transfer-cells'
-                              or activePage == 'kitting-semi'
+                          },
+                          kittingActive=${
+                              activePage == 'kitting-znp'
+                              or activePage == 'kitting-plain'
                           }">
 
         <a class="department-brand"
@@ -223,11 +225,46 @@
                     </span>
                 </a>
 
-                <!--
-                    Комплектование ЗНП переехало в «Подсборки»: заказ-
-                    комплектующий собирают из подсборок, и кладовщик ищет
-                    его в том же разделе, где их принимают.
-                -->
+            </div>
+
+            <!--
+                Комплектование — отдельный пункт, а не часть
+                «Подсборок»: заказ-комплектующий — не единственный
+                предмет работы склада, и прежняя граница прятала от
+                кладовщика операции, под которые диспетчер ещё не
+                поднял заказ. Здесь собраны все три разреза
+                комплектования, и каждый ведётся по подразделению
+                самого раздела.
+            -->
+            <a class="warehouse-navigation__item warehouse-dropdown-trigger"
+               th:classappend="${kittingActive} ? ' is-active' : ''"
+               href="#"
+               aria-expanded="false"
+               aria-haspopup="true"
+               title="Комплектование">
+
+                <span class="warehouse-navigation__icon">
+                    <svg viewBox="0 0 24 24" aria-hidden="true">
+                        <path d="M20 7 12 3 4 7v10l8 4 8-4V7Zm-8-1.2L17.4 9 12 12.2 6.6 9 12 5.8ZM6 10.6l5 2.5v6.2l-5-2.5v-6.2Zm7 8.7v-6.2l5-2.5v6.2l-5 2.5Z"/>
+                    </svg>
+                </span>
+
+                <span class="warehouse-navigation__text">
+                    Комплектование
+                </span>
+
+                <span class="warehouse-navigation__chevron" aria-hidden="true">
+                    <svg viewBox="0 0 24 24">
+                        <path d="M7 10l5 5 5-5Z"/>
+                    </svg>
+                </span>
+            </a>
+
+            <!-- Выпадающее подменю «Комплектование» -->
+            <div class="warehouse-submenu"
+                 role="menu"
+                 aria-label="Комплектование">
+
                 <a class="warehouse-submenu__item"
                    th:classappend="${activePage == 'kitting-znp'} ? ' is-active' : ''"
                    th:href="@{/warehouse/kitting-znp}"
@@ -242,6 +279,40 @@
                           th:if="${kittingZnpCount != null and kittingZnpCount > 0}"
                           th:text="${kittingZnpCount}">
                         2
+                    </span>
+                </a>
+
+                <a class="warehouse-submenu__item"
+                   th:classappend="${activePage == 'kitting-plain'} ? ' is-active' : ''"
+                   th:href="@{/warehouse/kitting-plain}"
+                   role="menuitem"
+                   title="Комплектование без заказ-комплектующего: проводятся одним фактом">
+
+                    <span class="warehouse-submenu__text">
+                        Комплектование без заказа
+                    </span>
+
+                    <span class="warehouse-submenu__counter"
+                          th:if="${kittingPlainCount != null and kittingPlainCount > 0}"
+                          th:text="${kittingPlainCount}">
+                        2
+                    </span>
+                </a>
+
+                <a class="warehouse-submenu__item"
+                   th:classappend="${activePage == 'kitting-semi'} ? ' is-active' : ''"
+                   th:href="@{/warehouse/kitting-semi}"
+                   role="menuitem"
+                   title="Комплектование полуфабрикатов: операции склада полуфабрикатов">
+
+                    <span class="warehouse-submenu__text">
+                        Комплектование полуфабрикатов
+                    </span>
+
+                    <span class="warehouse-submenu__counter"
+                          th:if="${kittingSemiCount != null and kittingSemiCount > 0}"
+                          th:text="${kittingSemiCount}">
+                        1
                     </span>
                 </a>
 
@@ -296,29 +367,6 @@
                           th:if="${quarantineCellCount != null and quarantineCellCount > 0}"
                           th:text="${quarantineCellCount}">
                         0
-                    </span>
-                </a>
-
-                <!--
-                    Комплектование полуфабрикатов переехало в «Ячейки»:
-                    склад отдаёт в сборку готовые ячейки, и работу по
-                    своему складу кладовщик ищет в разделе своего вида
-                    позиции.
-                -->
-                <a class="warehouse-submenu__item"
-                   th:classappend="${activePage == 'kitting-semi'} ? ' is-active' : ''"
-                   th:href="@{/warehouse/kitting-semi}"
-                   role="menuitem"
-                   title="Комплектование полуфабрикатов: операции склада полуфабрикатов">
-
-                    <span class="warehouse-submenu__text">
-                        Комплектование полуфабрикатов
-                    </span>
-
-                    <span class="warehouse-submenu__counter"
-                          th:if="${kittingSemiCount != null and kittingSemiCount > 0}"
-                          th:text="${kittingSemiCount}">
-                        1
                     </span>
                 </a>
 
