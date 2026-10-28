@@ -52,6 +52,9 @@ body {
 
     width: 100%;
     min-height: 100vh;
+
+    transition:
+        grid-template-columns var(--workshop-sidebar-duration) ease;
 }
 
 /*
@@ -192,6 +195,25 @@ body {
 .workshop-sidebar:focus-within {
     width: var(--workshop-sidebar-expanded-width) !important;
     box-shadow: 12px 0 34px rgba(6, 26, 20, 0.3);
+}
+
+/*
+ * Раскрытое меню обязано раздвинуть страницу, а не лечь на неё.
+ *
+ * Колонка сетки держится свёрнутой шириной, а растёт при наведении
+ * только сама панель, — поэтому её край и подписи пунктов выходили за
+ * свою ячейку и рисовались поверх формы: мастер видел пункт
+ * «Производственный календарь» там, где у него поле ввода.
+ *
+ * Расширяется та же колонка и с той же длительностью, что и панель:
+ * меню остаётся в своей ячейке, а содержимое уходит вправо, как и
+ * ожидает человек, открывающий меню.
+ */
+.app-shell:has(.workshop-sidebar:hover),
+.app-shell:has(.workshop-sidebar:focus-within) {
+    grid-template-columns:
+        var(--workshop-sidebar-expanded-width)
+        minmax(0, 1fr) !important;
 }
 
 .workshop-sidebar__inner {

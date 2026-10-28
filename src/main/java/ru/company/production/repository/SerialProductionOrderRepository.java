@@ -383,6 +383,31 @@ public interface SerialProductionOrderRepository
     boolean existsActiveLinkBySerialId(@Param("serialId") Long serialId);
 
     /**
+     * Сколько ячеек конкретного изделия вошло в заказ.
+     *
+     * Нужен потолку комплектования: строка матрицы связывает заказ и с
+     * ячейкой, и с изделием-носителем, в которое заказ вошёл, поэтому
+     * общий {@link #countByProductionOrder_Id} считает и носителя — на
+     * заказе с одной ячейкой он даёт две строки, и кладовщик читает
+     * «уже вошло 2 яч.». Счёт обязан считать ровно то изделие, чей
+     * потолок проверяется.
+     *
+     * Снятые с работы заказы здесь не нужны: состав читают по одному
+     * конкретному заказу, его активность проверяет вызывающий код.
+     */
+    @Query("""
+            select count(link)
+            from SerialProductionOrder link
+            join link.serial cell
+            where link.productionOrder.id = :productionOrderId
+              and cell.productClassifier.id = :classifierId
+            """)
+    long countCellsOfClassifierInOrder(
+            @Param("productionOrderId") Long productionOrderId,
+            @Param("classifierId") Long classifierId
+    );
+
+    /**
      * Сколько заказов вошло в изделие — счётчик состава карточки.
      */
     long countBySerial_Id(Long serialId);

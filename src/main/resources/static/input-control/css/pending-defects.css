@@ -17,8 +17,21 @@
 }
 
 /* Таблица заявок на отбраковку */
+
+/*
+ * Обёртка обязана прокручиваться: колонок одиннадцать, и без
+ * горизонтальной прокрутки браузер не выписывает таблицу за границу
+ * карточки, а сжимает её до содержимого. От сжатия первым страдает
+ * «Решение» — единственная колонка с полями ввода, и контролёр не
+ * может ни выбрать вердикт, ни написать комментарий.
+ */
+.bvk-defect-wrap {
+    overflow-x: auto;
+}
+
 .bvk-defect-table {
     width: 100%;
+    min-width: 1560px;
     border-collapse: collapse;
     font-size: 0.875rem;
 }
@@ -43,12 +56,46 @@
     letter-spacing: 0.05em;
 }
 
+/*
+ * Колонка решения держит ширину сама: выбор вердикта, комментарий и
+ * кнопка — три поля, и на естественной ширине они встают в столбик по
+ * несколько символов.
+ */
+.bvk-defect-table__head--decision,
+.bvk-defect-table__cell--decision {
+    width: 340px;
+}
+
 /* Кнопки решений в таблице */
 .bvk-defect-table__decision {
-    display: flex;
-    gap: 0.25rem;
-    flex-wrap: wrap;
-    justify-content: flex-start;
+    display: grid;
+    gap: 6px;
+    justify-items: stretch;
+}
+
+.bvk-defect-table__select,
+.bvk-defect-table__comment {
+    box-sizing: border-box;
+    width: 100%;
+    min-width: 0;
+    padding: 6px 8px;
+    border: 1px solid #cbd5e1;
+    border-radius: 4px;
+    font: inherit;
+    font-size: 0.875rem;
+    background: #fff;
+}
+
+.bvk-defect-table__select:focus,
+.bvk-defect-table__comment:focus {
+    border-color: #80bdff;
+    outline: 0;
+    box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, 0.25);
+}
+
+.bvk-defect-table__decision .btn {
+    justify-self: start;
+    white-space: nowrap;
 }
 
 /* Ссылки на паспорт в таблице */

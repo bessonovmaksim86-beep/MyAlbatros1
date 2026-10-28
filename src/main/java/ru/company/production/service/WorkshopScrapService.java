@@ -8,6 +8,8 @@ import ru.company.production.entity.AppUser;
 import ru.company.production.entity.InputControlDefectReason;
 import ru.company.production.entity.Operation;
 import ru.company.production.entity.OperationControlParam;
+import ru.company.production.entity.OperationTypeCode;
+import ru.company.production.entity.OrderScheduleRow;
 import ru.company.production.entity.PendingDefect;
 import ru.company.production.entity.ProductionOrder;
 import ru.company.production.entity.ProductSerial;
@@ -17,9 +19,11 @@ import ru.company.production.entity.QuarantineCellKind;
 import ru.company.production.entity.SerialProductionOrder;
 import ru.company.production.repository.InputControlDefectReasonRepository;
 import ru.company.production.repository.OperationControlParamRepository;
+import ru.company.production.repository.OrderScheduleRowRepository;
 import ru.company.production.repository.PendingDefectRepository;
 import ru.company.production.repository.ProductSerialOperationRepository;
 import ru.company.production.repository.ProductSerialRepository;
+import ru.company.production.repository.ProductionOrderItemRepository;
 import ru.company.production.repository.SerialProductionOrderRepository;
 
 import java.util.ArrayList;
@@ -65,12 +69,27 @@ public class WorkshopScrapService {
     /* Минимальная длина номера: 4 цифры кода + 5 цифр серии. */
     private static final int FULL_NUMBER_LENGTH = 9;
 
+    /*
+     * Типы работ, которые закрывает внесённая ячейка.
+     *
+     * Те же коды, что держат раздел комплектования склада и его
+     * счётчик в меню: проведение ставится этими типами, и снятие обязано
+     * опознавать ту же работу, иначе закрытая строка осталась бы для
+     * снятия невидимой.
+     */
+    private static final List<String> KITTING_TYPE_CODES = List.of(
+            OperationTypeCode.KIT_RECEIPT.name(),
+            OperationTypeCode.KITTING.name()
+    );
+
     private final ProductSerialRepository serialRepository;
     private final SerialProductionOrderRepository spoRepository;
     private final ProductSerialOperationRepository serialOpRepository;
     private final OperationControlParamRepository ocpRepository;
     private final PendingDefectRepository defectRepository;
     private final InputControlDefectReasonRepository reasonRepository;
+    private final OrderScheduleRowRepository scheduleRowRepository;
+    private final ProductionOrderItemRepository itemRepository;
 
     /**
      * Причины брака из справочника БВК — подсказки формы.
@@ -248,12 +267,14 @@ public class WorkshopScrapService {
      * Снять ячейку с комплектования ЗНП.
      *
      * Вызывает {@link PendingDefectService}, когда бюро вынесло решение.
-     * Делает две вещи:
+     * Делает три вещи:
      *
      *   * снимает факт со всех операций ячейки, проведённых в рамках
      *     этого ЗНП, — строка остаётся в паспорте со статусом
      *     {@code REWORKED} и примечанием, но перестаёт считаться
      *     выполненной;
+     *   * снимает проведение с тех строк графика, которые закрывались
+     *     именно этой ячейкой (см. {@link #releaseScheduleRows});
      *   * удаляет строку матрицы — заказ снова требует эту ячейку,
      *     и склад видит его в счётчике недоукомплектованных.
      *
@@ -282,9 +303,95 @@ public class WorkshopScrapService {
 
         unwriteOperations(serial, order, actor);
 
+        releaseScheduleRows(order, defect.getFullNumber());
+
         spoRepository.findBySerial_IdAndProductionOrder_Id(
                         serial.getId(), order.getId())
                 .ifPresent(spoRepository::delete);
+    }
+
+    /**
+     * Снимает проведение с работ, закрытых внесённой ячейкой.
+     *
+     * Проведение строки графика (V44) — единственный ответ плана
+     * «эта работа сделана». Пока он стоит, цех считает экземпляр
+     * укомплектованным: «Комплектование ЯПР20» и «Получение ЯПР20»
+     * числятся закрытыми, следующая по маршруту работа разблокирована,
+     * а заказ при этом уже снова ждёт ячейку. Такой план расходится с
+     * матрицей, и расходку замечают только на сборке.
+     *
+     * Снимаются НЕ все строки экземпляра, а только комплектовочные и
+     * получение комплектации: остальные работы экземпляра относятся к
+     * самому изделию (гравировка, сборка кабеля), ячейка на них
+     * влияет ровно как деталь, и снимать их — значило бы обнулить
+     * честно сделанную работу цеха.
+     *
+     * Экземпляр находится через изделие, в которое вошёл заказ:
+     * серийный номер ячейки строка графика не хранит, а состав
+     * заказ-комплектующего хранит и ячейки, и носителя — выпущенное
+     * изделие, чья позиция выпуска и есть номер экземпляра (см.
+     * {@code ProductionOrderItemRepository#findScheduleInstancesOfZnp}).
+     *
+     * У групповых ЗНП выпуска нет, поэтому строк не находится и
+     * ничего не снимается: их план привязан к самому заказу, и там
+     * снятие состава — отдельная задача, а не молчаливая утрата факта.
+     */
+    private void releaseScheduleRows(ProductionOrder order, String cellNumber) {
+
+        for (ProductionOrderItemRepository.ScheduleInstanceView instance
+                : itemRepository.findScheduleInstancesOfZnp(order.getId())) {
+
+            if (instance.getCustomerOrderId() == null
+                    || instance.getItemPosition() == null
+                    || instance.getInstanceIndex() == null) {
+                continue;
+            }
+
+            List<OrderScheduleRow> rows =
+                    scheduleRowRepository.findCompletedRowsOfInstance(
+                            instance.getCustomerOrderId(),
+                            instance.getItemPosition(),
+                            instance.getInstanceIndex());
+
+            List<OrderScheduleRow> kitting = rows.stream()
+                    .filter(this::isKittingRow)
+                    .toList();
+
+            if (kitting.isEmpty()) {
+                continue;
+            }
+
+            for (OrderScheduleRow row : kitting) {
+                row.setCompletedAt(null);
+                row.setCompletedBy(null);
+                row.setNote(withNote(row.getNote(),
+                        "Проведение снято: ячейка " + cellNumber
+                                + " забракована в цеху"));
+            }
+
+            scheduleRowRepository.saveAll(kitting);
+        }
+    }
+
+    /**
+     * Относится ли строка плана к комплектованию, а не к работе над
+     * изделием.
+     *
+     * Те же два типа, что держат раздел комплектования и его счётчик:
+     * закрытие и снятие обязаны опознавать работу одинаково, иначе
+     * проведённая строка оказалась бы невидимой для одного из них.
+     */
+    private boolean isKittingRow(OrderScheduleRow row) {
+
+        Operation operation = row.getOperation();
+
+        if (operation == null || operation.getOperationType() == null
+                || operation.getOperationType().getCode() == null) {
+            return false;
+        }
+
+        return KITTING_TYPE_CODES.contains(
+                operation.getOperationType().getCode().trim().toUpperCase());
     }
 
     /* ============================================================

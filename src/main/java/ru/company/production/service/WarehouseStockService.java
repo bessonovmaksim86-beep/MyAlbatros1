@@ -213,8 +213,22 @@ public class WarehouseStockService {
     /**
      * Номера, лежащие в изоляторе брака: перечень контроля за вычетом
      * тех, что склад уже принял обратно.
+     *
+     * Карточками БВК изолятор не исчерпывается: ячейку отправляет туда
+     * и решение бюро по заявке отбраковки (цех или оператор БВК), и оно
+     * оформлено строкой перемещения, а не группой брака. Без этих
+     * строк реестр печатал бы «свободна на складе» ячейку, которую
+     * кладовщик уже снял с полки и ждёт по приёмке.
+     *
+     * Незакрытые перемещения прибавляются, принятые — вычитаются, но
+     * вычитание не имеет права снять незакрытую строку: один номер
+     * могли браковать дважды, и тогда старая принятая строка не
+     * отменяет того, что ячейку снова убрали с полки.
      */
     private Set<String> quarantinedNumbers() {
+
+        Set<String> pending =
+                quarantineTransferService.findPendingNumbers();
 
         Set<String> numbers = inputControlService
                 .findQuarantineCells(QuarantineFilter.empty()).stream()
@@ -222,7 +236,11 @@ public class WarehouseStockService {
                 .filter(Objects::nonNull)
                 .collect(Collectors.toCollection(HashSet::new));
 
-        numbers.removeAll(quarantineTransferService.findAcceptedNumbers());
+        numbers.addAll(pending);
+
+        quarantineTransferService.findAcceptedNumbers().stream()
+                .filter(number -> !pending.contains(number))
+                .forEach(numbers::remove);
 
         return numbers;
     }

@@ -8,6 +8,7 @@ import ru.company.production.dto.AssignedOperationView;
 import ru.company.production.dto.KittingZnpOperationRow;
 import ru.company.production.dto.KittingZnpSerialRow;
 import ru.company.production.entity.AppUser;
+import ru.company.production.entity.ClassifierInclusion;
 import ru.company.production.entity.Operation;
 import ru.company.production.entity.OperationTypeCode;
 import ru.company.production.entity.OrderScheduleRow;
@@ -16,15 +17,19 @@ import ru.company.production.entity.ProductSerial;
 import ru.company.production.entity.ProductType;
 import ru.company.production.entity.ProductionOrder;
 import ru.company.production.entity.SerialProductionOrder;
+import ru.company.production.repository.ClassifierInclusionRepository;
 import ru.company.production.repository.KittingZnpLinkView;
-import ru.company.production.repository.OrganizationUnitRepository;
-import ru.company.production.repository.OrderScheduleRowRepository;
+import ru.company.production.repository.OrganizationUnitRepository;     
+import ru.company.production.repository.OrderScheduleRowRepository;     
+import ru.company.production.repository.ProductionOrderItemRepository;
 import ru.company.production.repository.ProductionOrderSerialProjection;
 import ru.company.production.repository.ProductClassifierRepository;
 import ru.company.production.repository.ProductSerialRepository;
 import ru.company.production.repository.SerialProductionOrderRepository;
 import ru.company.production.repository.ZnpCellLinkView;
 
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -161,6 +166,8 @@ public class WarehouseKittingService {
     private final OrderScheduleRowRepository scheduleRowRepository;
     private final ProductSerialRepository serialRepository;
     private final ProductClassifierRepository classifierRepository;
+    private final ClassifierInclusionRepository inclusionRepository;
+    private final ProductionOrderItemRepository itemRepository;
     private final SerialMovementJournalService journal;
 
     /** Подпись даты проведения в раскрытии изделия. */
@@ -890,16 +897,36 @@ public class WarehouseKittingService {
         }
 
         /*
-         * Потолок состава меряется ВСЕМИ строками операции заказа:
-         * заказ на три изделия даёт три строки графика, и четвёртая
-         * ячейка означала бы, что склад переложил заказ.
+         * Потолок состава.
+         *
+         * Первым ставится лимит самого изделия: классификатор
+         * заказчика говорит «в эту систему допускается одна ячейка
+         * 5102» (classifier_inclusion.max_quantity, V10), и это
+         * требование сильнее плана — два экземпляра плана означают два
+         * прибора, а не две ячейки в одном.
+         *
+         * Без него границей служило число экземпляров операции
+         * (см. countRowsOfProductionOrderAndOperation), и на серийных
+         * ЗНП оно равно нулю: план заказанного изделия спланирован по
+         * основанию «заказ покупателя» (V43), у его строк
+         * productionOrder пуст, а запрос считал по заказу-
+         * комплектующему. Ноль читается как «размер не задан», и
+         * потолок не применялся вовсе — склад вносил вторую ячейку в
+         * заказ, где по справочнику допущена одна.
          */
-        long required = scheduleRowRepository
-                .countRowsOfProductionOrderAndOperation(
-                        order.getId(), operation.getId());
+        long already = alreadyAttachedCells(order, cell);
 
-        long already = serialProductionOrderRepository
-                .countByProductionOrder_Id(order.getId());
+        Long limit = cellLimitOf(order, cell);
+
+        if (limit != null && already >= limit) {
+            return KittingResult.rejected(
+                    "В заказ «" + order.getNumber() + "» допущено " + limit
+                            + " яч. «" + cell.getDisplayName() + "», уже вошло "
+                            + already + " — сверх состава изделия номер не вносится"
+            );
+        }
+
+        long required = plannedSizeOf(row, order, operation);
 
         if (required > 0 && already >= required) {
             return KittingResult.rejected(
@@ -1024,6 +1051,120 @@ public class WarehouseKittingService {
         }
 
         return orders.isEmpty() ? null : orders.get(0);
+    }
+
+    /**
+     * Сколько ячеек такого же изделия уже вошло в заказ.
+     *
+     * Считается по классификатору, а не по всем строкам матрицы: в
+     * той же матрице стоит изделие-носитель, и общий счётчик
+     * приписывал бы ему роль ячейки («вошло 2» при одной внесённой).
+     */
+    private long alreadyAttachedCells(ProductionOrder order, ProductSerial cell) {
+
+        Long classifierId = cell.getProductClassifier() == null
+                ? null
+                : cell.getProductClassifier().getId();
+
+        return classifierId == null
+                ? serialProductionOrderRepository
+                        .countByProductionOrder_Id(order.getId())
+                : serialProductionOrderRepository.countCellsOfClassifierInOrder(
+                        order.getId(), classifierId);
+    }
+
+    /**
+     * Сколько ячеек этого изделия допускает изделие-носитель заказа.
+     *
+     * Границу задаёт состав изделия из справочника
+     * (classifier_inclusion, V10): «в датчик 1192 допускается одна
+     * ячейка ЯПР20М». Она сильнее плана, потому что экземпляры плана
+     * считают приборы, а не детали одного прибора.
+     *
+     * Носитель ищется составом заказ-комплектующего: в матрицу наряду с
+     * ячейками входит выпускаемое изделие, и только оно имеет позицию
+     * заказа покупателя. У группового ЗНП выпуска нет — выдача пустая,
+     * и потолок по составу изделия к нему неприменим.
+     *
+     * Из нескольких записей справочника берётся наименьший предел:
+     * заказ обязан уложиться в самый тесный из допущенных.
+     *
+     * @return null, если изделие заказа лимита не задаёт
+     */
+    private Long cellLimitOf(ProductionOrder order, ProductSerial cell) {
+
+        Long cellClassifierId = cell.getProductClassifier() == null
+                ? null
+                : cell.getProductClassifier().getId();
+
+        if (cellClassifierId == null || order.getId() == null) {
+            return null;
+        }
+
+        Long limit = null;
+
+        for (Long carrierId
+                : itemRepository.findCarrierClassifierIdsOfZnp(order.getId())) {
+
+            for (ClassifierInclusion inclusion
+                    : inclusionRepository.findByOwnerAndTarget(
+                            carrierId, cellClassifierId)) {
+
+                BigDecimal max = inclusion.getMaxQuantity();
+
+                if (max == null || max.signum() <= 0) {
+                    continue;
+                }
+
+                /* Дробный предел округляется вниз: полупустая ячейка не бывает. */
+                long allowed = max.setScale(0, RoundingMode.FLOOR).longValue();
+
+                if (allowed > 0 && (limit == null || allowed < limit)) {
+                    limit = allowed;
+                }
+            }
+        }
+
+        return limit;
+    }
+
+    /**
+     * Размер комплектования по плану — сколько экземпляров операции
+     * заказано.
+     *
+     * Считается по тому же основанию, которым спланирована строка:
+     * групповой ЗНП планирует работу сам (V56), а работу серийного
+     * заказ-комплектующего планируют по заказу покупателя (V43), и
+     * подсчёт по заказу-комплектующему там даёт ноль.
+     *
+     * @return 0, если планом размер не задан — потолок тогда не
+     *         применяется
+     */
+    private long plannedSizeOf(OrderScheduleRow row,
+                               ProductionOrder order,
+                               Operation operation) {
+
+        if (operation.getId() == null) {
+            return 0L;
+        }
+
+        if (row.isProductionOrderBased()) {
+            return scheduleRowRepository
+                    .countRowsOfProductionOrderAndOperation(
+                            order.getId(), operation.getId());
+        }
+
+        if (row.getCustomerOrder() == null
+                || row.getCustomerOrder().getId() == null
+                || row.getItemPosition() == null) {
+            return 0L;
+        }
+
+        return scheduleRowRepository
+                .countRowsOfCustomerOrderItemAndOperation(
+                        row.getCustomerOrder().getId(),
+                        row.getItemPosition(),
+                        operation.getId());
     }
 
     /**

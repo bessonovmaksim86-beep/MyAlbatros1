@@ -317,7 +317,7 @@
 
                     </div>
 
-                    <div class="table-wrap"
+                    <div class="table-wrap bvk-defect-wrap"
                          th:unless="${pending == null or #lists.isEmpty(pending)}">
 
                         <table class="data-table bvk-defect-table">
@@ -335,7 +335,9 @@
                                 <th>Этап отбраковки</th>
                                 <th>Затребовал</th>
                                 <th>Дата</th>
-                                <th>Решение</th>
+                                <th class="bvk-defect-table__head--decision">
+                                    Решение
+                                </th>
                             </tr>
 
                             </thead>
@@ -395,7 +397,13 @@
                                     22.10.2026 09:15
                                 </td>
 
-                                <td class="table-actions">
+                                <!--
+                                    Без .table-actions: тот класс делает
+                                    ячейку flex-контейнером, и форма
+                                    решения сжимается до ширины своего
+                                    содержимого вместо ширины колонки.
+                                -->
+                                <td class="bvk-defect-table__cell--decision">
 
                                     <!--
                                         Вердикт и комментарий: направление
@@ -493,7 +501,7 @@
 
                     </div>
 
-                    <div class="table-wrap"
+                    <div class="table-wrap bvk-defect-wrap"
                          th:unless="${resolved == null or #lists.isEmpty(resolved)}">
 
                         <table class="data-table bvk-defect-table">

@@ -208,6 +208,95 @@ public interface ProductionOrderItemRepository
     );
 
     /**
+     * Экземпляр плана, ради которого выпущено изделие, несущее заказ.
+     *
+     * Нужен браковке ячейки: заявка знает номер ЗНП, а строка
+     * {@code order_schedule_rows} серийного номера не хранит — её
+     * экземпляр задан тройкой «заказ покупателя + позиция + номер
+     * внутри позиции». Мост между ними — состав заказ-комплектующего:
+     * в матрицу (V20) наряду с ячейками входит выпускаемое изделие, и
+     * именно его позиция выпуска отвечает на вопрос «для какого
+     * экземпляра планировали эту работу».
+     *
+     * Ячейки отсекаются самим join'ом: у них нет позиции выпуска,
+     * привязанной к позиции заказа покупателя, — ячейку не выпускают,
+     * её принимают на склад.
+     *
+     * Номер внутри позиции — порядковый, а не значение {@code position}:
+     * позиция заказа на десять изделий даёт десять строк выпуска со
+     * сквозным {@code position}, и для второй позиции заказа экземпляр
+     * обязан считаться от нуля. Считается ровно тем же способом, что и
+     * сопоставление в {@code WorkshopDistributionSerialService#resolve}:
+     * количеством строк той же позиции заказа с меньшим
+     * {@code position}. Расхождение двух мест подписало бы работу
+     * чужим номером.
+     */
+    @Query("""
+            select
+                customerItem.customerOrder.id as customerOrderId,
+                customerItem.position as itemPosition,
+                (
+                    select count(other.id)
+                    from ProductionOrderItem other
+                    where other.customerOrderItem.id = item.customerOrderItem.id
+                      and other.position < item.position
+                ) as instanceIndex
+            from ProductionOrderItem item
+            join item.customerOrderItem customerItem
+            join item.serial carrier
+            where carrier.id in (
+                select link.serial.id
+                from SerialProductionOrder link
+                where link.productionOrder.id = :znpOrderId
+            )
+            """)
+    List<ScheduleInstanceView> findScheduleInstancesOfZnp(
+            @Param("znpOrderId") Long znpOrderId
+    );
+
+    /**
+     * Тройка экземпляра плана для выпускаемого изделия.
+     *
+     * Позиция обязана быть привязана к позиции заказа покупателя: без
+     * неё экземпляр графика не существует, и снимать проведение не с
+     * чего.
+     */
+    interface ScheduleInstanceView {
+
+        Long getCustomerOrderId();
+
+        Integer getItemPosition();
+
+        Integer getInstanceIndex();
+    }
+
+    /**
+     * Изделия-носители заказ-комплектующего: какие выпуски он обслуживает.
+     *
+     * Нужен потолку комплектования: лимит «сколько таких ячеек
+     * допускается» задан составом изделия-носителя
+     * (classifier_inclusion, V10), а носитель в матрице (V20) стоит
+     * рядом с ячейками и отличается от них именно позицией выпуска.
+     *
+     * У группового ЗНП выпуска нет, поэтому выдача пустая и потолок по
+     * составу изделия к нему неприменим.
+     */
+    @Query("""
+            select distinct classifier.id
+            from ProductionOrderItem item
+            join item.serial carrier
+            join carrier.productClassifier classifier
+            where carrier.id in (
+                select link.serial.id
+                from SerialProductionOrder link
+                where link.productionOrder.id = :znpOrderId
+            )
+            """)
+    List<Long> findCarrierClassifierIdsOfZnp(
+            @Param("znpOrderId") Long znpOrderId
+    );
+
+    /**
      * Удаляет позиции заказа целиком.
      *
      * Ключ заказа в этой таблице стоит с ON DELETE CASCADE (V16), но

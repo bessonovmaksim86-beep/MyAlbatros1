@@ -99,6 +99,15 @@ public class PendingDefectService {
 
         PendingDefect defect = new PendingDefect();
         defect.setFullNumber(number);
+        /*
+         * Ссылка на реестр обязательна и для заявок оператора БВК:
+         * решение бюро снимает ячейку с комплектования через
+         * WorkshopScrapService, а он идёт от серийника — без ссылки
+         * подтверждённый брак оставил бы ячейку в матрице ЗНП и в
+         * проведённых строках графика. Номерам вне реестра ссылки нет,
+         * и снятие для них пропускается как нечего снимаемое.
+         */
+        defect.setSerial(serial);
         defect.setCellKind(cellKind);
         defect.setSerialStatus(serialStatus);
         defect.setProductClassifier(classifier);

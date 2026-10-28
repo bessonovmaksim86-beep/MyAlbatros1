@@ -424,6 +424,69 @@ public interface OrderScheduleRowRepository
     );
 
     /**
+     * Сколько экземпляров заложено планом в операцию позиции заказа
+     * покупателя — потолок состава для серийного заказ-комплектующего.
+     *
+     * Отличие от {@link #countRowsOfProductionOrderAndOperation}: у
+     * строк, спланированных планировщиком заказа покупателя,
+     * {@code productionOrder} пуст (основание строки — заказ
+     * покупателя, V43), и подсчёт по заказу-комплектующему даёт ноль.
+     * Ноль вызывающий код читает как «размер планом не задан», поэтому
+     * потолок на серийных ЗНП не применялся вовсе и склад вносил в
+     * заказ вторую ячейку при заказанной одной.
+     */
+    @Query("""
+            select count(row.id)
+            from OrderScheduleRow row
+            where row.customerOrder.id = :customerOrderId
+              and row.itemPosition = :itemPosition
+              and row.operation.id = :operationId
+            """)
+    long countRowsOfCustomerOrderItemAndOperation(
+            @Param("customerOrderId") Long customerOrderId,
+            @Param("itemPosition") Integer itemPosition,
+            @Param("operationId") Long operationId
+    );
+
+    /**
+     * Проведённые строки одного экземпляра позиции заказа покупателя.
+     *
+     * Нужен браковке ячейки: экземпляр, для которого склад внёс
+     * ячейку, обязан вернуть свои проведённые работы обратно в план —
+     * иначе цех видел бы «Комплектование ЯПР20» закрытым для изделия,
+     * состав которого снова неполон, и следующая по маршруту работа
+     * осталась бы разблокированной.
+     *
+     * Ключ — тройка «заказ покупателя + позиция + номер экземпляра»,
+     * тот же, что связывает строку плана с выпускаемым изделием
+     * (см. {@code WorkshopDistributionSerialService#resolve}).
+     *
+     * Непроведённые строки в выдачу не входят: снимать факт с
+     * незакрытой работы нечего, а её возвращение в «Мои операции»
+     * ничего бы не изменило.
+     */
+    @EntityGraph(attributePaths = {
+            "operation",
+            "operation.operationName",
+            "operation.operationType",
+            "customerOrder"
+    })
+    @Query("""
+            select row
+            from OrderScheduleRow row
+            where row.customerOrder.id = :customerOrderId
+              and row.itemPosition = :itemPosition
+              and row.instanceIndex = :instanceIndex
+              and row.completedAt is not null
+            order by row.seq asc, row.id asc
+            """)
+    List<OrderScheduleRow> findCompletedRowsOfInstance(
+            @Param("customerOrderId") Long customerOrderId,
+            @Param("itemPosition") Integer itemPosition,
+            @Param("instanceIndex") Integer instanceIndex
+    );
+
+    /**
      * Нераспределённые операции подразделения мастера — по датам.
      *
      * Фильтр по work_place/executor пустым: мастер видит только то,
