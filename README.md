@@ -249,3 +249,18 @@ src/main/resources/
   templates/    — Thymeleaf-страницы по ролям
   static/       — CSS, JS, изображения
 ```
+
+## Материалы защиты
+
+- `presentation.html` — слайды, открывать в браузере (стрелки ←/→, пробел).
+- `presentation.mp4` — видеозапись защиты (62 МБ, лежит в корне репозитория).
+
+Скачать видео одним файлом, не клонируя репозиторий:
+
+```bash
+curl -L -o presentation.mp4 \
+  https://github.com/bessonovmaksim86-beep/MyAlbatros1/raw/master2810/presentation.mp4
+```
+
+В браузере — прямая ссылка [presentation.mp4](https://github.com/bessonovmaksim86-beep/MyAlbatros1/raw/master2810/presentation.mp4)
+(на странице файла в GitHub кнопка **Download**).
