@@ -177,6 +177,192 @@
     margin-top: 4px;
   }
 
+  /* Architecture diagram */
+  .arch-main {
+    display: flex;
+    align-items: stretch;
+    gap: 0;
+    justify-content: center;
+    margin: 24px 0 16px;
+  }
+  .arch-layer {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    width: 160px;
+    border-radius: 12px;
+    padding: 16px 10px;
+    text-align: center;
+    position: relative;
+    font-weight: 600;
+    font-size: 0.9rem;
+    transition: transform 0.2s;
+  }
+  .arch-layer:hover { transform: translateY(-4px); }
+  .arch-layer .layer-icon {
+    width: 40px;
+    height: 40px;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.2rem;
+    margin-bottom: 8px;
+  }
+  .arch-layer .layer-label {
+    font-size: 0.82rem;
+    margin-bottom: 4px;
+  }
+  .arch-layer .layer-sub {
+    font-size: 0.7rem;
+    opacity: 0.7;
+  }
+  .arch-arrow {
+    display: flex;
+    align-items: center;
+    font-size: 1.4rem;
+    color: var(--muted);
+    padding: 0 2px;
+  }
+  .arch-browser { background: rgba(92,138,255,0.12); border: 1px solid rgba(92,138,255,0.3); color: var(--accent); }
+  .arch-browser .layer-icon { background: rgba(92,138,255,0.2); }
+  .arch-controller { background: rgba(54,214,165,0.1); border: 1px solid rgba(54,214,165,0.25); color: var(--accent2); }
+  .arch-controller .layer-icon { background: rgba(54,214,165,0.2); }
+  .arch-service { background: rgba(168,92,255,0.1); border: 1px solid rgba(168,92,255,0.25); color: #a85cff; }
+  .arch-service .layer-icon { background: rgba(168,92,255,0.2); }
+  .arch-repo { background: rgba(245,166,35,0.1); border: 1px solid rgba(245,166,35,0.25); color: var(--accent3); }
+  .arch-repo .layer-icon { background: rgba(245,166,35,0.2); }
+  .arch-db { background: rgba(255,92,92,0.1); border: 1px solid rgba(255,92,92,0.25); color: #ff5c5c; }
+  .arch-db .layer-icon { background: rgba(255,92,92,0.2); }
+
+  .arch-side {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    margin-left: 32px;
+    justify-content: center;
+  }
+  .arch-side-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 16px;
+    border-radius: 10px;
+    font-size: 0.82rem;
+    font-weight: 600;
+    white-space: nowrap;
+  }
+  .arch-side-item .side-icon {
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.95rem;
+    flex-shrink: 0;
+  }
+  .arch-flyway {
+    background: rgba(92,138,255,0.08);
+    border: 1px dashed rgba(92,138,255,0.3);
+    color: var(--accent);
+  }
+  .arch-flyway .side-icon { background: rgba(92,138,255,0.15); }
+  .arch-security {
+    background: rgba(245,166,35,0.08);
+    border: 1px dashed rgba(245,166,35,0.3);
+    color: var(--accent3);
+  }
+  .arch-security .side-icon { background: rgba(245,166,35,0.15); }
+
+  .arch-connector {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-left: 0;
+    margin-top: 8px;
+    justify-content: center;
+  }
+  .arch-connector .dashed-line {
+    flex: 1;
+    height: 1px;
+    border-top: 2px dashed var(--border);
+  }
+  .arch-connector .conn-label {
+    font-size: 0.72rem;
+    color: var(--muted);
+    white-space: nowrap;
+  }
+
+  /* IDE file tree */
+  .ide-window {
+    background: var(--code-bg);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    width: 100%;
+    max-width: 1100px;
+    overflow: hidden;
+    box-shadow: 0 12px 40px rgba(0,0,0,0.4);
+  }
+  .ide-titlebar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 16px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+  }
+  .ide-dot { width: 11px; height: 11px; border-radius: 50%; }
+  .ide-dot.red { background: #ff5f57; }
+  .ide-dot.yellow { background: #febc2e; }
+  .ide-dot.green { background: #28c840; }
+  .ide-path {
+    margin-left: 12px;
+    font-family: 'Consolas', 'Fira Code', monospace;
+    font-size: 0.78rem;
+    color: var(--muted);
+  }
+  .ide-body {
+    display: grid;
+    grid-template-columns: 1.2fr 1fr;
+  }
+  .ide-tree {
+    padding: 18px 22px;
+    font-family: 'Consolas', 'Fira Code', monospace;
+    font-size: 0.82rem;
+    line-height: 1.75;
+    color: var(--text);
+    border-right: 1px solid var(--border);
+    white-space: pre;
+  }
+  .ide-tree .pkg { color: var(--accent3); font-weight: 600; }
+  .ide-tree .cls { color: var(--muted); }
+  .ide-tree .key { color: var(--accent2); }
+  .ide-tree .cnt { color: #555; font-size: 0.72rem; }
+  .ide-notes {
+    padding: 18px 22px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    justify-content: center;
+  }
+  .ide-note {
+    border-left: 3px solid var(--accent);
+    padding: 2px 0 2px 12px;
+  }
+  .ide-note .n-title {
+    font-size: 0.82rem;
+    font-weight: 700;
+    color: var(--text);
+    margin-bottom: 2px;
+  }
+  .ide-note .n-text {
+    font-size: 0.76rem;
+    color: var(--muted);
+    line-height: 1.5;
+  }
+
   /* Flow diagram */
   .flow {
     display: flex;
@@ -282,13 +468,7 @@
   .qa-item .q {
     font-weight: 700;
     color: var(--accent);
-    margin-bottom: 6px;
     font-size: 0.95rem;
-  }
-  .qa-item .a {
-    font-size: 0.88rem;
-    color: var(--muted);
-    line-height: 1.6;
   }
 
   /* Footer / nav */
@@ -377,6 +557,7 @@
   <div class="slide slide-title active" data-index="0">
     <h1>Production System</h1>
     <p class="subtitle">Учётная система производства &middot; Веб-приложение</p>
+    <p style="font-size:1.1rem;color:var(--accent);margin-bottom:24px;font-weight:600">Бессонов Максим Александрович</p>
     <div class="stack-tags">
       <span class="tag"><strong>Java</strong> 21</span>
       <span class="tag"><strong>Spring Boot</strong> 3.4</span>
@@ -429,26 +610,56 @@
   <div class="slide" data-index="2">
     <h2>Архитектура <span class="accent">системы</span></h2>
     <div class="section-line"></div>
-    <div class="flow">
-      <div class="flow-step"><span class="step-num">Layer 0</span>Браузер</div>
-      <span class="flow-arrow">→</span>
-      <div class="flow-step"><span class="step-num">Layer 1</span>Controller</div>
-      <span class="flow-arrow">→</span>
-      <div class="flow-step"><span class="step-num">Layer 2</span>Service</div>
-      <span class="flow-arrow">→</span>
-      <div class="flow-step"><span class="step-num">Layer 3</span>Repository</div>
-      <span class="flow-arrow">→</span>
-      <div class="flow-step"><span class="step-num">DB</span>MySQL</div>
+    <div class="arch-main">
+      <!-- Main layers -->
+      <div class="arch-layer arch-browser">
+        <div class="layer-icon">🌐</div>
+        <div class="layer-label">Browser</div>
+        <div class="layer-sub">Thymeleaf</div>
+      </div>
+      <span class="arch-arrow">→</span>
+      <div class="arch-layer arch-controller">
+        <div class="layer-icon">🎮</div>
+        <div class="layer-label">Controller</div>
+        <div class="layer-sub">41 класс</div>
+      </div>
+      <span class="arch-arrow">→</span>
+      <div class="arch-layer arch-service">
+        <div class="layer-icon">⚙️</div>
+        <div class="layer-label">Service</div>
+        <div class="layer-sub">53 класса</div>
+      </div>
+      <span class="arch-arrow">→</span>
+      <div class="arch-layer arch-repo">
+        <div class="layer-icon">🗃️</div>
+        <div class="layer-label">Repository</div>
+        <div class="layer-sub">47 интерфейсов</div>
+      </div>
+      <span class="arch-arrow">→</span>
+      <div class="arch-layer arch-db">
+        <div class="layer-icon">🗄️</div>
+        <div class="layer-label">MySQL</div>
+        <div class="layer-sub">80 миграций</div>
+      </div>
+      <!-- Side layers -->
+      <div class="arch-side">
+        <div class="arch-side-item arch-flyway">
+          <div class="side-icon">📋</div>
+          <div>
+            <div>Flyway</div>
+            <div style="font-size:0.68rem;opacity:0.7">V1 → V80 · validate</div>
+          </div>
+        </div>
+        <div class="arch-side-item arch-security">
+          <div class="side-icon">🔒</div>
+          <div>
+            <div>Spring Security</div>
+            <div style="font-size:0.68rem;opacity:0.7">25 ролей · BCrypt</div>
+          </div>
+        </div>
+      </div>
     </div>
-    <div class="flow" style="margin-top:8px">
-      <span style="font-size:0.8rem;color:var(--muted)">Flyway</span>
-      <span class="flow-arrow">⟵</span>
-      <span style="font-size:0.8rem;color:var(--muted)">Migration Scripts</span>
-      <span style="margin-left:40px;font-size:0.8rem;color:var(--muted)">Spring Security</span>
-      <span class="flow-arrow">⟵</span>
-      <span style="font-size:0.8rem;color:var(--muted)">URL Rules</span>
-    </div>
-    <div class="content-grid three" style="margin-top:28px">
+    <div class="content-grid three" style="margin-top:20px">
       <div class="card">
         <h3><span class="icon blue">DTO</span> Разделение слоёв</h3>
         <p>Сущности не «текут» в шаблоны. DTO — промежуточный слой для форм и страниц</p>
@@ -464,8 +675,61 @@
     </div>
   </div>
 
-  <!-- SLIDE 3: Full cycle -->
+  <!-- SLIDE 3: Project tree (IDE) -->
   <div class="slide" data-index="3">
+    <h2>Структура <span class="accent">кода</span></h2>
+    <div class="section-line"></div>
+    <div class="ide-window">
+      <div class="ide-titlebar">
+        <span class="ide-dot red"></span>
+        <span class="ide-dot yellow"></span>
+        <span class="ide-dot green"></span>
+        <span class="ide-path">src/main/java/ru/company/production</span>
+      </div>
+      <div class="ide-body">
+        <div class="ide-tree">ru.company.production
+├─ <span class="cls">ProductionApplication.java</span>
+├─ <span class="pkg">config/</span> <span class="cnt">6</span>
+│   ├─ <span class="cls">SecurityConfig.java</span>
+│   ├─ <span class="cls">WebConfig.java</span>
+│   └─ <span class="cls">DepartmentAuthSuccessHandler.java</span>
+├─ <span class="pkg">controller/</span> <span class="cnt">50</span>
+│   ├─ <span class="cls">DispatcherController.java</span>
+│   ├─ <span class="cls">TechnologyController.java</span>
+│   └─ <span class="cls">WarehouseKittingController.java</span>
+├─ <span class="pkg">dto/</span> <span class="cnt">85</span>
+├─ <span class="pkg">entity/</span> <span class="cnt">83</span>
+├─ <span class="pkg">repository/</span> <span class="cnt">77</span>
+├─ <span class="pkg">service/</span> <span class="cnt">61</span>
+│   ├─ <span class="key">OrderSchedulingService.java</span>
+│   ├─ <span class="key">SerialMovementJournalService.java</span>
+│   ├─ <span class="key">SubassemblyKittingService.java</span>
+│   └─ <span class="pkg">checklist/</span><span class="cls">ChecklistParser.java</span>
+└─ <span class="pkg">web/</span> <span class="cnt">1</span></div>
+        <div class="ide-notes">
+          <div class="ide-note">
+            <div class="n-title">Зависимости — в одну сторону</div>
+            <div class="n-text">controller → service → repository. Обратных рёбер нет: контроллер не знает про JPA, сервис — про HTTP.</div>
+          </div>
+          <div class="ide-note" style="border-color:var(--accent2)">
+            <div class="n-title">dto/ — 85 классов</div>
+            <div class="n-text">Формы ввода и projection-интерфейсы для списков. Сущности не попадают в шаблоны.</div>
+          </div>
+          <div class="ide-note" style="border-color:#a85cff">
+            <div class="n-title">service/ — самый толстый слой</div>
+            <div class="n-text">61 класс, ~34 000 строк. Здесь <span class="hl">@Transactional</span>-переходы статусов и весь расчёт графика.</div>
+          </div>
+          <div class="ide-note" style="border-color:var(--accent3)">
+            <div class="n-title">repository/ — 47 + 28</div>
+            <div class="n-text">47 JpaRepository и 28 projection-интерфейсов: тяжёлые списки читаются колонками, а не сущностями.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SLIDE 4: Full cycle -->
+  <div class="slide" data-index="4">
     <h2>Сквозной <span class="accent">производственный цикл</span></h2>
     <div class="section-line"></div>
     <div class="flow">
@@ -659,19 +923,15 @@
     <div class="section-line"></div>
     <div class="qa-item">
       <div class="q">«Зачем серверный рендеринг, а не SPA?»</div>
-      <div class="a">Операторы цеха на рабочих машинах. Одна деплой-артефакт, сессионная модель Spring Security из коробки. Тяжёлые взаимодействия закрыты собственными JS-модулями по разделам.</div>
     </div>
     <div class="qa-item" style="margin-top:12px">
       <div class="q">«Почему Flyway, а не ddl-auto: update?»</div>
-      <div class="a">update не умеет переносить данные между классификаторами (V4, V5). Validate ловит расхождение сущности и таблицы на старте, а не в проде.</div>
     </div>
     <div class="qa-item" style="margin-top:12px">
       <div class="q">«Как обеспечена целостность статусов?»</div>
-      <div class="a">Переходы живут в сервисах в одной транзакции (@Transactional). Смена статуса и запись в журнал — одним вызовом сервиса.</div>
     </div>
     <div class="qa-item" style="margin-top:12px">
       <div class="q">«Где тесты?»</div>
-      <div class="a">Есть 4 класса unit-тестов (~2 000 строк) на расчёт графика и статусные переходы. Покрытия JPQL и веб-слоя пока нет — приоритет первой итерации был закрыть сквозную функциональность. Следующий шаг — интеграционные тесты на новых экранах.</div>
     </div>
   </div>
 
