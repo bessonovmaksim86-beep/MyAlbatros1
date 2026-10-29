@@ -19,7 +19,6 @@ import ru.company.production.entity.Operation;
 import ru.company.production.entity.OperationTypeCode;
 import ru.company.production.entity.OrderScheduleRow;
 import ru.company.production.entity.ProductionOrder;
-import ru.company.production.entity.Role;
 import ru.company.production.entity.ScheduleRowStatus;
 import ru.company.production.entity.TechProcess;
 import ru.company.production.entity.TechProcessOperation;
@@ -93,33 +92,6 @@ public class WorkshopDistributionService {
             DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm");
 
     /*
-     * Руководящие роли: те, кому планировщик отдаёт получение
-     * комплектации своего подразделения как личную работу.
-     *
-     * Рядом с мастерами цехов, складов и бюро стоят начальники
-     * технологического бюро и диспетчерского отдела, руководитель
-     * службы качества — у них нет цехового модуля, но операции своего
-     * подразделения (в том числе получение комплектации) закрепляются
-     * именно за ними, и распределять их больше некому.
-     */
-    private static final Set<Role> SUPERVISOR_ROLES = Set.of(
-            Role.SDP_SPP_MASTER,
-            Role.SDP_SA_MASTER,
-            Role.SDP_SC_MASTER,
-            Role.SDP_ST_MASTER,
-            Role.OMTSIK_MASTER,
-            Role.OMTSIK_С_MASTER,
-            Role.BVK_MASTER,
-            Role.BTK_MASTER,
-            Role.SGP_MASTER,
-            Role.SGM_MASTER,
-            Role.SDP_SERVICE_HEAD_TECHNOLOGY,
-            Role.SDP_SERVICE_HEAD_DISPATCHER,
-            Role.DISPATCHER,
-            Role.SK_GENERAL
-    );
-
-    /*
      * Роли-исполнители справочника операций, которые носит сам
      * руководитель: «Начальник цеха/отдела» и «Руководитель службы».
      *
@@ -150,47 +122,6 @@ public class WorkshopDistributionService {
     public static final Set<String> NON_DISTRIBUTION_TYPE_CODES = Set.of(
             OperationTypeCode.KIT_RECEIPT.name(),
             OperationTypeCode.WORK_DISTRIBUTION.name()
-    );
-
-    /*
-     * Подразделения, где работу не распределяют: бюро входного контроля
-     * и бюро технического контроля.
-     *
-     * Контролёр бюро берёт любую работу из перечня бюро, а планировщик
-     * закрепляет строку графика за подразделением, а не за человеком,
-     * поэтому и меню, и право проведения здесь считаются по
-     * подразделению, а не по executor_id. Руководитель бюро и
-     * руководитель службы качества видят тот же перечень целиком.
-     *
-     * БТК стоит в этом же наборе наравне с БВК: распределения работ у
-     * него нет, и закрепление строки за конкретным контролёром
-     * отрезало бы остальным доступ к её проведению — работа висела бы
-     * на человеке, который в этот день её не ведёт.
-     */
-    private static final Set<Role> UNIT_POOL_ROLES = Set.of(
-            Role.BVK_EXECUTOR,
-            Role.BVK_MASTER,
-            Role.BTK_EXECUTOR,
-            Role.BTK_MASTER,
-            Role.SK_GENERAL
-    );
-
-    /*
-     * Руководящие роли, которым раздел распределения не принадлежит.
-     *
-     * Набор уже покрыт {@link #UNIT_POOL_ROLES}, но вынесен отдельно и
-     * намеренно его уже: руководитель службы качества ведёт тот же
-     * перечень через собственный интерфейс, и отсекать ему вход значило
-     * бы убрать раздел у человека, который к бюро отношения не имеет.
-     *
-     * Основание закрытия то же, что у пула: работу бюро планировщик
-     * закрепляет за подразделением, и перекладывать её некому —
-     * очередь распределения здесь всегда пуста, а закрепление за
-     * конкретным контролёром только отрезает работу от остальных.
-     */
-    private static final Set<Role> NO_DISTRIBUTION_ROLES = Set.of(
-            Role.BVK_MASTER,
-            Role.BTK_MASTER
     );
 
     private final OrderScheduleRowRepository scheduleRowRepo;
@@ -2214,7 +2145,7 @@ public class WorkshopDistributionService {
     public boolean isSupervisor(AppUser user) {
         return user != null
                 && user.getRole() != null
-                && SUPERVISOR_ROLES.contains(user.getRole());
+                && WorkshopDistributionPolicy.isSupervisor(user.getRole());
     }
 
     /**
@@ -2231,9 +2162,8 @@ public class WorkshopDistributionService {
      * подразделением, и любой контролёр берёт её сам.
      */
     public boolean canDistribute(AppUser user) {
-        return isSupervisor(user)
-                && user.getRole() != null
-                && !NO_DISTRIBUTION_ROLES.contains(user.getRole());
+        return user != null
+                && WorkshopDistributionPolicy.canDistribute(user.getRole());
     }
 
     /**
@@ -2782,9 +2712,8 @@ public class WorkshopDistributionService {
      * закреплённости: в бюро входного контроля работы не распределяются.
      */
     public boolean isUnitPool(AppUser user) {
-        return user != null
-                && user.getRole() != null
-                && UNIT_POOL_ROLES.contains(user.getRole());
+        return WorkshopDistributionPolicy.isUnitPool(
+                user == null ? null : user.getRole());
     }
 
     /*
