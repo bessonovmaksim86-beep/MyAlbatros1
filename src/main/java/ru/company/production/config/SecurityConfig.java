@@ -19,6 +19,7 @@ public class SecurityConfig {
 
     private final UserRepository userRepository;
     private final DepartmentAuthenticationSuccessHandler successHandler;
+
     @Bean
     public PasswordEncoder passwordEncoder() {
         return new BCryptPasswordEncoder(12);
@@ -57,104 +58,31 @@ public class SecurityConfig {
                                 "/webjars/**"
                         ).permitAll()
                         /*
-                         * Стили и скрипты разделов. Разметка общего
-                         * раздела «Мои операции» берёт боковое меню у
-                         * модуля руководителя (workshop/fragments/layout),
-                         * поэтому страница исполнителя ссылается на
-                         * /workshop/css/**; то же делают кладовщик и
-                         * руководитель службы качества. Без этого
-                         * правила файлы попадают под общий matcher
-                         * своего раздела, закрытый ролями руководителей,
-                         * и роль исполнителя получает на них 403 —
-                         * страница остаётся без каскадов: панель свёрнута
-                         * и подписи пунктов вылезают наружу, а бейджи
-                         * склеиваются. Правило держится над правилами
-                         * разделов: Spring Security берёт первое
-                         * совпадение.
-                         *
-                         * Шаблон по каталогу, а не список разделов:
-                         * в static у каждого раздела только css и js, и
-                         * новый раздел не придётся дописывать сюда.
+                         * Стили и скрипты разделов: общие правила
+                         * (см. docs/security-access.md, разделы 2–3).
                          */
                         .requestMatchers("/*/css/**", "/*/js/**")
                         .permitAll()
-                        .requestMatchers("/admin", "/admin/**").hasRole("ADMIN")
-                        /*
-                         * «Мои операции»: работы, закреплённые за самим
-                         * пользователем. Доступен всем аутентифицированным.
-                         * Список строится по учётной записи, поэтому
-                         * пользователь видит только свои работы независимо
-                         * от роли.
-                         */
-                        .requestMatchers("/my-operations", "/my-operations/**")
+                        .requestMatchers("/admin", "/admin/**")
+                        .hasRole("ADMIN")
+                        .requestMatchers("/my-operations",
+                                "/my-operations/**")
                         .authenticated()
                         /*
-                         * Распределение работ — ПЕРВЫМ, до общего
-                         * "/workshop/**": Spring Security применяет
-                         * первое совпадение, и если выше стоит общий
-                         * matcher, его короткий список ролей отрезал бы
-                         * расширенный — руководитель службы качества не
-                         * попадал в раздел, хотя пункт «Распределение
-                         * работ» ему в меню рисовали.
-                         *
-                         * Граница содержимого — подразделение учётной
-                         * записи (WorkshopStaffService), роль здесь
-                         * решает только «впускать ли вообще». Кроме
-                         * мастеров цехов, складов и бюро допущены
-                         * руководители вне цехового модуля: техбюро,
-                         * диспетчерский отдел, диспетчер и служба
-                         * качества — операции (в т. ч. получение
-                         * комплектации) их подразделения планировщик
-                         * закрепляет за ними, и распределять их больше
-                         * некому.
-                         *
-                         * Руководителей БВК и БТК в списке нет намеренно:
-                         * в бюро работу не распределяют — планировщик
-                         * закрепляет строку за подразделением, и любой
-                         * контролёр берёт её из перечня бюро сам
-                         * (WorkshopDistributionService#isUnitPool).
-                         * Закрепление за человеком здесь только отрезало
-                         * бы работу от остальных сотрудников бюро.
+                         * Распределение работ: см. docs/security-access.md,
+                         * раздел 4.
                          */
                         .requestMatchers(
                                 "/workshop/distribution",
                                 "/workshop/distribution/**"
                         )
-                        .hasAnyRole(
-                                "SDP_SPP_MASTER",
-                                "SDP_SA_MASTER",
-                                "SDP_SC_MASTER",
-                                "SDP_ST_MASTER",
-                                "OMTSIK_MASTER",
-                                "OMTSIK_С_MASTER",
-                                "SGP_MASTER",
-                                "SGM_MASTER",
-                                "SK_GENERAL",
-                                "SDP_SERVICE_HEAD_TECHNOLOGY",
-                                "SDP_SERVICE_HEAD_DISPATCHER",
-                                "DISPATCHER"
-                        )
+                        .hasAnyRole(AccessRoles.DISTRIBUTION_MANAGERS)
                         /*
-                         * Сотрудники, операции и производственный календарь —
-                         * начальнику службы контроля их открывают отдельными
-                         * правилами.
+                         * Сотрудники, операции, календарь: раздел 5.
                          *
-                         * Правила стоят до общего блока /workshop/**, потому что
-                         * Spring Security берёт первое совпадение: блок закрыт
-                         * цеховыми ролями и отсек бы SK_GENERAL раньше. Границей
-                         * его списков служит служба целиком (WorkshopStaffService
-                         * #unitScope), поэтому контролёры БТК и БВК видны ему
-                         * целиком.
-                         *
-                         * Все три раздела открыты и на запись: по замыслу они
-                         * работают для службы так же, как для руководителя
-                         * цеха. Справочник операций общий с технологическим
-                         * отделом, и без права записи контролёры БТК и БВК
-                         * работали бы операциями чужих цехов, а без закрепления
-                         * сотрудников в очереди распределения не появилось бы
-                         * ни одного исполнителя. Границы при этом проверяет
-                         * сервис: подразделение вне своей службы служба не
-                         * получит, даже изменив идентификатор в форме.
+                         * Набор шире UNIT_MANAGERS: сюда входит
+                         * руководитель службы качества, которому эти
+                         * разделы открыты его собственной службой.
                          */
                         .requestMatchers(
                                 HttpMethod.GET,
@@ -165,19 +93,7 @@ public class SecurityConfig {
                                 "/workshop/calendar",
                                 "/workshop/calendar/**"
                         )
-                        .hasAnyRole(
-                                "SDP_SPP_MASTER",
-                                "SDP_SA_MASTER",
-                                "SDP_SC_MASTER",
-                                "SDP_ST_MASTER",
-                                "OMTSIK_MASTER",
-                                "OMTSIK_С_MASTER",
-                                "BVK_MASTER",
-                                "BTK_MASTER",
-                                "SGP_MASTER",
-                                "SGM_MASTER",
-                                "SK_GENERAL"
-                        )
+                        .hasAnyRole(AccessRoles.UNIT_SECTIONS)
                         .requestMatchers(
                                 HttpMethod.POST,
                                 "/workshop/staff",
@@ -187,105 +103,40 @@ public class SecurityConfig {
                                 "/workshop/calendar",
                                 "/workshop/calendar/**"
                         )
-                        .hasAnyRole(
-                                "SDP_SPP_MASTER",
-                                "SDP_SA_MASTER",
-                                "SDP_SC_MASTER",
-                                "SDP_ST_MASTER",
-                                "OMTSIK_MASTER",
-                                "OMTSIK_С_MASTER",
-                                "BVK_MASTER",
-                                "BTK_MASTER",
-                                "SGP_MASTER",
-                                "SGM_MASTER",
-                                "SK_GENERAL"
-                        )
+                        .hasAnyRole(AccessRoles.UNIT_SECTIONS)
                         /*
-                         * Полный цеховой модуль (сотрудники, календарь,
-                         * операции подразделения) остаётся за мастерами
-                         * цехов, складов и бюро входного контроля.
+                         * Полный цеховой модуль: раздел 6.
                          */
                         .requestMatchers("/workshop", "/workshop/**")
-                        .hasAnyRole(
-                                "SDP_SPP_MASTER",
-                                "SDP_SA_MASTER",
-                                "SDP_SC_MASTER",
-                                "SDP_ST_MASTER",
-                                "OMTSIK_MASTER",
-                                "OMTSIK_С_MASTER",
-                                "BVK_MASTER",
-                                "BTK_MASTER",
-                                "SGP_MASTER",
-                                "SGM_MASTER"
-                        )
+                        .hasAnyRole(AccessRoles.UNIT_MANAGERS)
                         /*
-                         * Склад полуфабрикатов: оприходование ячеек.
-                         * Модуль определяет свои границы по учётной записи,
-                         * поэтому право даётся только роли склада.
+                         * Склад: раздел 7.
                          */
                         .requestMatchers("/warehouse", "/warehouse/**")
-                        .hasAnyRole(
-                                "OMTSIK_EXECUTOR",
-                                "OMTSIK_С_EXECUTOR"
-                        )
+                        .hasAnyRole(AccessRoles.WAREHOUSE_EXECUTORS)
                         /*
-                         * Бюро входного контроля: проверка партий,
-                         * оприходованных складом. Модуль работает с
-                         * чужим приходом, поэтому право давать ему
-                         * доступ к этим партиям есть только у роли
-                         * входного контроля.
-                         *
-                         * Руководителю бюро открыт только просмотр:
-                         * карточки прихода он читает те же, что и его
-                         * контролёры, и без этих пунктов его меню
-                         * отправляло бы его в чужой модуль. Проводить
-                         * проверку он не вправе — решение по партии
-                         * остаётся за исполнителем, поэтому POST
-                         * закрыт его ролью и ниже.
+                         * Бюро входного контроля: раздел 8.
                          */
                         .requestMatchers(
                                 HttpMethod.GET,
                                 "/input-control",
                                 "/input-control/**"
                         )
-                        .hasAnyRole("BVK_EXECUTOR", "BVK_MASTER")
-                        .requestMatchers("/input-control", "/input-control/**")
+                        .hasAnyRole(AccessRoles.BVK_STAFF)
+                        .requestMatchers("/input-control",
+                                "/input-control/**")
                         .hasRole("BVK_EXECUTOR")
                         /*
-                         * Интерфейс руководителя службы качества: разбор
-                         * изолятора брака и заказы на ремонт. Модуль читает
-                         * те же карточки входного контроля, что и бюро, но
-                         * решает по ним свою задачу — поэтому право на него
-                         * есть только у роли руководителя СК.
+                         * Служба качества: раздел 9.
                          */
                         .requestMatchers("/quality", "/quality/**")
                         .hasRole("SK_GENERAL")
                         /*
-                         * Отбраковка ячейки/подсборки с согласованием
-                         * бюро. Раздел вынесен за /input-control/**,
-                         * потому что адресом пользуются обе роли бюро
-                         * одинаково: правило "/input-control/**" держит
-                         * POST только для исполнителя и отсекло бы
-                         * руководителя, а решать по заявке должен и он.
-                         *
-                         * Право на заявку есть только у бюро: заявка
-                         * рождается из цеха, но проводит её по журналу
-                         * и изолятору именно бюро, и решение обязан
-                         * нести тот, кто отвечает за качество.
-                         *
-                         * Бюро технического контроля открыто наравне с
-                         * входным: цех бракует ячейку по ходу сборки, а
-                         * это этап технического контроля, и отказать БТК
-                         * в заявке цеха значило бы заставить мастера
-                         * искать контролёра не того бюро.
+                         * Заявки на отбраковку: раздел 10.
                          */
-                        .requestMatchers("/pending-defects", "/pending-defects/**")
-                        .hasAnyRole(
-                                "BVK_EXECUTOR",
-                                "BVK_MASTER",
-                                "BTK_EXECUTOR",
-                                "BTK_MASTER"
-                        )
+                        .requestMatchers("/pending-defects",
+                                "/pending-defects/**")
+                        .hasAnyRole(AccessRoles.DEFECT_REQUEST_STAFF)
                         .anyRequest().authenticated()
                 )
                 .formLogin(form -> form
