@@ -131,28 +131,6 @@
                 </span>
             </a>
 
-            <a class="technology-navigation__item"
-               th:classappend="${activePage == 'approvals'} ? ' is-active' : ''"
-               th:href="@{/technology/approvals}"
-               title="Согласование">
-
-                <span class="technology-navigation__icon">
-                    <svg viewBox="0 0 24 24" aria-hidden="true">
-                        <path d="m9 16.2-3.5-3.5L4.1 14.1 9 19 20.3 7.7l-1.4-1.4L9 16.2Z"/>
-                    </svg>
-                </span>
-
-                <span class="technology-navigation__text">
-                    Согласование
-                </span>
-
-                <span class="technology-navigation__counter"
-                      th:if="${approvalCount != null and approvalCount > 0}"
-                      th:text="${approvalCount}">
-                    7
-                </span>
-            </a>
-
             <!--
                 Разделов планирования («Распределение работ», «Мои
                 операции») в меню отдела намеренно нет: техбюро строит
@@ -163,8 +141,19 @@
         </nav>
 
         <div class="technology-sidebar__footer">
-            <span class="technology-sidebar__status-dot"></span>
+            <form th:action="@{/logout}" method="post">
+                <input th:if="${_csrf != null}"
+                       type="hidden"
+                       th:name="${_csrf.parameterName}"
+                       th:value="${_csrf.token}">
 
+                <button type="submit" class="technology-sidebar__logout">
+                    <span class="technology-sidebar__status-dot"></span>
+                    <span class="technology-sidebar__logout-text">
+                        Выйти
+                    </span>
+                </button>
+            </form>
         </div>
     </div>
 </aside>

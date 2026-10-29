@@ -14,6 +14,7 @@ import ru.company.production.repository.SensorCatalogRepository;
 
 import java.math.BigDecimal;
 import java.util.*;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -145,14 +146,22 @@ public class ProductClassifierService {
         classifier.setCode(form.getCode());
         classifier.setProductType(form.getProductType());
         classifier.setNote(trim(form.getNote()));
+
+        /*
+         * Наименование пишут изделия всех типов: у датчика это не повтор
+         * рода из справочника, а исполнение («12-1», «01А-1») — по нему
+         * SensorClassifierMatcher различает датчики одного рода, а список
+         * классификаторов показывает род вместе с исполнением. Обнуление
+         * поля для датчика стирало бы исполнение из БД при каждой правке
+         * классификатора.
+         */
+        classifier.setName(trim(form.getName()));
         if (form.getProductType() == ProductType.SENSOR) {
             SensorCatalog sensor = sensors.findById(form.getSensorCatalogId()).orElseThrow(() ->
                     new EntityNotFoundException("Выбранный датчик не найден"));
             classifier.setSensorCatalog(sensor);
-            classifier.setName(null);
         } else {
             classifier.setSensorCatalog(null);
-            classifier.setName(trim(form.getName()));
         }
     }
 
@@ -326,6 +335,35 @@ public class ProductClassifierService {
         if (row.getUnit() == null) throw new IllegalArgumentException("Выберите единицу измерения");
     }
 
+    /**
+     * Исполнение датчика обязано быть уникальным в рамках рода.
+     *
+     * Полное обозначение датчика складывается из наименования рода и
+     * его исполнения, поэтому два классификатора одного рода с одним
+     * product_name неразличимы: подбор по полному обозначению в позиции
+     * заказа (SensorClassifierMatcher) возвращал бы сразу несколько
+     * изделий и отказывал диспетчеру.
+     *
+     * Пустое исполнение не проверяют: род без значимых параметров
+     * поиска может не иметь маски, и такие записи различаются кодом.
+     */
+    private void validateSensorExecution(ClassifierForm form, Long currentClassifierId) {
+        if (form.getProductType() != ProductType.SENSOR) return;
+        String execution = trim(form.getName());
+        if (execution == null) return;
+        List<Integer> taken = classifiers.findSensorCodesByExecution(
+                form.getSensorCatalogId(), execution, currentClassifierId);
+        if (taken.isEmpty()) return;
+        String sensorClass = sensors.findById(form.getSensorCatalogId())
+                .map(SensorCatalog::getName)
+                .map(this::trim)
+                .orElse("выбранного рода");
+        throw new IllegalArgumentException("Наименование «" + execution
+                + "» уже использует датчик рода «" + sensorClass + "» (код "
+                + taken.stream().map(String::valueOf).collect(Collectors.joining(", "))
+                + "). В рамках одного рода датчиков наименования не должны повторяться.");
+    }
+
     private void validate(ClassifierForm form, Long currentClassifierId) {
         if (form.getCode() == null || form.getCode() < 1000 || form.getCode() > 9999) {
             throw new IllegalArgumentException("Код классификатора должен быть в диапазоне от 1000 до 9999");
@@ -333,6 +371,7 @@ public class ProductClassifierService {
         if (form.getProductType() == null) throw new IllegalArgumentException("Выберите тип изделия");
         if (form.getProductType() == ProductType.SENSOR) {
             if (form.getSensorCatalogId() == null) throw new IllegalArgumentException("Выберите датчик");
+            validateSensorExecution(form, currentClassifierId);
         } else if (trim(form.getName()) == null) {
             throw new IllegalArgumentException("Укажите наименование");
         }

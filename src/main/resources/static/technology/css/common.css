@@ -368,6 +368,75 @@ body {
     opacity: 1;
 }
 
+/* ============================================================
+   ФУТЕР С ВЫХОДОМ
+   ============================================================ */
+
+.technology-sidebar__footer {
+    margin-top: auto;
+    padding: 14px 0 0;
+
+    color: var(--technology-sidebar-muted);
+    font-size: 11px;
+}
+
+.technology-sidebar__footer form {
+    margin: 0;
+}
+
+.technology-sidebar__logout {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+
+    box-sizing: border-box;
+    width: 266px;
+    min-height: 42px;
+    padding: 10px 13px;
+
+    overflow: hidden;
+
+    color: #dbe6f1;
+    font: inherit;
+    font-size: 13px;
+    font-weight: 600;
+    white-space: nowrap;
+
+    cursor: pointer;
+
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 10px;
+
+    transition:
+        color 160ms ease,
+        background-color 160ms ease;
+}
+
+.technology-sidebar__logout:hover,
+.technology-sidebar__logout:focus-visible {
+    color: #ffffff;
+    background: rgba(255, 255, 255, 0.08);
+}
+
+.technology-sidebar__status-dot {
+    flex: 0 0 8px;
+    width: 8px;
+    height: 8px;
+
+    background: #38c172;
+    border-radius: 50%;
+}
+
+.technology-sidebar__logout-text {
+    opacity: 0;
+    transition: opacity var(--technology-sidebar-duration) ease;
+}
+
+.technology-sidebar:hover .technology-sidebar__logout-text,
+.technology-sidebar:focus-within .technology-sidebar__logout-text {
+    opacity: 1;
+}
 
 /* ============================================================
    ВЕРХНЯЯ ПАНЕЛЬ

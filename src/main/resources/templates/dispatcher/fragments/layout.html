@@ -173,7 +173,19 @@
         </nav>
 
         <div class="dispatcher-sidebar__footer">
-            <span class="dispatcher-sidebar__status-dot"></span>
+            <form th:action="@{/logout}" method="post">
+                <input th:if="${_csrf != null}"
+                       type="hidden"
+                       th:name="${_csrf.parameterName}"
+                       th:value="${_csrf.token}">
+
+                <button type="submit" class="dispatcher-sidebar__logout">
+                    <span class="dispatcher-sidebar__status-dot"></span>
+                    <span class="dispatcher-sidebar__logout-text">
+                        Выйти
+                    </span>
+                </button>
+            </form>
         </div>
     </div>
 </aside>
