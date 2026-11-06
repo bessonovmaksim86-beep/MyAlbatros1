@@ -17,6 +17,10 @@
     <!-- Всплывающие уведомления о новых делах -->
     <link rel="stylesheet"
           th:href="@{/css/notifications.css}">
+
+    <!-- Справка о пунктах меню: кнопка живёт в сайдбаре этого раздела -->
+    <link rel="stylesheet"
+          th:href="@{/css/app-help.css}">
 </head>
 
 <body>
@@ -258,5 +262,7 @@
 <script th:src="@{/js/float-scroll.js}"></script>
 <!-- Фоновая проверка счётчиков: звук + тосты при приросте -->
 <script th:src="@{/js/notifications.js}"></script>
+<!-- Справка о пунктах меню: окно строится из разметки сайдбара -->
+<script th:src="@{/js/app-help.js}"></script>
 </body>
 </html>

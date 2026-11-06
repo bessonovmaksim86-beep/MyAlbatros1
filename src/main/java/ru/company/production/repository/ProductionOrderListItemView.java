@@ -86,6 +86,17 @@ public interface ProductionOrderListItemView {
     Long getDoneItemCount();
 
     /*
+     * Количество ячеек, внесённых складом в заказ (матрица
+     * комплектования, V20).
+     *
+     * Нужен колонке «Готово» группового заказа: состава (позиций) у
+     * него нет — заказ задан изделием и количеством, — и на позициях
+     * колонка показала бы вечное «0 из 0». Внесённая ячейка и есть
+     * сделанная позиция, а заказанное количество задаёт знаменатель.
+     */
+    Long getCellCount();
+
+    /*
      * Число активных заказов-комплектующих, входящих в этот заказ.
      *
      * Скалярный подзапрос, а не связь: список читает проекцию, у которой
@@ -212,12 +223,52 @@ public interface ProductionOrderListItemView {
                 : value.stripTrailingZeros().toPlainString();
     }
 
-    /* Готово: «собрано из заявленного», например «3 из 10». */
+    /*
+     * Готово: «собрано из заявленного», например «3 из 10».
+     *
+     * Групповой заказ (V38) состава не имеет — он задан изделием и
+     * количеством, — и на позициях колонка показала бы вечное
+     * «0 из 0». Его готовность считают по внесённым складом ячейкам:
+     * знаменатель — заказанное количество, числитель — сколько ячеек
+     * уже в заказе. Часть ячеек могла уйти в брак и быть снятой с
+     * комплектования, поэтому «2 из 4» при закрытом заказе — норма, а
+     * не ошибка: заказ закрыт, а две позиции списали.
+     */
     default String getDoneProgress() {
+
+        if (isGroupKind()) {
+            long ordered = quantityAsLong();
+            long attached = getCellCount() == null ? 0L : getCellCount();
+
+            return attached + " из " + ordered;
+        }
+
         long total = getItemCount() == null ? 0L : getItemCount();
         long done = getDoneItemCount() == null ? 0L : getDoneItemCount();
 
         return done + " из " + total;
+    }
+
+    /*
+     * Групповой ли заказ — по тому же признаку вида, что и раздел
+     * списка (см. {@link #isComponent()} и ZnpKind#isGroupKind).
+     *
+     * Считается из проекции, а не из строки шаблона: «Готово» обязаны
+     * одинаково читать список групповых и общий список заказов, иначе
+     * один и тот же заказ показал бы две разные готовности.
+     */
+    default boolean isGroupKind() {
+        ZnpKind kind = getZnpKind();
+
+        return kind != null && kind.isGroupKind();
+    }
+
+    /* Заказанное количество целым: «10», а не «10.000». */
+    default long quantityAsLong() {
+
+        java.math.BigDecimal value = getQuantity();
+
+        return value == null ? 0L : value.longValue();
     }
 
     /*

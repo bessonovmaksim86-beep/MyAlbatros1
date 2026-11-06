@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="ru"
+      xmlns:th="http://www.thymeleaf.org">
+
+<head>
+    <meta charset="UTF-8">
+
+    <meta name="viewport"
+          content="width=device-width, initial-scale=1">
+
+    <title>Приёмка от склада</title>
+
+    <link rel="stylesheet"
+          th:href="@{/technology/css/technology.css}">
+
+    <link rel="stylesheet"
+          th:href="@{/workshop/css/workshop.css}">
+
+    <link rel="stylesheet"
+          th:href="@{/workshop/css/receiving.css}">
+</head>
+
+<body>
+
+<div class="app-shell">
+
+    <aside th:replace="~{workshop/fragments/layout
+            :: sidebar('receiving')}">
+    </aside>
+
+    <main class="main">
+
+        <header th:replace="~{workshop/fragments/layout
+                :: topbar}">
+        </header>
+
+        <div class="page-content workshop-page">
+
+            <div class="page-head">
+
+                <div class="page-title">
+
+                    <h1>Приёмка от склада</h1>
+
+                    <p>
+                        Склад снял позицию с полки и привёз её в
+                        <span th:text="${unitWord}">цех</span> — номер числится здесь,
+                        пока его не подтвердят. Подтверждённая позиция со склада снимается,
+                        возвращённая снова ляжет в доступный остаток
+                    </p>
+
+                </div>
+
+                <div class="page-head-actions">
+
+                    <a class="btn secondary"
+                       th:href="@{/workshop/operations}">
+                        Операции подразделения
+                    </a>
+
+                </div>
+
+            </div>
+
+            <div class="alert success"
+                 th:if="${successMessage}"
+                 th:text="${successMessage}">
+            </div>
+
+            <div class="alert danger"
+                 th:if="${errorMessage}"
+                 th:text="${errorMessage}">
+            </div>
+
+            <section class="card">
+
+                <div class="card-head">
+
+                    <h2>
+                        Ожидают подтверждения
+                        <span th:text="${pendingCount}">2</span>
+                    </h2>
+
+                    <p>
+                        Порядок — по времени передачи: самые давние сверху
+                    </p>
+
+                </div>
+
+                <div class="table-wrap" th:if="${!#lists.isEmpty(handovers)}">
+
+                    <table>
+
+                        <thead>
+                        <tr>
+                            <th>Номер позиции</th>
+                            <th>Изделие</th>
+                            <th>Вид</th>
+                            <th>Заказ</th>
+                            <th>Операция</th>
+                            <th>Передал</th>
+                            <th>Когда</th>
+                            <th>Действия</th>
+                        </tr>
+                        </thead>
+
+                        <tbody>
+
+                        <tr th:each="handover : ${handovers}">
+
+                            <td>
+                                <strong th:text="${handover.fullNumber}">
+                                    510200011
+                                </strong>
+                            </td>
+
+                            <td th:text="${handover.deviceLabel}">
+                                5102 — ЯПР20М
+                            </td>
+
+                            <td>
+                                <span class="status"
+                                      th:classappend="' ' + ${handover.kindBadgeClass}"
+                                      th:text="${handover.kindLabel}">
+                                    Ячейка
+                                </span>
+                            </td>
+
+                            <td th:text="${handover.orderLabel}">
+                                ЗНП-2026-11
+                            </td>
+
+                            <td th:text="${handover.operationLabel}">
+                                Монтаж подсборок
+                            </td>
+
+                            <td th:text="${handover.transferredByLabel}">
+                                Кладовщик Иванов И. И.
+                            </td>
+
+                            <td th:text="${handover.transferredAtLabel}">
+                                05.11.2026 14:10
+                            </td>
+
+                            <td>
+                                <div class="receiving-actions">
+
+                                    <form th:action="@{/workshop/receiving/accept}"
+                                          method="post">
+
+                                        <input th:if="${_csrf != null}"
+                                               type="hidden"
+                                               th:name="${_csrf.parameterName}"
+                                               th:value="${_csrf.token}">
+
+                                        <input type="hidden"
+                                               name="id"
+                                               th:value="${handover.id}">
+
+                                        <button type="submit" class="btn primary">
+                                            Принять
+                                        </button>
+
+                                    </form>
+
+                                    <!--
+                                        Возврат — форма с причиной: без неё
+                                        кладовщик не поймёт, что не так с
+                                        номером, и привезёт тот же снова.
+                                        Поле свёрнуто, чтобы не раздувать
+                                        строку таблицы.
+                                    -->
+                                    <form th:action="@{/workshop/receiving/reject}"
+                                          method="post"
+                                          class="receiving-reject">
+
+                                        <input th:if="${_csrf != null}"
+                                               type="hidden"
+                                               th:name="${_csrf.parameterName}"
+                                               th:value="${_csrf.token}">
+
+                                        <input type="hidden"
+                                               name="id"
+                                               th:value="${handover.id}">
+
+                                        <input type="text"
+                                               name="reason"
+                                               maxlength="1000"
+                                               autocomplete="off"
+                                               placeholder="Причина возврата">
+
+                                        <button type="submit" class="btn secondary">
+                                            Вернуть
+                                        </button>
+
+                                    </form>
+
+                                </div>
+                            </td>
+
+                        </tr>
+
+                        </tbody>
+
+                    </table>
+
+                </div>
+
+                <div class="card-body empty"
+                     th:if="${#lists.isEmpty(handovers)}">
+                    Подтверждения ждут ноль позиций: всё привезённое со склада принято
+                </div>
+
+            </section>
+
+        </div>
+
+    </main>
+
+</div>
+
+</body>
+
+</html>

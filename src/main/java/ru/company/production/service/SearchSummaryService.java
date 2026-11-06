@@ -18,8 +18,10 @@ import ru.company.production.repository.OperationRepository;
 import ru.company.production.repository.ProductClassifierRepository;
 import ru.company.production.repository.ProductSerialRepository;
 import ru.company.production.repository.ProductionOrderRepository;
+import ru.company.production.repository.SerialProductionOrderRepository;
 import ru.company.production.repository.TechProcessRepository;
 import ru.company.production.repository.WorkPlaceRepository;
+import ru.company.production.repository.ZnpCellLinkView;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -51,6 +53,7 @@ public class SearchSummaryService {
     private final ProductionOrderRepository productionOrderRepository;
     private final ProductSerialRepository productSerialRepository;
     private final CellReceivingBatchRepository receivingBatchRepository;
+    private final SerialProductionOrderRepository serialOrderRepository;
 
     /*
      * Паспорт изделия нужен сводке только как признак: есть ли у номера
@@ -280,6 +283,19 @@ public class SearchSummaryService {
         add(fields, "Заказ покупателя", order.getCustomerOrderNumber());
         add(fields, "Родительский заказ", order.getParentOrderNumber());
         add(fields, "Операция", order.getOperationName());
+
+        /*
+         * Внесённые ячейки — фактический состав заказ-комплектующего.
+         *
+         * Диспетчер находит заказ по номеру и хочет видеть не только
+         * работу, но и чем она закрыта: номер ячейки вносит кладовщик,
+         * и без него сводка обещала бы состав, которого не показать.
+         */
+        List<ZnpCellLinkView> cells =
+                serialOrderRepository.findCellsByOrderId(id);
+
+        add(fields, "Номер ячейки", attachedCellNumbers(cells));
+
         add(fields, "Техпроцесс", blankToNull(order.getTechProcessCode()));
         add(fields, "Дата заказа", order.getFormattedOrderDate());
         add(fields, "Срок исполнения", order.getFormattedDueDate());
@@ -288,11 +304,19 @@ public class SearchSummaryService {
          * Изделие и количество есть только у групповых и ремонтных
          * заказов; у выпуска и комплектования их нет, и пустые строки
          * в сводке были бы шумом — add() их отбрасывает по значению.
+         *
+         * Комплектование количества не задаёт (V37): его объём —
+         * сколько ячеек вошло в заказ. Ноль не печатают: пустой состав
+         * означает «ещё не укомплектован», а не «заявлено ноль».
          */
         if (order.isKindApplicable()) {
             add(fields, "Изделие заказа", blankToNull(
                     order.getClassifierLabel()));
-            add(fields, "Количество", order.getFormattedQuantity());
+            add(fields, "Количество", order.getQuantity() != null
+                    ? order.getFormattedQuantity()
+                    : cells.isEmpty()
+                            ? null
+                            : String.valueOf(cells.size()));
         }
 
         return new SearchSummaryView(
@@ -393,6 +417,30 @@ public class SearchSummaryService {
                 batch.getStatusLabel(),
                 fields
         );
+    }
+
+    /*
+     * Внесённые в заказ ячейки одной строкой: «121200022, 121200023».
+     *
+     * Пустой состав отдаётся null, а не прочерком: строку не добавляют
+     * вовсе (см. add()), и сводка не притворяется, что состав есть.
+     */
+    private String attachedCellNumbers(List<ZnpCellLinkView> cells) {
+        if (cells.isEmpty()) {
+            return null;
+        }
+
+        StringBuilder numbers = new StringBuilder();
+
+        for (ZnpCellLinkView cell : cells) {
+            if (numbers.length() > 0) {
+                numbers.append(", ");
+            }
+
+            numbers.append(cell.getCellNumber());
+        }
+
+        return numbers.toString();
     }
 
     /* Подпись изделия: «1212 ЯПР56» либо род датчика, если имени нет. */

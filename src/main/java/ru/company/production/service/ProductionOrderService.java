@@ -267,8 +267,8 @@ public class ProductionOrderService {
             );
         }
 
-        CustomerOrder customerOrder = requireCustomerOrder(release);
-        LocalDate dueDate = resolveDueDate(customerOrder);
+        CustomerOrder customerOrder = requireCustomerOrder(release);    
+        LocalDate dueDate = resolveDueDate(customerOrder, null);
 
         List<ProductionOrder> created = new ArrayList<>();
 
@@ -407,7 +407,7 @@ public class ProductionOrderService {
         }
 
         CustomerOrder customerOrder = requireCustomerOrder(release);
-        LocalDate dueDate = resolveDueDate(customerOrder);
+        LocalDate dueDate = resolveDueDate(customerOrder, null);
 
         /*
          * Изделия сгруппированы по введённому номеру ЗНП: один заказ
@@ -813,7 +813,7 @@ public class ProductionOrderService {
                 )
                 : null;
 
-        LocalDate dueDate = resolveDueDate(customerOrder);
+        LocalDate dueDate = resolveDueDate(customerOrder, form.getDueDate());
 
         validateDates(form.getOrderDate(), dueDate);
 
@@ -1073,7 +1073,7 @@ public class ProductionOrderService {
                 ? requireKittingOperation(form.getProductionOperationId())
                 : null;
 
-        LocalDate dueDate = resolveDueDate(customerOrder);
+        LocalDate dueDate = resolveDueDate(customerOrder, form.getDueDate());
 
         validateDates(form.getOrderDate(), dueDate);
 
@@ -2543,13 +2543,16 @@ public class ProductionOrderService {
     /*
      * Срок исполнения подтягивается из заказа покупателя — но только
      * когда заказ покупателя есть. Групповой заказ (V38) заводят без
-     * заявки, и срока извне у него нет: он остаётся незаполненным и
-     * правится в карточке.
+     * заявки, и срока извне у него нет: его ставит диспетчер в форме.
+     *
+     * Без срока групповой заказ не выходил бы ни в один список по
+     * сроку, а колонка «Срок» показывала бы прочерк у каждого
+     * самостоятельного заказа.
      */
-    private LocalDate resolveDueDate(CustomerOrder customerOrder) {
-        return customerOrder == null
-                ? null
-                : customerOrder.getDueDate();
+    private LocalDate resolveDueDate(CustomerOrder customerOrder,
+                                     LocalDate formDueDate) {
+
+        return customerOrder != null ? customerOrder.getDueDate() : formDueDate;
     }
 
     private void validateDates(LocalDate orderDate, LocalDate dueDate) {

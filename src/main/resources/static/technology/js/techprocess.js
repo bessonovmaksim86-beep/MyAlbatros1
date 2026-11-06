@@ -1123,10 +1123,14 @@
             const base = window.TP_CREATE_NEW_URL
                 || '/technology/techprocess/create/new';
 
-            location.assign(
-                base + '?classifierId='
-                + encodeURIComponent(classifierPicker.value)
-            );
+            const url = base + '?classifierId='
+                + encodeURIComponent(classifierPicker.value);
+
+            if (window.TP_SOURCE_ID) {
+                location.assign(url + '&sourceId=' + window.TP_SOURCE_ID);
+            } else {
+                location.assign(url);
+            }
         });
 
         refresh();
@@ -1143,6 +1147,26 @@
                 event.preventDefault();
             }
         });
+    }
+
+    /*
+     * Удаление изделия из списка применённых: форма отправляется
+     * сразу, поэтому подтверждение берут из data-confirm самой формы —
+     * в нём уже назван код изделия, и технолог видит, что именно
+     * убирает из маршрута.
+     */
+    function initAppliedRemoval() {
+        document
+            .querySelectorAll('.tp-remove-form')
+            .forEach(form => {
+                form.addEventListener('submit', event => {
+                    const message = form.dataset.confirm || '';
+
+                    if (!window.confirm(message)) {
+                        event.preventDefault();
+                    }
+                });
+            });
     }
 
     /*
@@ -1608,6 +1632,7 @@
         runSafely(initBuilder);
         runSafely(initProductPicker);
         runSafely(initDelete);
+        runSafely(initAppliedRemoval);
         runSafely(initGraphLinks);
         runSafely(initGraphTooltips);
     }

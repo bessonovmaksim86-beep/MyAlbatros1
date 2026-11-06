@@ -550,6 +550,51 @@
     font-size: 12px;
 }
 
+/*
+ * Кнопка удаления изделия из списка применённых.
+ */
+.techprocess-page .tp-remove-form {
+    flex: 0 0 auto;
+}
+
+.techprocess-page .tp-remove-btn {
+    flex: 0 0 auto;
+    width: 34px;
+    height: 34px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: #b91c1c;
+    background: #fff7f7;
+    border: 1px solid #fecaca;
+    border-radius: 8px;
+    font-size: 16px;
+    font-weight: 700;
+    line-height: 1;
+    cursor: pointer;
+    transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.techprocess-page .tp-remove-btn:hover {
+    background: #fff0f1;
+    border-color: #b91c1c;
+}
+
+/*
+ * Список привязанных изделий внутри строки техпроцесса.
+ */
+.techprocess-page .tp-classifiers-list {
+    display: block;
+    margin-top: 2px;
+    color: var(--tp-muted);
+    font-size: 12px;
+    line-height: 1.5;
+}
+
+.techprocess-page .tp-classifiers-list span {
+    display: inline;
+}
+
 .techprocess-page .tp-empty {
     padding: 40px 16px;
     color: var(--tp-muted);

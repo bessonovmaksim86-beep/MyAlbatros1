@@ -91,6 +91,13 @@ public class WorkshopScrapService {
     private final OrderScheduleRowRepository scheduleRowRepository;
     private final ProductionOrderItemRepository itemRepository;
 
+    /*
+     * Где позиция на самом деле (V81): матрица комплектования указывает операцию, под которую
+     * заказ заведён, а у заказов со складской приёмкой это приёмка склада. Без передачи цех
+     * читал в заявке «Цех: Склад полуфабрикатов» там, где ячейку уже увезли в сборку.
+     */
+    private final UnitHandoverService handoverService;
+
     /**
      * Причины брака из справочника БВК — подсказки формы.
      *
@@ -157,7 +164,7 @@ public class WorkshopScrapService {
                 QuarantineCellKind.ofCellReady(serial.isCellReady())
                         .getDisplayName(),
                 link.getProductionOrder().getNumber(),
-                "Цех: " + unitNameOf(link),
+                locationOf(link, number),
                 problemsOf(serial, number, null)
         );
     }
@@ -223,7 +230,7 @@ public class WorkshopScrapService {
         defect.setSerialStatus(serial.getStatus());
         defect.setProductClassifier(serial.getProductClassifier());
         defect.setReceivingBatch(serial.getReceivingBatch());
-        defect.setCurrentLocation("Цех: " + unitNameOf(link));
+        defect.setCurrentLocation(locationOf(link, number));
         defect.setDefectReason(defectReason.trim());
         defect.setDefectStage(stageLabel(defectStage));
         defect.setRequestedBy(user);
@@ -552,8 +559,35 @@ public class WorkshopScrapService {
     }
 
     /**
-     * Подразделение, которому выдан заказ: цех обязан узнать свою
-     * ячейку по подписи местоположения.
+     * Местоположение ячейки для заявки: где её искать бюро и кладовщику.
+     *
+     * Сначала — подтверждённая или ожидающая приёмки передача (V81), только потом операция
+     * заказа: у заказов со складской приёмкой эта операция — приёмка склада, и старая подпись
+     * звала «Цех: Склад полуфабрикатов» там, где ячейку уже увезли в цех.
+     */
+    private String locationOf(SerialProductionOrder link, String fullNumber) {
+
+        String location = handoverService.locationLabel(
+                link.getProductionOrder(), fullNumber);
+
+        if (location != null) {
+            return location;
+        }
+
+        /*
+         * Подразделения передачи нет (позиция внесена до V81): подписываем operation заказа, но
+         * род берём из кода подразделения — склад обязан читаться складом, а не «цехом».
+         */
+        if (link.getOperation() != null) {
+            location = UnitHandoverService.unitLocationLabel(
+                    link.getOperation().getOrganizationUnit());
+        }
+
+        return location != null ? location : unitNameOf(link);
+    }
+
+    /**
+     * Подразделение, которому выдан заказ: цех обязан узнать свою ячейку по подписи местоположения.
      */
     private static String unitNameOf(SerialProductionOrder link) {
 

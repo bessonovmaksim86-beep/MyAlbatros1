@@ -195,4 +195,36 @@ public interface TechProcessOperationRepository
             @Param("unitIds") List<Long> unitIds
     );
 
+    /**
+     * Преемники узла маршрута — операции, идущие после него.
+     *
+     * Нужен передаче позиции в подразделение (V81): склад проводит
+     * свою приёмку и обязан понять, кому именно отдавать позицию.
+     * Получателем считается подразделение первой операции маршрута,
+     * у которой складская приёмка стоит предшественником, — маршрут
+     * уже описывает порядок работ, и дублировать его кодом значило бы
+     * разъезжать с ним при правке техпроцесса.
+     *
+     * СвязьDependencies задана через {@code predecessors} (V7), поэтому
+     * преемников читают обратным соединением по таблице зависимостей.
+     * Порядок — по позиции узла: у приёмки бывает несколько преемников,
+     * и брать надо ближайшую по маршруту работу.
+     */
+    @EntityGraph(attributePaths = {
+            "operation",
+            "operation.operationName",
+            "operation.operationType",
+            "operation.organizationUnit"
+    })
+    @Query("""
+            select node
+            from TechProcessOperation node
+            join node.predecessors predecessor
+            where predecessor.id = :nodeId
+            order by node.position asc, node.id asc
+            """)
+    List<TechProcessOperation> findSuccessorsOfNode(
+            @Param("nodeId") Long nodeId
+    );
+
 }

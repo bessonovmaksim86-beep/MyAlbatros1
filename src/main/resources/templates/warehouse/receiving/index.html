@@ -204,12 +204,12 @@
                                             th:text="${
                                                 classifier.code
                                                 + ' — '
-                                                + (classifier.subassemblyLabel != null
-                                                   and !#strings.isEmpty(classifier.subassemblyLabel)
-                                                       ? classifier.subassemblyLabel
+                                                + (classifier.displayName != null
+                                                   and !#strings.isEmpty(classifier.displayName)
+                                                       ? classifier.displayName
                                                        : 'Без наименования')
                                             }">
-                                        1212 — Подсборка ЯПР56
+                                        1212 — ЯПР56
                                     </option>
 
                                 </select>

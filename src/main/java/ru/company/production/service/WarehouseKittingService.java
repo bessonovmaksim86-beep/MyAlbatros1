@@ -170,6 +170,12 @@ public class WarehouseKittingService {
     private final ProductionOrderItemRepository itemRepository;
     private final SerialMovementJournalService journal;
 
+    /*
+     * Передача со склада в подразделение (V81): снятая с полки ячейка считается уехавшей только
+     * после подтверждения цеха, поэтому её размещение и передача оформляются одним шагом.
+     */
+    private final UnitHandoverService handoverService;
+
     /** Подпись даты проведения в раскрытии изделия. */
     private static final DateTimeFormatter RU_DATE_TIME =
             DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm");
@@ -953,6 +959,12 @@ public class WarehouseKittingService {
          * на складе.
          */
         journal.recordInProduction(List.of(cell), order, executor);
+
+        /*
+         * Передача подразделению-получателю (V81): ячейка снята с полки, но числится на складе,
+         * пока цех не подтвердит приёмку. До этого момента её держит плашка ожидания в реестре.
+         */
+        handoverService.openForOrder(List.of(cell), order, operation, executor);
 
         return KittingResult.accepted(
                 "Ячейка " + number + " вошла в заказ «" + order.getNumber()

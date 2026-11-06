@@ -1,0 +1,335 @@
+/* ============================================================
+   СПРАВКА О ПУНКТАХ МЕНЮ (общая для всех интерфейсов)
+
+   Кнопка живёт в футере сайдбара рядом с «Выйти» и повторяет её
+   механику: в свёрнутой панели (72px) виден только значок, подпись
+   проявляется при :hover/:focus-within. Размеры взяты как у кнопки
+   выхода, иначе в футере получается «лестница».
+
+   Окно справки одно на все разделы: список слева строится из
+   пунктов открытого меню (см. js/app-help.js), справа —
+   справочное поле с описанием выбранного пункта.
+   ============================================================ */
+
+.app-help-button {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+
+    box-sizing: border-box;
+    width: 266px;
+    min-height: 42px;
+    padding: 10px 13px;
+
+    overflow: hidden;
+
+    color: #dceaf5;
+    font: inherit;
+    font-size: 13px;
+    font-weight: 600;
+    white-space: nowrap;
+
+    cursor: pointer;
+
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 10px;
+
+    transition:
+        color 160ms ease,
+        background-color 160ms ease;
+}
+
+.app-help-button:hover,
+.app-help-button:focus-visible {
+    color: #ffffff;
+    background: rgba(255, 255, 255, 0.08);
+}
+
+.app-help-button__icon {
+    display: flex;
+    flex: 0 0 18px;
+    align-items: center;
+    justify-content: center;
+    width: 18px;
+    height: 18px;
+}
+
+.app-help-button__icon svg {
+    width: 18px;
+    height: 18px;
+    fill: currentColor;
+}
+
+.app-help-button__text {
+    opacity: 0;
+    transition: opacity 220ms ease;
+}
+
+.sidebar:hover .app-help-button__text,
+.sidebar:focus-within .app-help-button__text {
+    opacity: 1;
+}
+
+
+/* ------------------------------------------------------------
+   ОКНО СПРАВКИ
+   ------------------------------------------------------------ */
+
+.app-help {
+    position: fixed;
+    inset: 0;
+    z-index: 4000;
+
+    display: none;
+}
+
+.app-help.is-open {
+    display: block;
+}
+
+.app-help__overlay {
+    position: absolute;
+    inset: 0;
+
+    background: rgba(6, 20, 36, 0.55);
+    backdrop-filter: blur(2px);
+}
+
+.app-help__dialog {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+
+    display: grid;
+    grid-template-columns: 268px minmax(0, 1fr);
+
+    box-sizing: border-box;
+    width: min(940px, calc(100vw - 40px));
+    max-height: min(680px, calc(100vh - 40px));
+
+    overflow: hidden;
+
+    color: #17293c;
+    background: #ffffff;
+    border: 1px solid rgba(23, 43, 68, 0.14);
+    border-radius: 14px;
+    box-shadow: 0 26px 70px rgba(4, 18, 34, 0.36);
+}
+
+.app-help__head {
+    grid-column: 1 / -1;
+
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+
+    padding: 16px 18px;
+
+    background: linear-gradient(180deg, #102844 0%, #0b1e34 100%);
+    color: #f2f6fa;
+}
+
+.app-help__title {
+    margin: 0;
+    font-size: 17px;
+    font-weight: 700;
+}
+
+.app-help__subtitle {
+    display: block;
+    margin-top: 3px;
+    font-size: 12px;
+    font-weight: 400;
+    color: #9fb0c5;
+}
+
+.app-help__close {
+    flex: 0 0 auto;
+
+    width: 32px;
+    height: 32px;
+    padding: 0;
+
+    font: inherit;
+    font-size: 18px;
+    line-height: 1;
+    color: #dceaf5;
+
+    cursor: pointer;
+
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.16);
+    border-radius: 8px;
+}
+
+.app-help__close:hover,
+.app-help__close:focus-visible {
+    color: #ffffff;
+    background: rgba(255, 255, 255, 0.18);
+}
+
+.app-help__list {
+    box-sizing: border-box;
+    padding: 10px;
+    overflow-y: auto;
+
+    background: #f5f8fb;
+    border-right: 1px solid rgba(23, 43, 68, 0.1);
+}
+
+.app-help__list-title {
+    padding: 6px 8px 8px;
+    font-size: 11px;
+    font-weight: 700;
+    color: #6b7f95;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+}
+
+.app-help__item {
+    display: block;
+    width: 100%;
+    padding: 9px 10px;
+
+    font: inherit;
+    font-size: 13px;
+    color: #17293c;
+    text-align: left;
+
+    cursor: pointer;
+
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 9px;
+}
+
+.app-help__item:hover {
+    background: rgba(16, 40, 68, 0.06);
+}
+
+.app-help__item.is-selected {
+    color: #0b1e34;
+    font-weight: 600;
+    background: #ffffff;
+    border-color: rgba(23, 43, 68, 0.16);
+    box-shadow: 0 2px 6px rgba(15, 30, 50, 0.08);
+}
+
+.app-help__item--sub {
+    padding-left: 26px;
+    font-size: 12px;
+}
+
+/*
+ * Пункт общей инструкции выделен слева цветной чертой: он не раздел
+ * меню, а текст о порядке работы, и в одном стиле с пунктами слился
+ * бы в перечень разделов.
+ */
+.app-help__item--guide {
+    font-weight: 600;
+    border-left: 3px solid #ed7900;
+}
+
+.app-help__body {
+    box-sizing: border-box;
+    padding: 20px 22px;
+    overflow-y: auto;
+}
+
+.app-help__field-label {
+    margin: 0 0 6px;
+    font-size: 11px;
+    font-weight: 700;
+    color: #6b7f95;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+}
+
+.app-help__section {
+    margin: 0 0 8px;
+    font-size: 18px;
+    font-weight: 700;
+}
+
+.app-help__text {
+    display: block;
+    box-sizing: border-box;
+    width: 100%;
+    min-height: 180px;
+    padding: 14px 16px;
+
+    font-family: inherit;
+    font-size: 14px;
+    line-height: 1.55;
+    color: #17293c;
+    white-space: pre-wrap;
+
+    cursor: text;
+    resize: vertical;
+
+    background: #f7fafc;
+    border: 1px solid rgba(23, 43, 68, 0.16);
+    border-left: 4px solid #102844;
+    border-radius: 10px;
+}
+
+.app-help__text:focus-visible {
+    outline: 2px solid #ed7900;
+    outline-offset: 2px;
+}
+
+.app-help__meta {
+    margin: 14px 0 0;
+    font-size: 12px;
+    color: #6b7f95;
+}
+
+.app-help__open {
+    display: inline-block;
+    margin-top: 18px;
+    padding: 9px 14px;
+
+    font: inherit;
+    font-size: 13px;
+    font-weight: 600;
+    color: #ffffff;
+    text-decoration: none;
+
+    background: #102844;
+    border-radius: 9px;
+}
+
+/* У пункта-группы («Подсборки» на складе) адреса нет — кнопке хода нечего делать. */
+.app-help__open[hidden] {
+    display: none;
+}
+
+.app-help__open:hover,
+.app-help__open:focus-visible {
+    background: #ed7900;
+}
+
+/* На узком экране список уходит над описанием: иначе поле не читается. */
+@media (max-width: 760px) {
+    .app-help__dialog {
+        grid-template-columns: minmax(0, 1fr);
+        grid-template-rows: auto auto;
+    }
+
+    .app-help__list {
+        max-height: 168px;
+        border-right: 0;
+        border-bottom: 1px solid rgba(23, 43, 68, 0.1);
+    }
+}
+
+/* Подпись кнопки раскрывается с тем же переходом, что и пункты меню. */
+@media (prefers-reduced-motion: reduce) {
+    .app-help-button,
+    .app-help-button__text {
+        transition: none !important;
+    }
+}

@@ -14,6 +14,8 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 import ru.company.production.dto.TechProcessForm;
+import ru.company.production.dto.TechProcessListItemDto;
+import ru.company.production.dto.TechProcessOperationGroup;
 import ru.company.production.dto.TypeCardView;
 import ru.company.production.dto.TypeCards;
 import ru.company.production.entity.ProductType;
@@ -42,6 +44,11 @@ public class TechProcessController {
 
     /**
      * Список техпроцессов.
+     *
+     * Строка — техпроцесс, а не пара «маршрут — изделие»: изделия
+     * показывают внутри строки. Счётчики карточек и фильтр поэтому
+     * опираются на набор видов изделий маршрута: маршрут, применяемый
+     * и к ячейке, и к датчику, попадает в обе группы.
      */
     @GetMapping
     public String index(
@@ -52,44 +59,29 @@ public class TechProcessController {
             String type,
             Model model
     ) {
-        List<TechProcessListItemView> all =
-                techProcessService.findAllWithClassifiers();
+        List<TechProcessListItemDto> all =
+                techProcessService.findAllGroupedByProcess();
 
         ProductType activeType = parseType(type);
 
         model.addAttribute("activePage", "techprocess");
-
         model.addAttribute(
                 "techProcesses",
                 activeType == null
                         ? all
                         : all.stream()
-                            .filter(row ->
-                                    row.getProductType() == activeType)
+                            .filter(row -> row.hasType(activeType))
                             .toList()
         );
-
-        model.addAttribute(
-                "totalCount",
-                all.size()
-        );
-
-        model.addAttribute(
-                "activeType",
-                activeType == null ? null : activeType.name()
-        );
-
-        model.addAttribute(
-                "activeTypeName",
+        model.addAttribute("totalCount", all.size());
+        model.addAttribute("activeType",
+                activeType == null ? null : activeType.name());
+        model.addAttribute("activeTypeName",
                 activeType == null
                         ? null
-                        : activeType.getDisplayName()
-        );
-
-        model.addAttribute(
-                "techProcessCards",
-                buildTechProcessCards(all)
-        );
+                        : activeType.getDisplayName());
+        model.addAttribute("techProcessCards",
+                buildTechProcessCards(all));
 
         return "technology/techprocess/index";
     }
@@ -110,7 +102,7 @@ public class TechProcessController {
      * Карточки техпроцессов по типам изделий.
      */
     private List<TypeCardView> buildTechProcessCards(
-            List<TechProcessListItemView> rows
+            List<TechProcessListItemDto> rows
     ) {
         List<TypeCardView> cards = new ArrayList<>();
 
@@ -118,7 +110,7 @@ public class TechProcessController {
             ProductType type = TYPE_ORDER[index];
 
             long count = rows.stream()
-                    .filter(row -> row.getProductType() == type)
+                    .filter(row -> row.hasType(type))
                     .count();
 
             cards.add(new TypeCardView(
@@ -160,6 +152,7 @@ public class TechProcessController {
     @GetMapping("/create/new")
     public String createPage(
             @RequestParam(required = false) Long classifierId,
+            @RequestParam(required = false) Long sourceId,
             Model model,
             RedirectAttributes redirectAttributes
     ) {
@@ -168,17 +161,60 @@ public class TechProcessController {
         }
 
         if (!model.containsAttribute("techProcessForm")) {
-            TechProcessForm form = new TechProcessForm();
-            form.setProductClassifierId(classifierId);
-            form.setCode(techProcessService.nextCode());
+            TechProcessForm form;
+
+            if (sourceId != null) {
+                form = techProcessService.createFormFrom(sourceId);
+                form.setProductClassifierId(classifierId);
+            } else {
+                form = new TechProcessForm();
+                form.setProductClassifierId(classifierId);
+                form.setCode(techProcessService.nextCode());
+            }
 
             model.addAttribute("techProcessForm", form);
+            model.addAttribute("sourceId", sourceId);
         }
 
         fillCommonModel(model);
         fillClassifierSummary(model, classifierId);
 
         return "technology/techprocess/create";
+    }
+
+    /**
+     * Создание техпроцесса на основе существующего начинается с
+     * выбора изделия — как и обычное создание. Источник передаётся
+     * параметром, чтобы шаг выбора и форма не потеряли его друг
+     * от друга.
+     */
+    @GetMapping("/{id}/create-from")
+    public String createFromSelectionPage(
+            @PathVariable Long id,
+            Model model,
+            RedirectAttributes redirectAttributes
+    ) {
+        try {
+            model.addAttribute(
+                    "sourceLabel",
+                    techProcessService.describeSource(id)
+            );
+        } catch (
+                EntityNotFoundException |
+                IllegalArgumentException exception
+        ) {
+            redirectAttributes.addFlashAttribute(
+                    "errorMessage",
+                    exception.getMessage()
+            );
+
+            return "redirect:/technology/techprocess";
+        }
+
+        model.addAttribute("sourceId", id);
+        fillSelectionModel(model);
+
+        return "technology/techprocess/create-select";
     }
 
     /**
@@ -513,6 +549,39 @@ public class TechProcessController {
     }
 
     /**
+     * Удаление изделия из списка применённых техпроцесса.
+     */
+    @PostMapping("/{id}/remove-classifier")
+    public String removeClassifier(
+            @PathVariable Long id,
+            @RequestParam Long classifierId,
+            RedirectAttributes redirectAttributes
+    ) {
+        try {
+            techProcessService.removeClassifierFromProcess(
+                    id,
+                    classifierId
+            );
+
+            redirectAttributes.addFlashAttribute(
+                    "successMessage",
+                    "Изделие удалено из списка применённых"
+            );
+        } catch (
+                EntityNotFoundException |
+                IllegalArgumentException |
+                IllegalStateException exception
+        ) {
+            redirectAttributes.addFlashAttribute(
+                    "errorMessage",
+                    exception.getMessage()
+            );
+        }
+
+        return "redirect:/technology/techprocess/" + id + "/copy";
+    }
+
+    /**
      * Общие данные для страниц создания и изменения.
      */
     private void fillCommonModel(Model model) {
@@ -521,6 +590,11 @@ public class TechProcessController {
         model.addAttribute(
                 "operations",
                 techProcessService.findActiveOperations()
+        );
+
+        model.addAttribute(
+                "operationsGroups",
+                techProcessService.findActiveOperationsGrouped()
         );
 
         model.addAttribute(

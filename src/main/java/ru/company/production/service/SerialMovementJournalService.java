@@ -539,6 +539,109 @@ public class SerialMovementJournalService {
         }
     }
 
+    /**
+     * Позиции переданы со склада в другое подразделение (V81).
+     *
+     * Записывает склад в момент, когда вносит позицию в заказ чужого
+     * подразделения. Разновидность и изделие берут из самой строки
+     * передачи: они зафиксированы на момент перемещения и не должны
+     * «плыть», когда позицию тем временем отметят готовой ячейкой.
+     *
+     * Ссылка на строку передачи обязательна: без неё паспортом нельзя
+     * показать, кому именно ушла позиция и подтвердил ли её получатель.
+     */
+    @Transactional
+    public void recordUnitTransferred(List<UnitHandover> handovers,
+                                      AppUser actor,
+                                      LocalDateTime moment) {
+        for (UnitHandover handover : handovers) {
+            SerialMovementEvent event = newEvent(
+                    handover.getFullNumber(),
+                    handover.getSerial() == null
+                            ? serialIdOf(handover.getFullNumber())
+                            : handover.getSerial().getId(),
+                    SerialMovementType.UNIT_TRANSFERRED,
+                    moment, actor, null, handover.getToOrder(), null);
+
+            event.setCellKind(handover.getCellKind());
+            event.setProductClassifier(handover.getClassifier());
+            event.setUnitHandover(handover);
+            event.setNote(truncate(
+                    "Передана подразделению «" + unitNameOf(handover) + "»", 500));
+
+            journalRepository.save(event);
+        }
+    }
+
+    /**
+     * Получатель подтвердил, что позиция у него (V81).
+     *
+     * Событие закрывает переход: с этой минуты позиция перестаёт
+     * числиться на складе. Подпись держит руководитель цеха, а не
+     * кладовщик, — отвечать за получение должен тот, кто принял.
+     */
+    @Transactional
+    public void recordUnitAccepted(UnitHandover handover,
+                                   AppUser actor,
+                                   LocalDateTime moment) {
+
+        SerialMovementEvent event = newEvent(
+                handover.getFullNumber(),
+                handover.getSerial() == null
+                        ? serialIdOf(handover.getFullNumber())
+                        : handover.getSerial().getId(),
+                SerialMovementType.UNIT_ACCEPTED,
+                moment, actor, null, handover.getToOrder(), null);
+
+        event.setCellKind(handover.getCellKind());
+        event.setProductClassifier(handover.getClassifier());
+        event.setUnitHandover(handover);
+        event.setNote(truncate(
+                "Принята подразделением «" + unitNameOf(handover) + "»", 500));
+
+        journalRepository.save(event);
+    }
+
+    /**
+     * Получатель отказался от позиции: она вернулась на склад (V81).
+     *
+     * Причина попадает в note: без неё возврат выглядел бы как
+     * двукратная выдача одной и той же позиции.
+     */
+    @Transactional
+    public void recordUnitRejected(UnitHandover handover,
+                                   AppUser actor,
+                                   LocalDateTime moment,
+                                   String reason) {
+
+        SerialMovementEvent event = newEvent(
+                handover.getFullNumber(),
+                handover.getSerial() == null
+                        ? serialIdOf(handover.getFullNumber())
+                        : handover.getSerial().getId(),
+                SerialMovementType.UNIT_REJECTED,
+                moment, actor, null, handover.getToOrder(), null);
+
+        event.setCellKind(handover.getCellKind());
+        event.setProductClassifier(handover.getClassifier());
+        event.setUnitHandover(handover);
+
+        String note = "Возвращена складу: "
+                + (reason == null || reason.isBlank() ? "без причины" : reason.trim());
+        event.setNote(truncate(note, 500));
+
+        journalRepository.save(event);
+    }
+
+    /** Наименование подразделения-получателя: связь ленивая. */
+    private static String unitNameOf(UnitHandover handover) {
+        if (handover.getToUnit() == null || handover.getToUnit().getName() == null) {
+            return "—";
+        }
+
+        return handover.getToUnit().getName();
+    }
+
     /** Хронология номера (карточка/отчёт). */
     @Transactional(readOnly = true)
     public List<SerialMovementEvent> historyOf(String fullNumber) {

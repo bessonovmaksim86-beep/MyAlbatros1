@@ -257,9 +257,13 @@
                  Поле ввода номеров ячеек, принятых на склад полуфабрикатов.
                  Номера можно вводить вручную или сканировать штрихкодами.
                  Разрешены только те номера, которые есть на складе.
+
+                 Если заказ укомплектован полностью — форма скрывается,
+                 а вместо неё показывается справка, что вносить больше нечего.
                  ===================================================== -->
             <form method="post"
-                  th:action="@{/warehouse/subassembly-kitting/{id}(id=${view.order.id})}">
+                  th:action="@{/warehouse/subassembly-kitting/{id}(id=${view.order.id})}"
+                  th:if="${!view.nothingToAdd()}">
 
                 <input th:if="${_csrf != null}"
                        type="hidden"
@@ -332,6 +336,47 @@
                 </section>
             </form>
 
+            <!--
+                 Справка, когда вносить больше нечего: заказ укомплектован,
+                 все ячейки оформлены. Форма скрыта, а внесённый состав
+                 ниже раскрыт сразу — кладовщику не нужно ничего искать.
+            -->
+            <section class="card"
+                     th:if="${view.nothingToAdd()}">
+
+                <div class="card-head">
+
+                    <div>
+
+                        <h2>Заказ укомплектован</h2>
+
+                        <small>
+                            В заказ вошло всё заказанное количество ячеек —
+                            вносить нечего. Состав заказа раскрыт ниже.
+                        </small>
+
+                    </div>
+
+                    <span class="warehouse-counter is-complete"
+                          th:text="${view.takenCount()} + ' из ' + ${view.requiredCount()} + ' яч.'">
+                        4 из 4 яч.
+                    </span>
+                </div>
+
+                <div class="card-body">
+
+                    <div class="warehouse-actions">
+
+                        <a class="btn secondary"
+                           th:href="@{/warehouse/subassembly-kitting}">
+                            К списку заказов
+                        </a>
+
+                    </div>
+
+                </div>
+            </section>
+
 
             <!-- =====================================================
                  ПЕРЕЧЕНЬ ЯЧЕЕК НА СКЛАДЕ
@@ -397,7 +442,7 @@
                                 </td>
 
                                 <td>
-                                    <span class="status status--attention">
+                                    <span class="status work">
                                         свободна
                                     </span>
                                 </td>
@@ -416,9 +461,14 @@
                  Внесённые в заказ ячейки — для справки.
                  Они со склада сняты и в свободном остатке не числятся,
                  но кладовщику важно видеть, что уже оформлено.
+
+                 Когда вносить нечего, блок раскрыт сразу: форма скрыта,
+                 и свёрнутым она оставила бы экран без ответа на вопрос,
+                 какие номера уже ушли в заказ.
                  ===================================================== -->
             <details class="collapsible"
-                     th:if="${view.attached != null and not #lists.isEmpty(view.attached)}">
+                     th:if="${view.attached != null and not #lists.isEmpty(view.attached)}"
+                     th:attr="open=${view.nothingToAdd()} ? '' : null">
 
                 <summary class="collapsible__summary">
                     <span>Ячейки, внесённые в заказ</span>
@@ -474,7 +524,7 @@
                                 </td>
 
                                 <td>
-                                    <span class="status status--ok">
+                                    <span class="status done">
                                         внесена в заказ
                                     </span>
                                 </td>

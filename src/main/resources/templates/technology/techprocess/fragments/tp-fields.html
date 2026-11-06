@@ -224,20 +224,23 @@
                                 Выберите операцию
                             </option>
 
-                            <option th:each="operation : ${operations}"
-                                    th:value="${operation.id}"
-                                    th:attr="data-name=${operation.operationName.name}"
-                                    th:selected="${row.operationId == operation.id}"
-                                    th:text="${
-                                        operation.operationName.name
-                                        + ' - '
-                                        + operation.operationType.name
-                                        + (operation.organizationUnit != null
-                                            ? ' - ' + operation.organizationUnit.name
-                                            : '')
-                                    }">
-                                Операция
-                            </option>
+                            <optgroup th:each="group : ${operationsGroups}"
+                                      th:label="${group.label}">
+
+                                <option th:each="operation : ${group.operations}"
+                                        th:value="${operation.id}"
+                                        th:attr="data-name=${operation.operationName.name}"
+                                        th:selected="${row.operationId == operation.id}"
+                                        th:text="${
+                                            operation.operationName.name
+                                            + (operation.organizationUnit != null
+                                                ? ' - ' + operation.organizationUnit.name
+                                                : '')
+                                        }">
+                                    Операция
+                                </option>
+
+                            </optgroup>
 
                         </select>
 
@@ -567,19 +570,22 @@
                                 Выберите операцию
                             </option>
 
-                            <option th:each="operation : ${operations}"
-                                    th:value="${operation.id}"
-                                    th:attr="data-name=${operation.operationName.name}"
-                                    th:text="${
-                                        operation.operationName.name
-                                        + ' - '
-                                        + operation.operationType.name
-                                        + (operation.organizationUnit != null
-                                            ? ' - ' + operation.organizationUnit.name
-                                            : '')
-                                    }">
-                                Операция
-                            </option>
+                            <optgroup th:each="group : ${operationsGroups}"
+                                      th:label="${group.label}">
+
+                                <option th:each="operation : ${group.operations}"
+                                        th:value="${operation.id}"
+                                        th:attr="data-name=${operation.operationName.name}"
+                                        th:text="${
+                                            operation.operationName.name
+                                            + (operation.organizationUnit != null
+                                                ? ' - ' + operation.organizationUnit.name
+                                                : '')
+                                        }">
+                                    Операция
+                                </option>
+
+                            </optgroup>
 
                         </select>
 

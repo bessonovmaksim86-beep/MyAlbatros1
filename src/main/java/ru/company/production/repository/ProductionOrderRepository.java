@@ -63,6 +63,11 @@ public interface ProductionOrderRepository
                       and item.status = :doneStatus
                 ) as doneItemCount,
                 (
+                    select count(cell.id)
+                    from SerialProductionOrder cell
+                    where cell.productionOrder = ord
+                ) as cellCount,
+                (
                     select count(child.id)
                     from ProductionOrder child
                     where child.parentProductionOrder = ord

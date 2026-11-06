@@ -183,9 +183,24 @@
 
                                 <td class="table-actions">
 
+                                    <!--
+                                        Кнопка «Внести» живёт только там, где
+                                        брать ещё есть что: у укомплектованного
+                                        заказа состава не осталось, и звать
+                                        кладовщика в пустое поле незачем.
+                                        Ссылка ведёт в тот же экран — там
+                                        видно внесённые номера.
+                                    -->
                                     <a class="btn primary compact"
+                                       th:if="${!order.completed()}"
                                        th:href="@{/warehouse/subassembly-kitting/{id}(id=${order.id})}">
                                         Внести ячейки
+                                    </a>
+
+                                    <a class="btn secondary compact"
+                                       th:if="${order.completed()}"
+                                       th:href="@{/warehouse/subassembly-kitting/{id}(id=${order.id})}">
+                                        Состав заказа
                                     </a>
 
                                 </td>

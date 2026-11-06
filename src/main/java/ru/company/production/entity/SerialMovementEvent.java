@@ -110,6 +110,20 @@ public class SerialMovementEvent {
     )
     private QuarantineTransfer quarantineTransfer;
 
+    /*
+     * Строка передачи в подразделение, породившая событие (V81).
+     *
+     * Нужна тем же мотивом, что и ссылка на перемещение из изолятора:
+     * по журналу видно, кому именно ушла позиция, а не только то,
+     * что она ушла со склада.
+     */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(
+            name = "unit_handover_id",
+            foreignKey = @ForeignKey(name = "fk_sme_unit_handover")
+    )
+    private UnitHandover unitHandover;
+
     @Column(name = "note", length = 500)
     private String note;
 }

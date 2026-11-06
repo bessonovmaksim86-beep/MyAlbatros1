@@ -295,12 +295,69 @@ public interface OrderScheduleRowRepository
             @Param("operationIds") Collection<Long> operationIds
     );
 
+    /*
+     * Незакрытые строки плана набора заказов — «где сейчас позиции».
+     *
+     * Список групповых ЗНП показывает операцию, на которой заказ стоит
+     * незакрытыми позициями. Скалярная проекция, а не сущности: список
+     * читает десятки заказов разом, а разыменование lazy-связей ради
+     * двух колонок при выключенном open-in-view дало бы или N+1, или
+     * LazyInitializationException.
+     *
+     * Порядок — заказ, экземпляр, шаг маршрута: вызывающий код берёт
+     * ПЕРВУЮ открытую строку экземпляра как его текущую работу, и без
+     * сортировки по seq первой оказалась бы произвольная работа.
+     *
+     * Строки снятого с работы заказа не нужны: список фильтрует
+     * активные заказы, а закрытые строки (completedAt) исключены —
+     * проведённая работа позицию не держит.
+     */
+    @Query("""
+            select row.productionOrder.id    as orderId,
+                   row.instanceIndex         as instanceIndex,
+                   row.seq                   as seq,
+                   operationName.name        as operationName,
+                   rowUnit.name              as unitName,
+                   operationUnit.name        as operationUnitName
+            from OrderScheduleRow row
+            join row.operation operation
+            join operation.operationName operationName
+            left join row.organizationUnit rowUnit
+            left join operation.organizationUnit operationUnit
+            where row.productionOrder.id in :orderIds
+              and row.completedAt is null
+            order by row.productionOrder.id asc,
+                     row.instanceIndex asc,
+                     row.seq asc
+            """)
+    List<OpenPlanRowView> findOpenPlanRowsOfProductionOrders(
+            @Param("orderIds") Collection<Long> orderIds
+    );
+
     /** «Основание плана → дата его окончания». */
     interface PlanEndDateView {
 
         Long getOrderId();
 
         java.time.LocalDate getEndDate();
+    }
+
+    /** Незакрытая строка плана: «заказ + экземпляр + его текущая работа». */
+    interface OpenPlanRowView {
+
+        Long getOrderId();
+
+        Integer getInstanceIndex();
+
+        Integer getSeq();
+
+        String getOperationName();
+
+        /** Подразделение строки плана; пустое — у строки без адреса. */
+        String getUnitName();
+
+        /** Подразделение самой операции — запасной адрес, если строка его не задала. */
+        String getOperationUnitName();
     }
 
     /** «Заказ покупателя + операция → дата окончания их плана». */

@@ -258,6 +258,10 @@ public class ProductionOrderForm {
         return formatDate(orderDate);
     }
 
+    public String getFormattedDueDate() {
+        return formatDate(dueDate);
+    }
+
     /*
      * Вид ЗНП, разобранный из строки селектора.
      *

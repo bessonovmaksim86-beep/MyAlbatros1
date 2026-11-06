@@ -677,6 +677,31 @@
 
                             </div>
 
+                            <div class="field"
+                                 id="dueDateField"
+                                 th:if="${productionOrderForm.resolvedKind.groupKind}">
+
+                                <label for="dueDate">Срок исполнения</label>
+
+                                <input id="dueDate"
+                                       type="text"
+                                       placeholder="дд.мм.гггг"
+                                       maxlength="10"
+                                       th:name="dueDate"
+                                       th:value="${
+                                           productionOrderForm.formattedDueDate
+                                       }">
+
+                                <span class="field-error"
+                                      th:if="${#fields.hasErrors('dueDate')}"
+                                      th:each="error : ${
+                                          #fields.errors('dueDate')
+                                      }"
+                                      th:text="${error}">
+                                </span>
+
+                            </div>
+
                             <!--
                                 Срок исполнения и статус в форме не
                                 вводятся: срок подтягивается из заказа

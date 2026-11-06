@@ -172,6 +172,32 @@
 
                             </div>
 
+                            <form method="post"
+                                  th:action="@{/technology/techprocess/{id}/remove-classifier(id=${source.id})}"
+                                  th:data-confirm="${
+                                      'Удалить изделие '
+                                      + item.code
+                                      + ' из применённых?'
+                                  }"
+                                  class="tp-remove-form">
+
+                                <input th:if="${_csrf != null}"
+                                       type="hidden"
+                                       th:name="${_csrf.parameterName}"
+                                       th:value="${_csrf.token}">
+
+                                <input type="hidden"
+                                       name="classifierId"
+                                       th:value="${item.classifierId}">
+
+                                <button type="submit"
+                                        class="tp-remove-btn"
+                                        title="Удалить изделие">
+                                    ✕
+                                </button>
+
+                            </form>
+
                         </div>
 
                         <div class="tp-empty"

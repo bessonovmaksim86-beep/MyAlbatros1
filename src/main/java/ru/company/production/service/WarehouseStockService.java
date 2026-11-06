@@ -9,6 +9,7 @@ import ru.company.production.dto.WarehouseStockRow;
 import ru.company.production.entity.QuarantineCellKind;
 import ru.company.production.repository.ProductSerialRepository;
 import ru.company.production.repository.SerialProductionOrderRepository;
+import ru.company.production.repository.UnitHandoverRepository;
 
 import java.text.Collator;
 import java.util.ArrayList;
@@ -76,6 +77,14 @@ public class WarehouseStockService {
     private final SerialProductionOrderRepository linkRepository;
 
     /*
+     * Подтверждаемые передачи в подразделения (V81): позиция, которую цех подтвердил, на полке
+     * уже не лежит, а переданная и не подтверждённая лежит, но ждёт получателя. Реестр обязан
+     * показывать и то, и другое — иначе кладовщик считал бы остаток по номерам, которых на
+     * складе нет, и выдавал бы их повторно.
+     */
+    private final UnitHandoverRepository handoverRepository;
+
+    /*
      * Изолятор брака описан карточками БВК, а не полем позиции, и
      * реестр обязан вычитать из него номера: ячейку, отобранную в
      * изолятор, кладовщик на полке не найдёт. Принятые складом
@@ -120,7 +129,18 @@ public class WarehouseStockService {
             return List.of();
         }
 
+        /*
+         * Подтверждённые приёмкой номера со склада уехали: оставить их в реестре означало бы
+         * удвоить остаток — позиция лежала бы на полке склада и в цехе одновременно.
+         */
+        rows = withoutAcceptedHandovers(rows);
+
+        if (rows.isEmpty()) {
+            return List.of();
+        }
+
         Map<Long, Set<String>> znpBySerial = placements(rows);
+        Map<Long, String> handedOver = handedOverUnits(rows);
 
         List<WarehouseStockRow> result = new ArrayList<>(rows.size());
 
@@ -151,7 +171,8 @@ public class WarehouseStockService {
                     row.getCellReadyAt(),
                     row.getReceivedAt(),
                     orders.isEmpty() ? null : String.join(", ", orders),
-                    orders.isEmpty()
+                    orders.isEmpty(),
+                    row.getId() == null ? null : handedOver.get(row.getId())
             ));
         }
 
@@ -330,6 +351,80 @@ public class WarehouseStockService {
                         )
                         .add(link.getZnpNumber().trim());
             });
+        }
+
+        return result;
+    }
+
+    /**
+     * Позиции, которые цех уже подтвердил: со склада они ушли.
+     *
+     * Вычитаются целиком по идентификаторам отобранной страницы — тот же приём, что у изолятора
+     * брака: реестр обязан описывать то, что лежит на полке, а не то, что когда-то на неё легло.
+     */
+    private List<ProductSerialRepository.WarehouseStockProjection>
+            withoutAcceptedHandovers(
+                    List<ProductSerialRepository.WarehouseStockProjection> rows) {
+
+        List<Long> ids = rows.stream()
+                .map(ProductSerialRepository.WarehouseStockProjection::getId)
+                .filter(Objects::nonNull)
+                .toList();
+
+        if (ids.isEmpty()) {
+            return rows;
+        }
+
+        Set<Long> accepted = new HashSet<>();
+
+        for (int offset = 0; offset < ids.size(); offset += PLACEMENT_PORTION) {
+
+            accepted.addAll(handoverRepository.findAcceptedSerialIds(
+                    ids.subList(offset,
+                            Math.min(offset + PLACEMENT_PORTION, ids.size()))));
+        }
+
+        if (accepted.isEmpty()) {
+            return rows;
+        }
+
+        return rows.stream()
+                .filter(row -> row.getId() == null || !accepted.contains(row.getId()))
+                .toList();
+    }
+
+    /**
+     * Куда ушли позиции, ещё не подтверждённые получателями: плашка ожидания в реестре.
+     *
+     * Один пакетный запрос на страницу, как у размещения: реестр перечисляет сотни номеров, и
+     * обращение к передаче на строку раздуло бы экран до сотен запросов.
+     */
+    private Map<Long, String> handedOverUnits(
+            List<ProductSerialRepository.WarehouseStockProjection> rows) {
+
+        List<Long> ids = rows.stream()
+                .map(ProductSerialRepository.WarehouseStockProjection::getId)
+                .filter(Objects::nonNull)
+                .toList();
+
+        if (ids.isEmpty()) {
+            return Map.of();
+        }
+
+        Map<Long, String> result = new LinkedHashMap<>();
+
+        for (int offset = 0; offset < ids.size(); offset += PLACEMENT_PORTION) {
+
+            handoverRepository.findPendingUnitNamesBySerialIds(
+                    ids.subList(offset,
+                            Math.min(offset + PLACEMENT_PORTION, ids.size())))
+                    .forEach(view -> {
+                        if (view.getSerialId() != null
+                                && view.getUnitName() != null) {
+                            result.putIfAbsent(
+                                    view.getSerialId(), view.getUnitName());
+                        }
+                    });
         }
 
         return result;

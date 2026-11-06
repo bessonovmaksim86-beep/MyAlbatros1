@@ -95,6 +95,13 @@ public class SubassemblyKittingService {
     private final ProductSerialOperationRepository serialOperationRepository;
 
     /*
+     * Передача со склада в подразделение (V81): внесённая в чужой заказ позиция уходит с полки
+     * только после подтверждения получателя, поэтому вкладывать её в заказ и оформлять передачу
+     * обязан один и тот же шаг — иначе в реестре остались бы номера, которые цех уже увёз.
+     */
+    private final UnitHandoverService handoverService;
+
+    /*
      * План заказа (V56): строки графика второй ветви — то, что читает
      * цех. Склад обязан проводить свою строку сам, иначе «Комплектование
      * подсборок» осталось бы незакрытым в плане и следующая по маршруту
@@ -631,9 +638,16 @@ public class SubassemblyKittingService {
 
         journal.recordInProduction(attached, order, executor);
 
+        /*
+         * Передача подразделению-получателю (V81): позиция остаётся на полке и в реестре наличия,
+         * пока цех не подтвердит приёмку. Заказ, чей маршрут целиком принадлежит складу, передачи
+         * не создаёт — изделие никуда не едет.
+         */
+        handoverService.openForOrder(attached, order, operation, executor);
+
         return KittingResult.accepted(
                 "Внесено в заказ «" + order.getNumber() + "»: "
-                        + attached.size() + " яч."
+                        + attached.size() + " ч."
                         + (already > 0
                                 ? "; уже вошло ранее " + already + " яч."
                                 : "")
@@ -839,6 +853,12 @@ public class SubassemblyKittingService {
          * в составе заказа.
          */
         journal.recordInProduction(attached, order, executor);
+
+        /*
+         * Передача подразделению-получателю (V81): подсборку привезли и сразу вложили в заказ,
+         * но на складе она всё равно числится, пока цех не подтвердит, что забрал её.
+         */
+        handoverService.openForOrder(attached, order, operation, executor);
 
         return KittingResult.accepted(
                 "Принято на склад и внесено в заказ «" + order.getNumber()
@@ -1453,9 +1473,20 @@ public class SubassemblyKittingService {
                     : quantity.setScale(0, RoundingMode.CEILING).longValue();
         }
 
-        /** Вносить нечего: заказанное количество уже внесено. */
+        /*
+         * Вносить нечего: заказанное количество уже внесено.
+         *
+         * Внесённые номера обязательны: без них признак загорелся бы у
+         * заказа, у которого не задано количество и пуст склад
+         * («0 из 0»), и экран скрыл бы форму там, где кладовщику ещё
+         * есть что взять. Список меряет укомплектованность тем же
+         * условием (SubassemblyKittingZnpRow#completed()), и два
+         * экрана одного заказа обязаны говорить одно и то же: иначе
+         * ссылка «Внести ячейки» вела бы на экран, где вносить
+         * «нечего».
+         */
         public boolean nothingToAdd() {
-            return takenCount() >= requiredCount();
+            return takenCount() > 0 && takenCount() >= requiredCount();
         }
     }
 

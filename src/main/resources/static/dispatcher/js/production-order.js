@@ -870,6 +870,12 @@
                 quantityField.hidden = !showGroup;
             }
 
+            const dueDateField = document.getElementById('dueDateField');
+
+            if (dueDateField) {
+                dueDateField.hidden = !showGroup;
+            }
+
             /*
              * Снятые при смене вида отметки датчиков в расчёт не идут:
              * поле скрыто, а сервис для группового вида их всё равно не

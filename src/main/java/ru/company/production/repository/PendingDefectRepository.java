@@ -9,6 +9,7 @@ import ru.company.production.entity.PendingDefect;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 /**
  * Репозиторий заявок на отбраковку с согласованием БВК.
@@ -86,6 +87,22 @@ public interface PendingDefectRepository
             where defect.decision is not null
             """)
     List<String> findResolvedFullNumbers();
+
+    /*
+     * Номера, по которым заявка ещё ждёт решения бюро.
+     *
+     * Нужны там, где позицию считают занятой работой: ячейку, списанную
+     * в брак, снимают с комплектования (см. WorkshopScrapService), и
+     * пока решение не принято, она числится в заказе, но уже не
+     * выполняется. До решения такая позиция — брак, а не очередь, и
+     * список заказов обязан её не считать.
+     */
+    @Query("""
+            select defect.fullNumber
+            from PendingDefect defect
+            where defect.decision is null
+            """)
+    Set<String> findAwaitingDecisionFullNumbers();
 
     /*
      * ============================================================

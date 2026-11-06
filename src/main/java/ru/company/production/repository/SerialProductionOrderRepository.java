@@ -408,6 +408,42 @@ public interface SerialProductionOrderRepository
     );
 
     /**
+     * Ячейки, внесённые в заказ — его фактический состав.
+     *
+     * То же, что {@link #findCellsByZnpNumbers}, но по идентификатору
+     * заказа: сводка поиска читает объект уже по нему, и поднимать
+     * номер строкой ради того же перечня значило бы ходить в базу
+     * дважды там, где хватает одного обращения.
+     *
+     * Датчики отсечены {@code productType = CELL} тем же правилом, что
+     * и в запросе по номерам: строка матрицы связывает заказ и с
+     * изделием-носителем, в которое он вошёл, и печатать его составом
+     * значило бы показать изделие частью его самого.
+     *
+     * Снятые с работы заказы исключены общим правилом матрицы —
+     * отменённый заказ обязан вернуть ячейку на склад.
+     */
+    @Query("""
+            select
+                ord.number as znpNumber,
+                cell.id as serialId,
+                cast(classifier.code * 100000 + cell.serial as string)
+                    as cellNumber
+            from SerialProductionOrder link
+            join link.serial cell
+            join cell.productClassifier classifier
+            join link.productionOrder ord
+            where ord.id = :productionOrderId
+              and ord.active = true
+              and cell.productType =
+                  ru.company.production.entity.ProductType.CELL
+            order by classifier.code asc, cell.serial asc
+            """)
+    List<ZnpCellLinkView> findCellsByOrderId(
+            @Param("productionOrderId") Long productionOrderId
+    );
+
+    /**
      * Сколько заказов вошло в изделие — счётчик состава карточки.
      */
     long countBySerial_Id(Long serialId);

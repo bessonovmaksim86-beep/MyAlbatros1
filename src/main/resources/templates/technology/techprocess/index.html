@@ -54,16 +54,6 @@
                         Создать техпроцесс
                     </a>
 
-                    <a class="btn secondary"
-                       th:href="@{/technology/techprocess/update}">
-                        Изменить
-                    </a>
-
-                    <a class="btn danger"
-                       th:href="@{/technology/techprocess/delete}">
-                        Удалить
-                    </a>
-
                 </div>
 
             </div>
@@ -134,25 +124,23 @@
                                 </strong>
 
                                 <span th:text="${
-                                    'Код ' + process.classifierCode
-                                    + ' — '
-                                    + process.productType.displayName
-                                    + (process.sensorClassName != null
-                                        ? ' — ' + process.sensorClassName
-                                        : '')
-                                    + (process.classifierName != null
-                                       and !#strings.isEmpty(process.classifierName)
-                                        ? ' — ' + process.classifierName
-                                        : '')
-                                }">
-                                    Изделие
-                                </span>
-
-                                <span th:text="${
                                     process.operationCount + ' опер.'
                                 }">
                                     0 опер.
                                 </span>
+
+                                <div class="tp-classifiers-list"
+                                     th:if="${!#lists.isEmpty(process.classifiers)}">
+                                    <span th:each="clf, iterStat
+                                        : ${process.classifiers}">
+                                        <span th:text="${clf}">
+                                            Код 5004 — Ячейка — ПВВ1
+                                        </span>
+                                        <span th:if="${!iterStat.last}"
+                                              th:text="',' ">
+                                        </span>
+                                    </span>
+                                </div>
 
                             </div>
 
@@ -166,28 +154,20 @@
                                     Визуализация
                                 </a>
 
+                                <a class="btn primary compact"
+                                   th:href="@{
+                                       /technology/techprocess/{id}/create-from(
+                                           id=${process.id}
+                                       )}">
+                                    Создать на основе
+                                </a>
+
                                 <a class="btn secondary compact"
                                    th:href="@{
                                        /technology/techprocess/{id}/copy(
                                            id=${process.id}
                                        )}">
-                                    Применить
-                                </a>
-
-                                <a class="btn secondary compact"
-                                   th:href="@{
-                                       /technology/techprocess/update/{id}(
-                                           id=${process.id}
-                                       )}">
-                                    Изменить
-                                </a>
-
-                                <a class="btn danger compact"
-                                   th:href="@{
-                                       /technology/techprocess/delete/{id}(
-                                           id=${process.id}
-                                       )}">
-                                    Удалить
+                                    Привязать изделие
                                 </a>
 
                             </div>

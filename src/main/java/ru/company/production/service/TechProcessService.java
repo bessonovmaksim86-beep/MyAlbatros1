@@ -5,13 +5,16 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import ru.company.production.dto.TechProcessListItemDto;
 import ru.company.production.dto.TechProcessForm;
 import ru.company.production.dto.TechProcessGraphView;
+import ru.company.production.dto.TechProcessOperationGroup;
 import ru.company.production.entity.ControlParam;
 import ru.company.production.entity.ControlParamType;
 import ru.company.production.entity.ControlParamValue;
 import ru.company.production.entity.Operation;
 import ru.company.production.entity.ProductClassifier;
+import ru.company.production.entity.ProductType;
 import ru.company.production.entity.TechProcess;
 import ru.company.production.entity.TechProcessClassifier;
 import ru.company.production.entity.TechProcessOperation;
@@ -32,6 +35,7 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.Deque;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -74,6 +78,96 @@ public class TechProcessService {
     }
 
     /**
+     * Список для страницы техпроцессов: маршрут одной строкой,
+     * привязанные к нему изделия — списком подписей.
+     *
+     * Группируют строки {@link #findAllWithClassifiers()}, а не новый
+     * запрос: подписка изделия уже собрана в проекции, а дублировать
+     * её во второй выборке значило бы разъезжаться с тем, что видит
+     * технолог на других страницах.
+     */
+    @Transactional(readOnly = true)
+    public List<TechProcessListItemDto> findAllGroupedByProcess() {
+        Map<Long, Row> rowsById = new LinkedHashMap<>();
+
+        for (TechProcessListItemView row
+                : techProcessRepository.findAllWithAppliedClassifiers()) {
+
+            Row grouped = rowsById.computeIfAbsent(
+                    row.getId(),
+                    id -> new Row(id, row.getCode(),
+                            row.getOperationCount())
+            );
+
+            grouped.classifiers.add(classifierLabel(row));
+            grouped.productTypes.add(row.getProductType());
+        }
+
+        /*
+         * Строка = маршрут, поэтому порядок — по коду маршрута:
+         * исходная выборка отсортирована по изделию, и без явной
+         * сортировки «ТП-001» попал бы в середину списка.
+         */
+        return rowsById.values().stream()
+                .sorted(Comparator.comparing(row -> row.code))
+                .map(Row::toDto)
+                .toList();
+    }
+
+    /* Накопление строк одного техпроцесса при группировке. */
+    private static final class Row {
+
+        private final Long id;
+        private final String code;
+        private final long operationCount;
+        private final List<String> classifiers = new ArrayList<>();
+        private final Set<ProductType> productTypes =
+                new LinkedHashSet<>();
+
+        private Row(Long id, String code, long operationCount) {
+            this.id = id;
+            this.code = code;
+            this.operationCount = operationCount;
+        }
+
+        private TechProcessListItemDto toDto() {
+            return new TechProcessListItemDto(
+                    id,
+                    code,
+                    operationCount,
+                    List.copyOf(classifiers),
+                    Set.copyOf(productTypes)
+            );
+        }
+    }
+
+    /**
+     * Подпись привязанного изделия: код, вид, род датчика и
+     * наименование. Род датчика и наименование могут отсутствовать —
+     * у изделия типа «Датчик» своего наименования нет, у ячейки нет
+     * каталога датчиков.
+     */
+    private static String classifierLabel(TechProcessListItemView row) {
+        StringBuilder label = new StringBuilder()
+                .append("Код ")
+                .append(row.getClassifierCode())
+                .append(" — ")
+                .append(row.getProductType().getDisplayName());
+
+        if (row.getSensorClassName() != null
+                && !row.getSensorClassName().isBlank()) {
+            label.append(" — ").append(row.getSensorClassName());
+        }
+
+        if (row.getClassifierName() != null
+                && !row.getClassifierName().isBlank()) {
+            label.append(" — ").append(row.getClassifierName());
+        }
+
+        return label.toString();
+    }
+
+    /**
      * Полные данные техпроцесса для отображения 
      * (шапка, изделие, операции с нормами).
      */
@@ -90,6 +184,20 @@ public class TechProcessService {
     @Transactional(readOnly = true)
     public List<Operation> findActiveOperations() {
         return operationRepository.findAllByOrderByOperationName_NameAsc();
+    }
+
+    /**
+     * Операции для конструктора техпроцесса — сгруппированные по типу.
+     *
+     * Группировка нужна в шаблоне tp-fields.html: вместо плоского
+     * списка пользователь видит <optgroup>, разделённый по типам
+     * (производственная, контрольная, комплектовочная и т.д.).
+     */
+    @Transactional(readOnly = true)
+    public List<TechProcessOperationGroup> findActiveOperationsGrouped() {
+        return TechProcessOperationGroup.of(
+                operationRepository.findAllByOrderByOperationName_NameAsc()
+        );
     }
 
     @Transactional(readOnly = true)
@@ -140,6 +248,68 @@ public class TechProcessService {
 
     public String nextCode() {
         return codeGenerator.next(techProcessRepository.findAllCodes());
+    }
+
+    /**
+     * Подпись техпроцесса-источника для шага выбора изделия:
+     * «ТП-0005 — 5004 Ячейка — ПВВ1».
+     *
+     * Возвращают строку, а не сущность: open-in-view выключен, и
+     * шаблон не смог бы прочитать ленивое изделие вне транзакции.
+     */
+    @Transactional(readOnly = true)
+    public String describeSource(Long id) {
+        TechProcess process = techProcessRepository
+                .findHeaderById(id)
+                .orElseThrow(() -> new EntityNotFoundException(
+                        "Техпроцесс с идентификатором "
+                                + id
+                                + " не найден"
+                ));
+
+        ProductClassifier classifier = process.getProductClassifier();
+
+        return process.getCode()
+                + " — "
+                + classifier.getCode()
+                + " "
+                + classifier.getDisplayName();
+    }
+
+    /**
+     * Форма нового техпроцесса, повторяющего состав указанного
+     * маршрута.
+     *
+     * Копии подлежат операции, нормы, зависимости и рабочие места:
+     * технологу проще поправить готовый маршрут, чем собирать его с
+     * нуля. Не копируют:
+     *   идентификатор, версию и код — это новый маршрут, а не
+     *   правка прежнего; код выдают следующий по порядку;
+     *   изделие — его выбирают на шаге выбора, иначе копия
+     *   назначилась бы исходному изделию второй базовой записью;
+     *   ячейки в контролируемых параметрах — значение «…ячейки…»
+     *   берут из состава изделия, а у нового изделия состав свой,
+     *   поэтому параметр оставляют без значения, а технолог вписывает
+     *   ячейку своего изделия.
+     */
+    @Transactional(readOnly = true)
+    public TechProcessForm createFormFrom(Long id) {
+        TechProcessForm form = getForm(id);
+
+        form.setId(null);
+        form.setVersion(null);
+        form.setCode(nextCode());
+        form.setProductClassifierId(null);
+
+        for (TechProcessForm.TechProcessOperationForm row
+                : form.getOperations()) {
+            for (TechProcessForm.ControlParamRow param
+                    : row.getControlParams()) {
+                param.setCellClassifierId(null);
+            }
+        }
+
+        return form;
     }
 
     /**
@@ -418,6 +588,77 @@ public class TechProcessService {
         }
 
         return linkRepository.findAppliedClassifiers(id);
+    }
+
+    /**
+     * Удаляет изделие из списка техпроцессов, к которым применён
+     * маршрут: операции, нормы и зависимости не затрагиваются —
+     * убирается только строка связки.
+     *
+     * Техпроцесс обязан иметь основное изделие (колонка NOT NULL и
+     * инвариант «основное изделие всегда входит в связи», см. apply),
+     * поэтому удаление основного маршрута передаёт основное изделие
+     * одному из оставшихся. Если же изделие в списке последнее —
+     * удаление запрещают: без изделий маршрут существовать не может,
+     * для этого служит удаление самого техпроцесса.
+     */
+    @Transactional
+    public void removeClassifierFromProcess(
+            Long processId,
+            Long classifierId
+    ) {
+        TechProcess process = techProcessRepository
+                .findWithAppliedClassifiers(processId)
+                .orElseThrow(() -> new EntityNotFoundException(
+                        "Техпроцесс с идентификатором "
+                                + processId
+                                + " не найден"
+                ));
+
+        TechProcessClassifier link = process.getClassifierLinks()
+                .stream()
+                .filter(candidate -> candidate.getClassifier().getId()
+                        .equals(classifierId))
+                .findFirst()
+                .orElseThrow(() -> new IllegalArgumentException(
+                        "Техпроцесс не применён к выбранному изделию"
+                ));
+
+        if (process.getClassifierLinks().size() == 1) {
+            throw new IllegalStateException(
+                    "Нельзя удалить единственное изделие техпроцесса: "
+                            + "удалите техпроцесс целиком"
+            );
+        }
+
+        process.getClassifierLinks().remove(link);
+
+        /*
+         * Удалённое изделие было основным — его место занимает
+         * следующее по коду. Иначе product_classifier_id остался бы
+         * указывать на удалённую связку, и техпроцесс пропал бы из
+         * списков и поиска, которые строятся по основному изделию.
+         */
+        if (process.getProductClassifier().getId().equals(classifierId)) {
+            ProductClassifier next = process.getClassifierLinks()
+                    .stream()
+                    .map(TechProcessClassifier::getClassifier)
+                    .min(Comparator.comparing(ProductClassifier::getCode))
+                    .orElseThrow(() -> new IllegalStateException(
+                            "Не удалось выбрать основное изделие"
+                    ));
+
+            process.setProductClassifier(next);
+        }
+
+        try {
+            techProcessRepository.saveAndFlush(process);
+        } catch (DataIntegrityViolationException exception) {
+            throw new IllegalStateException(
+                    "Не удалось удалить изделие из техпроцесса",
+                    exception
+            );
+        }
     }
 
     /**

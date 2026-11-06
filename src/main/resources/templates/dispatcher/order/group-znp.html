@@ -199,6 +199,7 @@
                                 <th>Количество</th>
                                 <th>Техпроцесс</th>
                                 <th>Готово</th>
+                                <th>Где позиции</th>
                                 <th>Срок</th>
                                 <th>Статус</th>
                                 <th>Действия</th>
@@ -212,7 +213,7 @@
                                     or #lists.isEmpty(groupOrders)
                                  }">
 
-                                <td colspan="10"
+                                <td colspan="11"
                                     class="empty-table">
                                     Групповые заказы пока не добавлены
                                 </td>
@@ -264,7 +265,41 @@
                                     0 из 24
                                 </td>
 
-                                <td th:text="${order.formattedDueDate}">
+                                <!--
+                                    Где позиции заказа.
+
+                                    Колонка отвечает на вопрос «чей сейчас
+                                    заказ»: подписывает работу плана, на
+                                    которой стоят внесённые ячейки. Позиции
+                                    в браке (заявка ждёт решения бюро) в
+                                    счёт не входят — их цех уже снял с
+                                    работы.
+
+                                    Прочерк — не ошибка данных: у «Нового»
+                                    заказа план ещё не построен, у закрытого
+                                    позиций не осталось, а у запущенного
+                                    ячейки ещё не внесены складом.
+                                -->
+                                <td th:with="positions=${
+                                        znpPositions != null
+                                            ? znpPositions.get(order.id)
+                                            : null
+                                    }">
+
+                                    <span class="status work"
+                                          th:if="${positions != null}"
+                                          th:text="${positions.label()}"
+                                          th:title="${positions.title()}">
+                                        Монтаж подсборок — 3 шт.
+                                    </span>
+
+                                    <span th:unless="${positions != null}">
+                                        —
+                                    </span>
+
+                                </td>
+
+                                <td th:text="${znpDueDates != null ? znpDueDates.get(order.id) : null} ?: ${order.formattedDueDate}">
                                     01.01.2026
                                 </td>
 
@@ -296,11 +331,18 @@
                                             не предлагает того, что сервис
                                             отвергнет.
                                         -->
+                                        <!--
+                                            Запуск нужен ровно один раз — пока заказ «Новый».
+                                            У заказа «В работе» кнопка предлагала второй запуск
+                                            и выглядела как пропущенное действие: план уже
+                                            построен, позиции уже в маршруте. Перестроить план
+                                            по запущенному заказу можно его карточкой, где это
+                                            осознанный шаг, а не кнопка в каждой строке списка.
+                                        -->
                                         <form method="post"
                                               th:if="${
                                                   order.status != null
-                                                  and order.status.name() != 'DONE'
-                                                  and order.status.name() != 'CANCELLED'
+                                                  and order.status.name() == 'NEW'
                                               }"
                                               th:action="@{/dispatcher/production-order/{id}/plan(id=${order.id})}"
                                               th:attr="data-confirm=${

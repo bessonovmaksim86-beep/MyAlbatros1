@@ -59,6 +59,12 @@
                  th:text="${errorMessage}">
             </div>
 
+            <div class="alert success"
+                 th:if="${sourceLabel != null}">
+                Создать на основе техпроцесса
+                <strong th:text="${sourceLabel}">ТП-0001</strong>
+            </div>
+
             <section class="card">
 
                 <div class="card-head">
@@ -208,6 +214,7 @@
 <script th:inline="javascript">
     /*<![CDATA[*/
     window.TP_CREATE_NEW_URL = /*[[@{/technology/techprocess/create/new}]]*/ '';
+    window.TP_SOURCE_ID = /*[[${sourceId}]]*/ null;
     /*]]>*/
 </script>
 

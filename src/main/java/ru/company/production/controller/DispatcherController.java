@@ -43,11 +43,13 @@ import ru.company.production.repository.CustomerOrderRepository;
 import ru.company.production.repository.ProductSerialRepository;
 import ru.company.production.repository.ProductTypeQuantityProjection;
 import ru.company.production.repository.ProductionOrderItemRepository;
+import ru.company.production.repository.ProductionOrderListItemView;
 import ru.company.production.repository.ProductionOrderRepository;
 import ru.company.production.repository.SystemComponentProjection;
 import ru.company.production.repository.UserRepository;
 import ru.company.production.service.CustomerOrderService;
 import ru.company.production.service.CustomerService;
+import ru.company.production.service.GroupZnpPositionsService;
 import ru.company.production.service.ProductionOrderService;
 import ru.company.production.service.SerialKittingService;
 import ru.company.production.service.OrderSchedulingService;
@@ -89,6 +91,12 @@ public class DispatcherController {
     private final ProductionOrderService productionOrderService;
     private final OrderSchedulingService orderSchedulingService;
     private final ChecklistParser checklistParser;
+
+    /*
+     * Колонка «Где позиции» списка групповых ЗНП: сводка по незакрытым
+     * работам плана, внесённым ячейкам и браку.
+     */
+    private final GroupZnpPositionsService groupZnpPositionsService;
 
     private static final String WORKSHOP_SCHEDULE_MODEL = "dispatcher/workshop-schedule";
     /*
@@ -737,12 +745,34 @@ public class DispatcherController {
 
         model.addAttribute("activePage", "groupZnp");
 
-        model.addAttribute(
-                "groupOrders",
+        List<ProductionOrderListItemView> groupOrders =
                 productionOrderRepository.findListItemsByKinds(
                         ProductionItemStatus.DONE,
                         ZnpKind.groupKinds()
-                )
+                );
+
+        model.addAttribute("groupOrders", groupOrders);
+
+        /*
+         * Колонка «Где позиции»: у запущенного заказа видно, на какой
+         * работе стоят его ячейки. Считается пакетно по всему списку
+         * (позиции есть не у каждого заказа) и только для заказов в
+         * работе — остальным колонка обязана показать прочерк.
+         */
+        model.addAttribute(
+                "znpPositions",
+                groupZnpPositionsService.ofListItems(groupOrders)
+        );
+
+        /*
+         * Колонка «Срок»: дата окончания плана заказа. Групповой заказ
+         * заводят без заявки покупателя, и срока извне у него нет, —
+         * план (V56) знает дату работ точнее карточки. Заказа в выдаче
+         * нет, когда плана нет: шаблон тогда показывает срок карточки.
+         */
+        model.addAttribute(
+                "znpDueDates",
+                groupZnpPositionsService.planDueDates(groupOrders)
         );
 
         /*

@@ -3,7 +3,6 @@ package ru.company.production.dto;
 import ru.company.production.entity.ProductSerialStatus;
 import ru.company.production.entity.ProductType;
 import ru.company.production.entity.QuarantineCellKind;
-import ru.company.production.entity.WarehouseNaming;
 
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
@@ -43,7 +42,8 @@ public record WarehouseStockRow(
         LocalDateTime cellReadyAt,
         LocalDateTime receivedAt,
         String placedZnpNumbers,
-        boolean free
+        boolean free,
+        String handoverUnitName
 ) {
 
     private static final DateTimeFormatter DATE_TIME_FORMATTER =
@@ -80,19 +80,16 @@ public record WarehouseStockRow(
     }
 
     /**
-     * Изделие строкой: «5127 — Подсборка ЯПР56М».
+     * Изделие строкой: «5127 — ЯПР56М».
      *
-     * Термин «Подсборка» подставляется непринятым позициям тем же
-     * способом, что и в перечнях прихода
-     * ({@link WarehouseNaming#subassemblyLabel(String)}), — одна и та
-     * же позиция обязана называться одинаково во всех разделах склада.
+     * Разновидность позиции сюда не подставляется намеренно: «Ячейка» и «Подсборка» описывают
+     * стадию маршрута и печатаются колонкой {@link #getKindLabel()}. Наименование изделия
+     * принадлежит классификатору и не должно переименоываться от того, что позицию пока не
+     * отметили готовой ячейкой, — иначе одна и та же позиция фигурировала бы в журнале,
+     * изоляторе и отбраковке под двумя разными именами.
      */
     public String getCellLabel() {
         String name = displayName();
-
-        if (getKind() == QuarantineCellKind.SUBASSEMBLY) {
-            name = WarehouseNaming.subassemblyLabel(name);
-        }
 
         if (classifierCode == null) {
             return name;
@@ -209,7 +206,34 @@ public record WarehouseStockRow(
 
     /** Модификатор CSS-класса плашки размещения. */
     public String getPlacementBadgeClass() {
+        if (isHandedOver()) {
+            return "handed";
+        }
+
         return free ? "done" : "work";
+    }
+
+    /** Позицию увезли в подразделение, но приёмку ещё не подтвердили (V81). */
+    public boolean isHandedOver() {
+        return handoverUnitName != null && !handoverUnitName.isBlank();
+    }
+
+    /*
+     * Плашка ожидания важнее плашки размещения: «В заказе: ЗНП-2026-11» говорит, что номер
+     * занят, а «Передана» — что номера на полке уже нет. Кладовщик по этой строке решает,
+     * выдавать ли позицию повторно, поэтому она перекрывает всё остальное.
+     */
+    public String getPlacementDisplayLabel() {
+        if (isHandedOver()) {
+            return "Передана «" + handoverUnitName.trim() + "», ждёт подтверждения";
+        }
+
+        return getPlacementLabel();
+    }
+
+    /** Куда именно ушла позиция — подписывает строку приёмки в карточке позиции. */
+    public String getHandoverUnitName() {
+        return handoverUnitName;
     }
 
     /** Момент поступления для сортировки: пустой уходит в конец. */
