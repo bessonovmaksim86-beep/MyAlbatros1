@@ -94,12 +94,6 @@ public class ControlReturnService {
         return controlReturnRepository.findOpenByRowIds(rowIds);
     }
 
-    /** Открытых возвратов — цифра пункта меню БТК. */
-    @Transactional(readOnly = true)
-    public long countOpenReturns() {
-        return controlReturnRepository.countByResolvedAtIsNull();
-    }
-
     /**
      * Отправить выбранные экземпляры на доработку.
      *

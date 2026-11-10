@@ -41,29 +41,6 @@ public interface ControlReturnRepository
     );
 
     /**
-     * Открытые возвраты — очередь доработки и счётчик БТК.
-     *
-     * Строка графика подтягивается с операцией и её наименованием:
-     * перечень обязан назвать работу, а не только номер строки.
-     */
-    @Query("""
-            select ret
-            from ControlReturn ret
-            left join fetch ret.scheduleRow row
-            left join fetch row.operation operation
-            left join fetch operation.operationName operationName
-            left join fetch ret.returnedBy returnedBy
-            where ret.resolvedAt is null
-            order by ret.returnedAt desc, ret.id desc
-            """)
-    List<ControlReturn> findOpen();
-
-    /**
-     * Открытых возвратов — цифра пункта меню.
-     */
-    long countByResolvedAtIsNull();
-
-    /**
      * История возвратов одной строки графика — сколько раз работу
      * возвращали и как закрывали.
      */
