@@ -51,44 +51,24 @@
                 <div class="page-head-actions create-actions">
 
                     <!--
-                        По кнопке на каждый вид раздела (V38): набор
-                        видов берётся из того же признака, что и отбор
-                        строк списка (ZnpKind.groupKinds()), поэтому
-                        добавленный в enum вид появляется здесь без
-                        правки шаблона.
-
-                        Выпуск (ЗП) на этой странице не создаётся:
-                        он рождается из заказа покупателя и остаётся
-                        в разделе «Заказы на производство».
-
-                        Надпись кнопки — название вида из enum
-                        (ZnpKind.getCreateButtonLabel), как в колонке
-                        «Вид» ниже и в заголовке формы.
+                        Единая кнопка «Создать ЗНП»: вид определяется
+                        первой операцией техпроцесса в форме.
+                        Диспетчер выбирает изделие, техпроцесс —
+                        сервис автоматически подставит GROUP_CELL
+                        для склада или CELL_REPAIR для БТК.
                     -->
                     <span class="create-actions__label">
                         Новый групповой заказ
                     </span>
 
-                    <div class="kind-buttons">
+                    <a class="btn kind-button"
+                       th:href="@{/dispatcher/production-order/create}">
 
-                        <a class="btn kind-button"
-                           th:each="kind : ${znpKinds}"
-                           th:href="@{/dispatcher/production-order/create(
-                               kind=${kind.name()}
-                           )}">
+                        <span class="kind-button__title">
+                            Создать ЗНП
+                        </span>
 
-                            <span class="kind-button__title"
-                                  th:text="${kind.createButtonLabel}">
-                                Групповой ЗНП на ячейки
-                            </span>
-
-                            <span class="kind-button__hint"
-                                  th:text="${kind.compositionHint}">
-                                изделие и количество
-                            </span>
-                        </a>
-
-                    </div>
+                    </a>
 
                 </div>
             </div>

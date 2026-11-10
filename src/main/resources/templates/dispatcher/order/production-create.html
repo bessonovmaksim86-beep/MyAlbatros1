@@ -50,22 +50,25 @@
                 <div class="page-title">
 
                     <!--
-                        В ЗНП-режиме вид поднимается прямо в заголовок:
-                        выбор вида уже сделан кнопкой на странице списка,
-                        и повторять его отдельным подписанным полем ниже
-                        — значит заставлять диспетчера сверять одно и то
-                        же дважды. Вид берётся из resolvedKind, а не из
-                        model-атрибута, чтобы заголовок не терялся после
-                        ошибки валидации.
+                        Форма одна на три случая, и заголовок различает
+                        их по разделу (activePage), а не по виду: выпуск
+                        (ЗП) заводят из заказа покупателя, комплектующий —
+                        из карточки выпуска, групповой ЗНП — со страницы
+                        «Групповые ЗНП».
+
+                        Для группового заказа вид в заголовке больше не
+                        повторяют: его определяет первая операция
+                        маршрута, а диспетчер выбирает изделие и
+                        техпроцесс, то есть вид ещё не известен.
                     -->
                     <h1 th:text="${
                         releaseOrder
                             ? 'Создание заказа на производство'
-                            : 'Создание · '
-                                  + productionOrderForm
-                                    .resolvedKind.displayName
+                            : (activePage == 'groupZnp'
+                                    ? 'Создание группового ЗНП'
+                                    : 'Создание заказа-комплектующего')
                     }">
-                        Создание заказа на производство
+                        Создание группового ЗНП
                     </h1>
 
                     <p th:text="${
@@ -74,14 +77,18 @@
                                выбранного заказа покупателя: каждое
                                изделие получает серийный номер вида
                                «код классификатора — серия»'
-                            : 'Вид заказа-комплектующего определяет состав:
-                               комплектование отмечает датчики выпуска,
-                               групповые и ремонтные виды задаются
-                               изделием и количеством'
+                            : (activePage == 'groupZnp'
+                                    ? 'Укажите изделие и техпроцесс — тип
+                                       ЗНП определится по первой операции
+                                       маршрута, его можно переключить
+                                       вручную'
+                                    : 'Комплектующий входит внутрь
+                                       выбранного выпуска и отмечает его
+                                       датчики')
                     }">
-                        Состав выпуска формируется из позиций выбранного
-                        заказа покупателя: каждое изделие получает
-                        серийный номер вида «код классификатора — серия»
+                        Укажите изделие и техпроцесс — тип ЗНП определится
+                        по первой операции маршрута, его можно переключить
+                        вручную
                     </p>
 
                 </div>
@@ -112,6 +119,13 @@
                       releaseOrder=${releaseOrder},
                       poSerial=${
                           productionOrderForm.resolvedKind.serialBased
+                      },
+                      kindEditable=${
+                          !releaseOrder
+                          and !editing
+                          and productionOrderForm
+                                .resolvedKind
+                                .groupKind
                       }"
                   class="co-form">
 
@@ -200,23 +214,82 @@
                             </div>
 
                             <!--
-                                Вид заказа-комплектующего (миграция V37)
-                                в форме НЕ показывается: его выбирает
-                                кнопка на странице списка или в карточке
-                                выпуска, и повторять выбор полем внутри
-                                формы значило бы дать диспетчеру сменить
-                                вид, который сервис всё равно не примет
-                                (см. assertKindUnchanged).
+                                Тип ЗНП — редактируемый селектор, но
+                                только в разделе групповых заказов и
+                                только при создании:
 
-                                Скрытое поле обязательно: уровень и вид
+                                  вид группового заказа больше не задают
+                                  кнопкой страницы списка — его определяет
+                                  первая операция маршрута, и диспетчер
+                                  вправе переключить предложение вручную;
+
+                                  при правке вид неизменный (сервис
+                                  отклоняет смену — assertKindUnchanged),
+                                  поэтому там остаётся скрытое поле;
+
+                                  выпуску и комплектующему внутри выпуска
+                                  вид не выбирают вовсе: первый всегда
+                                  комплектование, второй наследует состав
+                                  от перечня датчиков.
+
+                                В селекторе только групповые виды
+                                (ZnpKind.groupKinds()): комплектование
+                                здесь недоступно, иначе диспетчер убрал бы
+                                изделие и количество у заказа, который уже
+                                ими задан.
+                            -->
+                            <div class="field"
+                                 id="znpKindField"
+                                 th:if="${
+                                     !releaseOrder
+                                     and !editing
+                                     and activePage == 'groupZnp'
+                                 }">
+
+                                <label for="znpKind">
+                                    Тип ЗНП
+                                </label>
+
+                                <select id="znpKind"
+                                        th:field="*{znpKind}">
+
+                                    <option th:each="kindOption
+                                                : ${znpKindGroupOptions}"
+                                            th:value="${kindOption.name()}"
+                                            th:text="${
+                                                kindOption.displayName
+                                            }">
+                                        Групповой ЗНП на ячейки
+                                    </option>
+
+                                </select>
+
+                                <small id="znpKindHint">
+                                    Тип предложен по первой операции
+                                    техпроцесса; можно переключить вручную
+                                </small>
+
+                                <span class="field-error"
+                                      th:if="${#fields.hasErrors('znpKind')}"
+                                      th:errors="*{znpKind}">
+                                </span>
+
+                            </div>
+
+                            <!--
+                                Вне группового раздела и при правке вид
+                                приходит скрытым полем: уровень и вид
                                 сервис читает из формы, а без значения
                                 заказ любого вида создался бы
                                 комплектованием (ZnpKind.ofNullable).
-                                При ошибке валидации поле возвращает
-                                тот же вид, под который открывали форму.
                             -->
                             <input type="hidden"
                                    id="znpKind"
+                                   th:if="${
+                                       releaseOrder
+                                       or editing
+                                       or activePage != 'groupZnp'
+                                   }"
                                    th:field="*{znpKind}">
 
                             <!--
@@ -558,6 +631,22 @@
                                     укажите изделие
                                 </small>
 
+                                <!--
+                                    Подсказка вида из маршрута. Пустая
+                                    строка скрыта: до выбора маршрута
+                                    говорить не о чем, а пустой блок
+                                    сдвигал бы сетку формы.
+
+                                    Текст пишет скрипт ответом
+                                    /production-order/kind-proposal —
+                                    там же, где сервис считает вид по
+                                    первой комплектовочной операции.
+                                -->
+                                <small class="kind-proposal-hint"
+                                       id="kindProposalHint"
+                                       hidden>
+                                </small>
+
                                 <span class="field-error"
                                       th:if="${#fields.hasErrors('techProcessId')}"
                                       th:errors="*{techProcessId}">
@@ -875,12 +964,12 @@
         :: commonScripts}">
 </th:block>
 
-<script th:src="@{/dispatcher/js/production-order.js}"
-        th:attr="data-preview-url=@{/dispatcher/production-order/release-preview},
+                data-preview-url=@{/dispatcher/production-order/release-preview},
                  data-serials-url=@{/dispatcher/production-order/parent-serials},
                  data-release-serials-url=@{/dispatcher/production-order/release-serials},
                  data-kind-classifiers-url=@{/dispatcher/production-order/kind-classifiers},
-                 data-routes-url=@{/dispatcher/production-order/classifier-routes}"></script>
+                 data-routes-url=@{/dispatcher/production-order/classifier-routes},
+                 data-kind-proposal-url=@{/dispatcher/production-order/kind-proposal}"></script>
 
 </body>
 </html>

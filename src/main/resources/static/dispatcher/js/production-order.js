@@ -565,9 +565,19 @@
             ? script.getAttribute('data-routes-url')
             : null;
 
+        const proposalScript = document.querySelector(
+            'script[data-kind-proposal-url]'
+        );
+
+        const proposalUrl = proposalScript
+            ? proposalScript.getAttribute('data-kind-proposal-url')
+            : null;
+
         const editing = document.body.getAttribute(
             'data-po-editing'
         ) === 'true';
+
+        const kindHint = document.getElementById('kindProposalHint');
 
         function message(text) {
             techSelect.innerHTML = '';
@@ -610,46 +620,71 @@
 
                 techSelect.appendChild(option);
             });
-        }
-
-        function load(classifierId) {
-            if (!routesUrl) {
-                return;
-            }
-
-            if (!classifierId) {
-                message('Сначала выберите изделие');
-                return;
-            }
 
             /*
-             * Для комплектования блок скрыт или не отрисован: маршруты
-             * чужого вида запрашивать незачем.
+             * Маршруты загружены — запрашиваем предложение вида из
+             * первой операции выбранного (или текущего) техпроцесса.
              */
-            const techField =
-                document.getElementById('kindTechProcessField');
+            syncProposal(techSelect.value);
+        }
 
-            if (techField && techField.hidden) {
+        /*
+         * Запрашивает вид ЗНП по выбранному техпроцессу.
+         *
+         * Ответ заполняет подсказку под полем техпроцесса: если маршрут
+         * задаёт вид (склад или БТК), показывает чем заказ укомплектован;
+         * если нет — скрывает подсказку.
+         */
+        function syncProposal(techProcessId) {
+            if (!proposalUrl || !kindHint) {
                 return;
             }
 
-            message('Загружаем техпроцессы…');
+            if (!techProcessId) {
+                kindHint.hidden = true;
+                return;
+            }
 
             fetch(
-                routesUrl + '?classifierId='
-                + encodeURIComponent(classifierId),
+                proposalUrl + '?techProcessId='
+                + encodeURIComponent(techProcessId),
                 {headers: {'Accept': 'application/json'}}
             )
                 .then((response) =>
-                    response.ok ? response.json() : [])
-                .then(render)
-                .catch(() => message(
-                    'Не удалось загрузить техпроцессы'
-                ));
+                    response.ok ? response.json() : null)
+                .then((proposal) => {
+                    if (!proposal) {
+                        kindHint.hidden = true;
+                        return;
+                    }
+
+                    if (proposal.applicable) {
+                        kindHint.textContent =
+                            'Предложен тип: '
+                            + proposal.operationLabel
+                            + ' → '
+                            + proposal.kindDisplayName;
+                        kindHint.hidden = false;
+                    } else {
+                        kindHint.textContent = proposal.message;
+                        kindHint.hidden = false;
+                    }
+                })
+                .catch(() => {
+                    kindHint.textContent = 'Не удалось определить вид';
+                    kindHint.hidden = false;
+                });
         }
 
         classifierSelect.addEventListener('change', () => {
             load(classifierSelect.value);
+        });
+
+        /*
+         * Выбор техпроцесса — обновляет предложение вида.
+         */
+        techSelect.addEventListener('change', () => {
+            syncProposal(techSelect.value);
         });
 
         /*
@@ -659,6 +694,14 @@
          */
         if (!editing && classifierSelect.value) {
             load(classifierSelect.value);
+        }
+
+        /*
+         * Если техпроцесс уже выбран (например, диспетчер пришёл по
+         * ссылке с techProcessId), запрашиваем предложение вида.
+         */
+        if (!editing && techSelect.value) {
+            syncProposal(techSelect.value);
         }
     }
 
@@ -889,12 +932,13 @@
 
         syncZnpFields = applyKind;
 
+        /*
+         * При правке вид неизменный: обработчик change не нужен,
+         * но applyKind должен выполниться один раз, чтобы правильно
+         * показать/скрыть поля составу по выбранному виду.
+         */
         if (editing) {
-            /*
-             * При правке вид неизменный: селектор заменён скрытым
-             * полем, справочник и состав приходят с сервера, и
-             * перезаписывать их нельзя.
-             */
+            applyKind();
             return;
         }
 

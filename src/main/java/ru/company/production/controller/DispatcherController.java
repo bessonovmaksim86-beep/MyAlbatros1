@@ -20,6 +20,7 @@ import org.springframework.web.bind.WebDataBinder;
 import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 import ru.company.production.dto.CustomerForm;
 import ru.company.production.dto.CustomerOrderForm;
+import ru.company.production.dto.GroupZnpKindProposal;
 import ru.company.production.dto.ProductionOrderForm;
 import ru.company.production.dto.TypeCardView;
 import ru.company.production.dto.TypeCards;
@@ -832,6 +833,7 @@ public class DispatcherController {
             @RequestParam(required = false, defaultValue = "false")
             boolean release,
             @RequestParam(required = false) String kind,
+            @RequestParam(required = false) Long techProcessId,
             Model model
     ) {
 
@@ -893,12 +895,31 @@ public class DispatcherController {
             );
 
             /*
-             * Вид записывается разобранным именем, а не строкой из
-             * запроса: в форму и дальше попадает каноническое значение,
-             * и селектор (при правке — скрытое поле) открыт на том же
-             * виде, который реально сохранится.
+             * Если диспетчер пришёл со страницы групповых ЗНП и
+             * указал techProcessId, определяем вид из первой операции
+             * маршрута — склад даёт GROUP_CELL, БТК — CELL_REPAIR или
+             * SUBASSEMBLY_REPAIR. Иначе оставляем вид из параметра kind.
              */
-            form.setZnpKind(znpKind.name());
+            if (!release) {
+                GroupZnpKindProposal proposal =
+                        techProcessId != null
+                                ? productionOrderService
+                                        .resolveKindByTechProcess(
+                                                techProcessId
+                                        )
+                                : null;
+
+                String initialKind = znpKind.name();
+
+                if (proposal != null && proposal.applicable()) {
+                    initialKind = proposal.kind().name();
+                    model.addAttribute(
+                            "kindProposal", proposal
+                    );
+                }
+
+                form.setZnpKind(initialKind);
+            }
 
             /*
              * Автономер ЗНП-ГГГГ-NNN относится к выпуску. Комплектующему
@@ -1847,6 +1868,18 @@ public class DispatcherController {
         );
 
         /*
+         * Виды группового ЗНП для селектора формы: групповые и
+         * ремонтные виды — те, что отображаются на странице
+         * «Групповые ЗНП» (ZnpKind.groupKinds()). Диспетчер
+         * выбирает вид вручную, а сервис предлагает из первой
+         * операции техпроцесса (см. kind-proposal endpoint).
+         */
+        model.addAttribute(
+                "znpKindGroupOptions",
+                ZnpKind.groupKinds()
+        );
+
+        /*
          * Счётчик меню здесь не ставится: его считает
          * DispatcherViewAdvice по видам своего раздела. Прежняя строка
          * с countByActiveTrue() перезаписывала значение всем страницам
@@ -1993,6 +2026,22 @@ public class DispatcherController {
         }
 
         return rows;
+    }
+
+    /**
+     * Предложение вида группового ЗНП по выбранному техпроцессу.
+     *
+     * Вид определяется ПЕРВОЙ операцией маршрута: складское
+     * «Комплектование ячеек» → GROUP_CELL, БТК → CELL_REPAIR и т.д.
+     * Диспетчер видит подсказку и может переключить вид вручную.
+     */
+    @GetMapping("/production-order/kind-proposal")
+    @ResponseBody
+    public GroupZnpKindProposal kindProposal(
+            @RequestParam(required = false) Long techProcessId
+    ) {
+        return productionOrderService
+                .resolveKindByTechProcess(techProcessId);
     }
 
     /**

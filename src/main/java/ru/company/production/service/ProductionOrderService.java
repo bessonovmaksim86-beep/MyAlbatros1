@@ -4,6 +4,7 @@ import jakarta.persistence.EntityNotFoundException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import ru.company.production.dto.GroupZnpKindProposal;
 import ru.company.production.dto.ProductionOrderForm;
 import ru.company.production.entity.AppUser;
 import ru.company.production.entity.CustomerOrder;
@@ -692,9 +693,10 @@ public class ProductionOrderService {
         boolean component = form.isComponentLevel();
 
         /*
-         * Заказ верхнего уровня вида не выбирает — ему оставляют
-         * комплектование как значение по умолчанию, смысл из него не
-         * извлекается.
+         * Вид заказу-комплектующему берётся из формы: для группового
+         * ЗНП диспетчер может выбрать вид вручную. Для выпуска (ЗП)
+         * вид по-прежнему не выбирается — ему оставляют комплектование
+         * как значение по умолчанию, смысл из него не извлекается.
          */
         if (!component) {
             kind = ZnpKind.KITTING;
@@ -830,6 +832,8 @@ public class ProductionOrderService {
                     "Укажите номер заказа на производство (комплектующего)"
             );
         }
+
+        validateNumber(number);
 
         /*
          * Выбор датчиков обязателен для комплектующего на комплектование:
@@ -1089,6 +1093,8 @@ public class ProductionOrderService {
                     "Заказ с номером «" + number + "» уже существует"
             );
         }
+
+        validateNumber(number);
 
         ProductClassifier groupClassifier = null;
         BigDecimal groupQuantity = null;
@@ -2565,6 +2571,42 @@ public class ProductionOrderService {
         }
     }
 
+    /**
+     * Формат номера заказа: «ЗП-ГГГГ-NNN» для выпуска и
+     * «ЗНП-ГГГГ-NNN» для заказа-комплектующего.
+     *
+     * Номер приходит из внешнего учёта и вводится вручную, поэтому
+     * проверка держит именно шаблон, а не только уникальность: заказ
+     * вида «ЗНП-2026/17» прошёл бы проверку на повтор, попал бы в
+     * списки и в печатные документы, а найти его по номеру из
+     * бумажной заявки оказалось бы невозможно.
+     *
+     * Серийный номер не ограничен тремя знаками: автоподбор выдаёт
+     * столько разрядов, сколько занято в текущем году, поэтому
+     * «ЗНП-2026-1043» корректен, хотя и длиннее образца.
+     *
+     * Пустое значение не проверяется: у выпуска номер подставляется
+     * автоподбором, а у комплектующего пустота отклонена раньше — тем
+     * самым старые заказы с номером «не по шаблону» правится не
+     * отклоняют, пока диспетчер сам не введёт новый.
+     */
+    private void validateNumber(String number) {
+
+        if (number == null || number.isBlank()) {
+            return;
+        }
+
+        if (NUMBERED.matcher(number).matches()) {
+            return;
+        }
+
+        throw new IllegalArgumentException(
+                "Неверный формат номера «" + number
+                        + "»: укажите номер вида ЗНП-ГГГГ-NNN, "
+                        + "например ЗНП-" + LocalDate.now().getYear() + "-017"
+        );
+    }
+
     private String trimToEmpty(String value) {
         return value == null ? "" : value.trim();
     }
@@ -2579,5 +2621,189 @@ public class ProductionOrderService {
         }
 
         return ids.stream().allMatch(java.util.Objects::isNull);
+    }
+
+    /**
+     * Определяет вид группового ЗНП по первой операции техпроцесса.
+     *
+     * Вид заказа задаёт ПЕРВАЯ по маршруту операция (min position):
+     * именно она определяет, чем заказ укомплектован и кто его
+     * комплектует. Без первой операции комплектования заказ не создать.
+     *
+     * Правила:
+     * - Склад + KITTING_CELL → GROUP_CELL (null)
+     * - Склад + KITTING_SUBASSEMBLY → GROUP_CELL (SUBASSEMBLY)
+     * - БТК + KITTING_CELL → CELL_REPAIR
+     * - БТК + KITTING_SUBASSEMBLY → SUBASSEMBLY_REPAIR
+     * - иное/нет → не применим
+     *
+     * Код подразделения первой операции — ключевой признак: склад
+     * (SEMI_FINISHED_PRODUCT_WAREHOUSE) даёт комплектовочные виды,
+     * БТК (TECHNICAL_CONTROL_DEPARTMENT) — ремонтные. Текст операции
+     * в подписи помогает диспетчеру понять, откуда взялся вид.
+     */
+    public GroupZnpKindProposal resolveKindByTechProcess(Long techProcessId) {
+
+        if (techProcessId == null) {
+            return GroupZnpKindProposal.notApplicable(
+                    "",
+                    "Укажите техпроцесс для определения вида заказа"
+            );
+        }
+
+        List<TechProcessOperation> operations =
+                techProcessOperationRepository
+                        .findAllOrderedForProcess(techProcessId);
+
+        if (operations.isEmpty()) {
+            return GroupZnpKindProposal.notApplicable(
+                    "",
+                    "В техпроцессе нет операций — "
+                            + "невозможно определить вид заказа"
+            );
+        }
+
+        TechProcessOperation first = operations.get(0);
+        String typeCode = first.getOperation().getOperationType()
+                == null ? null
+                : first.getOperation().getOperationType().getCode();
+        String unitCode = first.getOperation().getOrganizationUnit() == null
+                ? null
+                : first.getOperation().getOrganizationUnit().getCode();
+        String opLabel = buildOperationLabel(first);
+
+        /*
+         * «Комплектовочная» (KITTING) вид не задаёт: её оставили за
+         * заказами без привязки номеров, а групповой заказ обязан
+         * начинаться с комплектования ячеек или подсборок — только
+         * эти два типа различают складской выпуск и ремонт БТК.
+         */
+        return resolveKindFromKittingOperation(typeCode, unitCode, opLabel);
+    }
+
+    /**
+     * Определяет вид заказа по строковому коду типа и подразделению
+     * операции комплектования.
+     *
+     * Кода типа — строка, а не enum: {@link OperationType#getCode()}
+     * возвращает String, и сравнивать код нужно по строке.
+     */
+    private GroupZnpKindProposal resolveKindFromKittingOperation(
+            String typeCode,
+            String unitCode,
+            String opLabel) {
+
+        if (typeCode == null || typeCode.isBlank()) {
+            return GroupZnpKindProposal.notApplicable(
+                    opLabel,
+                    "У операции не задан тип — "
+                            + "выберите операцию комплектования"
+            );
+        }
+
+        /*
+         * «Комплектовочная» (KITTING) вид не задаёт: её оставили за
+         * заказами без привязки номеров, а групповой заказ обязан
+         * начинаться с комплектования ячеек или подсборок — только
+         * эти два типа различают складской выпуск и ремонт БТК.
+         */
+        String code = typeCode.trim().toUpperCase();
+
+        /*
+         * Склад: комплектование ячеек → GROUP_CELL,
+         * комплектование подсборок → GROUP_CELL (SUBASSEMBLY).
+         */
+        if (isWarehouseKitting(code, unitCode)) {
+            KittingType kittingType = "KITTING_SUBASSEMBLY".equals(code)
+                    ? KittingType.SUBASSEMBLY : null;
+
+            return new GroupZnpKindProposal(
+                    ZnpKind.GROUP_CELL,
+                    kittingType,
+                    opLabel,
+                    "Первая операция — комплектование склада. "
+                            + "Заказ будет создан как групповой ЗНП на ячейки",
+                    unitCode
+            );
+        }
+
+        /*
+         * БТК: ремонтные виды.
+         */
+        if (isBtkKitting(code, unitCode)) {
+            ZnpKind kind = "KITTING_SUBASSEMBLY".equals(code)
+                    ? ZnpKind.SUBASSEMBLY_REPAIR
+                    : ZnpKind.CELL_REPAIR;
+
+            return new GroupZnpKindProposal(
+                    kind,
+                    null,
+                    opLabel,
+                    "Первая операция — комплектование БТК. "
+                            + "Заказ будет создан как ремонтный ЗНП",
+                    unitCode
+            );
+        }
+
+        /*
+         * Первая операция — не комплектование склада или БТК.
+         * Вид заказа не определяется.
+         */
+        return GroupZnpKindProposal.notApplicable(
+                opLabel,
+                "Первая операция не является комплектованием — "
+                        + "вид заказа не определяется"
+        );
+    }
+
+    /**
+     * Является ли операция комплектованием склада.
+     *
+     * Склад полуфабрикатов — SEMI_FINISHED_PRODUCT_WAREHOUSE.
+     *
+     * Только KITTING_CELL и KITTING_SUBASSEMBLY задают вид группового
+     * заказа; обычная KITTING — вид не задаёт.
+     */
+    private boolean isWarehouseKitting(String typeCode, String unitCode) {
+
+        return "SEMI_FINISHED_PRODUCT_WAREHOUSE".equals(unitCode)
+                && ("KITTING_CELL".equals(typeCode)
+                        || "KITTING_SUBASSEMBLY".equals(typeCode));
+    }
+
+    /**
+     * Является ли операция комплектованием БТК.
+     *
+     * Бюро технического контроля — TECHNICAL_CONTROL_DEPARTMENT.
+     *
+     * Только KITTING_CELL и KITTING_SUBASSEMBLY задают вид группового
+     * заказа; обычная KITTING — вид не задаёт.
+     */
+    private boolean isBtkKitting(String typeCode, String unitCode) {
+
+        return "TECHNICAL_CONTROL_DEPARTMENT".equals(unitCode)
+                && ("KITTING_CELL".equals(typeCode)
+                        || "KITTING_SUBASSEMBLY".equals(typeCode));
+    }
+
+    /**
+     * Формирует читаемую подпись операции для отображения диспетчеру.
+     */
+    private String buildOperationLabel(TechProcessOperation tpo) {
+        String opName = tpo.getOperation() != null
+                && tpo.getOperation().getOperationName() != null
+                ? tpo.getOperation().getOperationName().getName()
+                : "Без названия";
+
+        String unitName = tpo.getOperation() != null
+                && tpo.getOperation().getOrganizationUnit() != null
+                ? tpo.getOperation().getOrganizationUnit().getName()
+                : "";
+
+        if (unitName.isBlank()) {
+            return opName;
+        }
+
+        return opName + " — " + unitName;
     }
 }

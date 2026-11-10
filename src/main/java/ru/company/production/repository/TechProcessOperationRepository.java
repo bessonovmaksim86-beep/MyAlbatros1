@@ -161,6 +161,35 @@ public interface TechProcessOperationRepository
     );
 
     /**
+     * Узлы маршрута по порядку — включая тип операции и её подразделение.
+     *
+     * Нужен определению вида группового ЗНП: вид задаёт ПЕРВАЯ по
+     * маршруту операция, и брать её надо вместе с типом и владельцем —
+     * именно эта пара отличает комплектование ячеек от комплектования
+     * подсборок и склад от бюро технического контроля.
+     *
+     * Сортировка на стороне базы, а не в сервисе: порядок задаёт
+     * позиция узла, и перепутать её со списком, возвращённым базой в
+     * произвольном порядке, значило бы вывести не тот вид заказа.
+     */
+    @EntityGraph(attributePaths = {
+            "operation",
+            "operation.operationName",
+            "operation.operationType",
+            "operation.organizationUnit"
+    })
+    @Query("""
+            select node
+            from TechProcessOperation node
+            join node.operation operation
+            where node.techProcess.id = :processId
+            order by node.position asc, node.id asc
+            """)
+    List<TechProcessOperation> findAllOrderedForProcess(
+            @Param("processId") Long processId
+    );
+
+    /**
      * Операции подразделений в составе действующих маршрутов —
      * пробы для отчёта «Неприсвоенные операции».
      *
