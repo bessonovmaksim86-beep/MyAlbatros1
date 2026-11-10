@@ -823,9 +823,10 @@ public class DispatcherController {
      * выбранного заказа покупателя при сохранении, и каждая позиция
      * получит серийный номер.
      *
-     * Вид ЗНП приходит параметром {@code kind} — его задаёт пункт меню
-     * кнопки создания, а не выбор в самой форме: набор полей зависит от
-     * вида, и показывать диспетчеру поля чужого вида незачем.
+     * Вид ЗНП приходит параметром {@code kind}, а страница «Групповые
+     * ЗНП» передаёт признак {@code group}: форма одна на все режимы, и
+     * без вида она открылась бы комплектованием — с выбором выпуска и
+     * датчиков вместо изделия, количества и техпроцесса.
      */
     @GetMapping("/production-order/create")
     public String createProductionPage(
@@ -833,6 +834,8 @@ public class DispatcherController {
             @RequestParam(required = false, defaultValue = "false")
             boolean release,
             @RequestParam(required = false) String kind,
+            @RequestParam(required = false, defaultValue = "false")
+            boolean group,
             @RequestParam(required = false) Long techProcessId,
             Model model
     ) {
@@ -851,8 +854,17 @@ public class DispatcherController {
          * неизвестное или пустое значение читается как комплектование,
          * поэтому ссылка со старым адресом (без вида) продолжает
          * открывать прежнюю форму.
+         *
+         * Признак group задает групповой вид по умолчанию: со страницы
+         * «Групповые ЗНП» кнопок видов больше нет, а комплектующим
+         * этот заказ не является — открывать форму комплектованием
+         * значило бы показать диспетчеру выбор выпуска и датчиков.
+         * GROUP_CELL — отправная точка, а не решение: вид уточняется
+         * первой операцией маршрута и переключается в форме вручную.
          */
-        ZnpKind znpKind = ZnpKind.ofNullable(kind);
+        ZnpKind znpKind = kind == null && group
+                ? ZnpKind.GROUP_CELL
+                : ZnpKind.ofNullable(kind);
 
         model.addAttribute("znpKind", znpKind);
 
