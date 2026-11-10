@@ -629,6 +629,49 @@
         }
 
         /*
+         * Загружает маршруты выбранного изделия.
+         *
+         * Список ограничен изделием намеренно: предложить все маршруты
+         * подряд значило бы дать поставить заказу чужой техпроцесс, а
+         * сервис отверг бы его уже при сохранении.
+         */
+        function load(classifierId) {
+            if (!routesUrl) {
+                return;
+            }
+
+            if (!classifierId) {
+                message('Сначала выберите изделие');
+                return;
+            }
+
+            /*
+             * Для комплектования блок скрыт или не отрисован: маршруты
+             * чужого вида запрашивать незачем.
+             */
+            const techField =
+                document.getElementById('kindTechProcessField');
+
+            if (techField && techField.hidden) {
+                return;
+            }
+
+            message('Загружаем техпроцессы…');
+
+            fetch(
+                routesUrl + '?classifierId='
+                + encodeURIComponent(classifierId),
+                {headers: {'Accept': 'application/json'}}
+            )
+                .then((response) =>
+                    response.ok ? response.json() : [])
+                .then(render)
+                .catch(() => message(
+                    'Не удалось загрузить техпроцессы'
+                ));
+        }
+
+        /*
          * Запрашивает вид ЗНП по выбранному техпроцессу.
          *
          * Ответ заполняет подсказку под полем техпроцесса: если маршрут

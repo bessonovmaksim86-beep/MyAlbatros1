@@ -2477,7 +2477,7 @@ public class ProductionOrderService {
             GroupZnpKindProposal proposal =
                     resolveKindByTechProcess(process.getId());
 
-            if (!proposal.applicable()) {
+            if (!proposal.isApplicable()) {
                 throw new IllegalArgumentException(
                         "В техпроцессе «" + process.getCode()
                                 + "» " + proposal.message()

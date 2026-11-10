@@ -923,7 +923,7 @@ public class DispatcherController {
 
                 String initialKind = znpKind.name();
 
-                if (proposal != null && proposal.applicable()) {
+                if (proposal != null && proposal.isApplicable()) {
                     initialKind = proposal.kind().name();
                     model.addAttribute(
                             "kindProposal", proposal
