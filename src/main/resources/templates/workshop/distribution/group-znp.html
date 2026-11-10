@@ -715,7 +715,7 @@
 
                                 </div>
 
-                                <th:block th:each="batch : ${order.batchRows()}">
+                                <th:block th:each="batch, batchStat : ${order.batchRows()}">
 
                                     <div class="group-znp-batch__op">
 
@@ -785,12 +785,12 @@
                                                    th:value="${weeks}">
 
                                             <div class="group-znp-checks"
-                                                 th:id="'znp-checks-' + ${orderStat.index} + '-' + ${batch.operationId}">
+                                                 th:id="'znp-checks-' + ${orderStat.index} + '-' + ${batchStat.index}">
 
                                                 <label class="group-znp-check group-znp-check--all">
 
                                                     <input type="checkbox"
-                                                           th:attr="data-target=${orderStat.index} + '-' + ${batch.operationId}"
+                                                           th:attr="data-target=${orderStat.index} + '-' + ${batchStat.index}"
                                                            onchange="toggleAllForBatch(this)">
 
                                                     <span>Выделить все</span>
@@ -910,7 +910,7 @@
 
                                                 <button type="submit"
                                                         class="btn primary compact"
-                                                        th:attr="data-target=${orderStat.index} + '-' + ${batch.operationId}"
+                                                        th:attr="data-target=${orderStat.index} + '-' + ${batchStat.index}"
                                                         th:onclick="|return validateBatchAssign(this)|">
                                                     Назначить
                                                 </button>
