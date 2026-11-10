@@ -224,7 +224,7 @@
                                 <tr class="distribution-group-row"
                                     th:classappend="${op.hasBlocked()}
                                         ? ' is-blocked' : ''"
-                                    th:onclick="|toggleGroup(${stat.index}, '${gkey}')|">
+                                    th:onclick="|toggleGroup(${stat.index})|">
 
                                     <td class="cell-op">
 
@@ -320,6 +320,7 @@
                                 <tr class="distribution-group-panel"
                                     th:id="'group-panel-' + ${stat.index}"
                                     th:data-gkey="${gkey}"
+                                    th:data-expanded="${expanded} ? 'true' : null"
                                     th:classappend="${expanded} ? ' is-expanded' : ''">
 
                                     <td colspan="6">
@@ -814,8 +815,12 @@
  * Раскрытие между редиректами держится парой «операция + дата
  * плана» (gkey): после проведения состав списка меняется, и по
  * индексу открытая панель досталась бы чужой работе.
+ *
+ * Ключ берётся из data-атрибута панели, а не из аргумента: в
+ * обработчике события Thymeleaf разрешает только числа и логические
+ * значения, и строка ключа прерывала бы рендер всей страницы.
  */
-function toggleGroup(index, gkey) {
+function toggleGroup(index) {
     const panel = document.getElementById('group-panel-' + index);
 
     if (!panel) {
@@ -843,7 +848,7 @@ function toggleGroup(index, gkey) {
      * закрывавший экземпляр за экземпляром, каждый раз раскрывал бы
      * панель заново.
      */
-    const key = hidden ? (gkey || '') : '';
+    const key = hidden ? (panel.dataset.gkey || '') : '';
 
     panel.querySelectorAll('input[name="expanded"]').forEach(input => {
         input.value = key;
