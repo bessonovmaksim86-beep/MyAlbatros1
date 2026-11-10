@@ -229,6 +229,8 @@ public class CustomerOrderService {
                 ? ""
                 : form.getNumber().trim();
 
+        validateNumber(number);
+
         if (number.isBlank()) {
             number = nextNumber();
         }
@@ -398,6 +400,16 @@ public class CustomerOrderService {
 
         if (number.isBlank()) {
             number = order.getNumber();
+        }
+
+        /*
+         * Формат проверяется только у нового значения: заказ, заведённый
+         * до появления проверки, обязан правиться — иначе диспетчер не
+         * смог бы поменять в нём даже срок. Совпадающий с сохранённым
+         * номер повторять проверку не нужно.
+         */
+        if (!number.equals(order.getNumber())) {
+            validateNumber(number);
         }
 
         if (customerOrderRepository.existsByNumberAndIdNot(number, id)) {
@@ -823,6 +835,39 @@ public class CustomerOrderService {
 
     private String blankToNull(String value) {
         return value == null || value.isBlank() ? null : value.trim();
+    }
+
+    /**
+     * Формат номера заказа покупателя: «ЗП-ГГГГ-NNN».
+     *
+     * Номер приходит из внешнего учёта и вводится вручную, поэтому
+     * проверка держит именно шаблон: заказ вида «ЗП-2026/17» прошёл бы
+     * проверку на повтор, попал бы в списки и в печатные документы, а
+     * найти его по номеру из бумажной заявки оказалось бы невозможно.
+     *
+     * Серийный номер не ограничен тремя знаками: автоподбор выдаёт
+     * столько разрядов, сколько занято в текущем году.
+     *
+     * Пустое значение не проверяется: у выпуска номер подставляется
+     * автоподбором, а пустота отклонена раньше — тем самым старые
+     * заказы с номером «не по шаблону» правится не отклоняют, пока
+     * диспетчер сам не введёт новый.
+     */
+    private void validateNumber(String number) {
+
+        if (number == null || number.isBlank()) {
+            return;
+        }
+
+        if (NUMBERED.matcher(number).matches()) {
+            return;
+        }
+
+        throw new IllegalArgumentException(
+                "Неверный формат номера «" + number
+                        + "»: укажите номер вида ЗП-ГГГГ-NNN, "
+                        + "например ЗП-" + LocalDate.now().getYear() + "-017"
+        );
     }
 
     /**
