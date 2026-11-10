@@ -30,7 +30,6 @@ import ru.company.production.service.ModuleRoutes;
 import ru.company.production.service.OperationControlParamService;
 import ru.company.production.service.PendingDefectService;
 import ru.company.production.service.RepairKittingOperationService;
-import ru.company.production.service.UnitHandoverService;
 import ru.company.production.service.WorkshopDistributionService;
 import ru.company.production.service.WorkshopStaffService;
 import ru.company.production.service.ControlReturnService;
@@ -122,12 +121,6 @@ public class MyOperationsController {
     private final InputControlService inputControlService;
 
     private final OperationControlParamService controlParamService;
-
-    /*
-     * Счётчик «Приёмки от склада» в цеховом меню: позиции, которые склад
-     * внёс в заказы подразделения, но ещё не снял с полки.
-     */
-    private final UnitHandoverService handoverService;
 
     /*
      * Очередь отбраковки: счётчик пункта бюро в меню его сотрудников.
@@ -380,31 +373,20 @@ public class MyOperationsController {
         );
 
         /*
-         * Пункты «Забраковать» и «Приёмка от склада» в цеховом меню.
+         * Пункт «Забраковать» в цеховом меню.
          *
          * Граница та же, что у WorkshopViewAdvice: заявку оформляет тот,
          * у кого позиция числится в цеху, — руководитель цеха. Совет
          * подключён только к /workshop/**, а этот раздел живёт отдельно,
-         * поэтому без собственных признаков меню на «Мои операции»
-         * теряло оба пункта, и руководитель, переключившись с
-         * «Сотрудников» сюда, не находил привычную браковку.
+         * поэтому без собственного признака меню на «Мои операции»
+         * теряло браковку, и руководитель, переключившись с
+         * «Сотрудников» сюда, не находил привычный пункт.
          */
-        boolean canScrap = staffService.unitKind(user)
-                == WorkshopStaffService.UnitKind.WORKSHOP;
-
-        model.addAttribute("canScrap", canScrap);
-        model.addAttribute("canReceive", canScrap);
-
-        Long workshopUnitId = canScrap
-                ? staffService.workshopUnitId(user)
-                : null;
-
-        if (workshopUnitId != null) {
-            model.addAttribute(
-                    "pendingHandoverCount",
-                    handoverService.pendingCount(workshopUnitId)
-            );
-        }
+        model.addAttribute(
+                "canScrap",
+                staffService.unitKind(user)
+                        == WorkshopStaffService.UnitKind.WORKSHOP
+        );
 
         model.addAttribute(
                 "isSKGeneral",

@@ -10,7 +10,6 @@ import ru.company.production.entity.AppUser;
 import ru.company.production.repository.UserRepository;
 import ru.company.production.service.InputControlService;
 import ru.company.production.service.PendingDefectService;
-import ru.company.production.service.UnitHandoverService;
 import ru.company.production.service.WorkshopStaffService;
 
 import java.util.List;
@@ -37,14 +36,6 @@ import java.util.List;
                  * подписи рода подразделения и его граница нужны и здесь.
                  */
                 WorkshopScrapController.class,
-                /*
-                 * Приёмка от склада рисуется в том же цеховом меню и
-                 * закрывает тот же вопрос — где сейчас позиция, — что и
-                 * браковка. Меню берёт workshopUnitId как границу
-                 * очереди, поэтому совету нужны и подписи рода
-                 * подразделения, и счётчик ожидающих позиций.
-                 */
-                WorkshopReceivingController.class,
                 /*
                  * Раздел распределения групповых заказов рисует то же
                  * боковое меню и ту же верхнюю панель, поэтому ему
@@ -83,7 +74,6 @@ public class WorkshopViewAdvice {
     private final WorkshopStaffService staffService;
     private final InputControlService inputControlService;
     private final PendingDefectService pendingDefectService;
-    private final UnitHandoverService handoverService;
 
     @ModelAttribute
     public void addWorkshopContext(
@@ -225,19 +215,6 @@ public class WorkshopViewAdvice {
                 == WorkshopStaffService.UnitKind.WORKSHOP;
 
         model.addAttribute("canScrap", canScrap);
-
-        /*
-         * Приёмка от склада — та же граница, что у браковки: позицию
-         * подписывает то подразделение, которому её привезли. Складу и
-         * бюро пункт не нужен — они позиции со склада полуфабрикатов не
-         * получают, и очередь у них всегда пуста.
-         */
-        model.addAttribute("canReceive", canScrap);
-
-        if (canScrap && unitId != null) {
-            model.addAttribute("pendingHandoverCount",
-                    handoverService.pendingCount(unitId));
-        }
 
         if (bvkModule) {
             model.addAttribute(

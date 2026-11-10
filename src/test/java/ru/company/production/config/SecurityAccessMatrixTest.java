@@ -298,36 +298,6 @@ class SecurityAccessMatrixTest {
     }
 
     @Nested
-    @DisplayName("приёмка от склада (/workshop/receiving)")
-    class WorkshopReceiving {
-
-        /*
-         * Приёмку подтверждает тот, кому позицию привезли, — доступ у
-         * набора руководителей цехового модуля, того же, что и у остального
-         * модуля. Границу «своё подразделение» держит сервис: ссылка
-         * /workshop/receiving/accept одна на все цеха, и проверка по роли
-         * её не заменит.
-         */
-        @Test
-        @DisplayName("открыта мастерам цехов и руководителям подразделений")
-        void unitManagersEnter() throws Exception {
-            for (String role : AccessRoles.UNIT_MANAGERS) {
-                expectAllowed(role, "/workshop/receiving");
-                expectAllowed(role, "/workshop/receiving/accept");
-            }
-        }
-
-        @Test
-        @DisplayName("закрыта исполнителям и диспетчеру")
-        void othersAreDenied() throws Exception {
-            expectDenied(Role.SDP_SA_EXECUTOR.name(), "/workshop/receiving");
-            expectDenied(Role.BVK_EXECUTOR.name(), "/workshop/receiving");
-            expectDenied(Role.DISPATCHER.name(), "/workshop/receiving");
-            expectDenied(Role.SK_GENERAL.name(), "/workshop/receiving");
-        }
-    }
-
-    @Nested
     @DisplayName("склад")
     class Warehouse {
 

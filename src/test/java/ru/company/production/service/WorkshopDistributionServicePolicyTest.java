@@ -63,6 +63,7 @@ class WorkshopDistributionServicePolicyTest {
     @Mock private TechProcessOperationRepository routeNodeRepo;
     @Mock private TechProcessOperationControlParamRepository controlParamLinkRepo;
     @Mock private ControlReturnService controlReturnService;
+    @Mock private UnitHandoverService handoverService;
 
     private WorkshopDistributionService service;
 
@@ -71,7 +72,8 @@ class WorkshopDistributionServicePolicyTest {
         service = new WorkshopDistributionService(
                 scheduleRowRepo, bindingRepo, techProcessRepo,
                 absenceRepo, userRepository, staffService, serialService,
-                routeNodeRepo, controlParamLinkRepo, controlReturnService
+                routeNodeRepo, controlParamLinkRepo, controlReturnService,
+                handoverService
         );
     }
 

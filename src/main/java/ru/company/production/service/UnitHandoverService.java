@@ -4,6 +4,7 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.Optional;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import ru.company.production.entity.AppUser;
@@ -179,19 +180,6 @@ public class UnitHandoverService {
                 || !unitId.equals(handover.getToUnit().getId());
     }
 
-    /** Ожидающие подтверждения приёмки передачи подразделения — по времени передачи. */
-    @Transactional(readOnly = true)
-    public List<UnitHandover> pendingForUnit(Long unitId) {
-        return unitId == null ? List.of() : handoverRepository.findPendingForUnit(unitId);
-    }
-
-    /** Сколько позиций ждут подтверждения — счётчик пункта меню цеха. */
-    @Transactional(readOnly = true)
-    public long pendingCount(Long unitId) {
-        return unitId == null ? 0
-                : handoverRepository.countByToUnit_IdAndAcceptedFalseAndRejectedFalse(unitId);
-    }
-
     /** Подтверждённые приёмкой номера: реестр склада снимает их с полок. */
     @Transactional(readOnly = true)
     public java.util.Set<String> acceptedNumbers() {
@@ -247,6 +235,39 @@ public class UnitHandoverService {
     @Transactional(readOnly = true)
     public String locationLabel(ProductionOrder order, String fullNumber) {
         return unitLocationLabel(currentUnitOf(order, fullNumber));
+    }
+
+    /**
+     * Авто-приёмка по номеру и заказу: ищет и принимает незакрытую
+     * передачу.
+     *
+     * Вызывается проведением операции получения: отдельного пункта
+     * приёмки больше нет, и подписать получение должно ровно то
+     * действие, которым цех закрыл работу по этой позиции. Передачи нет —
+     * молча пропускаем: у позиции, не проходившей через комплектование,
+     * подтверждать нечего, и отказ оборвал бы проведение работы из-за
+     * бумажки, которой не существует.
+     *
+     * @return {@code null} — принято или принимать нечего; текст ошибки —
+     *         если передача предназначена другому подразделению
+     */
+    @Transactional
+    public String autoAccept(String number, Long orderId, Long unitId,
+                             AppUser actor) {
+        Optional<UnitHandover> pending =
+                handoverRepository.findPendingByNumberAndOrder(number, orderId);
+
+        if (pending.isEmpty()) {
+            return null;
+        }
+
+        UnitHandover handover = pending.get();
+
+        if (isForeignUnit(handover, unitId)) {
+            return "Эта позиция предназначена другому подразделению.";
+        }
+
+        return accept(handover.getId(), unitId, actor);
     }
 
     /**

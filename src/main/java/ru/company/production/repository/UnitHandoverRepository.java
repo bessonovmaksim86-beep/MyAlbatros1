@@ -1,7 +1,6 @@
 package ru.company.production.repository;
 
 import jakarta.persistence.LockModeType;
-import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
@@ -16,8 +15,9 @@ import java.util.Set;
 /**
  * Репозиторий подтверждаемых передач позиции со склада в подразделение.
  *
- * Основной путь чтения — незакрытые передачи конкретного
- * подразделения-получателя: по ним цех подтверждает получение.
+ * Путь чтения, вокруг которого всё построено, — незакрытая передача
+ * номера в заказ: её ищет проведение операции получения, закрывая
+ * перемещение тем же фактом, которым цех закрывает работу по позиции.
  *
  * Второй путь — перечень принятых номеров: по ним реестр наличия
  * склада снимает позицию с полок, потому что лежать на складе и в
@@ -30,44 +30,6 @@ import java.util.Set;
 @Repository
 public interface UnitHandoverRepository
         extends JpaRepository<UnitHandover, Long> {
-
-    /**
-     * Позиции, переданные подразделению, но ещё им не закрытые.
-     *
-     * Принятые и отклонённые из перечня уходят: приёмку проводят один
-     * раз, и оставленная строка подталкивала бы получателя провести её
-     * повторно. Порядок — по времени передачи, чтобы цех разбирал
-     * очередь сверху вниз.
-     *
-     * Граф охватывает всё, что печатает строка приёмки (изделие, заказ,
-     * операцию, подписи), потому что open-in-view выключен: обращение
-     * шаблона к ненагруженной связи оборвало бы рендеринг.
-     */
-    @EntityGraph(attributePaths = {
-            "serial",
-            "classifier",
-            "classifier.sensorCatalog",
-            "fromUnit",
-            "toUnit",
-            "toOrder",
-            "toOperation",
-            "toOperation.operationName",
-            "transferredBy"
-    })
-    @Query("""
-            select handover
-            from UnitHandover handover
-            where handover.toUnit.id = :unitId
-              and handover.accepted = false
-              and handover.rejected = false
-            order by handover.transferredAt asc, handover.id asc
-            """)
-    List<UnitHandover> findPendingForUnit(@Param("unitId") Long unitId);
-
-    /**
-     * Незакрытых передач подразделения: счётчик пункта меню цеха.
-     */
-    long countByToUnit_IdAndAcceptedFalseAndRejectedFalse(Long unitId);
 
     /**
      * Незакрытая передача по идентификатору — с блокировкой строки.
@@ -172,6 +134,26 @@ public interface UnitHandoverRepository
             """)
     List<Long> findAcceptedSerialIds(
             @Param("serialIds") java.util.Collection<Long> serialIds);
+
+    /**
+     * Незакрытая передача номера в заказ: авто-приёмка при проведении
+     * операции получения.
+     *
+     * Ищем именно незакрытую: принятая или отклонённая не подходит,
+     * иначе повторное проведение строки приняло бы чужую передачу.
+     * Блокировка строки на время транзакции защищает от двойного
+     * принятия, если исполнитель проведёт строку дважды (хотя
+     * completeRow это предотвращает проверкой completedAt).
+     */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select handover from UnitHandover handover "
+            + "where handover.fullNumber = :number "
+            + "and handover.toOrder.id = :orderId "
+            + "and handover.accepted = false "
+            + "and handover.rejected = false")
+    Optional<UnitHandover> findPendingByNumberAndOrder(
+            @Param("number") String number,
+            @Param("orderId") Long orderId);
 
     /** Пара «позиция → подразделение-получатель» для реестра наличия. */
     interface HandoverUnitView {

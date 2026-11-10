@@ -142,6 +142,7 @@ public class WorkshopDistributionService {
     private final TechProcessOperationControlParamRepository controlParamLinkRepo;
 
     private final ControlReturnService controlReturnService;
+    private final UnitHandoverService handoverService;
 
     /*
      * ============================================================
@@ -2146,6 +2147,115 @@ public class WorkshopDistributionService {
         controlReturnService.resolveReturns(row.getId(), performer);
 
         scheduleRowRepo.save(row);
+
+        /*
+         * Автоматическое принятие передачи: приёмка со склада удалена
+         * как отдельный пункт меню — её функцию закрывает операция
+         * получения комплектации. Проведение такой строки и есть тот
+         * самый факт, что позицию привезли и приняли: сервер ищет
+         * незакрытую передачу этого номера в этом заказе и закрывает
+         * её. Передачи нет — молча пропускает: позиция могла быть
+         * внесена не через комплектование (выпуск своего цеха), и
+         * отказ оборвал бы проведение работы из-за бумажки, которой
+         * не существует.
+         *
+         * Тип проверяется прямо, а не через isKitReceipt: тот признак
+         * шире (любая личная работа руководителя), а передачу склад
+         * заводит ровно под получение комплектации.
+         */
+        if (isReceiptType(operationTypeCode(row))) {
+            autoAcceptHandover(row, performer);
+        }
+    }
+
+    /**
+     * Получение комплектации — операция, которой склад привозит позицию.
+     *
+     * Строго этот тип, а не {@link #isKitReceiptType}: тот признаёт и
+     * комплектование, где позицию со склада выдают, и подтверждать там
+     * нечего — принимателем выступает другое подразделение.
+     */
+    private static boolean isReceiptType(String code) {
+        return OperationTypeCode.KIT_RECEIPT.name().equals(code);
+    }
+
+    /** Код типа операции строки — пустая строка, если тип не задан. */
+    private static String operationTypeCode(OrderScheduleRow row) {
+        if (row.getOperation() == null
+                || row.getOperation().getOperationType() == null
+                || row.getOperation().getOperationType().getCode() == null) {
+            return "";
+        }
+
+        return row.getOperation().getOperationType().getCode();
+    }
+
+    /**
+     * Автоматически принять передачу, привязанную к проведённому изделию.
+     *
+     * Передача заводится только при внесении позиции в заказ на
+     * производство ({@code UnitHandoverService#openForOrder}), поэтому
+     * основание строки здесь одно — заказ на производство: у строки
+     * выпуска передачи нет вовсе, и искать её по заказу покупателя
+     * значило бы принимать чужие позиции.
+     *
+     * Подразделение берётся у строки плана, а не у исполнителя: строку
+     * проводит руководитель подразделения, а принявшим обязан считаться
+     * тот, кому позицию везли.
+     */
+    private void autoAcceptHandover(OrderScheduleRow row, AppUser performer) {
+
+        ProductionOrder order = row.getProductionOrder();
+
+        if (order == null || order.getId() == null) {
+            return;
+        }
+
+        String number = resolveSerialNumber(row);
+
+        if (number == null || number.isBlank()) {
+            return;
+        }
+
+        handoverService.autoAccept(
+                number,
+                order.getId(),
+                row.getOrganizationUnit() == null
+                        ? null
+                        : row.getOrganizationUnit().getId(),
+                performer
+        );
+
+        /*
+         * Ответ autoAccept не читается намеренно: передача могла быть
+         * оформлена на другое подразделение, если маршрут заказа
+         * перепланировали уже после выноса позиции. Проведение работы
+         * от этого не становится неверным, и откатывать его из-за
+         * бумажной нестыковки — значит оставить цех без закрытой
+         * операции; чужая передача при этом остаётся незакрытой и
+         * будет видна в журнале движения.
+         */
+    }
+
+    /**
+     * Номер изделия строки плана: выпуск либо внесённая складом ячейка.
+     *
+     * Те же два источника подписи, что у панели «Мои операции»: у
+     * выпуска номера ячейки нет, у группового ЗНП — состава выпуска.
+     */
+    private String resolveSerialNumber(OrderScheduleRow row) {
+
+        ProductionOrderSerialProjection release =
+                serialService.resolve(List.of(row)).get(row.getId());
+
+        if (release != null && release.getFullNumber() != null) {
+            return release.getFullNumber();
+        }
+
+        AttachedCellView cell =
+                serialService.resolveAttachedCells(List.of(row)).get(row.getId());
+
+        return cell == null ? null : cell.getFullNumber();
     }
 
     /**
