@@ -2462,6 +2462,33 @@ public class ProductionOrderService {
             );
         }
 
+        /*
+         * Маршрут обязан вести работу комплектованием: именно оно
+         * решает, чем занят заказ и кто его выполняет (см.
+         * resolveKindByTechProcess). Без такой операции заказ не
+         * описывает состав — ни склад, ни БТК его работу не увидят,
+         * и диспетчер завёл бы документ, по которому нечего выполнить.
+         *
+         * Проверяется наличие комплектования, а не совпадение вида с
+         * предложенным: диспетчер вправе переключить тип вручную, но
+         * выбирать тип из пустоты он не может.
+         */
+        if (kind.requiresTechProcess()) {
+            GroupZnpKindProposal proposal =
+                    resolveKindByTechProcess(process.getId());
+
+            if (!proposal.applicable()) {
+                throw new IllegalArgumentException(
+                        "В техпроцессе «" + process.getCode()
+                                + "» " + proposal.message()
+                                + " — добавьте в начало маршрута операцию"
+                                + " «Комплектование ячеек» или"
+                                + " «Комплектование подсборок»"
+                                + " склада полуфабрикатов либо БТК"
+                );
+            }
+        }
+
         if (classifier == null) {
             return process;
         }
