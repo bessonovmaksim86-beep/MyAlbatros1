@@ -544,6 +544,39 @@ public interface OrderScheduleRowRepository
     );
 
     /**
+     * Проведённые строки одного экземпляра группового ЗНП.
+     *
+     * Нужен возврату с контроля БТК: у группового заказа основание
+     * строки — сам заказ (V56), заказа покупателя у него нет, и
+     * запрос по {@code customerOrder} вернулся бы пустым для целого
+     * вида заказов.
+     *
+     * Ключ экземпляра тот же по составу, что у выпуска, только
+     * основание другое: «заказ на производство + позиция + номер
+     * экземпляра».
+     */
+    @EntityGraph(attributePaths = {
+            "operation",
+            "operation.operationName",
+            "operation.operationType",
+            "productionOrder"
+    })
+    @Query("""
+            select row
+            from OrderScheduleRow row
+            where row.productionOrder.id = :productionOrderId
+              and row.itemPosition = :itemPosition
+              and row.instanceIndex = :instanceIndex
+              and row.completedAt is not null
+            order by row.seq asc, row.id asc
+            """)
+    List<OrderScheduleRow> findCompletedRowsOfProductionOrderInstance(
+            @Param("productionOrderId") Long productionOrderId,
+            @Param("itemPosition") Integer itemPosition,
+            @Param("instanceIndex") Integer instanceIndex
+    );
+
+    /**
      * Нераспределённые операции подразделения мастера — по датам.
      *
      * Фильтр по work_place/executor пустым: мастер видит только то,

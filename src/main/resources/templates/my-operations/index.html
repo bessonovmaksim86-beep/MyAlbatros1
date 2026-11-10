@@ -20,9 +20,12 @@
     <link rel="stylesheet"
           th:href="@{/workshop/css/distribution-groups.css}">
     <link rel="stylesheet"
-          th:href="@{/workshop/css/distribution-mode.css}">
-    <link rel="stylesheet"
-          th:href="@{/workshop/css/repair-kitting.css}">
+                  th:href="@{/workshop/css/distribution-mode.css}">
+            <link rel="stylesheet"
+                  th:href="@{/workshop/css/repair-kitting.css}">
+
+            <link rel="stylesheet"
+                  th:href="@{/my-operations/css/control-actions.css}">
 
     <link rel="stylesheet"
           th:if="${isSKGeneral}"
@@ -200,12 +203,28 @@
 
                             <tbody>
 
-                            <th:block th:each="op, stat : ${operations}">
+                            <th:block th:each="op, stat : ${operations}"
+                                      th:with="gkey=${op.operationId()} + '@' + ${op.dateParam()},
+                                               expanded=${expandedKey != null
+                                                          and expandedKey ==
+                                                              (op.operationId() + '@' + op.dateParam())}">
 
+                                <!--
+                                    Ключ раскрытой панели — пара
+                                    «операция + дата плана», тем же
+                                    ключом группу собирает сервис
+                                    (см. AssignedOperationView#dateParam).
+                                    Индекс строки для этого не годится:
+                                    проведение перестраивает список, и
+                                    панель, открытая по «третьему» месту,
+                                    осталась бы открытой у чужой работы
+                                    — либо закрылась бы вместе с той,
+                                    ради которой её раскрывали.
+                                -->
                                 <tr class="distribution-group-row"
                                     th:classappend="${op.hasBlocked()}
                                         ? ' is-blocked' : ''"
-                                    th:onclick="|toggleGroup(${stat.index})|">
+                                    th:onclick="|toggleGroup(${stat.index}, '${gkey}')|">
 
                                     <td class="cell-op">
 
@@ -279,7 +298,8 @@
                                         </span>
 
                                         <small class="instance-toggle__caret"
-                                               th:id="'group-caret-' + ${stat.index}">
+                                               th:id="'group-caret-' + ${stat.index}"
+                                               th:text="${expanded} ? '▲' : '▼'">
                                             ▼
                                         </small>
 
@@ -298,7 +318,9 @@
                                     выбирать исполнителя.
                                 -->
                                 <tr class="distribution-group-panel"
-                                    th:id="'group-panel-' + ${stat.index}">
+                                    th:id="'group-panel-' + ${stat.index}"
+                                    th:data-gkey="${gkey}"
+                                    th:classappend="${expanded} ? ' is-expanded' : ''">
 
                                     <td colspan="6">
 
@@ -364,9 +386,13 @@
                                                                name="mode"
                                                                th:value="${operationMode}">
 
+                                                        <input type="hidden"
+                                                               name="expanded"
+                                                               th:value="${gkey}">
+
                                                         <button type="submit"
                                                                 class="btn primary compact">
-                                                            Провести все операции
+                                                            Провести
                                                             (<span th:text="${op.bulkCompletableCount()}">7</span>)
                                                         </button>
                                                     </form>
@@ -386,6 +412,24 @@
 
                                                         <thead>
                                                         <tr>
+                                                            <!--
+                                                                Колонка отметок — только БТК.
+
+                                                                В проведённой половине она
+                                                                остаётся: возвращать с контроля
+                                                                можно ровно закрытую работу, а
+                                                                группа со всеми проведёнными
+                                                                экземплярами уезжает именно туда,
+                                                                и без колонки здесь контролёру
+                                                                пришлось бы искать её глазами в
+                                                                другой половине списка.
+                                                            -->
+                                                            <th th:if="${btkModule}"
+                                                                class="control-action-col">
+                                                                <input type="checkbox"
+                                                                       class="check-all-rows"
+                                                                       title="Отметить все проведённые экземпляры группы">
+                                                            </th>
                                                             <th th:text="${groupMode}
                                                                     ? 'Номер ячейки'
                                                                     : 'Серийный номер'">
@@ -400,8 +444,43 @@
                                                         <tbody>
 
                                                         <tr th:each="inst : ${op.instances}"
-                                                            th:classappend="${inst.blocked()}
-                                                                ? ' is-blocked' : ''">
+                                                            th:with="ret=${returnMap != null
+                                                                        ? returnMap.get(inst.rowId)
+                                                                        : null}"
+                                                            th:classappend="${(inst.blocked()
+                                                                                ? ' is-blocked' : '')
+                                                                               + (ret != null
+                                                                                ? ' is-return' : '')}">
+
+                                                            <td th:if="${btkModule}"
+                                                                class="control-action-col">
+
+                                                                <!--
+                                                                    Чекбокс принадлежит единой
+                                                                    форме действий контроля
+                                                                    (form=...), поэтому метка
+                                                                    и значение доезжают до
+                                                                    сервера без скрытых полей:
+                                                                    name повторяется на каждый
+                                                                    экземпляр, контроллер
+                                                                    читает их списком.
+
+                                                                    Проведённый экземпляр
+                                                                    отметить нельзя: возвращать
+                                                                    с контроля можно только
+                                                                    закрытую работу, а незакрытую
+                                                                    цех и так не считал бы
+                                                                    сделанной.
+                                                                -->
+                                                                <input type="checkbox"
+                                                                       name="rowIds"
+                                                                       form="control-action-form"
+                                                                       th:value="${inst.rowId}"
+                                                                       th:disabled="${!inst.completed()}"
+                                                                       th:title="${inst.completed()
+                                                                           ? 'Вернуть с контроля: ' + inst.productLabel()
+                                                                           : 'Вернуть можно только проведённый экземпляр'}">
+                                                            </td>
 
                                                             <td class="instance-table__serial"
                                                                 th:text="${groupMode}
@@ -433,6 +512,49 @@
                                                                     В работе
                                                                 </span>
 
+                                                                <!--
+                                                                    Подсветка возврата с контроля БТК.
+                                                                    Если экземпляр возвращён на доработку,
+                                                                    показываем бейдж с причиной и кто вернул.
+
+                                                                    Причина читается и вне модуля БТК:
+                                                                    именно она объясняет исполнителю,
+                                                                    почему закрытая работа снова стала
+                                                                    незакрытой, и без неё подсветка
+                                                                    выглядела бы сбоем проведения.
+                                                                -->
+                                                                <span class="badge badge--return"
+                                                                      th:if="${ret != null}"
+                                                                      th:text="${ret.badgeLabel()}">
+                                                                    Переделка: БТК
+                                                                </span>
+
+                                                                <!--
+                                                                    Причина возврата — тем же
+                                                                    блоком, что и бейдж: бейдж
+                                                                    отвечает на вопрос «что это»,
+                                                                    причина — на вопрос «что
+                                                                    переделывать». Без неё снятое
+                                                                    проведение выглядит сбоем, и
+                                                                    работу проводят заново, ничего
+                                                                    не исправив.
+
+                                                                    Кто и когда вернул — в
+                                                                    подписи: в списке это справочные
+                                                                    детали, а не то, ради чего
+                                                                    человек сюда пришёл.
+                                                                -->
+                                                                <div class="return-reason"
+                                                                     th:if="${ret != null}"
+                                                                     th:text="${ret.reasonLabel()}"
+                                                                     th:title="${ret.badgeLabel()
+                                                                         + (ret.returnedLabel() != null
+                                                                             ? ' · ' + ret.returnedLabel() : '')
+                                                                         + (ret.controlOperation() != null
+                                                                             ? ' · ' + ret.controlOperation() : '')}">
+                                                                    Не пропаян разъём X2
+                                                                </div>
+
                                                             </td>
 
                                                             <td th:if="${!completedView}">
@@ -455,6 +577,26 @@
                                                                            name="mode"
                                                                            th:value="${operationMode}">
 
+                                                                    <!--
+                                                                        Ключ панели,
+                                                                        из которой
+                                                                        пришли: проведение
+                                                                        редиректит на
+                                                                        список, и без
+                                                                        него раскрытая
+                                                                        работа свернулась
+                                                                        бы обратно.
+                                                                        Пока панель
+                                                                        свёрнута, ключ
+                                                                        пуст — его
+                                                                        подставляет
+                                                                        скрипт раскрытия.
+                                                                    -->
+                                                                    <input type="hidden"
+                                                                           name="expanded"
+                                                                           th:value="${expanded}
+                                                                                ? ${gkey} : ''">
+
                                                                     <button type="submit"
                                                                             class="btn primary compact">
                                                                         Провести операцию
@@ -472,8 +614,6 @@
                                                         </tr>
 
                                                         </tbody>
-
-                                        
 
                                                     </table>
 
@@ -494,6 +634,93 @@
                         </table>
 
                     </div>
+
+                </div>
+
+            </section>
+
+            <!--
+                Действия контроля БТК — одна форма на страницу.
+
+                Чекбоксы экземпляров объявлены внутри таблиц групп и
+                привязаны к этой форме атрибутом form: контролёр
+                отмечает экземпляры из разных строк списка сразу, а
+                форма одна, и её поля (режим, раскрытая группа, причина)
+                не расходятся между десятком копий.
+
+                Форма рисуется и в проведённой половине: возвращать
+                с контроля можно ровно закрытую работу, а группа, где
+                проведены все экземпляры, уезжает именно туда.
+
+                Кнопки — type="button": сервер обязан узнать, какое
+                именно действие выбрал контролёр, а две кнопки отправки
+                в одной форме оставили бы ему только значение первой.
+
+                Причина обязательна на сервере (ControlReturnService),
+                required здесь держит только явную подсказку до отправки.
+            -->
+            <section class="card control-actions-card"
+                     th:if="${btkModule}">
+
+                <div class="card-body">
+
+                    <form id="control-action-form"
+                          method="post"
+                          th:action="@{/my-operations/control-action}">
+
+                        <input th:if="${_csrf != null}"
+                               type="hidden"
+                               th:name="${_csrf.parameterName}"
+                               th:value="${_csrf.token}">
+
+                        <input type="hidden"
+                               name="mode"
+                               th:value="${operationMode}">
+
+                        <!--
+                            Раскрытая группа возвращается форме скриптом:
+                            после возврата список перестраивается, и без
+                            ключа панель свернулась бы ровно там, где
+                            контролёр только что работал.
+                        -->
+                        <input type="hidden"
+                               name="expanded"
+                               id="control-action-expanded"
+                               th:value="${expandedKey}">
+
+                        <input type="hidden"
+                               name="action"
+                               id="control-action-kind">
+
+                        <div class="control-actions-panel">
+
+                            <input type="text"
+                                   class="control-actions-panel__reason"
+                                   name="reason"
+                                   placeholder="Причина возврата — обязательна"
+                                   maxlength="500"
+                                   required>
+
+                            <span class="control-actions-panel__hint"
+                                  id="control-action-count">
+                                отмечено: 0
+                            </span>
+
+                            <button type="button"
+                                    class="btn danger compact"
+                                    onclick="submitControlAction('QUARANTINE')">
+                                В изолятор брака
+                            </button>
+
+                            <button type="button"
+                                    class="btn secondary compact"
+                                    onclick="submitControlAction('REWORK')">
+                                Отправить на доработку
+                            </button>
+
+                        </div>
+
+                    </form>
 
                 </div>
 
@@ -582,10 +809,14 @@
  * Раскрытие панели группы — тот же приём, что в распределении:
  * ключ — индекс строки списка, а не id операции, потому что одна
  * операция встречается в списке на несколько дат.
+ *
+ * Индекс служит только для поиска DOM-узла на этом рендере.
+ * Раскрытие между редиректами держится парой «операция + дата
+ * плана» (gkey): после проведения состав списка меняется, и по
+ * индексу открытая панель досталась бы чужой работе.
  */
-function toggleGroup(index) {
+function toggleGroup(index, gkey) {
     const panel = document.getElementById('group-panel-' + index);
-    const caret = document.getElementById('group-caret-' + index);
 
     if (!panel) {
         return;
@@ -594,9 +825,29 @@ function toggleGroup(index) {
     const hidden = panel.style.display === 'none';
 
     panel.style.display = hidden ? '' : 'none';
+
+    /*
+     * Стрелка панели живёт в строке группы, а не в самой панели,
+     * поэтому её ищут по тому же индексу.
+     */
+    const caret = document.getElementById('group-caret-' + index);
+
     if (caret) {
         caret.textContent = hidden ? '▲' : '▼';
     }
+
+    /*
+     * Ключ раскрытой группы уходит в каждую форму панели: проведение
+     * редиректит на список с параметром expanded, и сервер отмечает
+     * эту группу открытой на следующем рендере. Иначе исполнитель,
+     * закрывавший экземпляр за экземпляром, каждый раз раскрывал бы
+     * панель заново.
+     */
+    const key = hidden ? (gkey || '') : '';
+
+    panel.querySelectorAll('input[name="expanded"]').forEach(input => {
+        input.value = key;
+    });
 }
 
 /*
@@ -604,11 +855,19 @@ function toggleGroup(index) {
  * Проведение не прячется: кнопка живёт в раскрытой панели, а сама
  * строка группы сразу показывает серийные номера, проведённые и
  * ожидающие изделия, поэтому выбирать работу можно и не раскрывая.
+ *
+ * Группа, раскрытая сервером (data-expanded), из-под сворачивания
+ * исключена: иначе скрипт закрыл бы ровно ту панель, которую
+ * исполнитель держал открытой до проведения.
  */
 (function collapseGroups() {
     document
         .querySelectorAll('.distribution-group-panel')
         .forEach(panel => {
+            if (panel.dataset.expanded === 'true') {
+                return;
+            }
+
             panel.style.display = 'none';
         });
 })();
@@ -645,6 +904,177 @@ function toggleKittingGroup(index) {
         .forEach(panel => {
             panel.style.display = 'none';
         });
+})();
+
+/*
+ * ============================================================
+ * ДЕЙСТВИЯ КОНТРОЛЯ БТК
+ * ============================================================
+ *
+ * Чекбоксы экземпляров лежат внутри таблиц групп, а форма одна на
+ * страницу и привязана к ним атрибутом form. Поэтому отмеченные
+ * экземпляры считаются по всей форме, а не по одной панели: контролёр
+ * вправе вернуть работу сразу из нескольких операций одного дня.
+ *
+ * Ключ раскрытой группы берётся от панели, которой принадлежит первый
+ * отмеченный экземпляр: после возврата список перестраивается, и
+ * раскрытой обязана остаться та работа, над которой контролёр сейчас
+ * работал, а не первая строка нового подбора.
+ */
+/*
+ * Отмеченные поля ищутся по атрибуту form, а не как потомки формы:
+ * чекбоксы живут в таблицах групп и привязаны к форме атрибутом form,
+ * поэтому селектор вида «#form input» не нашёл бы ни одного из них и
+ * счётчик навсегда остался бы нулевым.
+ */
+function controlBoxes() {
+    return Array.from(
+        document.querySelectorAll(
+            'input[name="rowIds"][form="control-action-form"]:checked'
+        )
+    );
+}
+
+function controlCountLabel() {
+    const counter = document.getElementById('control-action-count');
+
+    if (!counter) {
+        return;
+    }
+
+    const count = controlBoxes().length;
+
+    counter.textContent = 'отмечено: ' + count;
+    counter.classList.toggle('is-empty', count === 0);
+}
+
+/*
+ * Кнопки — type="button": две кнопки отправки в одной форме не дали бы
+ * серверу узнать, какое именно действие выбрал контролёр, поэтому вид
+ * действия записывается в скрытое поле перед отправкой.
+ */
+function submitControlAction(action) {
+    const form = document.getElementById('control-action-form');
+
+    if (!form) {
+        return;
+    }
+
+    const boxes = controlBoxes();
+
+    if (boxes.length === 0) {
+        alert('Отметьте экземпляры, которые возвращаете с контроля.');
+        return;
+    }
+
+    const reason = form.querySelector('input[name="reason"]');
+
+    if (!reason || !reason.value.trim()) {
+        alert('Укажите причину возврата: цех обязан видеть, что переделывать.');
+        if (reason) {
+            reason.focus();
+        }
+        return;
+    }
+
+    const kind = document.getElementById('control-action-kind');
+    kind.value = action;
+
+    const first = boxes[0].closest('.distribution-group-panel');
+    const expanded = document.getElementById('control-action-expanded');
+
+    if (first && expanded) {
+        expanded.value = first.dataset.gkey || '';
+    }
+
+    const what = action === 'QUARANTINE'
+        ? 'в изолятор брака'
+        : 'на доработку';
+
+    if (!confirm('Отправить отмеченных экземпляров ('
+            + boxes.length + ') ' + what + '?')) {
+        return;
+    }
+
+    form.submit();
+}
+
+/*
+ * Счётчик и «выбрать все» живут на клиенте: сервер не знает, что
+ * контролёр отметил, пока форма не отправлена, а цифра рядом с кнопкой
+ * обязана отвечать на вопрос «сколько уйдёт» до нажатия.
+ */
+(function controlActions() {
+    const form = document.getElementById('control-action-form');
+
+    if (!form) {
+        return;
+    }
+
+    /*
+     * Слушатель висит на документе, а не на форме: чекбоксы лежат в
+     * таблицах групп и привязаны к форме атрибутом form, то есть её
+     * DOM-потомками не являются — внутри формы их change не всплывёт.
+     * Признак принадлежности берётся у самого поля (box.form), иначе
+     * счётчик считал бы отметки любой чужой формы на странице.
+     */
+    document.addEventListener('change', event => {
+        const box = event.target;
+
+        if (box.name !== 'rowIds' || box.form !== form) {
+            return;
+        }
+
+        controlCountLabel();
+
+        const panel = box.closest('.distribution-group-panel');
+
+        if (!panel) {
+            return;
+        }
+
+        const head = panel.querySelector('.check-all-rows');
+        const boxes = Array.from(
+            panel.querySelectorAll('input[name="rowIds"]:not(:disabled)')
+        );
+
+        if (!head || boxes.length === 0) {
+            return;
+        }
+
+        const checked = boxes.filter(item => item.checked).length;
+
+        head.checked = checked === boxes.length;
+        head.indeterminate = checked > 0 && checked < boxes.length;
+    });
+
+    document
+        .querySelectorAll('.check-all-rows')
+        .forEach(head => {
+            head.addEventListener('click', event => {
+                event.stopPropagation();
+            });
+
+            head.addEventListener('change', () => {
+                const panel = head.closest('.distribution-group-panel');
+
+                if (!panel) {
+                    return;
+                }
+
+                panel
+                    .querySelectorAll(
+                        'input[name="rowIds"]:not(:disabled)'
+                    )
+                    .forEach(box => {
+                        box.checked = head.checked;
+                    });
+
+                controlCountLabel();
+            });
+        });
+
+    controlCountLabel();
 })();
 </script>
 

@@ -515,6 +515,11 @@ public interface SerialProductionOrderRepository
      * или по заказу покупателя. Все три связи зафетчены: без них
      * проверка очереди вытягивала бы их по одному запросу на заказ, а
      * список и его счётчик кладовщик открывает за смену много раз.
+     *
+     * Классификатор изделия зафетчен ради колонок «Изделие» и «Тип»:
+     * без них список показывал бы кладовщику только номер ЗНП, и, чтобы
+     * понять, какие именно ячейки ждёт заказ, он открывал бы каждый
+     * заказ отдельно.
      */
     @Query("""
             select distinct ord
@@ -522,6 +527,7 @@ public interface SerialProductionOrderRepository
             left join fetch ord.productionOperation
             left join fetch ord.techProcess
             left join fetch ord.customerOrder
+            left join fetch ord.productClassifier
             where ord.active = true
               and (
                     ord.parentProductionOrder is not null

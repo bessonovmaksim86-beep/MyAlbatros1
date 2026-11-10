@@ -1422,6 +1422,23 @@ public class DispatcherController {
             String successMessage,
             RedirectAttributes redirectAttributes
     ) {
+        /*
+         * Раздел заказа читается до действия: после «В работу» статус
+         * меняется, и карточка больше не тот экран, с которым диспетчер
+         * работал. Групповые виды живут в «Групповых ЗНП» списком, и
+         * возврат обязан оставить человека там же — с обновлённым
+         * статусом и счётчиками, иначе каждое взятие в работу было бы
+         * шагом в карточку и обратно. Обычные выпуски по-прежнему
+         * доводят до карточки: у них она и есть рабочий экран.
+         */
+        String sectionListUrl = productionOrderRepository
+                .findById(id)
+                .map(ProductionOrder::getSectionListUrl)
+                .orElse("/dispatcher/production-order");
+
+        boolean stayInList = !"/dispatcher/production-order"
+                .equals(sectionListUrl);
+
         try {
             action.run();
         } catch (
@@ -1442,7 +1459,9 @@ public class DispatcherController {
                 successMessage
         );
 
-        return "redirect:/dispatcher/production-order/" + id;
+        return stayInList
+                ? "redirect:" + sectionListUrl
+                : "redirect:/dispatcher/production-order/" + id;
     }
 
     /**

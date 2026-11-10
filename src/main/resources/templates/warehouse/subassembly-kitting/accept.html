@@ -41,7 +41,10 @@
                 <div class="page-title">
 
                     <h1>
-                        Внесение ячеек
+                        Внесение
+                        <span th:text="${view.positionsTerm()}">
+                            ячеек
+                        </span>
                         <span class="mono"
                               th:text="${view.order.number}">
                             ЗНП-2026-114
@@ -90,7 +93,10 @@
                         <h2>Заказ-комплектующий</h2>
 
                         <small>
-                            Реквизиты заказа, в который вносятся ячейки
+                            Реквизиты заказа, в который вносятся
+                            <span th:text="${view.positionsGenitive()}">
+                                ячейки
+                            </span>
                         </small>
 
                     </div>
@@ -122,7 +128,13 @@
 
                         <div class="warehouse-summary__row">
 
-                            <dt>Тип ячеек</dt>
+                            <dt th:text="${
+                                view.showSubassemblyLabel()
+                                    ? 'Тип подсборок'
+                                    : 'Тип ячеек'
+                            }">
+                                Тип ячеек
+                            </dt>
 
                             <!--
                                 Заказ режима V72 собирается из подсборок,
@@ -276,9 +288,15 @@
 
                         <div>
 
-                            <h2>Внести ячейки в заказ</h2>
+                            <h2>
+                                Внести
+                                <span th:text="${view.positionsGenitive()}">
+                                    ячейки
+                                </span>
+                                в заказ
+                            </h2>
 
-                            <small>
+                            <small th:text="${view.entryHint()}">
                                 Внесите номера ячеек, принятых на склад
                                 полуфабрикатов. Номера можно вводить
                                 вручную или сканировать штрихкодами.
@@ -289,7 +307,7 @@
                         </div>
 
                         <span class="warehouse-counter"
-                              th:text="${view.takenCount()} + ' из ' + ${view.requiredCount()} + ' яч.'">
+                              th:text="${view.takenCount()} + ' из ' + ${view.requiredCount()} + ' ' + ${view.positionsAbbrev()}">
                             3 из 5 яч.
                         </span>
                     </div>
@@ -298,7 +316,8 @@
 
                         <div class="field">
 
-                            <label for="cellNumbers">
+                            <label for="cellNumbers"
+                                   th:text="'Номера ' + ${view.positionsGenitive()}">
                                 Номера ячеек
                             </label>
 
@@ -306,6 +325,11 @@
                                       name="cellNumbers"
                                       rows="4"
                                       class="mono"
+                                      th:attr="placeholder=${
+                                          'Введите номера ' + view.positionsGenitive()
+                                          + ', например:'
+                                          + '&#10;121200022&#10;121200025&#10;121200031'
+                                      }"
                                       placeholder="Введите номера ячеек, например:&#10;121200022&#10;121200025&#10;121200031"
                                       th:text="${param.cellNumbers != null ? param.cellNumbers[0] : ''}">
                             </textarea>
@@ -351,14 +375,17 @@
                         <h2>Заказ укомплектован</h2>
 
                         <small>
-                            В заказ вошло всё заказанное количество ячеек —
-                            вносить нечего. Состав заказа раскрыт ниже.
+                            В заказ вошло всё заказанное количество
+                            <span th:text="${view.positionsGenitive()}">
+                                ячеек
+                            </span>
+                            — вносить нечего. Состав заказа раскрыт ниже.
                         </small>
 
                     </div>
 
                     <span class="warehouse-counter is-complete"
-                          th:text="${view.takenCount()} + ' из ' + ${view.requiredCount()} + ' яч.'">
+                          th:text="${view.takenCount()} + ' из ' + ${view.requiredCount()} + ' ' + ${view.positionsAbbrev()}">
                         4 из 4 яч.
                     </span>
                 </div>
@@ -379,18 +406,21 @@
 
 
             <!-- =====================================================
-                 ПЕРЕЧЕНЬ ЯЧЕЕК НА СКЛАДЕ
+                 ПЕРЕЧЕНЬ СВОБОДНЫХ ПОЗИЦИЙ СКЛАДА
 
-                 Показывает свободные ячейки изделия заказа, принятые
-                 на склад. Блок сворачиваемый: перечень длинный, а вносят
-                 номера по полю выше. Внесённые в заказ ячейки показаны
-                 отдельным блоком ниже — они со склада сняты.
+                 Показывает свободные позиции изделия заказа: принятые
+                 ячейки либо — в режиме V72 — ещё не принятые подсборки.
+                 Блок сворачиваемый: перечень длинный, а вносят номера по
+                 полю выше. Внесённые в заказ позиции показаны отдельным
+                 блоком ниже — они со склада сняты.
                  ===================================================== -->
             <details class="collapsible"
                      th:if="${view.cells != null and not #lists.isEmpty(view.cells)}">
 
                 <summary class="collapsible__summary">
-                    <span>Ячейки на складе полуфабрикатов</span>
+                    <span th:text="${view.stockListTitle()}">
+                        Ячейки на складе полуфабрикатов
+                    </span>
 
                     <span class="collapsible__counter"
                           th:text="${#lists.size(view.cells)} + ' шт.'">
@@ -401,7 +431,8 @@
                 <div class="collapsible__body">
 
                     <p class="field-hint"
-                       style="margin-bottom: 12px;">
+                       style="margin-bottom: 12px;"
+                       th:text="${view.stockListHint()}">
                         Свободные ячейки изделия заказа, принятые на склад.
                         Эти ячейки ещё не оформлены в заказ.
                     </p>
@@ -414,7 +445,9 @@
 
                             <tr>
                                 <th>№</th>
-                                <th>Номер ячейки</th>
+                                <th th:text="${view.positionNumberLabel()}">
+                                    Номер ячейки
+                                </th>
                                 <th>Наименование</th>
                                 <th>Статус</th>
                             </tr>
@@ -471,7 +504,9 @@
                      th:attr="open=${view.nothingToAdd()} ? '' : null">
 
                 <summary class="collapsible__summary">
-                    <span>Ячейки, внесённые в заказ</span>
+                    <span th:text="${view.attachedListTitle()}">
+                        Ячейки, внесённые в заказ
+                    </span>
 
                     <span class="collapsible__counter"
                           th:text="${#lists.size(view.attached)} + ' шт.'">
@@ -482,7 +517,8 @@
                 <div class="collapsible__body">
 
                     <p class="field-hint"
-                       style="margin-bottom: 12px;">
+                       style="margin-bottom: 12px;"
+                       th:text="${view.attachedListHint()}">
                         Ячейки, уже оформленные в этот заказ.
                         Они со склада сняты и принять повторно нельзя.
                     </p>
@@ -495,7 +531,9 @@
 
                             <tr>
                                 <th>№</th>
-                                <th>Номер ячейки</th>
+                                <th th:text="${view.positionNumberLabel()}">
+                                    Номер ячейки
+                                </th>
                                 <th>Наименование</th>
                                 <th>Статус</th>
                             </tr>

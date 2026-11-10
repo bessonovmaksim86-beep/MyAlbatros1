@@ -1,0 +1,131 @@
+/*
+ * Действия контроля БТК в «Мои операции».
+ *
+ * Здесь два независимых признака одного и того же экрана:
+ * подсветка переделки и отметки экземпляров для возврата.
+ *
+ * Подсветку читает исполнитель: строка проведённой работы, с которой
+ * снят факт, обязана объяснять причину, иначе снятие выглядит сбоем
+ * проведения и работу проводят заново не переделывая.
+ *
+ * Отметки рисуются только БТК: проводить и возвращать — разные права,
+ * и чекбокс у исполнителя обещал бы действие, которое сервер отверг.
+ */
+
+/* -------------------------------------------------------
+   Строка возвращённого экземпляра
+   ------------------------------------------------------- */
+
+/*
+ * Цвет тот же, что у «ждёт предшественника» (distribution-groups.css),
+ * но слева добавлена полоса: переделка — не ожидание, а снятая работа,
+ * и различить их надо одним взглядом, без чтения подписи.
+ */
+.instance-table tbody tr.is-return {
+    background-color: #fff8e1;
+}
+
+.instance-table tbody tr.is-return td:first-child {
+    box-shadow: inset 3px 0 0 #e65100;
+}
+
+.instance-table tbody tr.is-return:hover {
+    background-color: #ffecb3;
+}
+
+.badge--return {
+    background-color: #ffe0b2;
+    color: #e65100;
+    border: 1px solid #ffb74d;
+}
+
+/*
+ * Причина возврата под бейджем: бейдж короткий и отвечает за признак,
+ * причина — текст до 500 символов, и в одну строку статуса он лёг бы
+ * поверх остальных подписей. Строки срезаются, целый текст читается в
+ * подписи элемента.
+ */
+.instance-table .return-reason {
+    margin-top: 4px;
+    color: #8c3f00;
+    font-size: .85em;
+    line-height: 1.3;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+
+/* -------------------------------------------------------
+   Колонка отметок
+   ------------------------------------------------------- */
+.instance-table .control-action-col {
+    width: 42px;
+    text-align: center;
+}
+
+.instance-table .control-action-col input[type="checkbox"] {
+    width: 16px;
+    height: 16px;
+    cursor: pointer;
+}
+
+/*
+ * Незакрытый экземпляр отмечен быть не может — возвращать нечего, —
+ * и курсор обязан это показывать, иначе контролёр кликает по пустому
+ * месту и ждёт реакции.
+ */
+.instance-table .control-action-col input[type="checkbox"]:disabled {
+    cursor: not-allowed;
+    opacity: .35;
+}
+
+/* -------------------------------------------------------
+   Форма действий контроля
+   ------------------------------------------------------- */
+.control-actions-card .card-body {
+    padding: 12px 16px;
+}
+
+.control-actions-panel {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: center;
+}
+
+.control-actions-panel__reason {
+    flex: 1 1 320px;
+    min-width: 240px;
+    padding: 8px 10px;
+    border: 1px solid #c5cad3;
+    border-radius: 4px;
+    font: inherit;
+    color: inherit;
+    background-color: #fff;
+}
+
+.control-actions-panel__reason:focus {
+    outline: none;
+    border-color: #e65100;
+    box-shadow: 0 0 0 2px rgba(230, 81, 0, .15);
+}
+
+.control-actions-panel__hint {
+    color: #6b7280;
+    font-size: .85em;
+    white-space: nowrap;
+}
+
+.control-actions-panel__hint.is-empty {
+    color: #b26a00;
+}
+
+/*
+ * Кнопки разные по смыслу: изолятор необратим (изделие уходит из цеха),
+ * доработка обратима (работа вернётся в тот же план), поэтому первая —
+ * danger, вторая обычная.
+ */
+.control-actions-panel .btn {
+    white-space: nowrap;
+}

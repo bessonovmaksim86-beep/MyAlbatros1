@@ -12,6 +12,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 import ru.company.production.entity.AppUser;
+import ru.company.production.entity.ControlReturn;
 import ru.company.production.dto.AssignedOperationView;
 import ru.company.production.dto.ControlParamCompletionForm;
 import ru.company.production.dto.ControlParamValueForm;
@@ -27,13 +28,20 @@ import ru.company.production.service.FinishedProductClosureService;
 import ru.company.production.service.InputControlService;
 import ru.company.production.service.ModuleRoutes;
 import ru.company.production.service.OperationControlParamService;
+import ru.company.production.service.PendingDefectService;
 import ru.company.production.service.RepairKittingOperationService;
+import ru.company.production.service.UnitHandoverService;
 import ru.company.production.service.WorkshopDistributionService;
 import ru.company.production.service.WorkshopStaffService;
+import ru.company.production.service.ControlReturnService;
+import ru.company.production.dto.ControlReturnView;
 
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 /**
  * Работы, закреплённые за текущим пользователем.
@@ -115,6 +123,26 @@ public class MyOperationsController {
 
     private final OperationControlParamService controlParamService;
 
+    /*
+     * Счётчик «Приёмки от склада» в цеховом меню: позиции, которые склад
+     * внёс в заказы подразделения, но ещё не снял с полки.
+     */
+    private final UnitHandoverService handoverService;
+
+    /*
+     * Очередь отбраковки: счётчик пункта бюро в меню его сотрудников.
+     */
+    private final PendingDefectService pendingDefectService;
+
+    /*
+     * Возвраты с контроля БТК: действия «в изолятор брака» и «на
+     * доработку» вызываются прямо из панели экземпляра, а открытые
+     * возвраты подсвечивают переделку в том же списке. Право на адрес
+     * и подсветка читаются из одного сервиса — иначе кнопка появилась
+     * бы там, где сервер её отверг.
+     */
+    private final ControlReturnService controlReturnService;
+
     /**
      * Список работ текущего пользователя.
      *
@@ -137,6 +165,7 @@ public class MyOperationsController {
     @GetMapping({"", "/"})
     public String index(
             @RequestParam(name = "mode", required = false) String mode,
+            @RequestParam(name = "expanded", required = false) String expanded,
             Authentication authentication,
             Model model
     ) {
@@ -180,10 +209,70 @@ public class MyOperationsController {
          */
         model.addAttribute("operationMode", view);
         model.addAttribute("completedView", completedView);
+
+        /*
+         * Ключ раскрытой группы приходит параметром адреса после
+         * проведения (см. #redirectToList(mode, expanded)) и попадает в
+         * шаблон как есть: панель обязана остаться открытой у той же
+         * работы, а не у строки, занявшей её место в перестроенном
+         * списке.
+         */
+        String expandedKey = expanded == null || expanded.isBlank()
+                ? null
+                : expanded.trim();
+
+        model.addAttribute("expandedKey", expandedKey);
         model.addAttribute(
                 "operations",
                 completedView ? completed : pending
         );
+
+        /*
+         * Обогащение списка открытыми возвратами: собираю все rowId
+         * из всех групп, загружаю открытые ControlReturn и передаю
+         * Map<rowId, ControlReturnView> в модель — шаблон рисует
+         * подсветку и причину прямо в панели экземпляра.
+         */
+        List<Long> allRowIds = new ArrayList<>();
+
+        for (AssignedOperationView group : assigned) {
+            if (group.instances() != null) {
+                for (var inst : group.instances()) {
+                    if (inst.rowId() != null) {
+                        allRowIds.add(inst.rowId());
+                    }
+                }
+            }
+        }
+
+        List<ControlReturn> openReturns = controlReturnService
+                .findOpenReturns(allRowIds);
+
+        Map<Long, ControlReturnView> returnMap = openReturns.stream()
+                .collect(Collectors.toMap(
+                        ret -> ret.getScheduleRow().getId(),
+                        ControlReturnView::from,
+                        (a, b) -> a
+                ));
+
+        model.addAttribute("returnMap", returnMap);
+
+        /*
+         * Открытые возвраты читаются только БТК: подсветка переделки и
+         * счётчик нужны контролёру, а исполнитель цеха видит своё
+         * возвращённое изделие по той же подсветке — её рисует
+         * returnMap, и он заполняется для всех. Цифра меню при этом
+         * чужому подразделению не показывается, и запрос ради неё
+         * лишний.
+         */
+        boolean btk = controlReturnService.isControlStaff(user);
+
+        if (btk) {
+            model.addAttribute(
+                    "openReturnCount",
+                    controlReturnService.countOpenReturns()
+            );
+        }
 
         /*
          * Цифра проведённой половины считается по уже собранному списку,
@@ -307,6 +396,33 @@ public class MyOperationsController {
                 canViewUnit ? staffService.countUnitOperations(scope) : 0L
         );
 
+        /*
+         * Пункты «Забраковать» и «Приёмка от склада» в цеховом меню.
+         *
+         * Граница та же, что у WorkshopViewAdvice: заявку оформляет тот,
+         * у кого позиция числится в цеху, — руководитель цеха. Совет
+         * подключён только к /workshop/**, а этот раздел живёт отдельно,
+         * поэтому без собственных признаков меню на «Мои операции»
+         * теряло оба пункта, и руководитель, переключившись с
+         * «Сотрудников» сюда, не находил привычную браковку.
+         */
+        boolean canScrap = staffService.unitKind(user)
+                == WorkshopStaffService.UnitKind.WORKSHOP;
+
+        model.addAttribute("canScrap", canScrap);
+        model.addAttribute("canReceive", canScrap);
+
+        Long workshopUnitId = canScrap
+                ? staffService.workshopUnitId(user)
+                : null;
+
+        if (workshopUnitId != null) {
+            model.addAttribute(
+                    "pendingHandoverCount",
+                    handoverService.pendingCount(workshopUnitId)
+            );
+        }
+
         model.addAttribute(
                 "isSKGeneral",
                 user.getRole() == ru.company.production.entity.Role.SK_GENERAL
@@ -357,6 +473,19 @@ public class MyOperationsController {
                         == ru.company.production.entity.Role.BTK_EXECUTOR;
 
         model.addAttribute("btkModule", btkModule);
+
+        /*
+         * Счётчик очереди отбраковки общий для двух бюро: цех присылает
+         * заявку, а решает её тот, кто отвечает за качество. Без него
+         * пункт «Отбраковка» на «Моих операциях» молчал бы о присланных
+         * заявках, хотя в меню модуля они подписаны цифрой.
+         */
+        if (bvkModule || btkModule) {
+            model.addAttribute(
+                    "pendingDefectCount",
+                    pendingDefectService.countPending()
+            );
+        }
         /*
          * Верхняя панель общего модуля подписывает пользователя по
          * карточке (ФИО и специальность), а не по логину, поэтому
@@ -425,6 +554,7 @@ public class MyOperationsController {
     public String completeForm(
             @PathVariable Long rowId,
             @RequestParam(name = "mode", required = false) String mode,
+            @RequestParam(name = "expanded", required = false) String expanded,
             Authentication authentication,
             Model model,
             RedirectAttributes redirectAttributes
@@ -436,11 +566,11 @@ public class MyOperationsController {
             params = controlParamService.loadForRow(rowId);
         } catch (RuntimeException ex) {
             redirectError(redirectAttributes, ex);
-            return redirectToList(mode);
+            return redirectToList(mode, expanded);
         }
 
         if (params.isEmpty()) {
-            return redirectToList(mode);
+            return redirectToList(mode, expanded);
         }
 
         model.addAttribute("controlParams", params);
@@ -453,6 +583,7 @@ public class MyOperationsController {
          * в обычную половину, где его работы нет.
          */
         model.addAttribute("operationMode", viewMode(mode));
+        model.addAttribute("expanded", expanded);
 
         return decorate(user, "my-operations/complete", model);
     }
@@ -468,6 +599,7 @@ public class MyOperationsController {
     public String completeWithControlParams(
             @PathVariable Long rowId,
             @RequestParam(name = "mode", required = false) String mode,
+            @RequestParam(name = "expanded", required = false) String expanded,
             @ModelAttribute("completionForm") ControlParamCompletionForm completionForm,
             Authentication authentication,
             RedirectAttributes redirectAttributes
@@ -490,10 +622,10 @@ public class MyOperationsController {
             );
         } catch (RuntimeException ex) {
             redirectError(redirectAttributes, ex);
-            return "redirect:" + completeFormUrl(rowId, mode);
+            return "redirect:" + completeFormUrl(rowId, mode, expanded);
         }
 
-        return redirectToList(mode);
+        return redirectToList(mode, expanded);
     }
 
     /* Сообщение об отказе проведения — тем же списком, откуда
@@ -515,18 +647,34 @@ public class MyOperationsController {
      * вырывать человека из его половины списка, иначе после ошибки он
      * увидел бы чужую половину и потерял незакрытую работу из виду.
      */
-    private static String completeFormUrl(Long rowId, String mode) {
+    private static String completeFormUrl(Long rowId, String mode, String expanded) {
         String view = viewMode(mode);
 
-        return REGULAR_MODE.equals(view)
-                ? "/my-operations/complete/" + rowId
-                : "/my-operations/complete/" + rowId + "?mode=" + view;
+        StringBuilder url = new StringBuilder("/my-operations/complete/")
+                .append(rowId);
+
+        if (view != null && !REGULAR_MODE.equals(view)) {
+            url.append("?mode=").append(view);
+        }
+
+        if (expanded != null && !expanded.isBlank()) {
+            if (!url.toString().contains("?")) {
+                url.append('?');
+            } else {
+                url.append('&');
+            }
+
+            url.append("expanded=").append(expanded.trim());
+        }
+
+        return url.toString();
     }
 
     @PostMapping("/complete")
     public String complete(
             @RequestParam Long rowId,
             @RequestParam(name = "mode", required = false) String mode,
+            @RequestParam(name = "expanded", required = false) String expanded,
             Authentication authentication,
             RedirectAttributes redirectAttributes
     ) {        AppUser user = currentUser(authentication);
@@ -539,7 +687,7 @@ public class MyOperationsController {
          * сервере, потому что ссылка формы известна и без кнопки.
          */
         if (controlParamService.hasControlParams(rowId)) {
-            return "redirect:" + completeFormUrl(rowId, mode);
+            return "redirect:" + completeFormUrl(rowId, mode, expanded);
         }
 
         try {
@@ -572,7 +720,7 @@ public class MyOperationsController {
          * переносит группу в проведённую половину, и исполнитель,
          * закрывавший работу из неё, обязан остаться там же.
          */
-        return redirectToList(mode);
+        return redirectToList(mode, expanded);
     }
 
     /**
@@ -599,6 +747,7 @@ public class MyOperationsController {
             @RequestParam Long operationId,
             @RequestParam(name = "plannedDate", required = false) String plannedDate,
             @RequestParam(name = "mode", required = false) String mode,
+            @RequestParam(name = "expanded", required = false) String expanded,
             Authentication authentication,
             RedirectAttributes redirectAttributes
     ) {
@@ -610,7 +759,7 @@ public class MyOperationsController {
                     "errorMessage",
                     "Не удалось определить группу работ для проведения"
             );
-            return redirectToList(mode);
+            return redirectToList(mode, expanded);
         }
 
         boolean groupMode = GROUP_MODE.equals(viewMode(mode))
@@ -639,7 +788,7 @@ public class MyOperationsController {
                             : "Проводить нечего: все экземпляры уже закрыты либо "
                               + "ждут предшествующую операцию"
             );
-            return redirectToList(mode);
+            return redirectToList(mode, expanded);
         }
 
         int completed = 0;
@@ -680,16 +829,99 @@ public class MyOperationsController {
             );
         }
 
-        return redirectToList(mode);
+        return redirectToList(mode, expanded);
+    }
+
+    /**
+     * Действие контроля БТК по выбранным экземплярам.
+     *
+     * Контролёр БТК отмечает чекбоксы нужных экземпляров и выбирает
+     * действие: «В изолятор брака» или «Отправить на доработку».
+     * Причина обязательна. Результат редиректит на тот же список
+     * с сохранением режима и раскрытой группы.
+     */
+    @PostMapping("/control-action")
+    public String controlAction(
+            @RequestParam(name = "rowIds", required = false) List<Long> rowIds,
+            @RequestParam(name = "action") String action,
+            @RequestParam(name = "reason") String reason,
+            @RequestParam(name = "mode", required = false) String mode,
+            @RequestParam(name = "expanded", required = false) String expanded,
+            Authentication authentication,
+            RedirectAttributes redirectAttributes
+    ) {
+        AppUser user = currentUser(authentication);
+
+        if (!controlReturnService.isControlStaff(user)) {
+            redirectAttributes.addFlashAttribute(
+                    "errorMessage",
+                    "Действие контроля доступно только сотрудникам БТК"
+            );
+            return redirectToList(mode, expanded);
+        }
+
+        try {
+            String message = switch (action) {
+                case "REWORK" -> controlReturnService.sendToRework(rowIds, reason, user);
+                case "QUARANTINE" -> controlReturnService.sendToQuarantine(rowIds, reason, user);
+                default -> throw new IllegalArgumentException(
+                        "Неизвестное действие: " + action);
+            };
+
+            redirectAttributes.addFlashAttribute("successMessage", message);
+        } catch (RuntimeException ex) {
+            redirectAttributes.addFlashAttribute(
+                    "errorMessage",
+                    ex.getMessage() == null
+                            ? "Не удалось выполнить действие"
+                            : ex.getMessage()
+            );
+        }
+
+        return redirectToList(mode, expanded);
     }
 
     /** Адрес списка того же режима — массовое проведение не уводит из него. */
     private static String redirectToList(String mode) {
-        String view = viewMode(mode);
+        return redirectToList(mode, null);
+    }
 
-        return REGULAR_MODE.equals(view)
+    /**
+     * Адрес списка с сохранёнными режимом и раскрытой группой.
+     *
+     * Ключ группы кладётся в запрос только непустым: пустой параметр
+     * вернул бы на страницу `expanded=`, и адрес закрывавшей группу
+     * группы отличался бы от адреса той же группы, свёрнутой вручную,
+     * — при закладках и «назад» это заметная мелочь, а при сравнении
+     * адресов в тестах — источник ложных отличий.
+     */
+    private static String redirectToList(String mode, String expanded) {
+        String view = viewMode(mode);
+        String key = expanded == null ? "" : expanded.trim();
+
+        StringBuilder url = new StringBuilder("redirect:/my-operations?");
+        boolean plain = REGULAR_MODE.equals(view);
+
+        if (!plain) {
+            url.append("mode=").append(view);
+        }
+
+        if (!key.isEmpty()) {
+            if (!plain) {
+                url.append('&');
+            }
+
+            url.append("expanded=").append(key);
+        }
+
+        /*
+         * Обычная половина без раскрытой группы — тот же адрес, что и
+         * до появления признака: пустой «?mode=regular» ломал бы
+         * закладки и сравнение редиректов.
+         */
+        return plain && key.isEmpty()
                 ? "redirect:/my-operations"
-                : "redirect:/my-operations?mode=" + view;
+                : url.toString();
     }
 
     /**

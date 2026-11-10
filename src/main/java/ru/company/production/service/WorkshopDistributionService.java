@@ -141,6 +141,8 @@ public class WorkshopDistributionService {
      */
     private final TechProcessOperationControlParamRepository controlParamLinkRepo;
 
+    private final ControlReturnService controlReturnService;
+
     /*
      * ============================================================
      * Экран распределения: строка таблицы = изделие, внутри — его
@@ -2135,6 +2137,14 @@ public class WorkshopDistributionService {
 
         row.setCompletedAt(java.time.LocalDateTime.now());
         row.setCompletedBy(performer);
+
+        /*
+         * Хук закрытия возвратов: если строка была возвращена с
+         * контроля БТК на доработку и проведена повторно —
+         * закрываю открытый ControlReturn.
+         */
+        controlReturnService.resolveReturns(row.getId(), performer);
+
         scheduleRowRepo.save(row);
     }
 

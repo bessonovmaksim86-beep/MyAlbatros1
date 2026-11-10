@@ -141,9 +141,34 @@ public class ZnpAcceptanceService {
         return orders.stream()
                 .map(order -> new ZnpAcceptanceRow(
                         order,
-                        Boolean.TRUE.equals(available.get(order.getId()))
+                        Boolean.TRUE.equals(available.get(order.getId())),
+                        order.getClassifierLabel(),
+                        acceptanceProductTypeName(order)
                 ))
                 .toList();
+    }
+
+    /**
+     * Тип принимаемого изделия для колонки списка.
+     *
+     * Список отобран по серийным номерам типа {@code CELL}, поэтому
+     * прочерк вместо типа означал бы лишь то, что заказ не выбран
+     * изделием (серийный ЗНП внутри выпуска), а склад принимает
+     * ячейки. Заказ режима V72 лежит на складе подсборкой до приёмки,
+     * и колонка обязана говорить «Подсборка»: иначе кладовщик ждал бы
+     * готовую ячейку там, где пришла подсборка.
+     */
+    private static String acceptanceProductTypeName(ProductionOrder order) {
+
+        if (order.isSubassemblyKitting()) {
+            return "Подсборка";
+        }
+
+        String typeName = order.getProductTypeName();
+
+        return typeName == null || "—".equals(typeName)
+                ? "Ячейка"
+                : typeName;
     }
 
     /**
