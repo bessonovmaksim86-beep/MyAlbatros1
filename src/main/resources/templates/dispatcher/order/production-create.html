@@ -971,7 +971,8 @@
         :: commonScripts}">
 </th:block>
 
-                data-preview-url=@{/dispatcher/production-order/release-preview},
+<script th:src="@{/dispatcher/js/production-order.js}"
+        th:attr="data-preview-url=@{/dispatcher/production-order/release-preview},
                  data-serials-url=@{/dispatcher/production-order/parent-serials},
                  data-release-serials-url=@{/dispatcher/production-order/release-serials},
                  data-kind-classifiers-url=@{/dispatcher/production-order/kind-classifiers},
