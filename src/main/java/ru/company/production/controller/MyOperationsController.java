@@ -33,6 +33,7 @@ import ru.company.production.service.RepairKittingOperationService;
 import ru.company.production.service.WorkshopDistributionService;
 import ru.company.production.service.WorkshopStaffService;
 import ru.company.production.service.ControlReturnService;
+import ru.company.production.service.ReworkReturnService;
 import ru.company.production.dto.ControlReturnView;
 
 import java.time.LocalDate;
@@ -149,9 +150,14 @@ public class MyOperationsController {
      * доработку» вызываются прямо из панели экземпляра, а открытые
      * возвраты подсвечивают переделку в том же списке. Право на адрес
      * и подсветка читаются из одного сервиса — иначе кнопка появилась
-     * бы там, где сервер её отверг.
+     * там, где сервер её отверг.
      */
     private final ControlReturnService controlReturnService;
+
+    /*
+     * Возврат на доработку: счётчик и признак пункта меню.
+     */
+    private final ReworkReturnService reworkReturnService;
 
     /**
      * Список работ текущего пользователя.
@@ -470,6 +476,25 @@ public class MyOperationsController {
                 staffService.unitKind(user)
                         == WorkshopStaffService.UnitKind.WORKSHOP
         );
+
+        /*
+         * Пункт «Возврат на доработку» в цеховом меню.
+         *
+         * Граница та же, что у WorkshopViewAdvice: раздел открыт
+         * руководителям подразделений. Иначе пункт меню скрывался
+         * на «Мои операции», потому что WorkshopViewAdvice не
+         * подключён к этому контроллеру.
+         */
+        boolean canRework = user.getRole() != null
+                && user.getRole().name().endsWith("_MASTER");
+        model.addAttribute("canRework", canRework);
+
+        if (canRework) {
+            model.addAttribute(
+                    "reworkReturnCount",
+                    reworkReturnService.countOpenReturns(user)
+            );
+        }
 
         model.addAttribute(
                 "isSKGeneral",
