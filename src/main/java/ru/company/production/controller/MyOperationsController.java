@@ -945,6 +945,90 @@ public class MyOperationsController {
             String message = switch (action) {
                 case "REWORK" -> controlReturnService.sendToRework(rowIds, reason, user);
                 case "QUARANTINE" -> controlReturnService.sendToQuarantine(rowIds, reason, user);
+                /*
+                 * Проведение отмеченных экземпляров. Причина здесь не
+                 * требуется, поэтому ветка идёт до проверки причины, а
+                 * сама форма различает действия названием кнопки.
+                 *
+                 * Экземпляры операции с контролируемыми параметрами
+                 * обходятся: их закрывает только форма отметки, и
+                 * закрытие без значений исказило бы данные техпроцесса.
+                 * Их число возвращается сообщением, чтобы неполный
+                 * результат не выглядел отказом кнопки.
+                 *
+                 * Каждое проведение идёт своими проверками права,
+                 * повторности, зависности маршрута и приостановки
+                 * заказа, поэтому частичный успех возможен.
+                 */
+                case "COMPLETE" -> {
+                    List<Long> distinctIds = rowIds == null
+                            ? List.of()
+                            : rowIds.stream().distinct().toList();
+
+                    if (distinctIds.isEmpty()) {
+                        throw new IllegalArgumentException(
+                                "Отметьте экземпляры, которые нужно провести");
+                    }
+
+                    int completedCount = 0;
+                    int skipped = 0;
+                    String failure = null;
+
+                    for (Long id : distinctIds) {
+                        if (controlParamService.hasControlParams(id)) {
+                            skipped++;
+                            continue;
+                        }
+
+                        try {
+                            suspensionService.assertRowOperable(id);
+                            distributionService.completeRow(id, user);
+
+                            /*
+                             * Хук СГП после проведения: completeRow уже
+                             * записал дату факта, и закрытие видит
+                             * актуальное состояние графика.
+                             */
+                            closureService.onRowCompleted(id);
+                            completedCount++;
+                        } catch (RuntimeException ex) {
+                            /*
+                             * Отмеченные строки неравноценны: часть
+                             * могла закрыться раньше или ждать
+                             * предшественника. Первая же ошибка не
+                             * имеет права обрывать проведение
+                             * остальных — иначе человек увидел бы
+                             * частично закрытую группу без шанса
+                             * закрыть её повторно тем же нажатием.
+                             */
+                            failure = ex.getMessage();
+                        }
+                    }
+
+                    if (completedCount == 0 && skipped == 0) {
+                        /*
+                         * Ни одного проведения — это отказ кнопки, а
+                         * не её частичный успех: зелёное сообщение
+                         * «проведено 0 из 3» прочитывается как
+                         * сработавшее действие, и контролёр не
+                         * заметит, что работа осталась открытой.
+                         */
+                        throw new IllegalArgumentException(
+                                failure == null || failure.isBlank()
+                                        ? "Не удалось провести ни один экземпляр"
+                                        : failure);
+                    }
+
+                    yield "Проведено: " + completedCount + " из "
+                            + distinctIds.size()
+                            + (skipped > 0 ? "; пропущено с контролируемыми "
+                            + "параметрами: " + skipped : "")
+                            + (completedCount < distinctIds.size() - skipped
+                            ? "; не проведено: "
+                            + (distinctIds.size() - skipped - completedCount)
+                            + (failure == null || failure.isBlank()
+                            ? "" : " — " + failure) : "");
+                }
                 default -> throw new IllegalArgumentException(
                         "Неизвестное действие: " + action);
             };

@@ -481,7 +481,7 @@
                                                                 class="control-action-col">
                                                                 <input type="checkbox"
                                                                        class="check-all-rows"
-                                                                       title="Отметить все проведённые экземпляры группы">
+                                                                       title="Отметить все доступные экземпляры группы">
                                                             </th>
                                                             <th th:text="${groupMode}
                                                                     ? 'Номер ячейки'
@@ -518,21 +518,28 @@
                                                                     экземпляр, контроллер
                                                                     читает их списком.
 
-                                                                    Проведённый экземпляр
-                                                                    отметить нельзя: возвращать
-                                                                    с контроля можно только
-                                                                    закрытую работу, а незакрытую
-                                                                    цех и так не считал бы
-                                                                    сделанной.
+                                                                    Отметить можно любой
+                                                                    экземпляр, кроме того, что
+                                                                    ждёт предшествующую работу:
+                                                                    контролёр выносит вердикт и
+                                                                    по непроверенной ячейке —
+                                                                    провести её, вернуть цеху на
+                                                                    доработку или отправить в
+                                                                    изолятор брака, не закрывая
+                                                                    контроль. Заблокированный
+                                                                    экземпляр отметить нельзя:
+                                                                    его не провести и возвращать
+                                                                    нечего — предшественник ещё
+                                                                    не закрыт.
                                                                 -->
                                                                 <input type="checkbox"
                                                                        name="rowIds"
                                                                        form="control-action-form"
                                                                        th:value="${inst.rowId}"
-                                                                       th:disabled="${!inst.completed()}"
-                                                                       th:title="${inst.completed()
-                                                                           ? 'Вернуть с контроля: ' + inst.productLabel()
-                                                                           : 'Вернуть можно только проведённый экземпляр'}">
+                                                                       th:disabled="${inst.blocked()}"
+                                                                       th:title="${inst.blocked()
+                                                                           ? 'Отметить нельзя: ' + inst.blockedLabel()
+                                                                           : 'Отметить экземпляр: ' + inst.productLabel()}">
                                                             </td>
 
                                                             <td class="instance-table__serial"
@@ -747,17 +754,40 @@
 
                         <div class="control-actions-panel">
 
+                            <!--
+                                Причина обязательна не для всякого
+                                действия: проведение отмеченных идёт без
+                                неё, поэтому required здесь снят — иначе
+                                браузер не отправил бы форму с вердиктом
+                                «годно». Обязательность причины держит
+                                сервер (ControlReturnService#requireReason)
+                                ровно для возврата и изолятора.
+                            -->
                             <input type="text"
                                    class="control-actions-panel__reason"
                                    name="reason"
                                    placeholder="Причина возврата — обязательна"
-                                   maxlength="500"
-                                   required>
+                                   maxlength="500">
 
                             <span class="control-actions-panel__hint"
                                   id="control-action-count">
                                 отмечено: 0
                             </span>
+
+                            <!--
+                                Проведение отмеченных — без причины:
+                                отметка значений контролируемых параметров
+                                у такой работы не требуется, а вердикт
+                                «годно» причины не имеет. Кнопка стоит первой,
+                                потому что на контроле ячеек это обычное
+                                завершение работы: отметить годные и
+                                закрыть, а возврат и брак — исключение.
+                            -->
+                            <button type="button"
+                                    class="btn primary compact"
+                                    onclick="submitControlAction('COMPLETE')">
+                                Провести отмеченные
+                            </button>
 
                             <button type="button"
                                     class="btn danger compact"
@@ -1020,13 +1050,20 @@ function submitControlAction(action) {
     const boxes = controlBoxes();
 
     if (boxes.length === 0) {
-        alert('Отметьте экземпляры, которые возвращаете с контроля.');
+        alert('Отметьте экземпляры, над которыми выполняете действие.');
         return;
     }
 
+    /*
+     * Причина нужна только там, где цех обязан понимать, что
+     * переделывать: возврат на доработку и запись в изолятор брака.
+     * Проведение — вердикт «годно», у него причины нет, и требовать её
+     * значило бы заставлять контролёра выдумывать текст ради кнопки.
+     */
+    const needsReason = action !== 'COMPLETE';
     const reason = form.querySelector('input[name="reason"]');
 
-    if (!reason || !reason.value.trim()) {
+    if (needsReason && (!reason || !reason.value.trim())) {
         alert('Укажите причину возврата: цех обязан видеть, что переделывать.');
         if (reason) {
             reason.focus();
@@ -1046,10 +1083,12 @@ function submitControlAction(action) {
 
     const what = action === 'QUARANTINE'
         ? 'в изолятор брака'
-        : 'на доработку';
+        : action === 'COMPLETE'
+            ? 'и провести'
+            : 'на доработку';
 
-    if (!confirm('Отправить отмеченных экземпляров ('
-            + boxes.length + ') ' + what + '?')) {
+    if (!confirm('Отмеченных экземпляров: ' + boxes.length + ' — '
+            + what + '?')) {
         return;
     }
 
