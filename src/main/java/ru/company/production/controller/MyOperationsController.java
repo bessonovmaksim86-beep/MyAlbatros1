@@ -209,6 +209,18 @@ public class MyOperationsController {
          * человек увидел бы на кнопке прежние две недели и счёл бы
          * работы потерявшимися.
          *
+         * Обе незакрытые цифры считаются всегда, а не только у
+         * открытого основания: счётчик — отдельный запрос по тому же
+         * сроку, он не зависит от подобранного списка и стоит дешевле,
+         * чем второй подбор. Ноль здесь означал бы «работ этого вида
+         * нет», а не «этот разрез вы сейчас не смотрите», и контролёр
+         * с групповыми ЗНП в работе видел бы на их кнопке пустоту ровно
+         * тогда, когда открыл обычные работы.
+         *
+         * Проведённые цифры так не считаются: «закрыта вся группа» —
+         * свойство собранного подборa, а не строки плана, и вторая
+         * половина остаётся без подписи (см. mode-switch.html).
+         *
          * Перезапись атрибутов бокового меню на этой странице
          * намеренна: цифра пункта «Мои операции» означает объём работ,
          * открытых перед глазами, а на прочих страницах раздела её
@@ -216,17 +228,13 @@ public class MyOperationsController {
          */
         model.addAttribute(
                 "myRegularOperationsCount",
-                groupBase
-                        ? 0L
-                        : distributionService.countMyOperations(
-                                user, period.from(), period.to())
+                distributionService.countMyOperations(
+                        user, period.from(), period.to())
         );
         model.addAttribute(
                 "myGroupOperationsCount",
-                groupBase
-                        ? distributionService.countMyGroupOperations(
-                                user, period.from(), period.to())
-                        : 0L
+                distributionService.countMyGroupOperations(
+                        user, period.from(), period.to())
         );
 
         model.addAttribute("periodFrom", period.from().toString());
