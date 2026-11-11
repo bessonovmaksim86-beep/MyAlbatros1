@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="ru"
+      xmlns:th="http://www.thymeleaf.org">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Возврат на доработку</title>
+
+    <link rel="stylesheet" th:href="@{/technology/css/common.css}">
+    <link rel="stylesheet" th:href="@{/workshop/css/workshop.css}">
+    <link rel="stylesheet" th:href="@{/workshop/css/rework-return.css}">
+</head>
+
+<body>
+
+<div class="app-shell">
+
+    <aside th:replace="${isSKGeneral}
+            ? ~{quality/fragments/layout :: sidebar(${activePage})}
+            : ~{workshop/fragments/layout :: sidebar('rework-return')}">
+    </aside>
+
+    <main class="main">
+
+        <header th:replace="${isSKGeneral}
+                ? ~{quality/fragments/layout :: topbar}
+                : ~{workshop/fragments/layout :: topbar}">
+        </header>
+
+        <div class="page-content workshop-page">
+
+            <div class="page-head">
+
+                <div class="page-title">
+
+                    <h1>Возврат на доработку</h1>
+
+                    <p>
+                        Изделия, возвращённые с контроля БТК. Отметьте
+                        операции своего цеха, которые нужно переделать, —
+                        проведение снимется ровно с них.
+                    </p>
+
+                </div>
+
+            </div>
+
+            <div class="alert success"
+                 th:if="${successMessage}"
+                 th:text="${successMessage}">
+            </div>
+
+            <div class="alert danger"
+                 th:if="${errorMessage}"
+                 th:text="${errorMessage}">
+            </div>
+
+            <!--
+                ============================================================
+                КАРТОЧКИ ИЗДЕЛИЙ
+
+                Карточка — экземпляр: БТК возвращает изделие целиком, а
+                цех решает по нему, какие свои операции переделывать. В
+                карточку попадают только строки маршрута этого цеха —
+                чужую закрытую работу он снять не может.
+                ============================================================
+            -->
+            <form th:if="${cards != null and !cards.isEmpty()}"
+                  method="post"
+                  th:action="@{/workshop/rework-return/mark-for-rework}"
+                  id="reworkForm">
+
+                <input th:if="${_csrf != null}"
+                       type="hidden"
+                       th:name="${_csrf.parameterName}"
+                       th:value="${_csrf.token}">
+
+                <div class="rework-return__card"
+                     th:each="card : ${cards}">
+
+                    <div class="rework-return__head">
+
+                        <span class="rework-return__base"
+                              th:text="${card.baseNumber}">
+                            ЗП-2026-005
+                        </span>
+
+                        <span class="rework-return__instance"
+                              th:text="'экземпляр ' + (card.instanceIndex + 1)">
+                            экземпляр 1
+                        </span>
+
+                        <span class="rework-return__reason"
+                              th:if="${card.reason != null}"
+                              th:title="${card.controlOperation}">
+                            <strong th:text="${card.controlOperation}">
+                                Контроль БТК
+                            </strong>
+                            <span th:text="${card.reason}">
+                                Не пропаян разъём X2
+                            </span>
+                        </span>
+
+                    </div>
+
+                    <table class="rework-return__table">
+
+                        <thead>
+                        <tr>
+                            <th class="col-mark"></th>
+                            <th>Операция</th>
+                            <th>Место</th>
+                            <th>План</th>
+                            <th>Факт</th>
+                        </tr>
+                        </thead>
+
+                        <tbody>
+                        <tr th:each="row : ${card.rows}"
+                            th:classappend="${card.isMarkedForRework(row.id)}
+                                            ? 'rework-marked'">
+
+                            <td class="col-mark">
+
+                                <!--
+                                    Отмечать можно только проведённую
+                                    работу своего цеха: незакрытую строку
+                                    снимать нечего, а чужую цех не
+                                    проводит и не закрывает.
+                                -->
+                                <input type="checkbox"
+                                       name="rowIds"
+                                       th:value="${row.id}"
+                                       th:disabled="${row.completedAt == null}"
+                                       th:title="${row.completedAt != null
+                                            ? 'Отметить для переделки: '
+                                              + row.operation.operationName.name
+                                            : 'Работа ещё не проведена — переделывать нечего'}">
+
+                            </td>
+
+                            <td>
+                                <span th:text="${row.operation.operationName.name}">
+                                    Сборка узла
+                                </span>
+                            </td>
+
+                            <td>
+                                <span th:text="${row.organizationUnit != null
+                                        ? row.organizationUnit.name : '—'}">
+                                    Цех сборки
+                                </span>
+                            </td>
+
+                            <td>
+                                <span th:text="${row.formattedPlannedDate}">
+                                    25.11.2026
+                                </span>
+                            </td>
+
+                            <td>
+
+                                <span class="rework-return__badge
+                                             rework-return__badge--completed"
+                                      th:if="${row.completedAt != null}"
+                                      th:text="'Проведён '
+                                              + ${#temporals.format(row.completedAt, 'dd.MM.yyyy HH:mm')}">
+                                    Проведён 02.11.2026 10:00
+                                </span>
+
+                                <span class="rework-return__badge
+                                             rework-return__badge--open"
+                                      th:if="${row.completedAt == null}">
+                                    Не проведён
+                                </span>
+
+                                <!--
+                                    Already снято для переделки: строка
+                                    стоит открытой, и её повторное
+                                    проведение закроет возврат.
+                                -->
+                                <span class="rework-return__badge
+                                             rework-return__badge--rework"
+                                      th:if="${card.isMarkedForRework(row.id)}">
+                                    На доработке
+                                </span>
+
+                            </td>
+
+                        </tr>
+                        </tbody>
+
+                    </table>
+
+                </div>
+
+                <!--
+                    ============================================================
+                    ПАНЕЛЬ ДЕЙСТВИЙ
+
+                    Одна причина на оба действия: цех обязан видеть, что
+                    переделывать, и «в свой цех», и «назад по маршруту».
+                    ============================================================
+                -->
+                <div class="rework-return__actions">
+
+                    <label class="rework-return__reason-field"
+                           for="reworkReason">
+                        Причина возврата — обязательна
+                    </label>
+
+                    <input type="text"
+                           id="reworkReason"
+                           name="reason"
+                           maxlength="500"
+                           autocomplete="off"
+                           placeholder="Что переделывать">
+
+                    <label class="rework-return__cascade"
+                           for="reworkCascade">
+                        <input type="checkbox"
+                               id="reworkCascade"
+                               name="cascade"
+                               value="true">
+                        Зацепить проведённые операции после отмеченных
+                    </label>
+
+                    <div class="rework-return__buttons">
+
+                        <button type="submit"
+                                class="btn primary"
+                                th:attr="formaction=@{/workshop/rework-return/mark-for-rework}">
+                            Вернуть на доработку
+                        </button>
+
+                        <button type="submit"
+                                class="btn danger"
+                                th:attr="formaction=@{/workshop/rework-return/send-to-predecessor}">
+                            Отправить в предшествующий цех
+                        </button>
+
+                    </div>
+
+                </div>
+
+            </form>
+
+            <div class="rework-return__empty"
+                 th:if="${cards == null or cards.isEmpty()}">
+                <p>Изделий на доработке нет</p>
+            </div>
+
+        </div>
+
+    </main>
+
+</div>
+
+<th:block th:replace="~{workshop/fragments/layout :: commonScripts}"></th:block>
+
+<script th:src="@{/workshop/js/rework-return.js}"></script>
+
+</body>
+</html>

@@ -32,12 +32,15 @@ import java.util.Set;
  * Действия контроля живут в «Моих операциях» и вызываются по чекбоксам
  * проведённых экземпляров:
  *
- *   * «Отправить на доработку» — проведение снимается со всех строк
- *     графика этого экземпляра, на каждую снятую строку заводится
- *     {@link ControlReturn}. Сроки (planned_date) не меняются: доработка
- *     выполняется в те же даты, иначе график перестал бы соответствовать
- *     обещанию покупателя. Переделка закрывается обычным повторным
- *     проведением строки (см. {@link #resolveReturns}).
+ *   * «Отправить на доработку» — сигнал цеху о возврате: на каждую
+ *     проведённую строку экземпляра заводится {@link ControlReturn},
+ *     но проведение НЕ снимается. Начальник цеха в разделе «Возврат на
+ *     доработку» сам решает, какие операции переделывать, и снимает
+ *     факт только с них (см. {@link ReworkReturnService#markForRework}).
+ *     Сроки (planned_date) не меняются: доработка выполняется в те же
+ *     даты, иначе график перестал бы соответствовать обещанию покупателя.
+ *     Переделка закрывается обычным повторным проведением строки
+ *     (см. {@link #resolveReturns}).
  *
  *   * «В изолятор брака» — путь заявки на отбраковку: номер изделия
  *     берётся из состава экземпляра, заявка создаётся и тут же
@@ -97,11 +100,15 @@ public class ControlReturnService {
     /**
      * Отправить выбранные экземпляры на доработку.
      *
-     * Снимается проведение со всех проведённых строк каждого затронутого
-     * экземпляра, а не только с выбранных: выборка приходит по операции
-     * контроля, а переделывать цех обязан изделие целиком — иначе
-     * следующая по маршруту работа осталась бы разблокированной над
-     * недоделанным изделием.
+     * Возврат — сигнал цеху, а не отмена работы: проведение со строк
+     * НЕ снимается. Начальник цеха в разделе «Возврат на доработку»
+     * сам решает, какие операции переделывать, и снимает проведение
+     * только с них (см. {@link ReworkReturnService#markForRework}).
+     *
+     * Возврат заводится на каждую проведённую строку экземпляра, а не
+     * только на выбранную: подсветка переделки обязана появиться у
+     * каждого исполнителя по его собственной работе, иначе цех увидел
+     * бы возврат только на операции контроля.
      */
     @Transactional
     public String sendToRework(List<Long> rowIds, String reason, AppUser actor) {
@@ -112,45 +119,31 @@ public class ControlReturnService {
         Map<String, OrderScheduleRow> instances = instanceSamples(rows);
         String controlOperation = operationLabel(rows.get(0));
 
-        /*
-         * Снятие предшествует записям возврата: строка плана обязана
-         * оказаться незакрытой до того, как по ней появится открытая
-         * переделка, иначе повторное проведение закрыло бы возврат,
-         * которого ещё нет.
-         */
         LocalDateTime now = LocalDateTime.now();
-        List<OrderScheduleRow> unwritten = new ArrayList<>();
+        List<ControlReturn> returns = new ArrayList<>();
 
         for (OrderScheduleRow sample : instances.values()) {
             for (OrderScheduleRow row : completedRowsOfInstance(sample)) {
-                row.setCompletedAt(null);
-                row.setCompletedBy(null);
-                scheduleRowRepository.save(row);
-                unwritten.add(row);
+
+                ControlReturn ret = new ControlReturn();
+                ret.setScheduleRow(row);
+                ret.setReason(defect);
+                ret.setControlOperation(controlOperation);
+                ret.setReturnedBy(actor);
+                ret.setReturnedAt(now);
+                returns.add(ret);
             }
         }
 
-        if (unwritten.isEmpty()) {
+        if (returns.isEmpty()) {
             throw new IllegalStateException(
                     "Нечего возвращать: выбранные экземпляры не проведены"
             );
         }
 
-        List<ControlReturn> returns = new ArrayList<>();
-
-        for (OrderScheduleRow row : unwritten) {
-            ControlReturn ret = new ControlReturn();
-            ret.setScheduleRow(row);
-            ret.setReason(defect);
-            ret.setControlOperation(controlOperation);
-            ret.setReturnedBy(actor);
-            ret.setReturnedAt(now);
-            returns.add(ret);
-        }
-
         controlReturnRepository.saveAll(returns);
 
-        return "Возвращено на доработку: " + returns.size();
+        return "Возвращено на доработку: " + instances.size();
     }
 
     /**

@@ -1,0 +1,221 @@
+/* ================================================================
+   Раздел «Возврат на доработку» — мастер цеха
+   ================================================================ */
+
+/*
+ * Карточка изделия — строка с экземпляром.
+ *
+ * Карточка строится из всех строк маршрута, принадлежащих цеху.
+ * Ключ — «co:orderId:itemPos:idx» или «po:poId:itemPos:idx».
+ */
+.rework-return__card {
+    border: 1px solid #ddd;
+    border-radius: 6px;
+    margin-bottom: 16px;
+    overflow: hidden;
+}
+
+.rework-return__head {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 16px;
+    background: #f5f7fa;
+    border-bottom: 1px solid #ddd;
+    flex-wrap: wrap;
+}
+
+.rework-return__base {
+    font-weight: 600;
+    color: #1a1a2e;
+}
+
+.rework-return__instance {
+    color: #666;
+    font-size: 14px;
+}
+
+.rework-return__reason {
+    margin-left: auto;
+    padding: 4px 10px;
+    background: #fff3cd;
+    border: 1px solid #ffc107;
+    border-radius: 4px;
+    font-size: 13px;
+    color: #856404;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 300px;
+}
+
+/*
+ * Таблица операций цеха — строки маршрута, которые мастер
+ * может вернуть на доработку.
+ */
+.rework-return__table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.rework-return__table th {
+    padding: 8px 12px;
+    text-align: left;
+    font-size: 13px;
+    font-weight: 600;
+    color: #555;
+    border-bottom: 1px solid #ddd;
+    background: #fafbfc;
+}
+
+.rework-return__table td {
+    padding: 10px 12px;
+    border-bottom: 1px solid #eee;
+    vertical-align: middle;
+}
+
+.rework-return__table tr:last-child td {
+    border-bottom: none;
+}
+
+/*
+ * Строка операции: отметка цехом для переделки.
+ */
+.rework-return__table tr.rework-marked td {
+    background: #fff3cd;
+    border-bottom-color: #ffc107;
+}
+
+/*
+ * Бейджи — в стиле badge из common.css.
+ */
+.rework-return__badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 12px;
+    font-weight: 500;
+    margin-right: 6px;
+}
+
+.rework-return__badge--completed {
+    background: #d4edda;
+    color: #155724;
+}
+
+.rework-return__badge--open {
+    background: #e2e3e5;
+    color: #383d41;
+}
+
+.rework-return__badge--rework {
+    background: #cce5ff;
+    color: #004085;
+}
+
+/*
+ * Поле причины — слева от кнопок.
+ */
+.rework-return__reason-field {
+    font-size: 13px;
+    font-weight: 500;
+    color: #555;
+    margin-right: 8px;
+    white-space: nowrap;
+}
+
+.rework-return__actions {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 16px;
+    background: #fafbfc;
+    border-top: 1px solid #eee;
+    flex-wrap: wrap;
+}
+
+.rework-return__actions input[type="text"] {
+    flex: 1;
+    min-width: 200px;
+    padding: 8px 12px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    font-size: 14px;
+}
+
+.rework-return__actions input[type="text"]:focus {
+    border-color: #007bff;
+    outline: none;
+    box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.15);
+}
+
+/*
+ * Каскад — чекбокс под кнопками.
+ */
+.rework-return__cascade {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+    color: #555;
+    white-space: nowrap;
+}
+
+.rework-return__cascade input {
+    margin: 0;
+}
+
+/*
+ * Кнопки действий.
+ */
+.rework-return__buttons {
+    display: flex;
+    gap: 8px;
+}
+
+.rework-return__buttons .btn {
+    white-space: nowrap;
+}
+
+/*
+ * Пустое состояние.
+ */
+.rework-return__empty {
+    text-align: center;
+    padding: 48px 24px;
+    color: #999;
+}
+
+/*
+ * Колонка чекбокса — минимальная ширина.
+ */
+.rework-return__table .col-mark {
+    width: 40px;
+    text-align: center;
+}
+
+/*
+ * Адаптив для узких экранов.
+ */
+@media (max-width: 768px) {
+    .rework-return__actions {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .rework-return__reason-field {
+        width: 100%;
+    }
+
+    .rework-return__actions input[type="text"] {
+        min-width: auto;
+    }
+
+    .rework-return__buttons {
+        flex-direction: column;
+    }
+
+    .rework-return__buttons .btn {
+        width: 100%;
+    }
+}

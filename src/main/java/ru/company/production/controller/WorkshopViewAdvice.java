@@ -10,6 +10,7 @@ import ru.company.production.entity.AppUser;
 import ru.company.production.repository.UserRepository;
 import ru.company.production.service.InputControlService;
 import ru.company.production.service.PendingDefectService;
+import ru.company.production.service.ReworkReturnService;
 import ru.company.production.service.WorkshopStaffService;
 
 import java.util.List;
@@ -64,7 +65,14 @@ import java.util.List;
                  * одном контроллере перезаписывали бы currentUser и
                  * счётчики в непредсказуемом порядке.
                  */
-                WorkshopExecutorController.class
+                WorkshopExecutorController.class,
+                /*
+                 * Раздел «Возврат на доработку» рисует то же боковое
+                 * меню и ту же верхнюю панель, что и остальные экраны
+                 * модуля: подписи рода подразделения и его граница
+                 * нужны и здесь.
+                 */
+                ReworkReturnController.class
         }
 )
 @RequiredArgsConstructor
@@ -74,6 +82,7 @@ public class WorkshopViewAdvice {
     private final WorkshopStaffService staffService;
     private final InputControlService inputControlService;
     private final PendingDefectService pendingDefectService;
+    private final ReworkReturnService reworkReturnService;
 
     @ModelAttribute
     public void addWorkshopContext(
@@ -100,6 +109,15 @@ public class WorkshopViewAdvice {
                 "moduleTitle",
                 WorkshopStaffService.UnitKind.WORKSHOP.getModuleTitle()
         );
+
+        /*
+         * Признак и счётчик возврата на доработку проставляются до
+         * проверки аутентификации: пункт меню обращается к ним в th:if,
+         * и отсутствие атрибута на анонимном запросе обернулось бы
+         * ошибкой Thymeleaf.
+         */
+        model.addAttribute("canRework", false);
+        model.addAttribute("reworkReturnCount", 0L);
 
         if (authentication == null
                 || !authentication.isAuthenticated()
@@ -237,6 +255,30 @@ public class WorkshopViewAdvice {
         if (bvkModule || btkModule) {
             model.addAttribute(
                     "pendingDefectCount", pendingDefectService.countPending()
+            );
+        }
+
+        /*
+         * Раздел «Возврат на доработку» открыт руководителям
+         * подразделений: переделку назначает тот, кто распределяет
+         * работу, — исполнитель выбирает операции только у себя.
+         * Тот же признак держит и право на адрес (см. SecurityConfig),
+         * поэтому меню и доступ не расходятся.
+         */
+        boolean canRework = supervisor.getRole() != null
+                && supervisor.getRole().name().endsWith("_MASTER");
+
+        model.addAttribute("canRework", canRework);
+
+        /*
+         * Счётчик открытых возвратов на доработку — изделия, возвращённые
+         * с контроля, которые этот цех вообще выполняет. Лёгкий запрос:
+         * пункт меню рисуется на каждом экране модуля.
+         */
+        if (canRework) {
+            model.addAttribute(
+                    "reworkReturnCount",
+                    reworkReturnService.countOpenReturns(supervisor)
             );
         }
 

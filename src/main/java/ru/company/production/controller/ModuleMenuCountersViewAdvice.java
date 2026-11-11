@@ -76,7 +76,15 @@ import ru.company.production.service.WorkshopStaffService;
                  * возврат в меню оборвался бы на запасной /workshop/staff,
                  * закрытый перед ролью исполнителя.
                  */
-                WorkshopExecutorController.class
+                WorkshopExecutorController.class,
+                /*
+                 * Раздел «Возврат на доработку» рисует то же боковое
+                 * меню, поэтому пунктам «Мои операции» и «Распределение
+                 * работ» нужны счётчики и ссылка возврата в свой модуль:
+                 * без них цеховая панель показала бы пустые цифры, а
+                 * возврат повёл бы на закрытый /workshop/staff.
+                 */
+                ReworkReturnController.class
         }
 )
 @RequiredArgsConstructor

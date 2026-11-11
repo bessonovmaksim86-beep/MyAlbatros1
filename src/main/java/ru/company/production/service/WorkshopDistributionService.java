@@ -143,6 +143,7 @@ public class WorkshopDistributionService {
     private final TechProcessOperationControlParamRepository controlParamLinkRepo;
 
     private final ControlReturnService controlReturnService;
+    private final ReworkReturnService reworkReturnService;
     private final UnitHandoverService handoverService;
 
     /*
@@ -2169,6 +2170,13 @@ public class WorkshopDistributionService {
          * закрываю открытый ControlReturn.
          */
         controlReturnService.resolveReturns(row.getId(), performer);
+
+        /*
+         * Хук закрытия возвратов на доработку: если строка была
+         * возвращена начальником цеха на переделку и проведена
+         * повторно — закрываю открытый ReworkReturn.
+         */
+        reworkReturnService.resolveReturns(row.getId(), performer);
 
         scheduleRowRepo.save(row);
 

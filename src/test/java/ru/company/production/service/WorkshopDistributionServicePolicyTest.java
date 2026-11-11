@@ -63,6 +63,7 @@ class WorkshopDistributionServicePolicyTest {
     @Mock private TechProcessOperationRepository routeNodeRepo;
     @Mock private TechProcessOperationControlParamRepository controlParamLinkRepo;
     @Mock private ControlReturnService controlReturnService;
+    @Mock private ReworkReturnService reworkReturnService;
     @Mock private UnitHandoverService handoverService;
     @Mock private WorkingDaysCalculator workingDays;
 
@@ -74,7 +75,7 @@ class WorkshopDistributionServicePolicyTest {
                 scheduleRowRepo, bindingRepo, techProcessRepo,
                 absenceRepo, userRepository, staffService, serialService,
                 routeNodeRepo, controlParamLinkRepo, controlReturnService,
-                handoverService, workingDays
+                reworkReturnService, handoverService, workingDays
         );
     }
 

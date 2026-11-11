@@ -544,6 +544,68 @@ public interface OrderScheduleRowRepository
     );
 
     /**
+     * Все строки одного экземпляра позиции, закреплённые за указанными
+     * подразделениями.
+     *
+     * Нужен разделу «Возврат на доработку»: строка контроля принадлежит
+     * бюро, а не цеху, поэтому карточку изделия цех собирает по своему
+     * подразделению — только те операции маршрута, которые выполняет сам.
+     *
+     * В отличие от {@link #findCompletedRowsOfInstance} сюда попадают и
+     * незакрытые строки: переделку надо видеть на фоне всего маршрута
+     * цеха, а не только его закрытой части.
+     */
+    @EntityGraph(attributePaths = {
+            "operation",
+            "operation.operationName",
+            "operation.operationType",
+            "organizationUnit",
+            "customerOrder"
+    })
+    @Query("""
+            select row
+            from OrderScheduleRow row
+            where row.customerOrder.id = :customerOrderId
+              and row.itemPosition = :itemPosition
+              and row.instanceIndex = :instanceIndex
+              and row.organizationUnit.id in :unitIds
+            order by row.seq asc, row.id asc
+            """)
+    List<OrderScheduleRow> findRowsOfInstanceInUnits(
+            @Param("customerOrderId") Long customerOrderId,
+            @Param("itemPosition") Integer itemPosition,
+            @Param("instanceIndex") Integer instanceIndex,
+            @Param("unitIds") java.util.Collection<Long> unitIds
+    );
+
+    /**
+     * Строки того же экземпляра группового ЗНП — см.
+     * {@link #findRowsOfInstanceInUnits}.
+     */
+    @EntityGraph(attributePaths = {
+            "operation",
+            "operation.operationName",
+            "operation.operationType",
+            "organizationUnit",
+            "productionOrder"
+    })
+    @Query("""
+            select row
+            from OrderScheduleRow row
+            where row.productionOrder.id = :productionOrderId
+              and row.itemPosition = :itemPosition
+              and row.instanceIndex = :instanceIndex
+              and row.organizationUnit.id in :unitIds
+            order by row.seq asc, row.id asc
+            """)
+    List<OrderScheduleRow> findRowsOfProductionOrderInstanceInUnits(
+            @Param("productionOrderId") Long productionOrderId,
+            @Param("itemPosition") Integer itemPosition,
+            @Param("instanceIndex") Integer instanceIndex,
+            @Param("unitIds") java.util.Collection<Long> unitIds
+    );
+
+    /**
      * Проведённые строки одного экземпляра группового ЗНП.
      *
      * Нужен возврату с контроля БТК: у группового заказа основание

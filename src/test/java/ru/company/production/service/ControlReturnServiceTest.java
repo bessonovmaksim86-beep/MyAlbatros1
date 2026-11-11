@@ -115,8 +115,8 @@ class ControlReturnServiceTest {
     class Rework {
 
         @Test
-        @DisplayName("Снимает проведение со всех строк экземпляра")
-        void clearsEveryRowOfInstance() {
+        @DisplayName("Возврат — сигнал: проведение остаётся на месте")
+        void keepsCompletionUntouched() {
 
             CustomerOrder order = new CustomerOrder();
             order.setId(ORDER_ID);
@@ -126,9 +126,8 @@ class ControlReturnServiceTest {
 
             /*
              * Отмечена одна строка, а проведено изделие по двум строкам
-             * плана: переделывать цех обязан изделие целиком, иначе
-             * следующая по маршруту работа осталась бы разблокированной
-             * над недоделанным изделием.
+             * плана: сигнал обязан дойти до каждого исполнителя изделия,
+             * иначе переделку увидит только контролёр.
              */
             OrderScheduleRow marked = completedRow(100L, order, unit);
             OrderScheduleRow sibling = completedRow(101L, order, unit);
@@ -145,17 +144,24 @@ class ControlReturnServiceTest {
             String message = service.sendToRework(
                     List.of(100L), "Не пропаян разъём X2", actor);
 
-            assertNull(marked.getCompletedAt());
-            assertNull(marked.getCompletedBy());
-            assertNull(sibling.getCompletedAt());
-            assertNull(sibling.getCompletedBy());
+            /*
+             * Проведение не снимается: решение о том, какие операции
+             * переделывать, принимает начальник цеха в своём разделе,
+             * и снятие делает он — ровно с отмеченных строк.
+             */
+            assertNotNull(marked.getCompletedAt());
+            assertNotNull(marked.getCompletedBy());
+            assertNotNull(sibling.getCompletedAt());
+            assertNotNull(sibling.getCompletedBy());
 
-            assertEquals("Возвращено на доработку: 2", message);
+            verify(scheduleRowRepository, never()).save(any());
+
+            assertEquals("Возвращено на доработку: 1", message);
         }
 
         @Test
-        @DisplayName("Заводит возврат на каждую снятую строку")
-        void writesReturnPerClearedRow() {
+        @DisplayName("Заводит возврат на каждую проведённую строку")
+        void writesReturnPerCompletedRow() {
 
             CustomerOrder order = new CustomerOrder();
             order.setId(ORDER_ID);

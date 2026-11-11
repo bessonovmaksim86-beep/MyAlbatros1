@@ -295,6 +295,36 @@ class SecurityAccessMatrixTest {
             expectAllowed(Role.SK_GENERAL.name(), "/workshop/staff");
             expectDenied(Role.SK_GENERAL.name(), "/workshop");
         }
+
+        @Test
+        @DisplayName("возврат на доработку открыт тем же мастерам")
+        void reworkReturnFollowsModule() throws Exception {
+            /*
+             * Раздел унаследован от общего matcher "/workshop/**", и
+             * отдельного правила у него нет. Проверка фиксирует, что
+             * адрес не закрылся частным matcher'ом: пункт меню рисуют по
+             * признаку canRework, и ссылка, ведущая в 403, была бы
+             * расхождением меню и права (docs, раздел 12).
+             */
+            for (String role : AccessRoles.UNIT_MANAGERS) {
+                expectAllowed(role, "/workshop/rework-return");
+            }
+        }
+
+        @Test
+        @DisplayName("возврат на доработку закрыт исполнителям и службе качества")
+        void reworkReturnIsDeniedToOthers() throws Exception {
+            /*
+             * Граница не списком ролей, а содержимым: переделку назначает
+             * тот, кто распределяет работу своего подразделения.
+             * Исполнитель выбирает операции у себя, а руководитель службы
+             * качества не владеет ни одним цехом.
+             */
+            expectDenied(Role.SDP_SA_EXECUTOR.name(), "/workshop/rework-return");
+            expectDenied(Role.BTK_EXECUTOR.name(), "/workshop/rework-return");
+            expectDenied(Role.SK_GENERAL.name(), "/workshop/rework-return");
+            expectDenied(Role.DISPATCHER.name(), "/workshop/rework-return");
+        }
     }
 
     @Nested
