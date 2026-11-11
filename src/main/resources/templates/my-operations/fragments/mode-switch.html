@@ -36,7 +36,7 @@
 
     <a class="mode-switch__item"
        th:classappend="${mode == 'regular'} ? ' is-active' : ''"
-       th:href="@{/my-operations}">
+       th:href="@{/my-operations(periodFrom=${periodFrom}, periodTo=${periodTo})}">
 
         Обычные работы
 
@@ -50,7 +50,7 @@
 
     <a class="mode-switch__item"
        th:classappend="${mode == 'group'} ? ' is-active' : ''"
-       th:href="@{/my-operations(mode='group')}">
+       th:href="@{/my-operations(mode='group', periodFrom=${periodFrom}, periodTo=${periodTo})}">
 
         Групповые ЗНП
 
@@ -77,7 +77,7 @@
     -->
     <a class="mode-switch__item"
        th:classappend="${mode == 'completed'} ? ' is-active' : ''"
-       th:href="@{/my-operations(mode='completed')}">
+       th:href="@{/my-operations(mode='completed', periodFrom=${periodFrom}, periodTo=${periodTo})}">
 
         Проведённые
 
@@ -91,7 +91,7 @@
 
     <a class="mode-switch__item"
        th:classappend="${mode == 'group-completed'} ? ' is-active' : ''"
-       th:href="@{/my-operations(mode='group-completed')}">
+       th:href="@{/my-operations(mode='group-completed', periodFrom=${periodFrom}, periodTo=${periodTo})}">
 
         Проведённые групповые ЗНП
 

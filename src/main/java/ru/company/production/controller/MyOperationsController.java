@@ -36,6 +36,7 @@ import ru.company.production.service.ControlReturnService;
 import ru.company.production.dto.ControlReturnView;
 
 import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -88,6 +89,22 @@ public class MyOperationsController {
 
     /** Проведённая половина групповых ЗНП. */
     private static final String GROUP_COMPLETED_MODE = "group-completed";
+
+    /**
+     * Подпись срока в панели: тот же русский формат, что в подписи
+     * периода распределения работ.
+     */
+    private static final DateTimeFormatter RU_DATE =
+            DateTimeFormatter.ofPattern("dd.MM.yyyy");
+
+    /**
+     * Горизонт показа работ: количество дней от сегодняшнего.
+     *
+     * Значение совпадает с {@link WorkshopDistributionService#HORIZON_DAYS},
+     * но вынесено сюда: контроллер и сервис в разных пакетах, а
+     * ссылаться на package-private поле нельзя.
+     */
+    private static final int HORIZON_DAYS = 14;
 
     private final WorkshopDistributionService distributionService;
     private final WorkshopStaffService staffService;
@@ -153,17 +170,21 @@ public class MyOperationsController {
      * сделанного. Пока она лежала в одном списке, закрытая работа
      * оставалась перед глазами и размывала остаток смены — а вырезать её
      * из подборa совсем было нельзя, проведённый экземпляр обязан
-     * оставаться видимым с датой закрытия.
+     * проведённые половины.
      */
     @GetMapping({"", "/"})
     public String index(
             @RequestParam(name = "mode", required = false) String mode,
             @RequestParam(name = "expanded", required = false) String expanded,
+            @RequestParam(name = "periodFrom", required = false) String periodFrom,
+            @RequestParam(name = "periodTo", required = false) String periodTo,
             Authentication authentication,
             Model model
     ) {
         AppUser user = currentUser(authentication);
         String view = viewMode(mode);
+
+        Period period = resolvePeriod(periodFrom, periodTo);
 
         /*
          * Основание строки — одно на пару кнопок «закреплённые +
@@ -176,8 +197,52 @@ public class MyOperationsController {
                 || GROUP_COMPLETED_MODE.equals(view);
 
         List<AssignedOperationView> assigned = groupBase
-                ? distributionService.findMyGroupOperations(user)
-                : distributionService.findMyOperations(user);
+                ? distributionService.findMyGroupOperations(
+                        user, period.from(), period.to())
+                : distributionService.findMyOperations(
+                        user, period.from(), period.to());
+
+        /*
+         * Цифры кнопок пересчитываются тем же сроком, что и список —
+         * по образцу распределения работ, где кнопка и таблица всегда
+         * показывают один интервал. Иначе, сузив список до недели,
+         * человек увидел бы на кнопке прежние две недели и счёл бы
+         * работы потерявшимися.
+         *
+         * Перезапись атрибутов бокового меню на этой странице
+         * намеренна: цифра пункта «Мои операции» означает объём работ,
+         * открытых перед глазами, а на прочих страницах раздела её
+         * готовит Advice по горизонту по умолчанию.
+         */
+        model.addAttribute(
+                "myRegularOperationsCount",
+                groupBase
+                        ? 0L
+                        : distributionService.countMyOperations(
+                                user, period.from(), period.to())
+        );
+        model.addAttribute(
+                "myGroupOperationsCount",
+                groupBase
+                        ? distributionService.countMyGroupOperations(
+                                user, period.from(), period.to())
+                        : 0L
+        );
+
+        model.addAttribute("periodFrom", period.from().toString());
+        model.addAttribute("periodTo", period.to().toString());
+        model.addAttribute("periodLabel",
+                "Период: " + period.from().format(RU_DATE)
+                        + " — " + period.to().format(RU_DATE));
+        /*
+         * Признак заданного вручную срока: панель показывает его как
+         * отфильтрованный и даёт кнопку сброса, а пустой адрес (горизонт
+         * по умолчанию) обязан выглядеть как обычный список.
+         */
+        model.addAttribute("periodFiltered",
+                blankToEmpty(periodFrom).isEmpty()
+                        && blankToEmpty(periodTo).isEmpty() ? null : "1");
+
 
         /*
          * Перенос делается разрезом собранного подборa, а не записью в
@@ -190,8 +255,18 @@ public class MyOperationsController {
         List<AssignedOperationView> pending = new ArrayList<>();
         List<AssignedOperationView> completed = new ArrayList<>();
 
+        /*
+         * Перенос считается группой, а не экземпляром: строка списка —
+         * это «операция + дата плана», и пользователь ожидает, что
+         * проведённые экземпляры уйдут в «Проведённые», а незакрытые —
+         * останутся в «Закреплённых». Группа, в которой закрыт хотя бы
+         * один экземпляр, переносится в проведённые целиком — разрезать
+         * группу на две строки (частично проведённая / незакрытая)
+         * означало бы потерять суммарную трудоёмкость и нарушить
+         * соответствие строки плану.
+         */
         for (AssignedOperationView group : assigned) {
-            (group.allCompleted() ? completed : pending).add(group);
+            (group.completedCount() > 0 ? completed : pending).add(group);
         }
 
         model.addAttribute("groupMode", groupBase);
@@ -205,7 +280,7 @@ public class MyOperationsController {
 
         /*
          * Ключ раскрытой группы приходит параметром адреса после
-         * проведения (см. #redirectToList(mode, expanded)) и попадает в
+         * проведения (см. #redirectToList(mode, expanded, periodFrom, periodTo)) и попадает в
          * шаблон как есть: панель обязана остаться открытой у той же
          * работы, а не у строки, занявшей её место в перестроенном
          * списке.
@@ -459,6 +534,16 @@ public class MyOperationsController {
          */
         model.addAttribute("currentUser", user);
         model.addAttribute("activePage", "my-operations");
+        /*
+         * Срок пробрасывается decorate, чтобы боковое меню и верхняя
+         * панель видели periodFrom / periodTo и могли использовать их
+         * (пока что только для сквозной видимости): шаблон layout
+         * уже читает эти атрибуты из модели.
+         */
+        if (!model.containsAttribute("periodFrom")) {
+            model.addAttribute("periodFrom", "");
+            model.addAttribute("periodTo", "");
+        }
 
         /*
          * Боковое меню раздел берёт у того модуля, в который роль входит
@@ -518,8 +603,10 @@ public class MyOperationsController {
     @GetMapping("/complete/{rowId}")
     public String completeForm(
             @PathVariable Long rowId,
-            @RequestParam(name = "mode", required = false) String mode,
+            @RequestParam(name = "mode", required = false) String mode,        
             @RequestParam(name = "expanded", required = false) String expanded,
+            @RequestParam(name = "periodFrom", required = false) String periodFrom,
+            @RequestParam(name = "periodTo", required = false) String periodTo,
             Authentication authentication,
             Model model,
             RedirectAttributes redirectAttributes
@@ -531,11 +618,11 @@ public class MyOperationsController {
             params = controlParamService.loadForRow(rowId);
         } catch (RuntimeException ex) {
             redirectError(redirectAttributes, ex);
-            return redirectToList(mode, expanded);
+            return redirectToList(mode, expanded, periodFrom, periodTo);
         }
 
         if (params.isEmpty()) {
-            return redirectToList(mode, expanded);
+            return redirectToList(mode, expanded, periodFrom, periodTo);
         }
 
         model.addAttribute("controlParams", params);
@@ -549,6 +636,12 @@ public class MyOperationsController {
          */
         model.addAttribute("operationMode", viewMode(mode));
         model.addAttribute("expanded", expanded);
+        /*
+         * Срок возвращается на форму вместе с режимом: отказ обязан
+         * вернуть человека в ту же неделю, из которой он открыл отметку.
+         */
+        model.addAttribute("periodFrom", blankToEmpty(periodFrom));
+        model.addAttribute("periodTo", blankToEmpty(periodTo));
 
         return decorate(user, "my-operations/complete", model);
     }
@@ -565,6 +658,8 @@ public class MyOperationsController {
             @PathVariable Long rowId,
             @RequestParam(name = "mode", required = false) String mode,
             @RequestParam(name = "expanded", required = false) String expanded,
+            @RequestParam(name = "periodFrom", required = false) String periodFrom,
+            @RequestParam(name = "periodTo", required = false) String periodTo,
             @ModelAttribute("completionForm") ControlParamCompletionForm completionForm,
             Authentication authentication,
             RedirectAttributes redirectAttributes
@@ -587,10 +682,10 @@ public class MyOperationsController {
             );
         } catch (RuntimeException ex) {
             redirectError(redirectAttributes, ex);
-            return "redirect:" + completeFormUrl(rowId, mode, expanded);
+            return "redirect:" + completeFormUrl(rowId, mode, expanded, periodFrom, periodTo);
         }
 
-        return redirectToList(mode, expanded);
+        return redirectToList(mode, expanded, periodFrom, periodTo);
     }
 
     /* Сообщение об отказе проведения — тем же списком, откуда
@@ -608,11 +703,14 @@ public class MyOperationsController {
     }
 
     /*
-     * Адрес формы отметки с сохранённым режимом: отказ не должен
-     * вырывать человека из его половины списка, иначе после ошибки он
-     * увидел бы чужую половину и потерял незакрытую работу из виду.
+     * Адрес формы отметки с сохранённым режимом и сроком: отказ не
+     * должен вырывать человека из его половины списка и из своей
+     * недели, иначе после ошибки он увидел бы чужую половину и
+     * потерял незакрытую работу из виду.
      */
-    private static String completeFormUrl(Long rowId, String mode, String expanded) {
+    private static String completeFormUrl(
+            Long rowId, String mode, String expanded,
+            String periodFrom, String periodTo) {
         String view = viewMode(mode);
 
         StringBuilder url = new StringBuilder("/my-operations/complete/")
@@ -632,6 +730,8 @@ public class MyOperationsController {
             url.append("expanded=").append(expanded.trim());
         }
 
+        appendPeriod(url, periodFrom, periodTo);
+
         return url.toString();
     }
 
@@ -640,6 +740,8 @@ public class MyOperationsController {
             @RequestParam Long rowId,
             @RequestParam(name = "mode", required = false) String mode,
             @RequestParam(name = "expanded", required = false) String expanded,
+            @RequestParam(name = "periodFrom", required = false) String periodFrom,
+            @RequestParam(name = "periodTo", required = false) String periodTo,
             Authentication authentication,
             RedirectAttributes redirectAttributes
     ) {        AppUser user = currentUser(authentication);
@@ -652,7 +754,7 @@ public class MyOperationsController {
          * сервере, потому что ссылка формы известна и без кнопки.
          */
         if (controlParamService.hasControlParams(rowId)) {
-            return "redirect:" + completeFormUrl(rowId, mode, expanded);
+            return "redirect:" + completeFormUrl(rowId, mode, expanded, periodFrom, periodTo);
         }
 
         try {
@@ -685,7 +787,7 @@ public class MyOperationsController {
          * переносит группу в проведённую половину, и исполнитель,
          * закрывавший работу из неё, обязан остаться там же.
          */
-        return redirectToList(mode, expanded);
+        return redirectToList(mode, expanded, periodFrom, periodTo);
     }
 
     /**
@@ -713,6 +815,8 @@ public class MyOperationsController {
             @RequestParam(name = "plannedDate", required = false) String plannedDate,
             @RequestParam(name = "mode", required = false) String mode,
             @RequestParam(name = "expanded", required = false) String expanded,
+            @RequestParam(name = "periodFrom", required = false) String periodFrom,
+            @RequestParam(name = "periodTo", required = false) String periodTo,
             Authentication authentication,
             RedirectAttributes redirectAttributes
     ) {
@@ -724,14 +828,24 @@ public class MyOperationsController {
                     "errorMessage",
                     "Не удалось определить группу работ для проведения"
             );
-            return redirectToList(mode, expanded);
+            return redirectToList(mode, expanded, periodFrom, periodTo);
         }
 
+        /*
+         * Список берётся тем же сроком, что нарисован на странице:
+         * состав экземпляров берут из подборa, и с горизонтом по
+         * умолчанию группа, найденная человеком в своей неделе, сюда бы
+         * не пришла — кнопка отчиталась бы «проводить нечего», хотя
+         * работа на экране есть.
+         */
+        Period period = resolvePeriod(periodFrom, periodTo);
         boolean groupMode = GROUP_MODE.equals(viewMode(mode))
                 || GROUP_COMPLETED_MODE.equals(viewMode(mode));
         List<AssignedOperationView> operations = groupMode
-                ? distributionService.findMyGroupOperations(user)
-                : distributionService.findMyOperations(user);
+                ? distributionService.findMyGroupOperations(
+                        user, period.from(), period.to())
+                : distributionService.findMyOperations(
+                        user, period.from(), period.to());
 
         AssignedOperationView group = operations.stream()
                 .filter(op -> operationId.equals(op.operationId()))
@@ -753,7 +867,7 @@ public class MyOperationsController {
                             : "Проводить нечего: все экземпляры уже закрыты либо "
                               + "ждут предшествующую операцию"
             );
-            return redirectToList(mode, expanded);
+            return redirectToList(mode, expanded, periodFrom, periodTo);
         }
 
         int completed = 0;
@@ -794,7 +908,7 @@ public class MyOperationsController {
             );
         }
 
-        return redirectToList(mode, expanded);
+        return redirectToList(mode, expanded, periodFrom, periodTo);
     }
 
     /**
@@ -812,6 +926,8 @@ public class MyOperationsController {
             @RequestParam(name = "reason") String reason,
             @RequestParam(name = "mode", required = false) String mode,
             @RequestParam(name = "expanded", required = false) String expanded,
+            @RequestParam(name = "periodFrom", required = false) String periodFrom,
+            @RequestParam(name = "periodTo", required = false) String periodTo,
             Authentication authentication,
             RedirectAttributes redirectAttributes
     ) {
@@ -822,7 +938,7 @@ public class MyOperationsController {
                     "errorMessage",
                     "Действие контроля доступно только сотрудникам БТК"
             );
-            return redirectToList(mode, expanded);
+            return redirectToList(mode, expanded, periodFrom, periodTo);
         }
 
         try {
@@ -843,24 +959,24 @@ public class MyOperationsController {
             );
         }
 
-        return redirectToList(mode, expanded);
-    }
-
-    /** Адрес списка того же режима — массовое проведение не уводит из него. */
-    private static String redirectToList(String mode) {
-        return redirectToList(mode, null);
+        return redirectToList(mode, expanded, periodFrom, periodTo);
     }
 
     /**
-     * Адрес списка с сохранёнными режимом и раскрытой группой.
+     * Адрес списка с сохранёнными режимом, раскрытой группой и сроком.
      *
      * Ключ группы кладётся в запрос только непустым: пустой параметр
      * вернул бы на страницу `expanded=`, и адрес закрывавшей группу
      * группы отличался бы от адреса той же группы, свёрнутой вручную,
      * — при закладках и «назад» это заметная мелочь, а при сравнении
      * адресов в тестах — источник ложных отличий.
+     *
+     * Срок возвращается тем же текстом, что пришёл в форму: человек,
+     * сузивший список до недели, после проведения обязан остаться в
+     * своей неделе, а не получить снова горизонт на две.
      */
-    private static String redirectToList(String mode, String expanded) {
+    private static String redirectToList(
+            String mode, String expanded, String periodFrom, String periodTo) {
         String view = viewMode(mode);
         String key = expanded == null ? "" : expanded.trim();
 
@@ -879,12 +995,14 @@ public class MyOperationsController {
             url.append("expanded=").append(key);
         }
 
+        appendPeriod(url, periodFrom, periodTo);
+
         /*
-         * Обычная половина без раскрытой группы — тот же адрес, что и
-         * до появления признака: пустой «?mode=regular» ломал бы
-         * закладки и сравнение редиректов.
+         * Обычная половина без раскрытой группы и без фильтра — тот же
+         * адрес, что и до появления признака: пустой «?mode=regular»
+         * ломал бы закладки и сравнение редиректов.
          */
-        return plain && key.isEmpty()
+        return plain && key.isEmpty() && url.indexOf("?") == url.length() - 1
                 ? "redirect:/my-operations"
                 : url.toString();
     }
@@ -927,6 +1045,69 @@ public class MyOperationsController {
         } catch (RuntimeException ignored) {
             return null;
         }
+    }
+
+    /**
+     * Срок показа работ: границы, которыми пользовались на странице.
+     *
+     * Панель срока задается двумя датами, и любую из них можно оставить
+     * пустой: тогда вторую дополняет горизонт по умолчанию. Нормализация
+     * нужна обоим получателям — подбору работ и массовому проведению,
+     * которое ищет группу в том же списке, что человек видит на
+     * экране.
+     */
+    private record Period(LocalDate from, LocalDate to) {
+    }
+
+    /**
+     * Срок из параметров адреса; пустой адрес — привычный горизонт от
+     * сегодняшнего дня.
+     */
+    private static Period resolvePeriod(String periodFrom, String periodTo) {
+
+        LocalDate from = parseDate(periodFrom);
+        LocalDate to = parseDate(periodTo);
+
+        if (from == null && to == null) {
+            LocalDate today = LocalDate.now();
+            return new Period(today, today.plusDays(HORIZON_DAYS));
+        }
+
+        if (from == null) {
+            from = to.minusDays(HORIZON_DAYS);
+        }
+
+        if (to == null) {
+            to = from.plusDays(HORIZON_DAYS);
+        }
+
+        return new Period(from, to);
+    }
+
+    /**
+     * Дописывает в адрес заданный пользователем срок.
+     *
+     * Параметры кладутся как пришли и только непустыми: адрес без
+     * фильтра обязан остаться прежним «/my-operations», иначе закладки и
+     * сравнение редиректов разошлись бы, а дополнять пустую границу
+     * здесь нечем — это делает {@link #resolvePeriod} при подборе.
+     */
+    private static void appendPeriod(StringBuilder url, String periodFrom,
+            String periodTo) {
+
+        for (String pair : new String[] {"periodFrom=" + blankToEmpty(periodFrom),
+                "periodTo=" + blankToEmpty(periodTo)}) {
+
+            if (pair.endsWith("=")) {
+                continue;
+            }
+
+            url.append(url.indexOf("?") < 0 ? '?' : '&').append(pair);
+        }
+    }
+
+    private static String blankToEmpty(String value) {
+        return value == null || value.isBlank() ? "" : value.trim();
     }
 
     /**

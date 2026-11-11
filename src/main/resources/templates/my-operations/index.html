@@ -79,6 +79,58 @@
                  th:text="${errorMessage}">
             </div>
 
+            <form class="filter-bar"
+                  method="get"
+                  th:action="@{/my-operations}">
+
+                <input type="hidden"
+                       name="mode"
+                       th:value="${operationMode != null ? operationMode : 'regular'}">
+
+                <label class="filter-bar__field">
+
+                    <span class="filter-bar__caption">Срок работ</span>
+
+                    <input type="date"
+                           name="periodFrom"
+                           class="filter-bar__input"
+                           th:value="${periodFrom}"
+                           onchange="this.form.submit()">
+
+                </label>
+
+                <span class="filter-bar__separator">—</span>
+
+                <label class="filter-bar__field">
+
+                    <input type="date"
+                           name="periodTo"
+                           class="filter-bar__input"
+                           th:value="${periodTo}"
+                           onchange="this.form.submit()">
+
+                </label>
+
+                <noscript>
+                    <button type="submit" class="btn primary compact">
+                        Применить
+                    </button>
+                </noscript>
+
+                <span class="filter-bar__period"
+                      th:if="${periodLabel != null}"
+                      th:text="${periodLabel}">
+                    Переход в другой раздел
+                </span>
+
+                <a th:if="${periodFiltered != null}"
+                   class="filter-bar__reset"
+                   th:href="@{/my-operations(mode=${operationMode != null ? operationMode : 'regular'})}">
+                    Сбросить
+                </a>
+
+            </form>
+
             <!--
                 Переключатель вида закреплённых работ — тот же приём, что
                 над списком распределения. Разделяет список на две

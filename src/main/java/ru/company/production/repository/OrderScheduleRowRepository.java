@@ -576,6 +576,81 @@ public interface OrderScheduleRowRepository
             @Param("instanceIndex") Integer instanceIndex
     );
 
+    /*
+     * Непроведённые строки операции того же экземпляра.
+     *
+     * Нужен переносу даты преемника на факт передачи: цех закрыл
+     * передаточную операцию сегодня, а работа приёмщика (контроль БТК,
+     * приёмка складом) стоит в плане позже — на неё приёмщик смотрит
+     * только со своей даты и до неё работу не видит. Выборка обязана
+     * держать тот же ключ экземпляра, что и снятие факта возврата,
+     * иначе перенос задел бы чужое изделие той же операции.
+     *
+     * Проведённые строки отсекаются: у закрытой работы дата плана —
+     * уже история, и двигать её нельзя, факт привязан к ней.
+     *
+     * Техпроцесс в условии обязателен: одна операция входит в несколько
+     * маршрутов, а заказ.plan строки обязан принадлежать маршруту,
+     * по которому её планировали.
+     */
+    @EntityGraph(attributePaths = {
+            "operation",
+            "operation.operationName",
+            "operation.operationType",
+            "organizationUnit",
+            "productionOrder"
+    })
+    @Query("""
+            select row
+            from OrderScheduleRow row
+            where row.productionOrder.id = :productionOrderId
+              and row.itemPosition = :itemPosition
+              and row.instanceIndex = :instanceIndex
+              and row.techProcess.id = :techProcessId
+              and row.operation.id = :operationId
+              and row.completedAt is null
+            order by row.plannedDate asc, row.id asc
+            """)
+    List<OrderScheduleRow> findOpenRowsOfProductionOrderInstanceOperation(
+            @Param("productionOrderId") Long productionOrderId,
+            @Param("itemPosition") Integer itemPosition,
+            @Param("instanceIndex") Integer instanceIndex,
+            @Param("techProcessId") Long techProcessId,
+            @Param("operationId") Long operationId
+    );
+
+    /*
+     * То же для экземпляра позиции заказа покупателя — пара к строкам
+     * группового ЗНП. Ветви раздельны, потому что у плана выпуска
+     * основание строки — заказ покупателя, а у группового ЗНП его нет
+     * вовсе (V56): единый запрос с OR отбросил бы одну из половин.
+     */
+    @EntityGraph(attributePaths = {
+            "operation",
+            "operation.operationName",
+            "operation.operationType",
+            "organizationUnit",
+            "customerOrder"
+    })
+    @Query("""
+            select row
+            from OrderScheduleRow row
+            where row.customerOrder.id = :customerOrderId
+              and row.itemPosition = :itemPosition
+              and row.instanceIndex = :instanceIndex
+              and row.techProcess.id = :techProcessId
+              and row.operation.id = :operationId
+              and row.completedAt is null
+            order by row.plannedDate asc, row.id asc
+            """)
+    List<OrderScheduleRow> findOpenRowsOfCustomerOrderInstanceOperation(
+            @Param("customerOrderId") Long customerOrderId,
+            @Param("itemPosition") Integer itemPosition,
+            @Param("instanceIndex") Integer instanceIndex,
+            @Param("techProcessId") Long techProcessId,
+            @Param("operationId") Long operationId
+    );
+
     /**
      * Нераспределённые операции подразделения мастера — по датам.
      *

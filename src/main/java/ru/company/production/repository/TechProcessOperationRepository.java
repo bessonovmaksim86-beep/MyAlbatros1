@@ -9,6 +9,7 @@ import ru.company.production.entity.TechProcessOperation;
 
 import java.util.Collection;
 import java.util.List;
+import java.util.Optional;
 
 /**
  * Узлы маршрутов техпроцессов — операции вместе с их зависимостями.
@@ -44,6 +45,29 @@ public interface TechProcessOperationRepository
             """)
     List<TechProcessOperation> findAllWithPredecessorsForProcesses(
             @Param("processIds") Collection<Long> processIds
+    );
+
+    /*
+     * Узел маршрута по паре «техпроцесс + операция».
+     *
+     * Строка графика хранит именно эту пару, а не ссылку на узел,
+     * поэтому зависимости проведённой работы ищутся через неё.
+     * Пара уникальна (uk_tech_process_operation), отсюда Optional.
+     */
+    @EntityGraph(attributePaths = {
+            "operation",
+            "operation.operationName",
+            "operation.operationType"
+    })
+    @Query("""
+            select node
+            from TechProcessOperation node
+            where node.techProcess.id = :processId
+              and node.operation.id = :operationId
+            """)
+    Optional<TechProcessOperation> findNodeOfProcessAndOperation(
+            @Param("processId") Long processId,
+            @Param("operationId") Long operationId
     );
 
     /**

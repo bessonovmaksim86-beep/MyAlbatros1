@@ -47,6 +47,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 
 /**
@@ -143,6 +144,14 @@ public class WorkshopDistributionService {
 
     private final ControlReturnService controlReturnService;
     private final UnitHandoverService handoverService;
+
+    /*
+     * Календарь нужен хуку переноса срока: передачу проводят в любой
+     * день, а плановую дату преемника нельзя ставить в выходной —
+     * приёмщик, для которого она и сдвигается, работает по календарю
+     * подразделения, а не по календарю сдающего цеха.
+     */
+    private final WorkingDaysCalculator workingDays;
 
     /*
      * ============================================================
@@ -1966,13 +1975,11 @@ public class WorkshopDistributionService {
      * список того пользователя, под которого выполнен вход.
      */
     @Transactional(readOnly = true)
-    public List<AssignedOperationView> findMyOperations(AppUser user) {
+    public List<AssignedOperationView> findMyOperations(
+            AppUser user, LocalDate from, LocalDate to) {
         if (user == null || user.getId() == null) {
             return List.of();
         }
-
-        LocalDate from = LocalDate.now();
-        LocalDate to = from.plusDays(HORIZON_DAYS);
 
         /*
          * Бюро входного контроля: меню строится по подразделению, а не
@@ -2050,6 +2057,23 @@ public class WorkshopDistributionService {
         });
 
         return result;
+    }
+
+    /**
+     * Работы пользователя за горизонт — без пользовательского периода.
+     *
+     * Вызывается контроллером при отсутствии параметров фильтра.
+     */
+    @Transactional(readOnly = true)
+    public List<AssignedOperationView> findMyOperations(AppUser user) {
+        if (user == null || user.getId() == null) {
+            return List.of();
+        }
+
+        LocalDate from = LocalDate.now();
+        LocalDate to = from.plusDays(HORIZON_DAYS);
+
+        return findMyOperations(user, from, to);
     }
 
     /**
@@ -2166,6 +2190,28 @@ public class WorkshopDistributionService {
         if (isReceiptType(operationTypeCode(row))) {
             autoAcceptHandover(row, performer);
         }
+
+        /*
+         * Перенос даты преемника на факт передачи.
+         *
+         * Передача — это момент, когда позиция физически покидает
+         * подразделение сдающего и переходит в подразделение приёмщика.
+         * Если плановая дата операции-преемника стоит раньше даты
+         * фактической передачи (или в выходной) — приёмщик либо не видит
+         * работу вовсе (выпала из горизонта), либо видит её в прошлом,
+         * что ломает статистику.
+         *
+         * Логика: берём техпроцесс строки, ищем узел маршрута по
+         * операции-преемнику (следующий по зависимостям), читаем его
+         * незакрытые строки и сдвигаем их план на ближайший рабочий
+         * день после факта передачи, сохраняя originalPlannedDate.
+         *
+         * Если преемника в маршруте нет (последняя операция) — пропускаем:
+         * передавать некуда.
+         */
+        if (isTransferType(operationTypeCode(row))) {
+            shiftSuccessorDate(row, performer);
+        }
     }
 
     /**
@@ -2258,6 +2304,190 @@ public class WorkshopDistributionService {
         return cell == null ? null : cell.getFullNumber();
     }
 
+    /** Передаточная ли это операция — факт перехода позиции между подразделениями. */
+    private static boolean isTransferType(String code) {
+        return OperationTypeCode.TRANSFER.name().equals(code);
+    }
+
+    /**
+     * Незакрытые строки того же экземпляра по операции маршрута.
+     *
+     * Основание строки бывает двух видов (V56): план выпуска держится за
+     * заказ покупателя, групповой ЗНП — за заказ на производство, поэтому
+     * ветви разные; единый запрос с OR отбросил бы одну из половин.
+     */
+    private List<OrderScheduleRow> openRowsOfInstanceOperation(
+            OrderScheduleRow row, Long operationId) {
+
+        TechProcess process = row.getTechProcess();
+
+        if (process == null || process.getId() == null || operationId == null) {
+            return List.of();
+        }
+
+        if (row.isProductionOrderBased()) {
+            ProductionOrder order = row.getProductionOrder();
+
+            return order == null || order.getId() == null
+                    ? List.of()
+                    : scheduleRowRepo.findOpenRowsOfProductionOrderInstanceOperation(
+                            order.getId(), row.getItemPosition(), row.getInstanceIndex(),
+                            process.getId(), operationId);
+        }
+
+        CustomerOrder order = row.getCustomerOrder();
+
+        return order == null || order.getId() == null
+                ? List.of()
+                : scheduleRowRepo.findOpenRowsOfCustomerOrderInstanceOperation(
+                        order.getId(), row.getItemPosition(), row.getInstanceIndex(),
+                        process.getId(), operationId);
+    }
+
+    /**
+     * Ставит план операции-преемника в день фактической передачи.
+     *
+     * План строят по календарю сдающего подразделения и обычно закладывают
+     * с запасом: контроль ячеек планируют через две недели после
+     * лакирования, потому что тогда очередь БТК была занята. Когда цех
+     * передаёт ячейку досрочно, план преемника остаётся за горизонтом
+     * «Моих операций» (14 дней), и приёмщик свою уже привезённую работу
+     * просто не видит — она появляется в списке только с наступления
+     * плановой даты.
+     *
+     * Проведение передачи и есть тот факт, с которого позиция доступна
+     * приёмщику, поэтому его дату и ставят плану преемника, поднимая до
+     * ближайшего рабочего дня: приёмщик работает по календарю, и дата в
+     * выходной означала бы работу, которую никто не увидит до понедельника.
+     *
+     * Дальше плана преемника не уводят: если у него остались прочие
+     * незакрытые предшественники с более поздним планом, передача одной
+     * ветки маршрута не даёт права требовать работу раньше их срока.
+     *
+     * Молчаливый пропуск вместо ошибки: у передаточной операции может не
+     * быть преемника (последняя в маршруте), а строка могла быть снята с
+     * плана или уже проведена — проводить передачу от этого неверным не
+     * становится, и откатывать её из-за плана нельзя.
+     */
+    private void shiftSuccessorDate(OrderScheduleRow row, AppUser performer) {
+
+        TechProcess process = row.getTechProcess();
+        Operation operation = row.getOperation();
+
+        if (process == null || process.getId() == null
+                || operation == null || operation.getId() == null) {
+            return;
+        }
+
+        Optional<TechProcessOperation> node =
+                routeNodeRepo.findNodeOfProcessAndOperation(
+                        process.getId(), operation.getId());
+
+        if (node.isEmpty()) {
+            return;
+        }
+
+        List<TechProcessOperation> successors =
+                routeNodeRepo.findSuccessorsOfNode(node.get().getId());
+
+        if (successors.isEmpty()) {
+            return;
+        }
+
+        LocalDate factDate = row.getCompletedAt() == null
+                ? LocalDate.now()
+                : row.getCompletedAt().toLocalDate();
+
+        for (TechProcessOperation successor : successors) {
+
+            if (successor.getOperation() == null
+                    || successor.getOperation().getId() == null) {
+                continue;
+            }
+
+            List<OrderScheduleRow> openRows = openRowsOfInstanceOperation(
+                    row, successor.getOperation().getId());
+
+            if (openRows.isEmpty()) {
+                continue;
+            }
+
+            /*
+             * Двигаем план преемника только если он стоит раньше факта
+             * передачи — иначе приёмщик и так видит работу по своему
+             * плану, а сдвиг вперёд нарушил бы статистику.
+             */
+            boolean anyBeforeFact = openRows.stream()
+                    .anyMatch(r -> {
+                        LocalDate p = r.getPlannedDate();
+                        return p != null && !p.isAfter(factDate);
+                    });
+
+            if (!anyBeforeFact) {
+                continue;
+            }
+
+            LocalDate target = workingDays.nextWorkingDay(factDate);
+
+            /*
+             * Прочие незакрытые предшественники преемника: их план —
+             * нижняя граница срока, раньше которой требовать работу
+             * бессмысленно. Переданная операция среди них уже закрыта и
+             * границы не задаёт.
+             */
+            for (TechProcessOperation predecessor : successor.getPredecessors()) {
+
+                if (predecessor.getOperation() == null
+                        || operation.getId().equals(predecessor.getOperation().getId())) {
+                    continue;
+                }
+
+                for (OrderScheduleRow blocker
+                        : openRowsOfInstanceOperation(
+                                row, predecessor.getOperation().getId())) {
+
+                    LocalDate blockerDate = blocker.getPlannedDate();
+
+                    if (blockerDate != null && blockerDate.isAfter(target)) {
+                        target = workingDays.nextWorkingDay(blockerDate);
+                    }
+                }
+            }
+
+            for (OrderScheduleRow successorRow : openRows) {
+                shiftRowTo(successorRow, target, performer);
+            }
+        }
+    }
+
+    /**
+     * Переносит план незакрытой строки на указанную дату.
+     *
+     * Прежний план сохраняет в originalPlannedDate по тому же правилу,
+     * что и перепланировщик графика: повторный перенос не должен
+     * перезаписывать исходную дату плановика датой предыдущего сдвига,
+     * иначе колонка «изначально планировалась» показала бы цепочку
+     * сдвигов вместо настоящего плана.
+     *
+     * Исполнителя строка не меняет: перенос срока — не переназначение,
+     * работу по-прежнему закрывает тот, кому её назначали.
+     */
+    private void shiftRowTo(OrderScheduleRow row, LocalDate target, AppUser performer) {
+
+        LocalDate planned = row.getPlannedDate();
+
+        if (planned == null || planned.equals(target)) {
+            return;
+        }
+
+        if (row.getOriginalPlannedDate() == null) {
+            row.setOriginalPlannedDate(planned);
+        }
+
+        row.setPlannedDate(target);
+        scheduleRowRepo.save(row);
+    }
+
     /**
      * Руководящая ли роль: ей принадлежат личные операции получения
      * комплектации подразделения.
@@ -2304,6 +2534,92 @@ public class WorkshopDistributionService {
      * в списке до конца дня.
      */
     /**
+     * Работы групповых ЗНП пользователя за указанный период.
+     *
+     * Перегрузка для пользовательского периода — используется панелью
+     * фильтра и переключателем режимов.
+     */
+    @Transactional(readOnly = true)
+    public List<AssignedOperationView> findMyGroupOperations(
+            AppUser user, LocalDate from, LocalDate to) {
+        if (user == null || user.getId() == null) {
+            return List.of();
+        }
+
+        List<OrderScheduleRow> rows;
+        List<Long> poolUnitIds;
+
+        if (isUnitPool(user)) {
+            List<Long> poolScope = staffService.unitScope(user);
+
+            if (poolScope.isEmpty()) {
+                return List.of();
+            }
+
+            rows = scheduleRowRepo.findGroupAllForUnits(
+                    ScheduleRowStatus.CONFIRMED, poolScope,
+                    GROUP_KINDS, from, to
+            );
+            poolUnitIds = poolScope;
+        } else {
+            rows = scheduleRowRepo.findGroupForExecutor(
+                    user.getId(), GROUP_KINDS, from, to
+            );
+            poolUnitIds = List.of();
+        }
+
+        List<AssignedOperationView> result = new ArrayList<>(
+                groupAssigned(
+                        rows,
+                        null,
+                        false,
+                        poolUnitIds,
+                        serialService.resolveAttachedCells(rows)
+                )
+        );
+
+        /*
+         * Личные работы руководителя по групповым ЗНП («Получение
+         * подсборок для группового ЗНП», передача ячеек в БТК) — те же
+         * строки, что в обычной половине у руководителя, но с групповым
+         * основанием. Здесь они не дубликат: обычная половина отсекает
+         * их по виду основания, поэтому без этого шага работа пропала
+         * бы из обоих списков.
+         */
+        if (!isUnitPool(user) && isSupervisor(user)) {
+            List<Long> scope = staffService.unitScope(user);
+
+            if (!scope.isEmpty()) {
+                List<OrderScheduleRow> ownRows =
+                        scheduleRowRepo.findOwnGroupKitReceipt(
+                                ScheduleRowStatus.CONFIRMED,
+                                scope,
+                                NON_DISTRIBUTION_TYPE_CODES,
+                                SUPERVISOR_EXECUTOR_ROLE_CODES,
+                                GROUP_KINDS,
+                                from,
+                                to
+                        );
+
+                result.addAll(groupAssigned(
+                        ownRows,
+                        null,
+                        true,
+                        scope,
+                        serialService.resolveAttachedCells(ownRows)
+                ));
+            }
+        }
+
+        result.sort((a, b) -> {
+            int date = a.plannedDate().compareTo(b.plannedDate());
+            return date != 0 ? date : a.title().compareTo(b.title());
+        });
+
+        return result;
+    }
+
+    /**
      * Работы групповых ЗНП пользователя — цифра его половины списка.
      *
      * Граница повторяет {@link #findMyGroupOperations} буквально: для
@@ -2321,6 +2637,20 @@ public class WorkshopDistributionService {
         LocalDate from = LocalDate.now();
         LocalDate to = from.plusDays(HORIZON_DAYS);
 
+        return countMyGroupOperations(user, from, to);
+    }
+
+    /**
+     * Работы групповых ЗНП пользователя за указанный период — цифра.
+     *
+     * Перегрузка для пользовательского периода.
+     */
+    @Transactional(readOnly = true)
+    public long countMyGroupOperations(AppUser user, LocalDate from, LocalDate to) {
+        if (user == null || user.getId() == null) {
+            return 0L;
+        }
+
         if (isUnitPool(user)) {
             List<Long> poolScope = staffService.unitScope(user);
 
@@ -2337,9 +2667,9 @@ public class WorkshopDistributionService {
             );
         }
 
-        return scheduleRowRepo.countGroupForExecutor(
-                user.getId(), GROUP_KINDS, from, to
-        ) + ownGroupCount(user, from, to);
+        return ownGroupCount(user, from, to)
+                + scheduleRowRepo.countGroupForExecutor(
+                        user.getId(), GROUP_KINDS, from, to);
     }
 
     /*
@@ -2373,14 +2703,16 @@ public class WorkshopDistributionService {
         );
     }
 
+    /**
+     * Работы пользователя за указанный период — цифра.
+     *
+     * Перегрузка для пользовательского периода.
+     */
     @Transactional(readOnly = true)
-    public long countMyOperations(AppUser user) {
+    public long countMyOperations(AppUser user, LocalDate from, LocalDate to) {
         if (user == null || user.getId() == null) {
             return 0L;
         }
-
-        LocalDate from = LocalDate.now();
-        LocalDate to = from.plusDays(HORIZON_DAYS);
 
         /*
          * Бюро входного контроля: цифра должна совпадать со списком,
@@ -2428,6 +2760,23 @@ public class WorkshopDistributionService {
                 from,
                 to
         );
+    }
+
+    /**
+     * Работы пользователя за горизонт — без пользовательского периода.
+     *
+     * Вызывается контроллером при отсутствии параметров фильтра.
+     */
+    @Transactional(readOnly = true)
+    public long countMyOperations(AppUser user) {
+        if (user == null || user.getId() == null) {
+            return 0L;
+        }
+
+        LocalDate from = LocalDate.now();
+        LocalDate to = from.plusDays(HORIZON_DAYS);
+
+        return countMyOperations(user, from, to);
     }
 
     /**
