@@ -38,8 +38,9 @@
 
                     <p>
                         Изделия, возвращённые с контроля БТК. Отметьте
-                        операции своего цеха, которые нужно переделать, —
-                        проведение снимется ровно с них.
+                        операции своего цеха, которые нужно переделать:
+                        проведение снимется с них и со всех проведённых
+                        операций, идущих в техпроцессе после отмеченных.
                     </p>
 
                 </div>
@@ -86,20 +87,29 @@
                             ЗП-2026-005
                         </span>
 
-                        <span class="rework-return__instance"
-                              th:text="'экземпляр ' + (card.instanceIndex + 1)">
-                            экземпляр 1
+                        <!--
+                            Изделие, а не номер экземпляра внутри
+                            позиции: у группового ЗНП несколько карточек
+                            одного заказа имеют один и тот же номер
+                            основания, и различает их только наименование
+                            с номером ячейки или серийника.
+                        -->
+                        <span class="rework-return__item"
+                              th:if="${card.itemLabel != null}"
+                              th:text="${card.itemLabel}">
+                            ЯПР20М — 510200006
                         </span>
 
-                        <span class="rework-return__reason"
-                              th:if="${card.reason != null}"
-                              th:title="${card.controlOperation}">
-                            <strong th:text="${card.controlOperation}">
-                                Контроль БТК
-                            </strong>
-                            <span th:text="${card.reason}">
-                                Не пропаян разъём X2
-                            </span>
+                        <!--
+                            Основание возврата читается одной строкой:
+                            цех видит и этап, на котором изделие
+                            завернули, и то, что переделывать.
+                        -->
+                        <span class="rework-return__return"
+                              th:if="${card.returnLabel != null}"
+                              th:text="${card.returnLabel}">
+                            Вернулось с операции: Контроль ячеек из
+                            производства. Причина: Не пропаян разъём X2
                         </span>
 
                     </div>
@@ -124,19 +134,21 @@
                             <td class="col-mark">
 
                                 <!--
-                                    Отмечать можно только проведённую
-                                    работу своего цеха: незакрытую строку
-                                    снимать нечего, а чужую цех не
-                                    проводит и не закрывает.
+                                    Отмечать можно все строки маршрута
+                                    цеха: проведённые — чтобы снять
+                                    проведение, незакрытые — потому что
+                                    старый порядок БТК уже снял
+                                    проведение, и карточка иначе
+                                    повисает навсегда без чекбоксов.
                                 -->
                                 <input type="checkbox"
                                        name="rowIds"
                                        th:value="${row.id}"
-                                       th:disabled="${row.completedAt == null}"
-                                       th:title="${row.completedAt != null
+                                       th:disabled="${!card.isMarkable(row)}"
+                                       th:title="${card.isMarkable(row)
                                             ? 'Отметить для переделки: '
                                               + row.operation.operationName.name
-                                            : 'Работа ещё не проведена — переделывать нечего'}">
+                                            : 'Отметить нельзя'}">
 
                             </td>
 
@@ -205,26 +217,12 @@
                 -->
                 <div class="rework-return__actions">
 
-                    <label class="rework-return__reason-field"
-                           for="reworkReason">
-                        Причина возврата — обязательна
-                    </label>
-
-                    <input type="text"
+                    <input type="hidden"
                            id="reworkReason"
                            name="reason"
-                           maxlength="500"
-                           autocomplete="off"
-                           placeholder="Что переделывать">
-
-                    <label class="rework-return__cascade"
-                           for="reworkCascade">
-                        <input type="checkbox"
-                               id="reworkCascade"
-                               name="cascade"
-                               value="true">
-                        Зацепить проведённые операции после отмеченных
-                    </label>
+                           th:value="${cards != null and !cards.isEmpty()
+                                     ? cards[0].reason : ''}"
+                           maxlength="500">
 
                     <div class="rework-return__buttons">
 

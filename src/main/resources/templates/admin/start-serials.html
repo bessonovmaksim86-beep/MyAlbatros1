@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="ru"
+      xmlns:th="http://www.thymeleaf.org">
+
+<head>
+    <meta charset="UTF-8">
+
+    <meta name="viewport"
+          content="width=device-width, initial-scale=1">
+
+    <title>Стартовые номера серий</title>
+
+    <link rel="stylesheet"
+          th:href="@{/technology/css/technology.css}">
+
+    <link rel="stylesheet"
+          th:href="@{/technology/css/common.css}">
+
+    <link rel="stylesheet"
+          th:href="@{/admin/css/admin.css}">
+</head>
+
+<body>
+
+<div class="app-shell">
+
+    <aside th:replace="~{admin/fragments/layout
+            :: sidebar('startSerials')}">
+    </aside>
+
+    <main class="main">
+
+        <header th:replace="~{admin/fragments/layout
+                :: topbar}">
+        </header>
+
+        <div class="page-content admin-page">
+
+            <div class="page-head">
+
+                <div>
+
+                    <h1>Стартовые номера серий</h1>
+
+                    <p>
+                        Серийные номера в прежней базе уже выданы, и новая
+                        база не вправе их задваивать. Здесь задают номер, с
+                        которого начинается выдача по каждому классификатору.
+                        Пустое поле — ряд начинается с единицы.
+                    </p>
+
+                    <p>
+                        Стартовый номер — нижняя граница выдачи, а не
+                        положение счётчика: занятые номера реестра остаются
+                        занятыми. Значение ниже пройденного максимума не
+                        ошибка, а избыточность — система выдаст следующий за
+                        максимумом номер.
+                    </p>
+                </div>
+
+                <span class="badge"
+                      th:text="${'Изделий в справочнике: ' + totalCount}">
+                    Изделий в справочнике: 312
+                </span>
+            </div>
+
+            <div class="alert success"
+                 th:if="${successMessage}"
+                 th:text="${successMessage}">
+            </div>
+
+            <div class="alert danger"
+                 th:if="${errorMessage}"
+                 th:text="${errorMessage}">
+            </div>
+
+            <section class="card">
+
+                <div class="card-head">
+
+                    <div>
+
+                        <h2>Стартовый номер по изделиям</h2>
+
+                        <p>
+                            У прибора, ячейки и системы ряд своего
+                            классификатора: 888800122 → 888800123. У датчиков
+                            ряд сквозной на весь род, поэтому разным
+                            классификаторам одного рода ставят один старт —
+                            действует наибольший из заданных.
+                        </p>
+                    </div>
+
+                    <div class="field admin-start-serials-filter">
+
+                        <label for="startSerialsFilter">
+                            Фильтр по коду или наименованию
+                        </label>
+
+                        <input id="startSerialsFilter"
+                               type="search"
+                               autocomplete="off"
+                               placeholder="1212, ЯПР20, ДУУ2М">
+                    </div>
+                </div>
+
+                <div class="card-body">
+
+                    <p class="empty-inline"
+                       th:if="${#lists.isEmpty(rows)}">
+                        В справочнике классификаторов нет ни одного изделия.
+                    </p>
+
+                    <div class="table-wrap"
+                         th:unless="${#lists.isEmpty(rows)}">
+
+                        <table id="startSerialsTable">
+                            <thead>
+                            <tr>
+                                <th>Изделие</th>
+                                <th>Область нумерации</th>
+                                <th>Занято до</th>
+                                <th>Следующий номер</th>
+                                <th>Стартовый номер</th>
+                            </tr>
+                            </thead>
+
+                            <tbody>
+                            <tr th:each="row : ${rows}"
+                                th:attr="data-search=${row.searchText}"
+                                class="admin-start-serials-row">
+
+                                <td>
+                                    <strong class="admin-start-serials-code"
+                                            th:text="${row.code}">
+                                        1212
+                                    </strong>
+
+                                    <span class="badge admin-start-serials-type"
+                                          th:text="${row.productType.displayName}">
+                                        Ячейка
+                                    </span>
+
+                                    <small class="field-hint"
+                                           th:text="${row.displayName}">
+                                        Ячейка ЯПР20
+                                    </small>
+                                </td>
+
+                                <td>
+                                    <span th:text="${row.numberingLabel}">
+                                        классификатор
+                                    </span>
+
+                                    <!--
+                                        Чужой старт по роду: строка показывает
+                                        не своё значение, и без подписи
+                                        администратор искал бы причину в поле
+                                        соседнего классификатора.
+                                    -->
+                                    <small class="admin-start-serials-warn"
+                                           th:if="${row.startInherited}"
+                                           th:text="${
+                                               'действует старт рода: '
+                                               + row.effectiveStart
+                                           }">
+                                        действует старт рода: 130
+                                    </small>
+                                </td>
+
+                                <td>
+                                    <span th:if="${row.maxUsedSerial > 0}"
+                                          th:text="${row.maxUsedSerial}">
+                                        129
+                                    </span>
+
+                                    <span th:unless="${row.maxUsedSerial > 0}"
+                                          class="empty-inline">
+                                        ряд не начат
+                                    </span>
+                                </td>
+
+                                <td>
+                                    <strong class="admin-start-serials-next"
+                                            th:text="${row.nextSerial}">
+                                        130
+                                    </strong>
+                                </td>
+
+                                <td>
+                                    <!--
+                                        Форма целиком внутри ячейки: tr не
+                                        допускает form-контейнера, а значение
+                                        здесь одно, и отдельная кнопка рядом с
+                                        полем читается яснее, чем отложенная
+                                        отправка всей таблицы.
+                                    -->
+                                    <form class="admin-start-serials-form"
+                                          th:action="@{/admin/start-serials/save}"
+                                          method="post">
+
+                                        <input th:if="${_csrf != null}"
+                                               type="hidden"
+                                               th:name="${_csrf.parameterName}"
+                                               th:value="${_csrf.token}">
+
+                                        <input type="hidden"
+                                               name="classifierId"
+                                               th:value="${row.id}">
+
+                                        <input type="number"
+                                               name="startSerial"
+                                               class="admin-start-serials-input"
+                                               min="1"
+                                               max="99999"
+                                               step="1"
+                                               inputmode="numeric"
+                                               placeholder="не задан"
+                                               th:value="${row.startSerial}">
+
+                                        <button type="submit"
+                                                class="btn primary compact">
+                                            Сохранить
+                                        </button>
+                                    </form>
+
+                                    <small class="admin-start-serials-warn"
+                                           th:if="${row.startBelowUsed}"
+                                           th:text="${
+                                               'ряд уже дошёл до '
+                                               + row.maxUsedSerial
+                                               + ' — старт не сработает'
+                                           }">
+                                        ряд уже дошёл до 129 — старт не сработает
+                                    </small>
+                                </td>
+                            </tr>
+                            </tbody>
+                        </table>
+                    </div>
+
+                </div>
+
+            </section>
+
+        </div>
+    </main>
+</div>
+
+<th:block th:replace="~{admin/fragments/layout
+        :: commonScripts}">
+</th:block>
+
+<script>
+    /*
+     * Фильтр только клиентский: перечень читается одной выборкой, и
+     * обращение к серверу на каждый набранный символ сделало бы страницу
+     * медленнее, чем прокрутка списка глазами.
+     */
+    document.addEventListener("input", function (event) {
+
+        var filter = event.target.closest("#startSerialsFilter");
+
+        if (!filter) {
+            return;
+        }
+
+        var term = filter.value.trim().toLowerCase();
+
+        document
+            .querySelectorAll(".admin-start-serials-row")
+            .forEach(function (row) {
+
+                var text = row.dataset.search || "";
+
+                row.hidden = term !== "" && !text.includes(term);
+            });
+    });
+</script>
+
+</body>
+</html>

@@ -90,8 +90,10 @@ class SuccessorDateShiftTest {
     @Mock private TechProcessOperationControlParamRepository controlParamLinkRepo;
     @Mock private ControlReturnService controlReturnService;
     @Mock private ReworkReturnService reworkReturnService;
+    @Mock private InstanceReworkService instanceReworkService;
     @Mock private UnitHandoverService handoverService;
     @Mock private WorkingDaysCalculator workingDays;
+    @Mock private SerialMovementJournalService journal;
 
     private WorkshopDistributionService service;
     private AppUser performer;
@@ -102,7 +104,8 @@ class SuccessorDateShiftTest {
                 scheduleRowRepo, bindingRepo, techProcessRepo,
                 absenceRepo, userRepository, staffService, serialService,
                 routeNodeRepo, controlParamLinkRepo, controlReturnService,
-                reworkReturnService, handoverService, workingDays
+                reworkReturnService, instanceReworkService, handoverService,
+                workingDays, journal
         );
 
         performer = new AppUser();

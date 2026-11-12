@@ -2,6 +2,7 @@ package ru.company.production.repository;
 
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
@@ -199,6 +200,71 @@ public interface ProductClassifierRepository extends JpaRepository<ProductClassi
 
     boolean existsByCode(Integer code);
     boolean existsByCodeAndIdNot(Integer code, Long id);
+
+    /**
+     * Ставит (или снимает) стартовый номер ряда классификатора
+     * (миграция V86).
+     *
+     * Точечный UPDATE, а не сохранение сущности: поле служебное, и
+     * запись всей сущности зацепила бы состав и состав системы, которые
+     * администратор этого раздела не видит и менять не вправе.
+     *
+     * Null допустим и означает «ряд начинается с единицы» — так же
+     * читает пустое значение {@code ProductClassifier#getStartSerialOrOne}.
+     */
+    @Modifying(flushAutomatically = true, clearAutomatically = true)
+    @Query("""
+            update ProductClassifier classifier
+            set classifier.startSerial = :startSerial
+            where classifier.id = :id
+            """)
+    int updateStartSerial(
+            @Param("id") Long id,
+            @Param("startSerial") Integer startSerial
+    );
+
+    /**
+     * Классификаторы для раздела «Стартовые номера серий» (миграция
+     * V86).
+     *
+     * Род датчика подтянут fetch-join'ом: строка таблицы подписывает
+     * область нумерации наименованием рода, а open-in-view выключен —
+     * без fetch шаблон упал бы на ленивой ссылке.
+     *
+     * Порядок — тип, затем код: раздел перечисляет сотни изделий, и
+     * сгруппированные по виду изделия читаются быстрее, чем перемешанный
+     * по коду список.
+     */
+    @Query("""
+            select classifier
+            from ProductClassifier classifier
+            left join fetch classifier.sensorCatalog
+            order by classifier.productType asc, classifier.code asc
+            """)
+    List<ProductClassifier> findAllForStartSerials();
+
+    /**
+     * Наибольший стартовый номер среди классификаторов одного рода
+     * датчиков (миграция V86).
+     *
+     * У датчиков ряд сквозной на весь род (V27): несколько
+     * классификаторов выдают номера из одной последовательности, и старт
+     * обязан быть общий — наибольший из заданных. Иначе классификатор с
+     * меньшим стартом выдал бы номер, который сосед по роду уже считает
+     * пройденным, и задвоенного номера не поймал бы даже уникальный ключ
+     * (он запрещает повтор, а не возвращает ленту назад).
+     *
+     * null — старт не задан ни у одного классификатора рода, то есть
+     * ряд начинается с единицы.
+     */
+    @Query("""
+            select max(classifier.startSerial)
+            from ProductClassifier classifier
+            where classifier.sensorCatalog.id = :sensorCatalogId
+            """)
+    Integer findMaxStartSerialBySensorCatalog(
+            @Param("sensorCatalogId") Long sensorCatalogId
+    );
 
     /**
      * Ячейки классификатора, в наименовании которых встречается

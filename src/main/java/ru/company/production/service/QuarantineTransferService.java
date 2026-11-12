@@ -22,6 +22,7 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -213,7 +214,44 @@ public class QuarantineTransferService {
     @Transactional(readOnly = true)
     public Set<String> findAcceptedNumbers() {
         return new LinkedHashSet<>(
-                transferRepository.findAcceptedFullNumbers());
+                transferRepository.findAcceptedFullNumbers());        
+    }
+
+    /**
+     * Номера, лежащие в изоляторе брака СЕЙЧАС: карточки БВК плюс
+     * незакрытые перемещения, за вычетом тех, что склад уже принял
+     * обратно.
+     *
+     * Единый источник границы для всех складских перечней — реестра
+     * наличия, комплектования подсборок и привязки ячейки к ЗНП. Номер
+     * в изоляторе на полке не лежит, и предлагать его кладовщику или
+     * проводить в заказ значило бы разрешить вложить в изделие
+     * забракованное: вывод из изолятора даётся только подтверждённой
+     * приёмкой склада, а не вводом номера.
+     *
+     * Принятые перемещения вычитаются, но вычитание не имеет права
+     * снять незакрытую строку: один номер могли браковать дважды, и
+     * тогда старая принятая строка не отменяет того, что позицию снова
+     * убрали с полки.
+     */
+    @Transactional(readOnly = true)
+    public Set<String> findActiveQuarantineNumbers() {
+
+        Set<String> pending = findPendingNumbers();
+
+        Set<String> numbers = inputControlService
+                .findQuarantineCells(QuarantineFilter.empty()).stream()
+                .map(QuarantineCellView::getFullNumber)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toCollection(LinkedHashSet::new));
+
+        numbers.addAll(pending);
+
+        findAcceptedNumbers().stream()
+                .filter(number -> !pending.contains(number))
+                .forEach(numbers::remove);
+
+        return numbers;
     }
 
     /* ============================================================

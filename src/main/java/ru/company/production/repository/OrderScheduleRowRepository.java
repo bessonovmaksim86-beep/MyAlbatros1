@@ -2315,4 +2315,85 @@ public interface OrderScheduleRowRepository
     long countCompletedByProductionOrderId(
             @Param("productionOrderId") Long productionOrderId
     );
+
+    /*
+     * ============================================================
+     * Прохождение техпроцесса заказом — сводка поиска
+     * ============================================================
+     *
+     * Сводка поиска обязана показать не только свойства заказа, но и
+     * где заказ сейчас идёт: найденный по номеру групповой ЗНП ищут
+     * именно затем, чтобы понять, на какой работе стоит группа ячеек
+     * и кто за неё отвечает.
+     *
+     * Скалярная проекция, а не сущности: строка печатает наименование
+     * операции, дату и фамилию исполнителя, а open-in-view выключен —
+     * fetch join ради четырёх колонок потянул бы техпроцесс, основание
+     * и рабочее место.
+     *
+     * Порядок — шаг маршрута, затем экземпляр: сервис идёт по строкам
+     * сверху вниз, сворачивая их в операции, и первой встречает раннюю
+     * работу. Без сортировки по seq операцией заказа оказалась бы
+     * произвольная работа маршрута.
+     *
+     * Ограничение по статусу строки не ставится: сводка показывает
+     * заказ так, как его видит цех, а черновик плана для заказа,
+     * взятого в работу, уже проведён в CONFIRMED.
+     */
+    @Query("""
+            select row.seq                  as seq,
+                   row.instanceIndex        as instanceIndex,
+                   row.plannedDate          as plannedDate,
+                   row.completedAt          as completedAt,
+                   operation.id             as operationId,
+                   operationName.name       as operationName,
+                   executor.fullName        as executorName,
+                   executor.username        as executorLogin,
+                   rowUnit.name             as unitName,
+                   operationUnit.name       as operationUnitName
+            from OrderScheduleRow row
+            join row.operation operation
+            join operation.operationName operationName
+            left join row.organizationUnit rowUnit
+            left join operation.organizationUnit operationUnit
+            left join row.executor executor
+            where row.productionOrder.id = :productionOrderId
+            order by row.seq asc, row.instanceIndex asc
+            """)
+    List<RouteStepRow> findRouteStepsOfProductionOrder(
+            @Param("productionOrderId") Long productionOrderId
+    );
+
+    /**
+     * Одна строка маршрута заказа: шаг, экземпляр, работа и её адрес.
+     *
+     * Экземпляр нужен, чтобы посчитать прогресс: сколько ячеек закрыло
+     * шаг и сколько их запланировано.
+     */
+    interface RouteStepRow {
+
+        Integer getSeq();
+
+        Integer getInstanceIndex();
+
+        LocalDate getPlannedDate();
+
+        java.time.LocalDateTime getCompletedAt();
+
+        Long getOperationId();
+
+        String getOperationName();
+
+        /** Фамилия исполнителя; пустая, если работа никем не занята. */
+        String getExecutorName();
+
+        /** Логин — запасная подпись, если ФИО в справочнике пустое. */
+        String getExecutorLogin();
+
+        /** Подразделение строки плана — адрес, назначенный распределением. */
+        String getUnitName();
+
+        /** Подразделение самой операции — запасной адрес. */
+        String getOperationUnitName();
+    }
 }

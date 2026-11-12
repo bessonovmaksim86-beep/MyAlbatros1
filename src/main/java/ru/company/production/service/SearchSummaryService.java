@@ -15,6 +15,7 @@ import ru.company.production.entity.WorkPlace;
 import ru.company.production.repository.CellReceivingBatchRepository;
 import ru.company.production.repository.CustomerOrderRepository;
 import ru.company.production.repository.OperationRepository;
+import ru.company.production.repository.OrderScheduleRowRepository;
 import ru.company.production.repository.ProductClassifierRepository;
 import ru.company.production.repository.ProductSerialRepository;
 import ru.company.production.repository.ProductionOrderRepository;
@@ -22,9 +23,17 @@ import ru.company.production.repository.SerialProductionOrderRepository;
 import ru.company.production.repository.TechProcessRepository;
 import ru.company.production.repository.WorkPlaceRepository;
 import ru.company.production.repository.ZnpCellLinkView;
+import ru.company.production.repository.ZnpCellPassageView;
 
+import java.math.BigDecimal;
+import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.TreeMap;
 
 /**
  * Общая сводка по найденному объекту для поиска.
@@ -54,12 +63,16 @@ public class SearchSummaryService {
     private final ProductSerialRepository productSerialRepository;
     private final CellReceivingBatchRepository receivingBatchRepository;
     private final SerialProductionOrderRepository serialOrderRepository;
+    private final OrderScheduleRowRepository scheduleRowRepository;
 
     /*
      * Паспорт изделия нужен сводке только как признак: есть ли у номера
      * история перемещений и, значит, стоит ли давать ссылку на неё.
      */
     private final ProductPassportService passportService;
+
+    private static final DateTimeFormatter RU_DATE =
+            DateTimeFormatter.ofPattern("dd.MM.yyyy");
 
     /**
      * Сводка по объекту или null, если категория неизвестна либо
@@ -276,6 +289,20 @@ public class SearchSummaryService {
             return null;
         }
 
+        /*
+         * Групповые ЗНП (V38): заказ ведётся по техпроцессу, и
+         * пользователю важнее видеть, где сейчас стоит группа ячеек
+         * и как каждая из них прошла маршрут, чем пустые поля
+         * «Заказ покупателя» / «Родительский заказ».
+         */
+        if (order.isGroupZnp()) {
+            return productionOrderGroupZnp(id, order);
+        }
+
+        /*
+         * Обычный выпуск (ЗП) или комплектование — показываем
+         * стандартные поля.
+         */
         List<SearchSummaryView.Field> fields = new ArrayList<>();
 
         add(fields, "Номер заказа", order.getNumber());
@@ -284,40 +311,13 @@ public class SearchSummaryService {
         add(fields, "Родительский заказ", order.getParentOrderNumber());
         add(fields, "Операция", order.getOperationName());
 
-        /*
-         * Внесённые ячейки — фактический состав заказ-комплектующего.
-         *
-         * Диспетчер находит заказ по номеру и хочет видеть не только
-         * работу, но и чем она закрыта: номер ячейки вносит кладовщик,
-         * и без него сводка обещала бы состав, которого не показать.
-         */
         List<ZnpCellLinkView> cells =
                 serialOrderRepository.findCellsByOrderId(id);
 
         add(fields, "Номер ячейки", attachedCellNumbers(cells));
 
-        add(fields, "Техпроцесс", blankToNull(order.getTechProcessCode()));
         add(fields, "Дата заказа", order.getFormattedOrderDate());
         add(fields, "Срок исполнения", order.getFormattedDueDate());
-
-        /*
-         * Изделие и количество есть только у групповых и ремонтных
-         * заказов; у выпуска и комплектования их нет, и пустые строки
-         * в сводке были бы шумом — add() их отбрасывает по значению.
-         *
-         * Комплектование количества не задаёт (V37): его объём —
-         * сколько ячеек вошло в заказ. Ноль не печатают: пустой состав
-         * означает «ещё не укомплектован», а не «заявлено ноль».
-         */
-        if (order.isKindApplicable()) {
-            add(fields, "Изделие заказа", blankToNull(
-                    order.getClassifierLabel()));
-            add(fields, "Количество", order.getQuantity() != null
-                    ? order.getFormattedQuantity()
-                    : cells.isEmpty()
-                            ? null
-                            : String.valueOf(cells.size()));
-        }
 
         return new SearchSummaryView(
                 "productionorder",
@@ -326,6 +326,555 @@ public class SearchSummaryService {
                 order.getStatusDisplayName(),
                 fields
         );
+    }
+
+    /*
+     * ============================================================
+     * Групповой ЗНП — сводка поиска с техпроцессом
+     * ============================================================
+     *
+     * Заказ вида GROUP_CELL, GROUP_DEVICE, CELL_REPAIR или
+     * SUBASSEMBLY_REPAIR ведётся по техпроцессу (V40), и для него
+     * важно показать не пустые поля заказа покупателя, а:
+     *
+     *   1. Текущее место — где группа ячеек стоит прямо сейчас;
+     *   2. Представление изделия — номер и наименование;
+     *   3. Пошаговое прохождение ТП — каждая операция с прогрессом
+     *      ячеек, исполнителем, планом и фактом.
+     *
+     * Сводка строится по строкам плана OrderScheduleRow (V56), где
+     * каждая строка = один экземпляр изделия на одной операции.
+     * Запрос агрегирует данные по seq (шагу маршрута) и instanceIndex
+     * (экземпляру), чтобы построить представление изделия с его
+     * прохождением.
+     *
+     * ЕДИНЫЙ ЗАПРОС ЯЧЕЕК (V101). Раньше сводка вызывала два разных
+     * запроса: findCellsByOrderId (только номер) и findRouteStepsOf...
+     * (план). Теперь findPassageCellsByOrderId отдаёт номер, наименование,
+     * тип изделия и отметку готовности cellReadyAt — это всё, что нужно
+     * для kindLabel и itemLabel.
+     *
+     * СТРОКА ПОДПИСИ "—". Выводить "—" когда нечего показать — значит
+     * притвориться, что данные есть. Поэтому пустое значение всегда
+     * превращается в null, а null означает «данных нет», а не «прочерк».
+     */
+    private SearchSummaryView productionOrderGroupZnp(
+            Long orderId, ProductionOrder order) {
+
+        List<SearchSummaryView.Field> fields = new ArrayList<>();
+
+        add(fields, "Номер заказа", order.getNumber());
+        add(fields, "Вид заказа", order.getZnpKindDisplayName());
+        add(fields, "Дата заказа", order.getFormattedOrderDate());
+        add(fields, "Срок исполнения", order.getFormattedDueDate());
+
+        if (order.getProductClassifier() != null) {
+            add(fields, "Изделие заказа", order.getClassifierLabel());
+        }
+
+        add(fields, "Количество",
+                order.getQuantity() != null
+                        ? order.getFormattedQuantity()
+                        : null);
+
+        /*
+         * Состав заказа — ЕДИНЫЙ ЗАПРОС с полными реквизитами.
+         *
+         * findPassageCellsByOrderId отдаёт номер, наименование, тип
+         * изделия и отметку готовности. Порядок — по моменту внесения,
+         * поэтому i-я ячейка = экземпляр плана i.
+         */
+        List<ZnpCellPassageView> cells =
+                serialOrderRepository.findPassageCellsByOrderId(orderId);
+
+        add(fields, "Внесено ячеек",
+                cells.isEmpty() ? null
+                        : String.valueOf(cells.size()));
+
+        /*
+         * Строка плана — один запрос на все данные.
+         *
+         * findRouteStepsOfProductionOrder отдаёт seq, экземпляр,
+         * операцию, дату, исполнителя, подразделение — всё для
+         * построения текущего места и проходов изделий.
+         */
+        List<OrderScheduleRowRepository.RouteStepRow> allSteps =
+                scheduleRowRepository
+                        .findRouteStepsOfProductionOrder(orderId);
+
+        /*
+         * Текущее место — где позиции стоят прямо сейчас.
+         */
+        SearchSummaryView.CurrentLocation currentLocation =
+                buildCurrentLocation(allSteps);
+
+        /*
+         * Матрица прохождения ТП: строки = операции, колонки = ячейки.
+         */
+        List<SearchSummaryView.OperationPassage> operationPassages =
+                buildOperationPassagesMatrix(cells, allSteps);
+
+        /*
+         * Сводка техпроцесса: код, изделие, сколько работ проведено.
+         */
+        SearchSummaryView.TechProcessSummary tps =
+                buildTechProcessSummary(order, operationPassages);
+
+        return new SearchSummaryView(
+                "productionorder",
+                order.getNumber(),
+                "Заказ на производство",
+                order.getStatusDisplayName(),
+                fields,
+                null,
+                null,
+                null,
+                currentLocation,
+                operationPassages,
+                tps
+        );
+    }
+
+    /*
+     * Текущее место: подразделение и работа, где стоит большинство
+     * ячеек группы.
+     *
+     * Принимает строки плана, а не заказ — они уже загружены единым
+     * запросом, повторный вызов был бы лишним обращением к БД.
+     */
+    private SearchSummaryView.CurrentLocation buildCurrentLocation(
+            List<OrderScheduleRowRepository.RouteStepRow> steps) {
+
+        if (steps.isEmpty()) {
+            return null;
+        }
+
+        /*
+         * Группируем незакрытые строки по работе: считаем, сколько
+         * экземпляров на каждой. Работа с максимумом экземпляров —
+         * текущее место.
+         */
+        Map<String, List<OrderScheduleRowRepository.RouteStepRow>>
+                byWork = new LinkedHashMap<>();
+
+        for (OrderScheduleRowRepository.RouteStepRow row : steps) {
+            if (row.getCompletedAt() != null) {
+                continue;
+            }
+
+            String key = row.getOperationName() + "|"
+                    + blankToNull(row.getUnitName())
+                    + "|" + blankToNull(row.getOperationUnitName());
+
+            byWork.computeIfAbsent(key, k -> new ArrayList<>())
+                    .add(row);
+        }
+
+        if (byWork.isEmpty()) {
+            return null;
+        }
+
+        /*
+         * Работа с максимумом экземпляров.
+         */
+        Map.Entry<String, List<OrderScheduleRowRepository.RouteStepRow>>
+                leading = null;
+
+        for (Map.Entry<String, List<OrderScheduleRowRepository.RouteStepRow>> entry : byWork.entrySet()) {
+            if (leading == null
+                    || entry.getValue().size() > leading.getValue().size()) {
+                leading = entry;
+            }
+        }
+
+        if (leading == null) {
+            return null;
+        }
+
+        List<OrderScheduleRowRepository.RouteStepRow> leadingRows
+                = leading.getValue();
+        String unitName = blankToNull(leadingRows.get(0).getUnitName());
+        if (unitName == null) {
+            unitName = blankToNull(
+                    leadingRows.get(0).getOperationUnitName());
+        }
+
+        String operationName = leadingRows.get(0).getOperationName();
+        long count = leadingRows.size();
+
+        String description = unitName != null
+                ? unitName + " (" + operationName + " — " + count + " шт.)"
+                : operationName + " — " + count + " шт.";
+
+        /*
+         * Если позиции разбросаны по нескольким работам — подсказка.
+         */
+        String others = null;
+        if (byWork.size() > 1) {
+            StringBuilder sb = new StringBuilder();
+            for (Map.Entry<String, List<OrderScheduleRowRepository.RouteStepRow>> entry : byWork.entrySet()) {
+                if (sb.length() > 0) {
+                    sb.append("; ");
+                }
+                String[] parts = entry.getKey().split("\\|");
+                String opName = parts[0];
+                String u = blankToNull(parts[1]);
+                if (u == null) {
+                    u = blankToNull(parts[2]);
+                }
+                String label = u != null
+                        ? u + " (" + opName + ")"
+                        : opName;
+                sb.append(label).append(" — ")
+                        .append(entry.getValue().size());
+            }
+            others = "Позиции разбросаны: " + sb.toString();
+        }
+
+        return new SearchSummaryView.CurrentLocation(
+                unitName, description, others);
+    }
+
+    /*
+     * Матрица прохождения техпроцесса: строка = работа маршрута,
+     * колонки = внесённые в заказ ячейки.
+     *
+     * Строки идут в порядке маршрута: запрос отсортирован по seq, а
+     * группировка — по LinkedHashMap, поэтому первая встреченная работа
+     * оказывается ранней, а не произвольной.
+     *
+     * Ячейка сопоставляется экземпляру плана по правилу V56: i-я по
+     * внесению ячейка = экземпляр с индексом i. Отдельной связи
+     * «строка плана — серийный номер» в схеме нет, её заменяет
+     * порядок внесения.
+     */
+    private List<SearchSummaryView.OperationPassage> buildOperationPassagesMatrix(
+            List<ZnpCellPassageView> cells,
+            List<OrderScheduleRowRepository.RouteStepRow> allSteps) {
+
+        /*
+         * Матрица без колонек бессмысленна: строки плана есть почти у
+         * любого заказа в работе, а изделий в заказе ещё нет. Пустой
+         * список — сигнал шаблону показать объяснение, а не таблицу
+         * прочерков.
+         */
+        if (cells.isEmpty()) {
+            return List.of();
+        }
+
+        Map<Long, List<OrderScheduleRowRepository.RouteStepRow>>
+                byOperation = new LinkedHashMap<>();
+
+        for (OrderScheduleRowRepository.RouteStepRow row : allSteps) {
+            Long opId = row.getOperationId();
+            if (opId == null) {
+                continue;
+            }
+            byOperation.computeIfAbsent(opId, k -> new ArrayList<>())
+                    .add(row);
+        }
+
+        /*
+         * Порядок обхода важен: колонки матрицы должны идти одинаково
+         * во всех строках, иначе одна ячейка прыгнула бы между
+         * столбцами. TreeMap фиксирует порядок по номеру экземпляра.
+         */
+        Map<Integer, ZnpCellPassageView> cellByInstance = new TreeMap<>();
+
+        for (int i = 0; i < cells.size(); i++) {
+            cellByInstance.put(i, cells.get(i));
+        }
+
+        List<SearchSummaryView.OperationPassage> result =
+                new ArrayList<>(byOperation.size());
+
+        LocalDate today = LocalDate.now();
+
+        for (List<OrderScheduleRowRepository.RouteStepRow> rows
+                : byOperation.values()) {
+            result.add(buildOperationPassage(rows, cellByInstance, today));
+        }
+
+        return result;
+    }
+
+    /*
+     * Одна строка матрицы: работа маршрута и её ячейки.
+     *
+     * Агрегатные поля (исполнитель, план, факт, статус) описывают
+     * работу целиком — так строка читается даже когда ячеек много и
+     * колонки ушли за край экрана.
+     */
+    private SearchSummaryView.OperationPassage buildOperationPassage(
+            List<OrderScheduleRowRepository.RouteStepRow> rows,
+            Map<Integer, ZnpCellPassageView> cellByInstance,
+            LocalDate today) {
+
+        OrderScheduleRowRepository.RouteStepRow first = rows.get(0);
+
+        /*
+         * Ячейки строки считаются первыми: работа закрыта тогда, когда
+         * её провели все внесённые в заказ изделия, а не все строки
+         * плана. Строк плана может быть больше, чем ячеек, — тогда
+         * «проведено» по строкам соврало бы о готовности группы.
+         */
+        List<SearchSummaryView.CellPassage> cells =
+                buildCellPassages(rows, cellByInstance, today);
+
+        int passed = 0;
+        boolean overdue = false;
+
+        for (SearchSummaryView.CellPassage cell : cells) {
+            if (cell.isCompleted()) {
+                passed++;
+            } else if (cell.isOverdue()) {
+                overdue = true;
+            }
+        }
+
+        int total = cells.size();
+        boolean completed = total > 0 && passed == total;
+
+        /*
+         * Исполнитель незакрытой работы важнее исполнителя закрытой:
+         * строка в работе отвечает за группу сейчас.
+         */
+        String executor = "не назначен";
+        boolean assigned = false;
+
+        for (OrderScheduleRowRepository.RouteStepRow r : rows) {
+            String name = executorLabel(r);
+            if (name != null) {
+                assigned = true;
+                if (r.getCompletedAt() == null) {
+                    executor = name;
+                    break;
+                }
+                executor = name;
+            }
+        }
+
+        String statusLabel;
+        String statusModifier;
+
+        if (total == 0) {
+            statusLabel = "нет ячеек";
+            statusModifier = "muted";
+        } else if (completed) {
+            statusLabel = "выполнено";
+            statusModifier = "ok";
+        } else if (overdue) {
+            statusLabel = "просрочено";
+            statusModifier = "danger";
+        } else if (passed > 0) {
+            statusLabel = "частично";
+            statusModifier = "progress";
+        } else if (assigned) {
+            statusLabel = "в работе";
+            statusModifier = "progress";
+        } else {
+            statusLabel = "ожидает";
+            statusModifier = "muted";
+        }
+
+        /*
+         * Факт работы — последний по времени: группа закрывает
+         * работу не одновременно, и важен момент, когда её закрыли.
+         *
+         * Строки плана может быть больше, чем внесённых ячеек:
+         * экземпляр без изделия в заказе остаётся с пустой датой, и
+         * наивный обход споткнулся бы о неё на isAfter().
+         */
+        String actualLabel = "—";
+
+        if (completed) {
+            java.time.LocalDateTime last = null;
+
+            for (OrderScheduleRowRepository.RouteStepRow r : rows) {
+                java.time.LocalDateTime moment = r.getCompletedAt();
+
+                if (moment == null) {
+                    continue;
+                }
+
+                if (last == null || moment.isAfter(last)) {
+                    last = moment;
+                }
+            }
+
+            actualLabel = formatDate(last);
+        }
+
+        return new SearchSummaryView.OperationPassage(
+                first.getOperationName(),
+                unitOf(rows),
+                executor,
+                formatDate(first.getPlannedDate()),
+                actualLabel,
+                completed,
+                overdue,
+                statusLabel,
+                statusModifier,
+                passed,
+                total,
+                cells
+        );
+    }
+
+    /*
+     * Ячейки, прошедшие (или нет) одну работу маршрута.
+     *
+     * Обход идёт по внесённым ячейкам, а не по строкам плана: колонок
+     * должно быть ровно столько, сколько изделий в заказе, иначе
+     * таблица показала бы работы, которых у изделий ещё нет.
+     */
+    private List<SearchSummaryView.CellPassage> buildCellPassages(
+            List<OrderScheduleRowRepository.RouteStepRow> rows,
+            Map<Integer, ZnpCellPassageView> cellByInstance,
+            LocalDate today) {
+
+        Map<Integer, OrderScheduleRowRepository.RouteStepRow>
+                rowByInstance = new HashMap<>();
+
+        for (OrderScheduleRowRepository.RouteStepRow r : rows) {
+            if (r.getInstanceIndex() != null) {
+                rowByInstance.put(r.getInstanceIndex(), r);
+            }
+        }
+
+        List<SearchSummaryView.CellPassage> cells = new ArrayList<>();
+
+        for (Map.Entry<Integer, ZnpCellPassageView> entry
+                : cellByInstance.entrySet()) {
+
+            ZnpCellPassageView cell = entry.getValue();
+            OrderScheduleRowRepository.RouteStepRow row =
+                    rowByInstance.get(entry.getKey());
+
+            boolean completed = row != null && row.getCompletedAt() != null;
+            boolean overdue = row != null && !completed
+                    && row.getPlannedDate() != null
+                    && row.getPlannedDate().isBefore(today);
+
+            cells.add(new SearchSummaryView.CellPassage(
+                    cell.getSerialId(),
+                    entry.getKey() + 1,
+                    cell.getFullNumber(),
+                    cell.getCellReadyAt() != null ? "Ячейка" : "Подсборка",
+                    row == null ? "—" : executorLabelOrDash(row),
+                    row == null ? "—" : formatDate(row.getPlannedDate()),
+                    completed ? formatDate(row.getCompletedAt()) : "—",
+                    completed,
+                    overdue
+            ));
+        }
+
+        return cells;
+    }
+
+    /* ФИО исполнителя строки плана; логин — запасная подпись. */
+    private String executorLabel(OrderScheduleRowRepository.RouteStepRow row) {
+        String name = blankToNull(row.getExecutorName());
+
+        return name != null ? name : blankToNull(row.getExecutorLogin());
+    }
+
+    private String executorLabelOrDash(
+            OrderScheduleRowRepository.RouteStepRow row) {
+
+        String name = executorLabel(row);
+
+        return name == null ? "не назначен" : name;
+    }
+
+    /*
+     * Подразделение работы: адрес строки плана надёжнее подразделения
+     * самой операции — распределение могло назначить другой участок.
+     */
+    private String unitOf(
+            List<OrderScheduleRowRepository.RouteStepRow> rows) {
+
+        for (OrderScheduleRowRepository.RouteStepRow r : rows) {
+            String unit = blankToNull(r.getUnitName());
+            if (unit != null) {
+                return unit;
+            }
+        }
+
+        for (OrderScheduleRowRepository.RouteStepRow r : rows) {
+            String unit = blankToNull(r.getOperationUnitName());
+            if (unit != null) {
+                return unit;
+            }
+        }
+
+        return null;
+    }
+    /*
+     * Сводка техпроцесса: код, изделие, сколько работ проведено.
+     *
+     * Считается по готовым строкам матрицы, а не по строкам плана
+     * напрямую: иначе число в заголовке и галочки в таблице считались
+     * бы по разным правилам, и «7 из 20» против семи строк «выполнено»
+     * выглядело бы ошибкой данных.
+     */
+    private SearchSummaryView.TechProcessSummary buildTechProcessSummary(
+            ProductionOrder order,
+            List<SearchSummaryView.OperationPassage> passages) {
+
+        TechProcess tp = order.getTechProcess();
+        if (tp == null || tp.getCode() == null) {
+            return null;
+        }
+
+        String itemLabel = "—";
+        if (tp.getProductClassifier() != null) {
+            ProductClassifier pc = tp.getProductClassifier();
+            String name = pc.getDisplayName();
+            Integer code = pc.getCode();
+            itemLabel = code + (name != null && !name.isBlank()
+                    ? " " + name : "");
+        }
+
+        /*
+         * Знаменатель — длина маршрута, а не число строк плана: заказ
+         * мог встать в план только частью работ, и «3 из 3» при
+         * двадцати операциях маршрута скрыла бы остальной путь.
+         */
+        int totalOps = tp.getOperations() == null
+                ? passages.size()
+                : Math.max(tp.getOperations().size(), passages.size());
+
+        int passedOps = 0;
+
+        for (SearchSummaryView.OperationPassage passage : passages) {
+            if (passage.isCompleted()) {
+                passedOps++;
+            }
+        }
+
+        String progressLabel = totalOps == 0
+                ? "нет работ"
+                : passedOps + " из " + totalOps + " работ проведено";
+
+        return new SearchSummaryView.TechProcessSummary(
+                tp.getCode(), itemLabel, totalOps,
+                passedOps, progressLabel);
+    }
+
+    /*
+     * ============================================================
+     * Вспомогательные методы
+     * ============================================================
+     */
+
+    private static String formatDate(LocalDate date) {
+        return date == null ? "—" : date.format(RU_DATE);
+    }
+
+    private static String formatDate(java.time.LocalDateTime dt) {
+        if (dt == null) return "—";
+        return dt.format(RU_DATE);
     }
 
     /*

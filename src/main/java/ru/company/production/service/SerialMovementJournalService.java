@@ -603,6 +603,56 @@ public class SerialMovementJournalService {
     }
 
     /**
+     * Цеховая операция проведена по экземпляру изделия (V87).
+     *
+     * Проведение живёт в строке графика ({@code completed_at}), а не в
+     * журнале, и до этого события паспорт обрывался на последнем
+     * ПЕРЕМЕЩЕНИИ: ячейку распределили, исполнитель провёл монтаж — а в
+     * хронологии пусто, потому что номер физически никуда не переезжал.
+     *
+     * Подпись события собирает вызывающий код: только он знает, чем
+     * была работа (наименование операции) и ради какого основания
+     * (выпуск либо заказ покупателя). В журнале отдельной колонки под
+     * справочник операций нет, а заводить её ради одной подписи
+     * значило бы дублировать {@code operations}, который и так остаётся
+     * единственным источником наименований.
+     *
+     * Номер передаётся разрешённым, а не вычисляется здесь: экземпляр
+     * строки графика сопоставляется с серийником только в разделе
+     * распределения (по составу выпуска либо по порядку внесения
+     * ячейки), и перенос этого правила в журнал завёл бы второй
+     * источник правды. Номера ещё нет (выпуск не создан, склад не внёс
+     * ячейку) — вызывающий код не зовёт метод вовсе.
+     */
+    @Transactional
+    public void recordOperationCompleted(String fullNumber,
+                                         Long serialId,
+                                         ProductionOrder order,
+                                         String note,
+                                         AppUser actor,
+                                         LocalDateTime moment) {
+
+        SerialMovementEvent event = newEvent(
+                fullNumber, serialId,
+                SerialMovementType.OPERATION_COMPLETED,
+                moment, actor, null, order, null);
+
+        /*
+         * Состояние копируют по строке реестра: номер вне реестра здесь
+         * невозможен (серийник уже разрезили), но удалённый параллельно
+         * выпуск обязан провести событие, а не оборвать его.
+         */
+        if (serialId != null) {
+            serialRepository.findById(serialId)
+                    .ifPresent(serial -> applySerialState(event, serial));
+        }
+
+        event.setNote(truncate(note, 500));
+
+        journalRepository.save(event);
+    }
+
+    /**
      * Получатель отказался от позиции: она вернулась на склад (V81).
      *
      * Причина попадает в note: без неё возврат выглядел бы как
@@ -630,6 +680,54 @@ public class SerialMovementJournalService {
                 + (reason == null || reason.isBlank() ? "без причины" : reason.trim());
         event.setNote(truncate(note, 500));
 
+        journalRepository.save(event);
+    }
+
+    /**
+     * Возврат с контроля БТК на доработку.
+     *
+     * БТК возвращает проведённую работу цеху — проведение остаётся,
+     * но в паспорте обязана появиться строка: без неё многократная
+     * переделка одного изделия выглядела бы сбоем проведения, а не
+     * серией возвратов с разными причинами.
+     *
+     * Вызывается из {@link ru.company.production.service.ControlReturnService}
+     * на каждую строку экземпляра, чтобы каждая работа цеха получила
+     * свою запись — не только на контролёре.
+     *
+     * Повторный возврат пишется отдельной строкой: тип один, но
+     * причина и момент свои, и паспортом различают первую переделку и
+     * каждую последующую.
+     *
+     * @param fullNumber номер изделия
+     * @param serialId   строка реестра (может быть null)
+     * @param reason     причина возврата — читается в паспорте
+     * @param actor      контролёр БТК
+     * @param moment     момент возврата
+     */
+    @Transactional
+    public void recordReturnedToRework(String fullNumber,
+                                       Long serialId,
+                                       String reason,
+                                       AppUser actor,
+                                       LocalDateTime moment) {
+
+        SerialMovementEvent event = newEvent(
+                fullNumber, serialId,
+                SerialMovementType.RETURNED_TO_REWORK,
+                moment, actor, null, null, null);
+
+        /*
+         * Состояние копируют по строке реестра: у возврата с контроля
+         * номер всегда из реестра, но удалённый параллельно выпуск
+         * обязан провести событие, а не оборвать его.
+         */
+        if (serialId != null) {
+            serialRepository.findById(serialId)
+                    .ifPresent(serial -> applySerialState(event, serial));
+        }
+
+        event.setNote(truncate(reason, 500));
         journalRepository.save(event);
     }
 

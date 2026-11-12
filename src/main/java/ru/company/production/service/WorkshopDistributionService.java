@@ -29,8 +29,7 @@ import ru.company.production.repository.ExecutorDayLoadView;
 import ru.company.production.repository.OpenInstanceRowView;
 import ru.company.production.repository.OrderScheduleRowRepository;
 import ru.company.production.repository.ProductionOrderSerialProjection;
-import ru.company.production.repository.TechProcessOperationControlParamRepository;
-import ru.company.production.repository.TechProcessOperationRepository;
+import ru.company.production.repository.TechProcessOperationControlParamRepository;import ru.company.production.repository.TechProcessOperationRepository;
 import ru.company.production.repository.TechProcessRepository;
 import ru.company.production.repository.UserRepository;
 import ru.company.production.repository.WorkshopStaffBindingRepository;
@@ -144,6 +143,16 @@ public class WorkshopDistributionService {
 
     private final ControlReturnService controlReturnService;
     private final ReworkReturnService reworkReturnService;
+
+    /*
+     * Незавершённая доработка блокирует проведение: признак читается
+     * отсюда и здесь же, где считается кнопка в списке. Разделить их
+     * значило бы разойтись во мнении о том, закрыта ли переделка, — и
+     * получить либо кнопку, которую сервер отвергает, либо работу,
+     * которую нельзя провести после исправления брака.
+     */
+    private final InstanceReworkService instanceReworkService;
+
     private final UnitHandoverService handoverService;
 
     /*
@@ -153,6 +162,14 @@ public class WorkshopDistributionService {
      * подразделения, а не по календарю сдающего цеха.
      */
     private final WorkingDaysCalculator workingDays;
+
+    /*
+     * Проведение работы — событие пути номера (V87): до этого журнал
+     * знал только перемещения, и паспорт обрывался на строке
+     * «Принята подразделением», хотя цех уже проводил монтаж и
+     * контроль.
+     */
+    private final SerialMovementJournalService journal;
 
     /*
      * ============================================================
@@ -2161,6 +2178,29 @@ public class WorkshopDistributionService {
             );
         }
 
+        /*
+         * Возврат с контроля БТК блокирует весь экземпляр, а не только
+         * строку, по которой выставлен сигнал: БТК возвращает изделие
+         * целиком. Пока цех не отметил операции переделки и они не
+         * проведены, закрывать работу нельзя — иначе переделка осталась
+         * бы под повторно закрытой работой и контролёр увидел бы годное
+         * изделие вместо исправленного.
+         *
+         * Проверка держится на сервере по той же причине, что и
+         * зависимость маршрута выше: список мог быть открыт до возврата.
+         * Используется единый признак из InstanceReworkService, чтобы
+         * сервер и интерфейс не расходились во мнении о блокировке.
+         */
+        Set<Long> incompleteRows = instanceReworkService
+                .incompleteRowIds(List.of(row.getId()));
+        if (!incompleteRows.isEmpty()) {
+            throw new IllegalStateException(
+                    "Провести нельзя: позиция на доработке. Работа закроется "
+                            + "после того, как руководитель отметит операции "
+                            + "переделки, они будут распределены и проведены"
+            );
+        }
+
         row.setCompletedAt(java.time.LocalDateTime.now());
         row.setCompletedBy(performer);
 
@@ -2179,6 +2219,20 @@ public class WorkshopDistributionService {
         reworkReturnService.resolveReturns(row.getId(), performer);
 
         scheduleRowRepo.save(row);
+
+        /*
+         * Журнал перемещений (V87): проведение работы — событие пути
+         * номера. До этого журнал знал только перемещения, и паспорт
+         * ячейки обрывался на строке «Принята подразделением»: цех
+         * проводил монтаж и контроль, номер при этом физически никуда
+         * не переезжал — и в хронологии не появлялось ни одной строки.
+         *
+         * Момент берётся из completedAt, а не LocalDateTime.now():
+         * строка графика и её строка в паспорте обязаны нести одну и ту
+         * же дату, иначе «работа закрыта» и «работа проведена»
+         * разошлись бы на секунды, а при повторном чтении — и на минуты.
+         */
+        recordPerformedOperation(row, performer);
 
         /*
          * Автоматическое принятие передачи: приёмка со склада удалена
@@ -2220,6 +2274,62 @@ public class WorkshopDistributionService {
         if (isTransferType(operationTypeCode(row))) {
             shiftSuccessorDate(row, performer);
         }
+    }
+
+    /**
+     * Проведение работы — строка паспорта номера (V87).
+     *
+     * Экземпляр строки графика сам по себе номера не хранит: он
+     * планирует изделие ДО выпуска (V43), а связь восстанавливает
+     * раздел распределения — по составу выпуска для плана заказа
+     * покупателя и по порядку внесения ячейки для группового ЗНП (V56).
+     * Те же два резолвера дают и идентификатор реестра, поэтому
+     * событие подписывается ровно тем номером, который мастер видел
+     * над операцией, а не выдуманным.
+     *
+     * Ни одного, ни другого номера может не оказаться: выпуск ещё не
+     * создан, кладовщик ещё не внёс ячейку. Работа при этом проведена
+     * по-настоящему, но журналу не о чём писать — событие обязано
+     * ссылаться хотя бы на идентификатор или номер
+     * (chk_sme_has_identifier), поэтому строка просто пропускается.
+     */
+    private void recordPerformedOperation(OrderScheduleRow row,
+                                          AppUser performer) {
+
+        String fullNumber = null;
+        Long serialId = null;
+
+        if (row.isProductionOrderBased()) {
+            AttachedCellView cell =
+                    serialService.resolveAttachedCells(List.of(row))
+                            .get(row.getId());
+
+            if (cell != null) {
+                fullNumber = cell.getFullNumber();
+                serialId = cell.getSerialId();
+            }
+        } else {
+            ProductionOrderSerialProjection serial =
+                    serialService.resolve(List.of(row)).get(row.getId());
+
+            if (serial != null) {
+                fullNumber = serial.getFullNumber();
+                serialId = serial.getSerialId();
+            }
+        }
+
+        if (fullNumber == null || fullNumber.isBlank()) {
+            return;
+        }
+
+        journal.recordOperationCompleted(
+                fullNumber,
+                serialId,
+                row.getProductionOrder(),
+                getOperationName(row),
+                performer,
+                row.getCompletedAt()
+        );
     }
 
     /**
@@ -2872,6 +2982,20 @@ public class WorkshopDistributionService {
 
         Set<String> parametrisedNodes = controlParamNodes(rows);
 
+        /*
+         * Строки, чья переделка не завершена: проводить и перемещать
+         * нельзя. Исключение — строки, которые цех уже отметил на
+         * переделку: их повторное проведение и есть закрытие цикла.
+         */
+        List<Long> allRowIds = new ArrayList<>();
+        for (OrderScheduleRow row : rows) {
+            if (row.getId() != null) {
+                allRowIds.add(row.getId());
+            }
+        }
+        Set<Long> incompleteReworkRows = instanceReworkService
+                .incompleteRowIds(allRowIds);
+
         Map<String, List<OrderScheduleRow>> grouped = new LinkedHashMap<>();
 
         for (OrderScheduleRow row : rows) {
@@ -2914,7 +3038,8 @@ public class WorkshopDistributionService {
                     ownWork,
                     buildInstances(
                             group, serialMap, blockers, poolUnitIds, ownWork,
-                            cellMap, parametrisedNodes
+                            cellMap, parametrisedNodes,
+                            incompleteReworkRows
                     ),
                     /*
                      * Главная подпись группы. Пока карта ячеек не
@@ -3275,7 +3400,7 @@ public class WorkshopDistributionService {
     ) {
         return buildInstances(
                 group, serialMap, blockers, poolUnitIds, ownWork,
-                Map.of(), Set.of()
+                Map.of(), Set.of(), Set.of()
         );
     }
 
@@ -3304,6 +3429,32 @@ public class WorkshopDistributionService {
             Map<Long, AttachedCellView> cellMap,
             Set<String> parametrisedNodes
     ) {
+        return buildInstances(
+                group, serialMap, blockers, poolUnitIds, ownWork,
+                cellMap, parametrisedNodes, Set.of()
+        );
+    }
+
+    /*
+     * Тот же сборщик с множеством строк, чей экземпляр возвращён БТК.
+     *
+     * {@code signaledRows} — строки открытого сигнала БТК по всему
+     * экземпляру изделия (см.
+     * {@link ControlReturnService#rowIdsOfSignaledInstances}): пока
+     * цех не решил, какие операции переделывать, позиция не проводится
+     * и не перемещается, поэтому право проведения снимается здесь же,
+     * где считается остальная блокировка.
+     */
+    private List<OperationInstance> buildInstances(
+            List<OrderScheduleRow> group,
+            Map<Long, ProductionOrderSerialProjection> serialMap,
+            Map<Long, InstanceBlocker> blockers,
+            List<Long> poolUnitIds,
+            boolean ownWork,
+            Map<Long, AttachedCellView> cellMap,
+            Set<String> parametrisedNodes,
+            Set<Long> signaledRows
+    ) {
         List<OperationInstance> instances = new ArrayList<>();
 
         for (OrderScheduleRow row : group) {
@@ -3317,6 +3468,9 @@ public class WorkshopDistributionService {
             AttachedCellView cell = cellMap == null
                     ? null
                     : cellMap.get(row.getId());
+            boolean returned = signaledRows != null
+                    && row.getId() != null
+                    && signaledRows.contains(row.getId());
 
             instances.add(new OperationInstance(
                     row.getId(),
@@ -3342,13 +3496,19 @@ public class WorkshopDistributionService {
                      * работ руководителя (ownWork): их план закрепляет за
                      * подразделением, поэтому право считается по границе
                      * подразделения, а не по фамилии исполнителя.
+                     *
+                     * Возврат БТК снимает право: изделие ждёт решения
+                     * цеха, и закрыть его работу нельзя, пока не
+                     * отмечены операции переделки, они не распределены
+                     * и не проведены.
                      */
                     (row.getExecutor() != null
                             || isWarehouseKitting(row)
                             || isPoolRow(row, poolUnitIds)
                             || (ownWork && isSupervisorOwnRow(row)))
                             && row.getCompletedAt() == null
-                            && !blocker.blocked(),
+                            && !blocker.blocked()
+                            && !returned,
                     serial == null ? null : serial.getFullNumber(),
                     /*
                      * Наименование изделия. Для строки выпуска — из
@@ -3376,7 +3536,8 @@ public class WorkshopDistributionService {
                                     row.getOperation() == null
                                             ? null
                                             : row.getOperation().getId()
-                            ))
+                            )),
+                    returned
             ));
         }
 

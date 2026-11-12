@@ -39,6 +39,36 @@ public interface ProductSerialRepository
     );
 
     /**
+     * Занятые максимумы сразу по перечню областей нумерации.
+     *
+     * Раздел стартовых номеров показывает все классификаторы разом, и
+     * запрос на каждый дал бы столько же обращений к базе, сколько
+     * изделий в справочнике (их сотни).
+     *
+     * Пара «ключ → максимум» отдаётся проекцией: области, по которым
+     * номеров ещё нет, в выдачу не попадают, и вызывающий читает это
+     * как отсутствие ключа.
+     */
+    @Query("""
+            select serial.numberingKey as numberingKey,
+                   max(serial.serial)  as maxSerial
+            from ProductSerial serial
+            where serial.numberingKey in :numberingKeys
+            group by serial.numberingKey
+            """)
+    List<NumberingMaxView> findMaxSerialsByNumberingKeys(
+            @Param("numberingKeys") Collection<String> numberingKeys
+    );
+
+    /** Максимум занятой серии одной области нумерации. */
+    interface NumberingMaxView {
+
+        String getNumberingKey();
+
+        Integer getMaxSerial();
+    }
+
+    /**
      * Серийники, выданные в рамках заказа на производство,
      * в порядке позиций выпуска.
      */

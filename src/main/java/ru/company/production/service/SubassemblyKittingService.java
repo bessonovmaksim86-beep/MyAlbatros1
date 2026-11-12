@@ -95,6 +95,13 @@ public class SubassemblyKittingService {
     private final ProductSerialOperationRepository serialOperationRepository;
 
     /*
+     * Перемещения из изолятора брака: для вычитания номеров ячеек
+     * и подсборок, которые числятся в изоляторе и не должны быть
+     * доступны для комплектования.
+     */
+    private final QuarantineTransferService quarantineTransferService;
+
+    /*
      * Передача со склада в подразделение (V81): внесённая в чужой заказ позиция уходит с полки
      * только после подтверждения получателя, поэтому вкладывать её в заказ и оформлять передачу
      * обязан один и тот же шаг — иначе в реестре остались бы номера, которые цех уже увёз.
@@ -286,18 +293,68 @@ public class SubassemblyKittingService {
         );
     }
 
+    /*
+     * Номера, лежащие в изоляторе брака, — общим методом, которым
+     * пользуется и реестр наличия (QuarantineTransferService
+     * .findActiveQuarantineNumbers).
+     *
+     * Раздел обязан вычитать их из свободных перечней: позиция, которую
+     * бюро сняло с полки, на складе больше не лежит, и предложить её
+     * кладовщику значило бы разрешить вложить в заказ забракованное
+     * изделие. Вывод из изолятора — только подтверждённой приёмкой
+     * склада, поэтому граница держится одна для всех складских экранов:
+     * иначе реестр сказал бы «не лежит», а комплектование — «бери».
+     */
+    private Set<String> quarantinedNumbers() {
+        return quarantineTransferService.findActiveQuarantineNumbers();
+    }
+
     /**
      * Свободный складской остаток: принятые складом ячейки, ещё не
      * оформленные ни в один заказ.
      *
      * Отдельный метод, чтобы не дублировать отобра в {@code findOrders}
      * и {@code loadView}.
+     *
+     * Позиции изолятора брака из перечня вычитаются: их нельзя вносить
+     * в заказ, пока склад не принял их обратно.
      */
     private List<SubassemblyKittingCellRow> stockRows() {
 
-        List<ProductSerial> stock = serialRepository.findFreeOnWarehouse();
+        return toCellRows(withoutQuarantine(
+                serialRepository.findFreeOnWarehouse(),
+                quarantinedNumbers()));
+    }
+
+    /**
+     * Позиции, не лежащие в изоляторе брака.
+     *
+     * Сверка по полному номеру: изолятор описан карточками БВК и
+     * строками перемещений, где номер хранится строкой, а не ссылкой на
+     * реестр.
+     *
+     * Множество передаётся параметром, а не считается внутри: перечень
+     * изолятора велик, и раздел, который фильтрует склад и проверяет
+     * ввод одним проведением, обязан читать его один раз.
+     */
+    private static List<ProductSerial> withoutQuarantine(
+            List<ProductSerial> stock,
+            Set<String> quarantined) {
+
+        if (quarantined.isEmpty()) {
+            return stock;
+        }
 
         return stock.stream()
+                .filter(serial -> serial.getFullNumber() == null
+                        || !quarantined.contains(serial.getFullNumber()))
+                .toList();
+    }
+
+    private static List<SubassemblyKittingCellRow> toCellRows(
+            List<ProductSerial> serials) {
+
+        return serials.stream()
                 .map(SubassemblyKittingService::toCellRow)
                 .toList();
     }
@@ -309,12 +366,16 @@ public class SubassemblyKittingService {
      * Приёмка такого заказа и есть перевод подсборки в ячейку, поэтому
      * кладовщику показывают то, что ещё не принято, — принятая ячейка
      * в этом перечне уже не числится.
+     *
+     * Позиции изолятора брака вычитаются: в заказать подсборку, которую
+     * бюро сняло с полки как брак, нельзя — вывод только через приёмку
+     * склада.
      */
-    private List<SubassemblyKittingCellRow> unacceptedStockRows() {
+    private List<SubassemblyKittingCellRow> unacceptedStockRows() {     
 
-        return serialRepository.findUnacceptedCells().stream()
-                .map(SubassemblyKittingService::toCellRow)
-                .toList();
+        return toCellRows(withoutQuarantine(
+                serialRepository.findUnacceptedCells(),
+                quarantinedNumbers()));
     }
 
     /**
@@ -400,18 +461,27 @@ public class SubassemblyKittingService {
      * Тот же отбор, что печатает экран: проверка проведения и перечень
      * на экране обязаны совпадать, иначе кладовщику показали бы ячейку,
      * которую провести не дали бы.
+     *
+     * Изолятор брака вычитан здесь же: поле принимает ручной ввод и
+     * вставку из буфера, поэтому отказ обязан следовать за перечнем, а
+     * не только прятать номер на экране.
      */
-    private List<ProductSerial> allowedStock(ProductionOrder order) {
+    private List<ProductSerial> allowedStock(
+            ProductionOrder order,
+            Set<String> quarantined) {
 
         Long classifierId = order.getProductClassifier() == null
                 ? null
                 : order.getProductClassifier().getId();
 
+        List<ProductSerial> stock = withoutQuarantine(
+                serialRepository.findFreeOnWarehouse(), quarantined);
+
         if (classifierId == null) {
-            return serialRepository.findFreeOnWarehouse();
+            return stock;
         }
 
-        return serialRepository.findFreeOnWarehouse().stream()
+        return stock.stream()
                 .filter(serial -> serial.getProductClassifier() != null
                         && classifierId.equals(
                                 serial.getProductClassifier().getId()))
@@ -496,6 +566,30 @@ public class SubassemblyKittingService {
         }
 
         /*
+         * Изолятор брака: бюро сняло позицию с полки, и на склад она
+         * возвращается только подтверждённой приёмкой перемещения. Поле
+         * ввода номер принимает, поэтому отказ стоит ДО складской
+         * границы и покрывает оба режима: иначе кладовщик прочёл бы
+         * «ячеек нет на складе» там, где позиция лежит в изоляторе,
+         * и искал бы её по всему реестру.
+         */
+        Set<String> quarantined = quarantinedNumbers();
+
+        List<String> isolated = chosen.stream()
+                .filter(quarantined::contains)
+                .toList();
+
+        if (!isolated.isEmpty()) {
+            return KittingResult.rejected(
+                    "Эти позиции в изоляторе брака — внести их в заказ «"
+                            + order.getNumber() + "» нельзя. На склад их "
+                            + "возвращает приёмка перемещения из изолятора, "
+                            + "а не ввод номера: "
+                            + join(isolated)
+            );
+        }
+
+        /*
          * Режим V72: «Изготовление ячеек из подсборок».
          *
          * Берём непринятые подсборки из findUnacceptedCells(), вносим
@@ -504,7 +598,7 @@ public class SubassemblyKittingService {
          * шаг, который переводит QuarantineCellKind из SUBASSEMBLY в CELL.
          */
         if (order.isSubassemblyKitting()) {
-            return attachUnacceptedCells(order, chosen, executor);
+            return attachUnacceptedCells(order, chosen, executor, quarantined);
         }
 
         /*
@@ -518,7 +612,7 @@ public class SubassemblyKittingService {
          * провести не может, и молча принять её значило бы испортить
          * состав заказа.
          */
-        List<ProductSerial> stock = allowedStock(order);
+        List<ProductSerial> stock = allowedStock(order, quarantined);
 
         /*
          * Реальное количество ячеек, уже заведённых в заказ.
@@ -672,7 +766,8 @@ public class SubassemblyKittingService {
     private KittingResult attachUnacceptedCells(
             ProductionOrder order,
             List<String> chosen,
-            AppUser executor) {
+            AppUser executor,
+            Set<String> quarantined) {
 
         /*
          * Берём непринятые подсборки по изделию заказа.
@@ -680,7 +775,7 @@ public class SubassemblyKittingService {
          * loadView уже отфильтровал по классификатору, и здесь
          * тот же отбор — кладовщик не должен видеть чужие изделия.
          */
-        List<ProductSerial> unaccepted = unacceptedStock(order);
+        List<ProductSerial> unaccepted = unacceptedStock(order, quarantined);
 
         /*
          * Внесённые ранее номера читаются матрицей комплектования
@@ -890,14 +985,21 @@ public class SubassemblyKittingService {
      *
      * Тот же отбор по классификатору, что в loadView — кладовщик
      * не должен видеть чужие изделия.
+     *
+     * Изолятор брака вычитан так же, как в обычном режиме: проведение
+     * V72 принимает подсборку на склад ячейкой, и забракованное изделие
+     * не имеет права пройти этот шаг мимо решения службы качества.
      */
-    private List<ProductSerial> unacceptedStock(ProductionOrder order) {
+    private List<ProductSerial> unacceptedStock(
+            ProductionOrder order,
+            Set<String> quarantined) {
 
         Long classifierId = order.getProductClassifier() == null
                 ? null
                 : order.getProductClassifier().getId();
 
-        List<ProductSerial> all = serialRepository.findUnacceptedCells();
+        List<ProductSerial> all = withoutQuarantine(
+                serialRepository.findUnacceptedCells(), quarantined);
 
         if (classifierId == null) {
             return all;

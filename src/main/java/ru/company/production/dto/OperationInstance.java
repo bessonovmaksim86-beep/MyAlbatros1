@@ -37,6 +37,9 @@ import java.math.RoundingMode;
  *                      параметры — проведение возможно только через форму
  *                      отметки, массовое проведение такой экземпляр
  *                      пропускает (проставляется контроллером списка)
+ * @param returnedForRework возвращён с контроля БТК, но цех ещё не
+ *                      принял на доработку — проведение и перемещение
+ *                      заблокированы до решения цеха
  */
 public record OperationInstance(
         Long rowId,
@@ -52,7 +55,8 @@ public record OperationInstance(
         boolean blocked,
         String blockerLabel,
         String cellNumber,
-        boolean needsControlParams
+        boolean needsControlParams,
+        boolean returnedForRework
 ) {
 
     /**

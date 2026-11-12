@@ -227,9 +227,13 @@ public class WorkshopViewAdvice {
          * оформляет тот, у кого ячейка лежит на столе, то есть мастер
          * производственного цеха. Склад и бюро ячейку не получают в
          * работу, и пункт привёл бы их к форме, которая всегда
-         * отказывает: ячейка склада в цеху не числится.
+         * отказывает: ячейка склада в цеху не числится. Исполнителям
+         * цеха пункт не показывается — у них нет права на браковку.
          */
-        boolean canScrap = staffService.unitKind(supervisor)
+        boolean isExecutor = supervisor.getRole() != null
+                && supervisor.getRole().name().endsWith("_EXECUTOR");
+        boolean canScrap = !isExecutor
+                && staffService.unitKind(supervisor)
                 == WorkshopStaffService.UnitKind.WORKSHOP;
 
         model.addAttribute("canScrap", canScrap);

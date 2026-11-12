@@ -3,7 +3,6 @@ package ru.company.production.service;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import ru.company.production.dto.QuarantineFilter;
 import ru.company.production.dto.WarehouseStockFilter;
 import ru.company.production.dto.WarehouseStockRow;
 import ru.company.production.entity.QuarantineCellKind;
@@ -22,7 +21,6 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
-import java.util.stream.Collectors;
 
 /**
  * Наличие на складе полуфабрикатов: реестр ячеек и подсборок, которые
@@ -85,14 +83,12 @@ public class WarehouseStockService {
     private final UnitHandoverRepository handoverRepository;
 
     /*
-     * Изолятор брака описан карточками БВК, а не полем позиции, и
-     * реестр обязан вычитать из него номера: ячейку, отобранную в
-     * изолятор, кладовщик на полке не найдёт. Принятые складом
-     * перемещения вычитаются обратно — с приёмкой позиция возвращается
-     * на склад и обязана снова появиться в реестре (тот же перечень,
-     * который снимает строку из экрана изолятора).
+     * Изолятор брака описан карточками БВК и строками перемещений, а не
+     * полем позиции, и реестр обязан вычитать из него номера: ячейку,
+     * отобранную в изолятор, кладовщик на полке не найдёт. Границу
+     * считает сам сервис перемещений — тем же расчётом, которым
+     * комплектование отсекает доступные номера.
      */
-    private final InputControlService inputControlService;
     private final QuarantineTransferService quarantineTransferService;
 
     /**
@@ -235,35 +231,13 @@ public class WarehouseStockService {
      * Номера, лежащие в изоляторе брака: перечень контроля за вычетом
      * тех, что склад уже принял обратно.
      *
-     * Карточками БВК изолятор не исчерпывается: ячейку отправляет туда
-     * и решение бюро по заявке отбраковки (цех или оператор БВК), и оно
-     * оформлено строкой перемещения, а не группой брака. Без этих
-     * строк реестр печатал бы «свободна на складе» ячейку, которую
-     * кладовщик уже снял с полки и ждёт по приёмке.
-     *
-     * Незакрытые перемещения прибавляются, принятые — вычитаются, но
-     * вычитание не имеет права снять незакрытую строку: один номер
-     * могли браковать дважды, и тогда старая принятая строка не
-     * отменяет того, что ячейку снова убрали с полки.
+     * Расчёт вынесен в {@link QuarantineTransferService} общим для
+     * реестра и комплектования: позиция из изолятора не имеет права
+     * числиться свободной на одном экране и доступной для заказа на
+     * другом, поэтому границу держит один метод, а не два похожих.
      */
     private Set<String> quarantinedNumbers() {
-
-        Set<String> pending =
-                quarantineTransferService.findPendingNumbers();
-
-        Set<String> numbers = inputControlService
-                .findQuarantineCells(QuarantineFilter.empty()).stream()
-                .map(QuarantineCellView::getFullNumber)
-                .filter(Objects::nonNull)
-                .collect(Collectors.toCollection(HashSet::new));
-
-        numbers.addAll(pending);
-
-        quarantineTransferService.findAcceptedNumbers().stream()
-                .filter(number -> !pending.contains(number))
-                .forEach(numbers::remove);
-
-        return numbers;
+        return quarantineTransferService.findActiveQuarantineNumbers();
     }
 
     /** Полный номер позиции: код классификатора и пятизначная серия. */

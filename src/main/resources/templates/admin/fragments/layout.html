@@ -140,6 +140,22 @@
                     </span>
                 </a>
 
+                <a class="admin-navigation__item"
+                   th:classappend="${activePage == 'startSerials'} ? ' is-active' : ''"
+                   th:href="@{/admin/start-serials}"
+                   title="Стартовые номера серий: номер, с которого начинается выдача по каждому классификатору">
+
+                    <span class="admin-navigation__icon">
+                        <svg viewBox="0 0 24 24" aria-hidden="true">
+                            <path d="M7 2v6h10V2h2v6h3a1 1 0 0 1 1 1v12a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V9a1 1 0 0 1 1-1h3V2H7Zm0 8H5v9h14v-9h-2v6H7v-6Z"/>
+                        </svg>
+                    </span>
+
+                    <span class="admin-navigation__text">
+                        Стартовые номера серий
+                    </span>
+                </a>
+
             </nav>
 
             <div class="admin-sidebar__divider"></div>

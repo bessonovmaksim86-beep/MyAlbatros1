@@ -27,7 +27,8 @@ import java.util.Locale;
         AdminUserController.class,
         AdminSwitchController.class,
         AdminHolidayController.class,
-        AdminDataCleanupController.class
+        AdminDataCleanupController.class,
+        AdminStartSerialsController.class
 })
 @RequiredArgsConstructor
 public class AdminViewAdvice {

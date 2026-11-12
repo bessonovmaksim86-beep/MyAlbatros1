@@ -9,6 +9,7 @@ import ru.company.production.entity.ProductSerial;
 import ru.company.production.entity.ProductSerialStatus;
 import ru.company.production.entity.ProductType;
 import ru.company.production.entity.ProductionOrder;
+import ru.company.production.repository.ProductClassifierRepository;
 import ru.company.production.repository.ProductSerialRepository;
 
 import java.util.Set;
@@ -33,6 +34,7 @@ import java.util.Set;
 public class SerialIssueService {
 
     private final ProductSerialRepository productSerialRepository;
+    private final ProductClassifierRepository classifierRepository;
 
     /**
      * Резервирует следующий свободный номер под позицию заказа
@@ -116,7 +118,10 @@ public class SerialIssueService {
         Integer max = productSerialRepository
                 .findMaxSerialByNumberingKey(numberingKey);
 
-        int candidate = (max == null ? 0 : max) + 1;
+        int candidate = Math.max(
+                (max == null ? 0 : max) + 1,
+                StartSerialService.resolve(classifier, classifierRepository)
+        );
 
         Set<Integer> busy = taken == null ? Set.of() : taken;
 

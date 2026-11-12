@@ -167,6 +167,16 @@
 }
 
 /*
+ * Работа, начатая, но не закрытая: цвет тот же, что у статуса .work
+ * в technology.css, чтобы «в работе» означало одно и то же во всех
+ * разделах системы.
+ */
+.badge--progress {
+    background: #fff1dd;
+    color: #a45c00;
+}
+
+/*
  * Хронология читается сверху вниз как пройденный путь, поэтому первая
  * строка — первое событие. Даты держат табличные цифры, чтобы колонка
  * не «гуляла», и не переносятся: дату сравнивают глазами по вертикали.
@@ -292,6 +302,388 @@
     text-align: center;
     color: var(--muted);
     font-size: 14px;
+}
+
+/* ---------- Карточка поиска: текущее место ---------- */
+
+/*
+ * Плашка адреса, а не строка свойств: «где изделие» — единственный
+ * вопрос, ради которого заказ ищут посреди смены, и он должен
+ * читаться раньше перечня характеристик.
+ */
+.card--location .card-body {
+    padding: 18px 20px;
+}
+
+.location-block {
+    display: grid;
+    gap: 10px;
+}
+
+.location-block__main {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 14px 16px;
+    border: 1px solid var(--line);
+    border-left: 4px solid var(--orange);
+    border-radius: 12px;
+    background: #fffaf4;
+}
+
+.location-block__unit {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--navy);
+    font-size: 14px;
+    font-weight: 800;
+}
+
+.location-block__unit-icon {
+    display: grid;
+    place-items: center;
+    width: 32px;
+    height: 32px;
+    border-radius: 9px;
+    background: #ffe6cc;
+    color: var(--orange);
+    flex-shrink: 0;
+}
+
+.location-block__desc {
+    color: var(--text);
+    font-size: 14px;
+    font-weight: 600;
+    word-break: break-word;
+}
+
+.location-block__hint {
+    padding: 0 2px;
+    color: var(--muted);
+    font-size: 12px;
+    line-height: 1.5;
+}
+
+/* ---------- Карточка поиска: прохождение техпроцесса ---------- */
+
+/*
+ * Матрица шире обычной сводки: колонок столько, сколько ячеек в
+ * заказе, и в 820px они сжались бы в нечитаемый столбик. Остальные
+ * карточки страницы остаются своей ширины — расширение касается
+ * только контейнера.
+ */
+.search-summary--wide {
+    max-width: 1200px;
+}
+
+.card--techprocess {
+    overflow: visible;
+}
+
+.tp-summary__title {
+    display: flex;
+    align-items: baseline;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin: 0;
+    font-size: 15px;
+    color: var(--navy);
+}
+
+.tp-summary__code {
+    padding: 3px 9px;
+    border-radius: 7px;
+    background: #eaf1f8;
+    color: var(--navy);
+    font-size: 13px;
+    font-weight: 800;
+    letter-spacing: .4px;
+}
+
+.tp-summary__divider {
+    color: var(--line);
+    font-weight: 700;
+}
+
+.tp-summary__item {
+    color: var(--text);
+    font-weight: 700;
+    word-break: break-word;
+}
+
+.tp-summary__progress {
+    margin: 6px 0 0;
+    color: var(--muted);
+    font-size: 13px;
+    font-weight: 600;
+}
+
+/*
+ * Горизонтальная прокрутка вместо переноса: колонки-ячейки обязаны
+ * стоять строго под своими заголовками, иначе матрица перестаёт
+ * читаться по вертикали — а колонка в матрице и есть изделие.
+ */
+.tp-scroll {
+    overflow-x: auto;
+    margin: 0 -4px;
+    padding: 0 4px 4px;
+}
+
+.tp-matrix {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+    font-size: 12px;
+}
+
+.tp-matrix th,
+.tp-matrix td {
+    border-top: 1px solid var(--line);
+    padding: 11px 12px;
+    vertical-align: top;
+    text-align: left;
+}
+
+.tp-matrix thead th {
+    border-top: 0;
+    background: #f8fafc;
+    color: #748494;
+    font-size: 11px;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: .4px;
+    white-space: nowrap;
+}
+
+/*
+ * Колонка операции прилипает слева: при прокрутке вправо работа,
+ * которую читают, не должна уходить с экрана.
+ */
+.tp-matrix__op {
+    position: sticky;
+    left: 0;
+    z-index: 1;
+    min-width: 210px;
+    max-width: 260px;
+    background: #fff;
+    box-shadow: inset -1px 0 0 var(--line);
+}
+
+.tp-matrix thead .tp-matrix__op {
+    background: #f8fafc;
+}
+
+.tp-matrix__op-name,
+.tp-matrix__op-unit,
+.tp-matrix__op-plan,
+.tp-matrix__op-executor {
+    display: block;
+}
+
+.tp-matrix__op-name {
+    color: var(--text);
+    font-size: 13px;
+    font-weight: 700;
+    text-transform: none;
+    letter-spacing: 0;
+    line-height: 1.35;
+}
+
+.tp-matrix__op-unit {
+    margin-top: 3px;
+    color: var(--navy);
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: none;
+    letter-spacing: 0;
+}
+
+.tp-matrix__op-plan {
+    margin-top: 5px;
+    color: var(--muted);
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: none;
+    letter-spacing: 0;
+    font-variant-numeric: tabular-nums;
+}
+
+.tp-matrix__op-executor {
+    margin-top: 2px;
+    color: var(--muted);
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: none;
+    letter-spacing: 0;
+}
+
+/*
+ * Ячейка матрицы: состояние, план, факт и исполнитель одной колонкой.
+ * Состояние подкрашено слева — так незакрытую работу видно боковым
+ * зрением, не читая дат.
+ */
+.tp-matrix__cell {
+    min-width: 148px;
+    border-left: 1px solid #e9eef2;
+}
+
+.tp-matrix__cell.is-danger {
+    background: #fffafa;
+}
+
+.tp-matrix__cell.is-ok {
+    background: #fbfdfc;
+}
+
+.tp-matrix__cell-state {
+    padding: 3px 8px;
+    font-size: 10px;
+}
+
+.tp-matrix__cell-date {
+    display: flex;
+    gap: 6px;
+    align-items: baseline;
+    margin-top: 7px;
+}
+
+.tp-matrix__cell-date i {
+    font-style: normal;
+    color: var(--muted);
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .3px;
+}
+
+.tp-matrix__cell-date b {
+    color: var(--text);
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+}
+
+.tp-matrix__cell-date.is-actual b {
+    color: #18794e;
+}
+
+.tp-matrix__cell-executor {
+    display: block;
+    margin-top: 6px;
+    color: var(--muted);
+    font-size: 11px;
+    font-weight: 600;
+    line-height: 1.35;
+    word-break: break-word;
+}
+
+/*
+ * Шапка колонки — ссылка на карточку номера: по номеру изделие ищут
+ * чаще всего, и вести человека в поиск, чтобы открыть его паспорт,
+ * означало бы обрывать чтение матрицы.
+ */
+.tp-matrix__cell-head {
+    min-width: 148px;
+    border-left: 1px solid #e9eef2;
+}
+
+.tp-matrix__cell-index {
+    display: inline-grid;
+    place-items: center;
+    width: 18px;
+    height: 18px;
+    margin-bottom: 5px;
+    border-radius: 6px;
+    background: #eaf1f8;
+    color: var(--navy);
+    font-size: 10px;
+    font-weight: 800;
+}
+
+.tp-matrix__cell-number {
+    display: block;
+    color: var(--navy);
+    font-weight: 800;
+    font-variant-numeric: tabular-nums;
+    text-transform: none;
+    letter-spacing: 0;
+    font-size: 12px;
+}
+
+a.tp-matrix__cell-number:hover {
+    text-decoration: underline;
+}
+
+.tp-matrix__cell-kind {
+    display: block;
+    margin-top: 2px;
+    color: var(--muted);
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .3px;
+}
+
+.tp-matrix__agg {
+    width: 150px;
+    min-width: 150px;
+    border-left: 1px solid var(--line);
+    background: #fcfdfe;
+}
+
+.tp-matrix__bar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.tp-matrix__track {
+    flex: 1;
+    height: 7px;
+    border-radius: 999px;
+    background: #e9eef2;
+    overflow: hidden;
+}
+
+.tp-matrix__fill {
+    height: 100%;
+    border-radius: 999px;
+    background: var(--navy);
+    transition: width .2s ease;
+}
+
+.tp-matrix__fill.is-ok {
+    background: var(--green);
+}
+
+.tp-matrix__fill.is-danger {
+    background: var(--red);
+}
+
+.tp-matrix__count {
+    color: var(--text);
+    font-size: 11px;
+    font-weight: 800;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+
+.tp-matrix__agg-state {
+    margin-top: 8px;
+    padding: 3px 8px;
+    font-size: 10px;
+}
+
+@media (max-width: 760px) {
+    .search-summary--wide {
+        max-width: none;
+    }
+
+    .location-block__main {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 10px;
+    }
 }
 
 @media (max-width: 640px) {

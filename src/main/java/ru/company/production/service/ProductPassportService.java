@@ -135,14 +135,52 @@ public class ProductPassportService {
             SerialMovementEvent event) {
 
         return new PassportView.PassportEventRow(
-                event.getEventType().getDisplayName(),
+                titleOf(event),
                 event.getEventType().getBadgeClass(),
                 format(event.getOccurredAt()),
                 actorLabelOf(event.getActor()),
                 documentLabelOf(event),
-                blankToDash(event.getNote()),
+                reasonLabelOf(event),
                 stateLabelOf(event)
         );
+    }
+
+    /**
+     * Заголовок события.
+     *
+     * Проведение цеховой операции (V87) — единственное событие, чьё
+     * note называет саму работу, а не её причину: «Операция проведена»
+     * без наименования не ответило бы, что именно закрыли, тогда как
+     * для изолятора, возврата и отказа note остаётся причиной и живёт в
+     * своей колонке.
+     */
+    private static String titleOf(SerialMovementEvent event) {
+
+        String title = event.getEventType().getDisplayName();
+
+        if (event.getEventType()
+                != ru.company.production.entity
+                .SerialMovementType.OPERATION_COMPLETED) {
+            return title;
+        }
+
+        String operation = event.getNote();
+
+        return operation == null || operation.isBlank()
+                ? title
+                : "Проведена операция «" + operation.trim() + "»";
+    }
+
+    /** Причина события: для проведения работы её уже несёт заголовок. */
+    private static String reasonLabelOf(SerialMovementEvent event) {
+
+        if (event.getEventType()
+                == ru.company.production.entity
+                .SerialMovementType.OPERATION_COMPLETED) {
+            return "—";
+        }
+
+        return blankToDash(event.getNote());
     }
 
     /**

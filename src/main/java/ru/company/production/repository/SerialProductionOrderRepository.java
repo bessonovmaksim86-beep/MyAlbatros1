@@ -444,6 +444,44 @@ public interface SerialProductionOrderRepository
     );
 
     /**
+     * Внесённые ячейки заказа с наименованием и стадией — состав для
+     * представления изделия в сводке поиска.
+     *
+     * От {@link #findCellsByOrderId} отличается не колонками, а
+     * порядком: тот запрос сортирует состав по номеру, а сводке нужно
+     * сопоставить ячейку экземпляру плана, и ключ сопоставления —
+     * порядок внесения (заказ, момент внесения, номер). Сортировка по
+     * номеру подписала бы операции одного изделия другому, когда склад
+     * вносит номера не по возрастанию.
+     *
+     * Отметка готовности ({@code cell_ready_at}, V75) выбирается
+     * потому, что разновидность позиции выводится из неё: принятая
+     * складом позиция остаётся подсборкой, пока кладовщик не
+     * подтвердит готовность, и без этой колонки сводка назвала бы
+     * подсборку ячейкой.
+     */
+    @Query("""
+            select
+                cell.id            as serialId,
+                classifier.code    as classifierCode,
+                cell.serial        as serial,
+                classifier.name    as classifierName,
+                sensor.name        as sensorName,
+                cell.productType   as productType,
+                cell.cellReadyAt   as cellReadyAt
+            from SerialProductionOrder link
+            join link.serial cell
+            join cell.productClassifier classifier
+            left join classifier.sensorCatalog sensor
+            where link.productionOrder.id = :productionOrderId
+              and link.productionOrder.active = true
+            order by link.createdAt asc, classifier.code asc, cell.serial asc
+            """)
+    List<ZnpCellPassageView> findPassageCellsByOrderId(
+            @Param("productionOrderId") Long productionOrderId
+    );
+
+    /**
      * Сколько заказов вошло в изделие — счётчик состава карточки.
      */
     long countBySerial_Id(Long serialId);

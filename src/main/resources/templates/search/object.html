@@ -106,7 +106,10 @@
 
             <!-- Объект найден -->
             <div th:if="${summary != null}"
-                 class="search-summary">
+                 class="search-summary"
+                 th:classappend="${summary.techProcessSummary != null}
+                     ? 'search-summary--wide'
+                     : null">
 
                 <div class="search-summary__head">
 
@@ -206,6 +209,256 @@
                                 Искать ещё
                             </a>
                         </div>
+                    </div>
+                </section>
+
+                <!--
+                    Текущее место изделий.
+                    Показывается, когда заказ в работе и позиции стоят
+                    на конкретной работе маршрута.
+                -->
+                <section class="card card--location"
+                         th:if="${summary.currentLocation != null}">
+
+                    <div class="card-head">
+
+                        <div>
+
+                            <h2>Текущее место</h2>
+
+                            <p>
+                                Где изделия группы находятся сейчас.
+                                Если позиции разбросаны по нескольким
+                                работам — все показаны.
+                            </p>
+                        </div>
+                    </div>
+
+                    <div class="card-body">
+
+                        <div class="location-block">
+
+                            <div class="location-block__main">
+
+                                <div class="location-block__unit"
+                                     th:if="${!#strings.isEmpty(summary.currentLocation.unitName)}">
+                                    <span class="location-block__unit-icon">
+                                        <svg viewBox="0 0 24 24" width="18" height="18"
+                                             fill="currentColor" aria-hidden="true">
+                                            <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5a2.5 2.5 0 0 1 0-5 2.5 2.5 0 0 1 0 5z"/>
+                                        </svg>
+                                    </span>
+                                    <span th:text="${summary.currentLocation.unitName}">
+                                        Цех
+                                    </span>
+                                </div>
+
+                                <div class="location-block__desc"
+                                     th:text="${summary.currentLocation.description}">
+                                    Цех (Операция — 3 шт.)
+                                </div>
+                            </div>
+
+                            <div class="location-block__hint"
+                                 th:if="${!#strings.isEmpty(summary.currentLocation.others)}">
+                                <span th:text="${summary.currentLocation.others}">
+                                    Позиции разбросаны: Цех (Работа1) — 2; Цех (Работа2) — 1
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!--
+                    Матрица прохождения техпроцесса: строки = операции
+                    маршрута, колонки = внесённые в заказ ячейки.
+                    Показывается для заказов с техпроцессом.
+                -->
+                <section class="card card--techprocess"
+                         th:if="${summary.techProcessSummary != null}">
+
+                    <div class="card-head">
+
+                        <div>
+
+                            <h2 class="tp-summary__title">
+                                <span class="tp-summary__code"
+                                      th:text="${summary.techProcessSummary.code}">
+                                    ТП-005
+                                </span>
+                                <span class="tp-summary__divider">·</span>
+                                <span class="tp-summary__item"
+                                      th:text="${summary.techProcessSummary.itemLabel}">
+                                    5102 — ЯПР20М
+                                </span>
+                            </h2>
+
+                            <p class="tp-summary__progress"
+                               th:text="${summary.techProcessSummary.progressLabel}">
+                                7 из 20 работ проведено
+                            </p>
+                        </div>
+                    </div>
+
+                    <div class="card-body">
+
+                        <!--
+                            Матрица прохождения: строки — работы маршрута,
+                            колонки — внесённые в заказ ячейки.
+
+                            Таблица, а не карточки: прохождение читают
+                            строкой («вся группа на лакировании») и
+                            колонкой («эта ячейка стоит на сборке»), и
+                            только сетка держит обе оси одновременно.
+
+                            Шапка колонок берётся из первой строки:
+                            сервис строит одинаковый набор ячеек для
+                            каждой работы, поэтому колонки всегда
+                            соответствуют друг другу.
+                        -->
+                        <div class="tp-scroll"
+                             th:if="${!summary.operationPassages.isEmpty()}">
+
+                            <table class="tp-matrix">
+
+                                <thead>
+                                <tr>
+                                    <th class="tp-matrix__op">
+                                        Операция
+                                    </th>
+
+                                    <th class="tp-matrix__cell-head"
+                                        th:each="head, headStat : ${summary.operationPassages[0].cells}">
+
+                                        <span class="tp-matrix__cell-index"
+                                              th:text="${headStat.count}">
+                                            1
+                                        </span>
+
+                                        <a class="tp-matrix__cell-number"
+                                           th:if="${head.serialId != null}"
+                                           th:href="@{/search/object/serial/{id}(id=${head.serialId})}"
+                                           th:text="${head.fullNumber}">
+                                            510200006
+                                        </a>
+
+                                        <span class="tp-matrix__cell-number"
+                                              th:if="${head.serialId == null}"
+                                              th:text="${head.fullNumber}">
+                                            510200006
+                                        </span>
+
+                                        <span class="tp-matrix__cell-kind"
+                                              th:text="${head.kindLabel}">
+                                            Ячейка
+                                        </span>
+                                    </th>
+
+                                    <th class="tp-matrix__agg">
+                                        Прогресс работы
+                                    </th>
+                                </tr>
+                                </thead>
+
+                                <tbody>
+                                <tr th:each="op : ${summary.operationPassages}">
+
+                                    <th class="tp-matrix__op">
+
+                                        <span class="tp-matrix__op-name"
+                                              th:text="${op.operationName}">
+                                            Лакирование подсборок
+                                        </span>
+
+                                        <span class="tp-matrix__op-unit"
+                                              th:if="${!#strings.isEmpty(op.unitName)}"
+                                              th:text="${op.unitName}">
+                                            Цех механической обработки
+                                        </span>
+
+                                        <span class="tp-matrix__op-plan"
+                                              th:text="'план ' + ${op.plannedLabel}">
+                                            план 10.11.2026
+                                        </span>
+
+                                        <span class="tp-matrix__op-executor"
+                                              th:text="${op.executor}">
+                                            Иванов И. И.
+                                        </span>
+                                    </th>
+
+                                    <td class="tp-matrix__cell"
+                                        th:each="cell : ${op.cells}"
+                                        th:classappend="'is-' + ${cell.statusModifier}">
+
+                                        <span class="badge tp-matrix__cell-state"
+                                              th:classappend="'badge--' + ${cell.statusModifier}"
+                                              th:text="${cell.statusLabel}">
+                                            проведено
+                                        </span>
+
+                                        <span class="tp-matrix__cell-date">
+                                            <i>план</i>
+                                            <b th:text="${cell.plannedLabel}">
+                                                10.11.2026
+                                            </b>
+                                        </span>
+
+                                        <span class="tp-matrix__cell-date"
+                                              th:classappend="${cell.completed}
+                                                  ? 'is-actual'
+                                                  : null">
+                                            <i>факт</i>
+                                            <b th:text="${cell.actualLabel}">
+                                                12.11.2026
+                                            </b>
+                                        </span>
+
+                                        <span class="tp-matrix__cell-executor"
+                                              th:text="${cell.executor}">
+                                            Иванов И. И.
+                                        </span>
+                                    </td>
+
+                                    <td class="tp-matrix__agg">
+
+                                        <div class="tp-matrix__bar">
+
+                                            <div class="tp-matrix__track">
+                                                <div class="tp-matrix__fill"
+                                                     th:classappend="${op.overdue}
+                                                         ? 'is-danger'
+                                                         : ${op.completed}
+                                                         ? 'is-ok'
+                                                         : ''"
+                                                     th:style="'width:' + ${op.progressPercent} + '%'">
+                                                </div>
+                                            </div>
+
+                                            <span class="tp-matrix__count"
+                                                  th:text="${op.passed} + ' / ' + ${op.total}">
+                                                3 / 5
+                                            </span>
+                                        </div>
+
+                                        <span class="badge tp-matrix__agg-state"
+                                              th:classappend="'badge--' + ${op.statusModifier}"
+                                              th:text="${op.statusLabel}">
+                                            выполнено
+                                        </span>
+                                    </td>
+                                </tr>
+                                </tbody>
+                            </table>
+                        </div>
+
+                        <p class="empty"
+                           th:if="${summary.operationPassages.isEmpty()}">
+                            Состав ещё не внесён — ячейки появятся после
+                            оприходования на склад полуфабрикатов, и
+                            тогда станет видно прохождение каждой по
+                            работам техпроцесса.
+                        </p>
                     </div>
                 </section>
             </div>

@@ -56,10 +56,13 @@ public class ReworkReturnController {
     /**
      * Переделать отмеченные операции — возврат на доработку в текущий цех.
      *
-     * Проведение снимается только с отмеченных строк. Каскадом — с
-     * проведённых строк, идущих в маршруте после отмеченных: переделанная
-     * работа не может оставаться под закрытой, иначе следующая по
-     * маршруту осталась бы разблокированной.
+     * Проведение снимается с отмеченных строк и каскадом с проведённых
+     * строк, идущих в маршруте после них: переделанная работа не может
+     * оставаться под закрытой, иначе следующая по маршруту осталась бы
+     * разблокированной над недоделанным изделием. Каскад включён всегда
+     * и выбора не имеет — отмечая лакирование подсборка, цех обязан
+     * переделать и всё, что по техпроцессу идёт после него (передачу в
+     * БТК и т. д.), иначе закрытая приёмка висела бы над переделкой.
      *
      * На каждую снятую строку заводится {@link ReworkReturn}: исполнитель
      * видит причину по своей работе, а возврат остаётся в истории.
@@ -68,7 +71,6 @@ public class ReworkReturnController {
     public String markForRework(
             @RequestParam List<Long> rowIds,
             @RequestParam String reason,
-            @RequestParam(defaultValue = "false") boolean cascade,
             Authentication authentication,
             RedirectAttributes redirectAttributes
     ) {
@@ -76,7 +78,7 @@ public class ReworkReturnController {
 
         try {
             String msg = reworkReturnService.markForRework(
-                    rowIds, reason, cascade, supervisor);
+                    rowIds, reason, supervisor);
 
             redirectAttributes.addFlashAttribute("successMessage", msg);
         } catch (IllegalArgumentException | IllegalStateException e) {

@@ -9,6 +9,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import ru.company.production.entity.AppUser;
+import ru.company.production.entity.ControlReturn;
 import ru.company.production.entity.CustomerOrder;
 import ru.company.production.entity.Operation;
 import ru.company.production.entity.OperationName;
@@ -18,17 +19,23 @@ import ru.company.production.entity.ReworkReturn;
 import ru.company.production.entity.ReworkReturn.ReturnType;
 import ru.company.production.entity.ReworkReturn.ReworkStatus;
 import ru.company.production.entity.Role;
+import ru.company.production.entity.WorkPlace;
+import ru.company.production.repository.AttachedCellView;
 import ru.company.production.repository.ControlReturnRepository;
 import ru.company.production.repository.OrderScheduleRowRepository;
+import ru.company.production.repository.ProductionOrderSerialProjection;
 import ru.company.production.repository.ReworkReturnRepository;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -44,9 +51,15 @@ import static org.mockito.Mockito.when;
  * мало, и следующая по маршруту осталась разблокированной над
  * недоделанным изделием.
  *
- * <p>Поэтому проверяются три вещи: снятие касается ровно отмеченных
- * строк, каскад забирает только идущие после них, и отправка в
- * предшествующий цех не трогает чужие подразделения.
+ * <p>Поэтому проверяются четыре вещи: снятие касается ровно отмеченных
+ * строк, каскад забирает только идущие после них, снятая работа
+ * возвращается в распределение новой датой (прежняя остаётся в
+ * истории), и сигнал БТК закрывается решением цеха — иначе изделие
+ * навсегда осталось бы в разделе.
+ *
+ * <p>Календарь переделки берётся настоящий, а не мок: {@link
+ * WorkingDaysCalculator} не имеет зависимостей, а даты переноса —
+ * ровно то, что тест и обязан утверждать.
  */
 @ExtendWith(MockitoExtension.class)
 class ReworkReturnServiceTest {
@@ -55,6 +68,7 @@ class ReworkReturnServiceTest {
     @Mock private ControlReturnRepository controlReturnRepository;
     @Mock private OrderScheduleRowRepository scheduleRowRepository;
     @Mock private WorkshopStaffService staffService;
+    @Mock private WorkshopDistributionSerialService serialService;
 
     private ReworkReturnService service;
 
@@ -64,7 +78,9 @@ class ReworkReturnServiceTest {
                 reworkReturnRepository,
                 controlReturnRepository,
                 scheduleRowRepository,
-                staffService
+                staffService,
+                serialService,
+                new WorkingDaysCalculator()
         );
     }
 
@@ -74,6 +90,10 @@ class ReworkReturnServiceTest {
 
     private static final long UNIT_ID = 7L;
     private static final long ORDER_ID = 31L;
+
+    /** Дата плана принятой работы — та, что возврат обязан сохранить. */
+    private static final LocalDate ACCEPTED_DATE =
+            LocalDate.of(2026, 11, 2);
 
     private static AppUser user(Role role) {
         AppUser appUser = new AppUser();
@@ -108,6 +128,7 @@ class ReworkReturnServiceTest {
         row.setItemPosition(1);
         row.setInstanceIndex(0);
         row.setOrganizationUnit(unit);
+        row.setPlannedDate(ACCEPTED_DATE);
 
         if (completed) {
             row.setCompletedAt(LocalDateTime.of(2026, 11, 2, 10, 0));
@@ -115,6 +136,34 @@ class ReworkReturnServiceTest {
         }
 
         return row;
+    }
+
+    /** Открытый сигнал БТК по строке — основание карточки. */
+    private static ControlReturn controlReturn(OrderScheduleRow row,
+                                               String reason) {
+        ControlReturn ret = new ControlReturn();
+        ret.setScheduleRow(row);
+        ret.setReason(reason);
+        ret.setControlOperation("Контроль ячеек из производства");
+        ret.setReturnedBy(user(Role.BTK_MASTER));
+        ret.setReturnedAt(LocalDateTime.of(2026, 11, 3, 9, 0));
+        return ret;
+    }
+
+    /**
+     * Пара «заказ + подразделение», общая для всех карточек теста:
+     * один экземпляр, несколько строк его маршрута.
+     */
+    private static CustomerOrder order() {
+        CustomerOrder order = new CustomerOrder();
+        order.setId(ORDER_ID);
+        return order;
+    }
+
+    private static OrganizationUnit unit() {
+        OrganizationUnit unit = new OrganizationUnit();
+        unit.setId(UNIT_ID);
+        return unit;
     }
 
     /* ============================================================
@@ -129,31 +178,28 @@ class ReworkReturnServiceTest {
         @DisplayName("Снимает проведение ровно с отмеченных строк")
         void clearsOnlyChosenRows() {
 
-            CustomerOrder order = new CustomerOrder();
-            order.setId(ORDER_ID);
-
-            OrganizationUnit unit = new OrganizationUnit();
-            unit.setId(UNIT_ID);
-
-            OrderScheduleRow chosen = row(100L, 5, order, unit, true);
-            OrderScheduleRow later = row(101L, 6, order, unit, true);
+            OrderScheduleRow chosen = row(100L, 5, order(), unit(), true);
+            OrderScheduleRow later = row(101L, 6, order(), unit(), true);
 
             AppUser master = user(Role.SDP_SA_MASTER);
 
             when(staffService.unitScope(master)).thenReturn(List.of(UNIT_ID));
             when(scheduleRowRepository.findAllById(List.of(100L)))
                     .thenReturn(List.of(chosen));
+            when(controlReturnRepository.findOpenByRowIds(any()))
+                    .thenReturn(List.of());
 
             String message = service.markForRework(
-                    List.of(100L), "Не пропаян разъём X2", false, master);
+                    List.of(100L), "Не пропаян разъём X2", master);
 
             assertNull(chosen.getCompletedAt());
             assertNull(chosen.getCompletedBy());
 
             /*
-             * Без каскада идущая после операция остаётся закрытой:
-             * начальник цеха видит маршрут и сам решает, где граница
-             * переделки.
+             * Маршрут экземпляра запрос не вернул — каскаду цеплять
+             * нечего, и идущая после операция остаётся закрытой:
+             * переделка снимает только те работы, которые правда идут
+             * после отмеченной в техпроцессе этого изделия.
              */
             assertNotNull(later.getCompletedAt());
 
@@ -164,21 +210,17 @@ class ReworkReturnServiceTest {
         @DisplayName("Заводит возврат на каждую снятую строку")
         void writesReturnPerClearedRow() {
 
-            CustomerOrder order = new CustomerOrder();
-            order.setId(ORDER_ID);
-
-            OrganizationUnit unit = new OrganizationUnit();
-            unit.setId(UNIT_ID);
-
-            OrderScheduleRow chosen = row(100L, 5, order, unit, true);
+            OrderScheduleRow chosen = row(100L, 5, order(), unit(), true);
 
             AppUser master = user(Role.SDP_SA_MASTER);
 
             when(staffService.unitScope(master)).thenReturn(List.of(UNIT_ID));
             when(scheduleRowRepository.findAllById(List.of(100L)))
                     .thenReturn(List.of(chosen));
+            when(controlReturnRepository.findOpenByRowIds(any()))
+                    .thenReturn(List.of());
 
-            service.markForRework(List.of(100L), "  Перепутать маркировку  ", false, master);
+            service.markForRework(List.of(100L), "  Перепутать маркировку  ", master);
 
             @SuppressWarnings("unchecked")
             ArgumentCaptor<List<ReworkReturn>> captor =
@@ -204,19 +246,13 @@ class ReworkReturnServiceTest {
         }
 
         @Test
-        @DisplayName("Каскад снимает проведённые строки после отмеченной")
+        @DisplayName("Идущие после проведённые строки снимаются всегда")
         void cascadeClearsFollowingCompletedRows() {
 
-            CustomerOrder order = new CustomerOrder();
-            order.setId(ORDER_ID);
-
-            OrganizationUnit unit = new OrganizationUnit();
-            unit.setId(UNIT_ID);
-
-            OrderScheduleRow earlier = row(99L, 4, order, unit, true);
-            OrderScheduleRow chosen = row(100L, 5, order, unit, true);
-            OrderScheduleRow later = row(101L, 6, order, unit, true);
-            OrderScheduleRow open = row(102L, 7, order, unit, false);
+            OrderScheduleRow earlier = row(99L, 4, order(), unit(), true);
+            OrderScheduleRow chosen = row(100L, 5, order(), unit(), true);
+            OrderScheduleRow later = row(101L, 6, order(), unit(), true);
+            OrderScheduleRow open = row(102L, 7, order(), unit(), false);
 
             AppUser master = user(Role.SDP_SA_MASTER);
 
@@ -226,9 +262,11 @@ class ReworkReturnServiceTest {
             when(scheduleRowRepository.findRowsOfInstanceInUnits(
                     ORDER_ID, 1, 0, List.of(UNIT_ID)))
                     .thenReturn(List.of(earlier, chosen, later, open));
+            when(controlReturnRepository.findOpenByRowIds(any()))
+                    .thenReturn(List.of());
 
             String message = service.markForRework(
-                    List.of(100L), "Отклонение по параметру", true, master);
+                    List.of(100L), "Отклонение по параметру", master);
 
             /*
              * Каскад тянет только идущие после и только проведённые:
@@ -248,19 +286,127 @@ class ReworkReturnServiceTest {
         }
 
         @Test
-        @DisplayName("Пустая причина — отказ без записей")
-        void blankReasonRejectedBeforeWrites() {
+        @DisplayName("Причина берётся из шапки возврата, а не с формы")
+        void reasonComesFromControlReturn() {
+
+            OrderScheduleRow chosen = row(100L, 5, order(), unit(), true);
 
             AppUser master = user(Role.SDP_SA_MASTER);
 
-            assertThrows(IllegalArgumentException.class,
-                    () -> service.markForRework(List.of(100L), "   ", false, master));
+            when(staffService.unitScope(master)).thenReturn(List.of(UNIT_ID));
+            when(scheduleRowRepository.findAllById(List.of(100L)))
+                    .thenReturn(List.of(chosen));
+            when(controlReturnRepository.findOpenByRowIds(any()))
+                    .thenReturn(List.of(
+                            controlReturn(chosen, "Не пропаян разъём X2")));
 
-            verifyNoInteractions(
-                    reworkReturnRepository,
-                    scheduleRowRepository,
-                    staffService
+            /*
+             * Поле причины на экране убрано, поэтому параметр пуст:
+             * сервер обязан подставить причину того возврата БТК, ради
+             * которого карточка и показана.
+             */
+            service.markForRework(List.of(100L), null, master);
+
+            @SuppressWarnings("unchecked")
+            ArgumentCaptor<List<ReworkReturn>> captor =
+                    ArgumentCaptor.forClass(List.class);
+
+            verify(reworkReturnRepository).saveAll(captor.capture());
+
+            assertEquals(
+                    "Не пропаян разъём X2",
+                    captor.getValue().get(0).getReason()
             );
+        }
+
+        @Test
+        @DisplayName("Нет причины ни в запросе, ни в возврате — отказ без записей")
+        void missingReasonRejectedBeforeWrites() {
+
+            OrderScheduleRow chosen = row(100L, 5, order(), unit(), true);
+
+            AppUser master = user(Role.SDP_SA_MASTER);
+
+            when(staffService.unitScope(master)).thenReturn(List.of(UNIT_ID));
+            when(scheduleRowRepository.findAllById(List.of(100L)))
+                    .thenReturn(List.of(chosen));
+            when(controlReturnRepository.findOpenByRowIds(any()))
+                    .thenReturn(List.of());
+
+            assertThrows(IllegalArgumentException.class,
+                    () -> service.markForRework(List.of(100L), "   ", master));
+
+            verify(scheduleRowRepository, never()).save(any());
+            verifyNoInteractions(reworkReturnRepository);
+        }
+
+        @Test
+        @DisplayName("Снятая строка уходит в распределение новой датой, прежняя — в истории")
+        void clearedRowGoesBackToDistributionWithNewDate() {
+
+            OrderScheduleRow chosen = row(100L, 5, order(), unit(), true);
+            chosen.setExecutor(user(Role.SDP_SA_EXECUTOR));
+            chosen.setWorkPlace(new WorkPlace());
+
+            AppUser master = user(Role.SDP_SA_MASTER);
+
+            when(staffService.unitScope(master)).thenReturn(List.of(UNIT_ID));
+            when(scheduleRowRepository.findAllById(List.of(100L)))
+                    .thenReturn(List.of(chosen));
+            when(controlReturnRepository.findOpenByRowIds(any()))
+                    .thenReturn(List.of());
+
+            service.markForRework(List.of(100L), "Прозвон не прошёл", master);
+
+            /*
+             * Закрепление снято: работа, с которой сняли факт,
+             * возвращается мастеру — иначе она осталась бы «за своим
+             * исполнителем» и в очередь распределения не попала.
+             */
+            assertNull(chosen.getExecutor());
+            assertNull(chosen.getWorkPlace());
+
+            /*
+             * Дата плана — ближайший рабочий день, а не дата принятой
+             * работы: под прошедшей датой строка выпала бы из горизонта.
+             */
+            LocalDate expected =
+                    new WorkingDaysCalculator().nextWorkingDay(LocalDate.now());
+
+            assertEquals(expected, chosen.getPlannedDate());
+            assertTrue(expected.isAfter(ACCEPTED_DATE));
+
+            @SuppressWarnings("unchecked")
+            ArgumentCaptor<List<ReworkReturn>> captor =
+                    ArgumentCaptor.forClass(List.class);
+
+            verify(reworkReturnRepository).saveAll(captor.capture());
+
+            /* Прежняя дата сохранена в возврате — она видна в истории. */
+            assertEquals(ACCEPTED_DATE, captor.getValue().get(0).getPreviousPlannedDate());
+        }
+
+        @Test
+        @DisplayName("Сигнал БТК закрывается — карточка уходит из раздела")
+        void controlReturnIsClosedByDecision() {
+
+            OrderScheduleRow chosen = row(100L, 5, order(), unit(), true);
+            ControlReturn signal = controlReturn(chosen, "Не пропаян разъём X2");
+
+            AppUser master = user(Role.SDP_SA_MASTER);
+
+            when(staffService.unitScope(master)).thenReturn(List.of(UNIT_ID));
+            when(scheduleRowRepository.findAllById(List.of(100L)))
+                    .thenReturn(List.of(chosen));
+            when(controlReturnRepository.findOpenByRowIds(any()))
+                    .thenReturn(List.of(signal));
+
+            service.markForRework(List.of(100L), null, master);
+
+            assertNotNull(signal.getResolvedAt());
+            assertEquals(master, signal.getResolvedBy());
+
+            verify(controlReturnRepository).saveAll(List.of(signal));
         }
 
         @Test
@@ -270,7 +416,7 @@ class ReworkReturnServiceTest {
             AppUser master = user(Role.SDP_SA_MASTER);
 
             assertThrows(IllegalArgumentException.class,
-                    () -> service.markForRework(List.of(), "причина", false, master));
+                    () -> service.markForRework(List.of(), "причина", master));
 
             verifyNoInteractions(reworkReturnRepository, scheduleRowRepository);
         }
@@ -282,7 +428,7 @@ class ReworkReturnServiceTest {
             AppUser executor = user(Role.SDP_SA_EXECUTOR);
 
             assertThrows(IllegalStateException.class,
-                    () -> service.markForRework(List.of(100L), "причина", false, executor));
+                    () -> service.markForRework(List.of(100L), "причина", executor));
 
             verifyNoInteractions(
                     reworkReturnRepository,
@@ -295,13 +441,10 @@ class ReworkReturnServiceTest {
         @DisplayName("Чужое подразделение — отказ")
         void foreignUnitRejected() {
 
-            CustomerOrder order = new CustomerOrder();
-            order.setId(ORDER_ID);
-
             OrganizationUnit foreign = new OrganizationUnit();
             foreign.setId(9L);
 
-            OrderScheduleRow chosen = row(100L, 5, order, foreign, true);
+            OrderScheduleRow chosen = row(100L, 5, order(), foreign, true);
 
             AppUser master = user(Role.SDP_SA_MASTER);
 
@@ -310,7 +453,7 @@ class ReworkReturnServiceTest {
                     .thenReturn(List.of(chosen));
 
             assertThrows(IllegalStateException.class,
-                    () -> service.markForRework(List.of(100L), "причина", false, master));
+                    () -> service.markForRework(List.of(100L), "причина", master));
 
             verifyNoInteractions(reworkReturnRepository);
         }
@@ -326,7 +469,7 @@ class ReworkReturnServiceTest {
 
             assertThrows(IllegalArgumentException.class,
                     () -> service.markForRework(
-                            List.of(100L, 101L), "причина", false, master));
+                            List.of(100L, 101L), "причина", master));
 
             verifyNoInteractions(reworkReturnRepository, staffService);
         }
@@ -344,15 +487,9 @@ class ReworkReturnServiceTest {
         @DisplayName("Снимает проведённые строки своего цеха")
         void clearsCompletedRowsOfOwnUnits() {
 
-            CustomerOrder order = new CustomerOrder();
-            order.setId(ORDER_ID);
-
-            OrganizationUnit unit = new OrganizationUnit();
-            unit.setId(UNIT_ID);
-
-            OrderScheduleRow chosen = row(100L, 5, order, unit, true);
-            OrderScheduleRow sibling = row(101L, 6, order, unit, true);
-            OrderScheduleRow open = row(102L, 7, order, unit, false);
+            OrderScheduleRow chosen = row(100L, 5, order(), unit(), true);
+            OrderScheduleRow sibling = row(101L, 6, order(), unit(), true);
+            OrderScheduleRow open = row(102L, 7, order(), unit(), false);
 
             AppUser master = user(Role.SDP_SA_MASTER);
 
@@ -391,13 +528,7 @@ class ReworkReturnServiceTest {
         @DisplayName("Нечего снимать — отказ, возврат не заводится")
         void nothingCompletedRejected() {
 
-            CustomerOrder order = new CustomerOrder();
-            order.setId(ORDER_ID);
-
-            OrganizationUnit unit = new OrganizationUnit();
-            unit.setId(UNIT_ID);
-
-            OrderScheduleRow chosen = row(100L, 5, order, unit, false);
+            OrderScheduleRow chosen = row(100L, 5, order(), unit(), false);
 
             AppUser master = user(Role.SDP_SA_MASTER);
 

@@ -38,6 +38,68 @@ public interface ReworkReturnRepository extends JpaRepository<ReworkReturn, Long
     List<ReworkReturn> findOpenByRowIds(@Param("rowIds") Collection<Long> rowIds);
 
     /**
+     * Строки указанного списка, чей экземпляр уже принят цехом на
+     * переделку — открытый возврат есть хотя бы по одной его строке.
+     *
+     * Нужен блокировке проведения: цех снимает проведение только с
+     * отмеченных строк, а изделие переделывается целиком, и прочие его
+     * работы обязаны ждать, пока переделка не закрыта. Отвечает
+     * «Мои операции» и серверная проверка проведения.
+     *
+     * Условие читает принадлежность экземпляру, а не подразделению:
+     * строка возврата принадлежит цеху, а блокировать надо весь маршрут
+     * изделия, включая чужие подразделения того же маршрута.
+     */
+    @Query("""
+            select row.id
+            from OrderScheduleRow row
+            where row.id in :rowIds
+              and (
+                    exists (
+                        select ret.id
+                        from ReworkReturn ret
+                        join ret.scheduleRow other
+                        where ret.resolvedAt is null
+                          and row.customerOrder.id is not null
+                          and other.customerOrder.id = row.customerOrder.id
+                          and other.itemPosition = row.itemPosition
+                          and other.instanceIndex = row.instanceIndex
+                    )
+                 or exists (
+                        select ret.id
+                        from ReworkReturn ret
+                        join ret.scheduleRow other
+                        where ret.resolvedAt is null
+                          and row.productionOrder.id is not null
+                          and other.productionOrder.id = row.productionOrder.id
+                          and other.itemPosition = row.itemPosition
+                          and other.instanceIndex = row.instanceIndex
+                    )
+              )
+            """)
+    List<Long> findRowIdsOfReworkInstances(
+            @Param("rowIds") java.util.Collection<Long> rowIds
+    );
+
+    /**
+     * Строки указанного списка, по которым сам цех завёл открытый
+     * возврат — то есть ровно те операции, которые решено переделывать.
+     *
+     * Они составляют исключение из блокировки: повторное проведение
+     * такой строки и есть закрытие переделки, и заблокировать её
+     * означало бы запереть цикл намертво.
+     */
+    @Query("""
+            select distinct ret.scheduleRow.id
+            from ReworkReturn ret
+            where ret.scheduleRow.id in :rowIds
+              and ret.resolvedAt is null
+            """)
+    List<Long> findRowIdsWithOpenReturn(
+            @Param("rowIds") java.util.Collection<Long> rowIds
+    );
+
+    /**
      * История возвратов одной строки — сколько раз работу возвращали
      * на доработку и как закрывали. Нужна аналитике брака.
      */

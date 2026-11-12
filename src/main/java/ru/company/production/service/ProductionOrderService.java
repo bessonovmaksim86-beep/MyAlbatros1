@@ -2027,6 +2027,10 @@ public class ProductionOrderService {
      * Поэтому максимум берётся по области, а не по типу изделия:
      * 888800122 → 888800123, а у датчиков одного рода ряд сквозной
      * (119200111 → 119400112).
+     *
+     * Нижней границей ряда служит стартовый номер классификатора
+     * (миграция V86): номера в пред-БД уже были выданы, и новый ряд
+     * обязан начаться с указанной администратором серии.
      */
     private ProductSerial issueSerial(ProductClassifier classifier,
                                       ProductionOrder order) {
@@ -2045,7 +2049,12 @@ public class ProductionOrderService {
         Integer max = productSerialRepository
                 .findMaxSerialByNumberingKey(numberingKey);
 
-        int candidate = (max == null ? 0 : max) + 1;
+        int candidate = Math.max(
+                (max == null ? 0 : max) + 1,
+                StartSerialService.resolve(
+                        classifier, productClassifierRepository
+                )
+        );
 
         /*
          * Все номера текущего выпуска уже видны в persistence-контексте,

@@ -30,12 +30,25 @@
     color: #1a1a2e;
 }
 
-.rework-return__instance {
-    color: #666;
+/*
+ * Изделие: наименование и его номер (серийник выпуска либо номер
+ * ячейки). Разделяет карточки одного заказа, у которых номер
+ * основания совпадает.
+ */
+.rework-return__item {
+    color: #333;
     font-size: 14px;
+    font-weight: 500;
 }
 
-.rework-return__reason {
+/*
+ * Основание возврата — «Вернулось с операции: X. Причина: Y».
+ *
+ * Перенос разрешён и ширина не ограничена: прежний nowrap c
+ * max-width обрезывал причину до нечитаемых «Вап» и «Ищущий»,
+ * а исполнитель обязан видеть, что именно переделывать.
+ */
+.rework-return__return {
     margin-left: auto;
     padding: 4px 10px;
     background: #fff3cd;
@@ -43,10 +56,9 @@
     border-radius: 4px;
     font-size: 13px;
     color: #856404;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    max-width: 300px;
+    text-align: right;
+    flex: 1 1 320px;
+    min-width: 0;
 }
 
 /*
@@ -147,22 +159,6 @@
     border-color: #007bff;
     outline: none;
     box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.15);
-}
-
-/*
- * Каскад — чекбокс под кнопками.
- */
-.rework-return__cascade {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    font-size: 13px;
-    color: #555;
-    white-space: nowrap;
-}
-
-.rework-return__cascade input {
-    margin: 0;
 }
 
 /*

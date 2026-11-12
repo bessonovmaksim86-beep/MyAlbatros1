@@ -18,6 +18,7 @@ import ru.company.production.repository.ProductSerialRepository;
 import ru.company.production.repository.ProductionOrderSerialProjection;
 
 import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.LinkedHashMap;
@@ -68,6 +69,21 @@ public class ControlReturnService {
     private final PendingDefectService pendingDefectService;
 
     /*
+     * Возврат на доработку пишется в журнал перемещений: паспорт изделия
+     * собирается по журналу, и без строки переделки в нём повторный
+     * возврат выглядел бы первым, а закрытая переделка — сбоем
+     * проведения.
+     */
+    private final SerialMovementJournalService journalService;
+
+    /*
+     * Сервис блокировки доработки: БТК не может перемещать позиции,
+     * которые цех уже принял на переделку — это запрещено на
+     * сервере, а не только скрыто в интерфейсе.
+     */
+    private final InstanceReworkService instanceReworkService;
+
+    /*
      * Роли, ведущие контроль и возвращающие работу цеху: мастер и
      * контролёр БТК.
      *
@@ -98,6 +114,45 @@ public class ControlReturnService {
     }
 
     /**
+     * Строки, по которым возврат заводился когда-либо.
+     *
+     * Открытых возвратов для этого мало: переделку закрывают повторным
+     * проведением, и строка становится закрытой ровно в тот момент,
+     * когда позиция снова попадает на контроль. Различить первую
+     * переделку и повторную можно только по факту возврата, оставшемуся
+     * в истории — строки возвратов не удаляются.
+     */
+    @Transactional(readOnly = true)
+    public Set<Long> rowsWithReturnHistory(Collection<Long> rowIds) {
+
+        if (rowIds == null || rowIds.isEmpty()) {
+            return Set.of();
+        }
+
+        return new LinkedHashSet<>(
+                controlReturnRepository.findRowIdsWithReturnHistory(rowIds));
+    }
+
+    /**
+     * Строки, чей экземпляр ожидает решения цеха — открытый сигнал БТК
+     * есть хотя бы по одной его строке.
+     *
+     * Нужен блокировке проведения: БТК возвращает изделие целиком, а не
+     * одну операцию, поэтому сигнал, заведённый на строку монтажа,
+     * касается и строки контроля того же изделия.
+     */
+    @Transactional(readOnly = true)
+    public Set<Long> rowIdsOfSignaledInstances(Collection<Long> rowIds) {
+
+        if (rowIds == null || rowIds.isEmpty()) {
+            return Set.of();
+        }
+
+        return new LinkedHashSet<>(
+                controlReturnRepository.findRowIdsOfSignaledInstances(rowIds));
+    }
+
+    /**
      * Отправить выбранные экземпляры на доработку.
      *
      * Возврат — сигнал цеху, а не отмена работы: проведение со строк
@@ -109,6 +164,12 @@ public class ControlReturnService {
      * только на выбранную: подсветка переделки обязана появиться у
      * каждого исполнителя по его собственной работе, иначе цех увидел
      * бы возврат только на операции контроля.
+     *
+     * Возврат пишется и в журнал перемещений — по одному событию на
+     * экземпляр: переделка одного изделия обязана читаться в его
+     * паспорте столько раз, сколько её возвращали, иначе повторный
+     * возврат выглядел бы первым, а закрытая переделка — сбоем
+     * проведения.
      */
     @Transactional
     public String sendToRework(List<Long> rowIds, String reason, AppUser actor) {
@@ -123,27 +184,82 @@ public class ControlReturnService {
         List<ControlReturn> returns = new ArrayList<>();
 
         for (OrderScheduleRow sample : instances.values()) {
+
+            /*
+             * Выбранная строка попадает в возврат сама, даже оставаясь
+             * непроведённой: контролёр вправе завернуть ячейку, не
+             * закрывая контроль. Без этого возврат заводился только на
+             * закрытые работы цеха, а отмеченная позиция в списке БТК
+             * не менялась — действие выглядело не сработавшим.
+             */
+            Set<Long> returned = new LinkedHashSet<>();
+
+            for (OrderScheduleRow chosen : rows) {
+                if (!instanceKey(chosen).equals(instanceKey(sample))) {
+                    continue;
+                }
+
+                returns.add(newReturn(
+                        chosen, defect, controlOperation, actor, now));
+                returned.add(chosen.getId());
+            }
+
             for (OrderScheduleRow row : completedRowsOfInstance(sample)) {
 
-                ControlReturn ret = new ControlReturn();
-                ret.setScheduleRow(row);
-                ret.setReason(defect);
-                ret.setControlOperation(controlOperation);
-                ret.setReturnedBy(actor);
-                ret.setReturnedAt(now);
-                returns.add(ret);
+                if (!returned.add(row.getId())) {
+                    continue;
+                }
+
+                returns.add(newReturn(
+                        row, defect, controlOperation, actor, now));
             }
         }
 
-        if (returns.isEmpty()) {
-            throw new IllegalStateException(
-                    "Нечего возвращать: выбранные экземпляры не проведены"
+        /*
+         * Отказ на пустом выборе уже отвергнут в requireRows, а
+         * выбранная строка попадает в возврат всегда: ветка «нечего
+         * возвращать» осталась бы недостижимым кодом.
+         */
+        controlReturnRepository.saveAll(returns);
+
+        /*
+         * Событие журнала — после возврата: паспорт обязан показать
+         * доработку ровно тогда, когда сигнал цеху отправлен, а не
+         * раньше. Экземпляр без номера изделия (выпуск ещё не создан,
+         * склад не внёс ячейку) события не получает: журналу не о чём
+         * писать, а выдуманный номер исказил бы паспорт.
+         */
+        for (OrderScheduleRow sample : instances.values()) {
+            ProductSerial serial = serialOfInstance(sample);
+
+            if (serial == null || serial.getFullNumber() == null) {
+                continue;
+            }
+
+            journalService.recordReturnedToRework(
+                    serial.getFullNumber(),
+                    serial.getId(),
+                    defect,
+                    actor,
+                    now
             );
         }
 
-        controlReturnRepository.saveAll(returns);
-
         return "Возвращено на доработку: " + instances.size();
+    }
+
+    private static ControlReturn newReturn(OrderScheduleRow row,
+                                           String defect,
+                                           String controlOperation,
+                                           AppUser actor,
+                                           LocalDateTime now) {
+        ControlReturn ret = new ControlReturn();
+        ret.setScheduleRow(row);
+        ret.setReason(defect);
+        ret.setControlOperation(controlOperation);
+        ret.setReturnedBy(actor);
+        ret.setReturnedAt(now);
+        return ret;
     }
 
     /**
@@ -307,6 +423,13 @@ public class ControlReturnService {
      * Граница — {@link WorkshopStaffService#unitScope}: руководителю
      * службы качества принадлежат оба бюро, и сравнение с единственным
      * подразделением его карточки отклонило бы любую его работу.
+     *
+     * Проведённую позицию перемещать нельзя никуда — ни в изолятор
+     * брака, ни назад на доработку: вердикт контроля уже вынесен, и
+     * второе перемещение задним числом переписывал бы принятую работу.
+     * Исключение — позиция, уже бывшая в доработке: её возвращают не
+     * раз, пока переделку не закрыли повторным проведением (проверка
+     * читает историю возвратов — {@link #assertMovable}).
      */
     private List<OrderScheduleRow> requireRows(List<Long> rowIds, AppUser actor) {
 
@@ -343,8 +466,85 @@ public class ControlReturnService {
             }
         }
 
+        assertMovable(rows);
+
         return rows;
     }
+
+    /**
+     * Проведённые строки, не бывшие в доработке, перемещению не подлежат.
+     *
+     * Отметить можно непроведённый экземпляр — контролёр выносит вердикт
+     * до проведения — и проведённый, который уже возвращали на доработку
+     * хотя бы раз: переделку закрывают повторным проведением, и по
+     * закрытому возврату нельзя отличить повторную переделку от первой.
+     * Поэтому проверяем не открытые, а все возвраты — строки не удаляются,
+     * а закрываются {@code resolved_at} при повторном проведении.
+     *
+     * Дополнительно БТК запрещено перемещать позиции, которые цех
+     * уже принял на доработку — у них есть открытый {@link ReworkReturn}.
+     * Такие позиции находятся в процессе переделки, и повторное
+     * перемещение переписало бы маршрут изделия, по которому решение
+     * ещё не принято.
+     *
+     * Читаем одним запросом по всем rowIds: проверка обязана отвергнуть
+     * отказ до любых записей, а построчный запрос превратил бы одну
+     * отметку в десяток обращений к базе.
+     */
+    private void assertMovable(List<OrderScheduleRow> rows) {
+
+        List<Long> completedIds = new ArrayList<>();
+
+        for (OrderScheduleRow row : rows) {
+            if (row.getCompletedAt() != null) {
+                completedIds.add(row.getId());
+            }
+        }
+
+        if (completedIds.isEmpty()) {
+            return;
+        }
+
+        Set<Long> hadReturn = new LinkedHashSet<>(
+                controlReturnRepository.findRowIdsWithReturnHistory(completedIds));
+
+        for (Long id : completedIds) {
+            if (hadReturn.contains(id)) {
+                continue;
+            }
+
+            OrderScheduleRow row = rows.stream()
+                    .filter(r -> r.getId().equals(id))
+                    .findFirst().orElse(null);
+
+            throw new IllegalStateException(
+                    "Позиция проведена "
+                            + (row != null && row.getCompletedAt() != null
+                                ? " " + RU_DATE_TIME.format(row.getCompletedAt())
+                                : "")
+                            + " — перемещать её нельзя. На доработку возвращают "
+                            + "только позиции, уже бывшие в доработке"
+            );
+        }
+
+        /*
+         * Строки, чья переделка не завершена: БТК не может перемещать
+         * позиции, которые цех уже принял на доработку.
+         */
+        Set<Long> incompleteRows = instanceReworkService
+                .incompleteRowIds(completedIds);
+
+        if (!incompleteRows.isEmpty()) {
+            throw new IllegalStateException(
+                    "Позиция на доработке — перемещение запрещено. "
+                            + "Доработка закроется после повторного проведения"
+            );
+        }
+    }
+
+    /** Подпись снятия проведения в отказе — тот же формат, что в списках. */
+    private static final DateTimeFormatter RU_DATE_TIME =
+            DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm");
 
     /* ============================================================
        ЭКЗЕМПЛЯРЫ ИХ СТРОКИ И НОМЕРЫ

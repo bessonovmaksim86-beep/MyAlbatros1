@@ -13,6 +13,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 import ru.company.production.entity.AppUser;
 import ru.company.production.entity.ControlReturn;
+import ru.company.production.entity.ReworkReturn;
 import ru.company.production.dto.AssignedOperationView;
 import ru.company.production.dto.ControlParamCompletionForm;
 import ru.company.production.dto.ControlParamValueForm;
@@ -39,10 +40,10 @@ import ru.company.production.dto.ControlReturnView;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.stream.Collectors;
 
 /**
  * Работы, закреплённые за текущим пользователем.
@@ -271,16 +272,19 @@ public class MyOperationsController {
 
         /*
          * Перенос считается группой, а не экземпляром: строка списка —
-         * это «операция + дата плана», и пользователь ожидает, что
-         * проведённые экземпляры уйдут в «Проведённые», а незакрытые —
-         * останутся в «Закреплённых». Группа, в которой закрыт хотя бы
-         * один экземпляр, переносится в проведённые целиком — разрезать
-         * группу на две строки (частично проведённая / незакрытая)
-         * означало бы потерять суммарную трудоёмкость и нарушить
-         * соответствие строки плану.
+         * это «операция + дата плана», и разрезать её между двумя
+         * половинами означало бы показать исполнителю строку без части
+         * её экземпляров и потерять суммарную трудоёмкость.
+         *
+         * Порог — «закрыты ВСЕ экземпляры» (allCompleted), а не «закрыт
+         * хотя бы один»: в группе из десяти изделий, где проведены
+         * девять, остаток обязан оставаться перед глазами. Прежний порог
+         * прятал такую группу в «Проведённых», и счётчик «Групповые ЗНП»
+         * показывал незакрытые строки, которых человек не находил ни в
+         * одной половине списка.
          */
         for (AssignedOperationView group : assigned) {
-            (group.completedCount() > 0 ? completed : pending).add(group);
+            (group.allCompleted() ? completed : pending).add(group);
         }
 
         model.addAttribute("groupMode", groupBase);
@@ -311,9 +315,15 @@ public class MyOperationsController {
 
         /*
          * Обогащение списка открытыми возвратами: собираю все rowId
-         * из всех групп, загружаю открытые ControlReturn и передаю
-         * Map<rowId, ControlReturnView> в модель — шаблон рисует
-         * подсветку и причину прямо в панели экземпляра.
+         * из всех групп, загружаю открытые ControlReturn и возвраты,
+         * заведённые самим цехом, и передаю Map<rowId, ControlReturnView>
+         * в модель — шаблон рисует подсветку и причину прямо в панели
+         * экземпляра.
+         *
+         * Оба источника нужны: сигнал БТК цех закрывает в момент снятия
+         * проведения (карточка уходит из «Возврата на доработку»), и
+         * если бы читался только он, исполнитель увидел бы снятую работу
+         * без единого объяснения.
          */
         List<Long> allRowIds = new ArrayList<>();
 
@@ -327,17 +337,39 @@ public class MyOperationsController {
             }
         }
 
-        List<ControlReturn> openReturns = controlReturnService
-                .findOpenReturns(allRowIds);
+        Map<Long, ControlReturnView> returnMap = new LinkedHashMap<>();
 
-        Map<Long, ControlReturnView> returnMap = openReturns.stream()
-                .collect(Collectors.toMap(
-                        ret -> ret.getScheduleRow().getId(),
-                        ControlReturnView::from,
-                        (a, b) -> a
-                ));
+        /*
+         * Возврат цеха приоритетнее сигнала БТК: он указывает ровно те
+         * операции, которые решено переделывать, тогда как БТК
+         * помечает изделие целиком.
+         */
+        for (ControlReturn ret : controlReturnService.findOpenReturns(allRowIds)) {
+            if (ret.getScheduleRow() != null && ret.getScheduleRow().getId() != null) {
+                returnMap.put(ret.getScheduleRow().getId(), ControlReturnView.from(ret));
+            }
+        }
+
+        for (ReworkReturn ret : reworkReturnService.findOpenReturns(allRowIds)) {
+            if (ret.getScheduleRow() != null && ret.getScheduleRow().getId() != null) {
+                returnMap.put(ret.getScheduleRow().getId(), ControlReturnView.from(ret));
+            }
+        }
 
         model.addAttribute("returnMap", returnMap);
+
+        /*
+         * Строки, на которые доработку возвращали хотя бы раз.
+         *
+         * Один и тот же признак, что и серверная проверка в
+         * ControlReturnService#assertMovable: проведённую позицию
+         * перемещать нельзя, кроме той, что уже была в доработке.
+         * Интерфейс и сервер обязаны смотреть в один признак.
+         */
+        model.addAttribute(
+                "rowsWithReturnHistory",
+                controlReturnService.rowsWithReturnHistory(allRowIds)
+        );
 
         /*
          * Цифра проведённой половины считается по уже собранному списку,
@@ -465,16 +497,20 @@ public class MyOperationsController {
          * Пункт «Забраковать» в цеховом меню.
          *
          * Граница та же, что у WorkshopViewAdvice: заявку оформляет тот,
-         * у кого позиция числится в цеху, — руководитель цеха. Совет
+         * у кого позиция числится в цеху, — руководитель цеха. Исполнителям
+         * пункт не показывается — у них нет права на браковку. Совет
          * подключён только к /workshop/**, а этот раздел живёт отдельно,
          * поэтому без собственного признака меню на «Мои операции»
          * теряло браковку, и руководитель, переключившись с
          * «Сотрудников» сюда, не находил привычный пункт.
          */
+        boolean isExecutor = user.getRole() != null
+                && user.getRole().name().endsWith("_EXECUTOR");
         model.addAttribute(
                 "canScrap",
-                staffService.unitKind(user)
-                        == WorkshopStaffService.UnitKind.WORKSHOP
+                !isExecutor
+                && staffService.unitKind(user)
+                == WorkshopStaffService.UnitKind.WORKSHOP
         );
 
         /*

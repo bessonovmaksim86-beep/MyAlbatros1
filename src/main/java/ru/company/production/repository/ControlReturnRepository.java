@@ -41,6 +41,69 @@ public interface ControlReturnRepository
     );
 
     /**
+     * Строки, по которым возврат заводился когда-либо.
+     *
+     * Открытых возвратов для этого мало: переделку закрывают повторным
+     * проведением, и строка становится закрытой ровно в тот момент,
+     * когда позиция снова попадает на контроль. Различить первую
+     * переделку и повторную можно только по факту возврата, оставшемуся
+     * в истории — строки возвратов не удаляются.
+     */
+    @Query("""
+            select distinct ret.scheduleRow.id
+            from ControlReturn ret
+            where ret.scheduleRow.id in :rowIds
+            """)
+    List<Long> findRowIdsWithReturnHistory(
+            @Param("rowIds") Collection<Long> rowIds
+    );
+
+    /**
+     * Строки, чей экземпляр awaits решения цеха — открытый сигнал БТК
+     * есть хотя бы по одной его строке.
+     *
+     * Нужен блокировке проведения: БТК возвращает изделие целиком, а не
+     * одну операцию, поэтому сигнал, заведённый на строку монтажа,
+     * касается и строки контроля того же изделия. Проверять каждую
+     * строку отдельным запросом значило бы десятки обращений к базе на
+     * один экран списка работ.
+     *
+     * Условие переписывает принадлежность возвратом экземпляру: строка
+     * возврата принадлежит бюро, а не цеху, поэтому блокируются ровно
+     * строки того же изделия, а не того же подразделения.
+     */
+    @Query("""
+            select row.id
+            from OrderScheduleRow row
+            where row.id in :rowIds
+              and (
+                    exists (
+                        select ret.id
+                        from ControlReturn ret
+                        join ret.scheduleRow other
+                        where ret.resolvedAt is null
+                          and row.customerOrder.id is not null
+                          and other.customerOrder.id = row.customerOrder.id
+                          and other.itemPosition = row.itemPosition
+                          and other.instanceIndex = row.instanceIndex
+                    )
+                 or exists (
+                        select ret.id
+                        from ControlReturn ret
+                        join ret.scheduleRow other
+                        where ret.resolvedAt is null
+                          and row.productionOrder.id is not null
+                          and other.productionOrder.id = row.productionOrder.id
+                          and other.itemPosition = row.itemPosition
+                          and other.instanceIndex = row.instanceIndex
+                    )
+              )
+            """)
+    List<Long> findRowIdsOfSignaledInstances(
+            @Param("rowIds") Collection<Long> rowIds
+    );
+
+    /**
      * История возвратов одной строки графика — сколько раз работу
      * возвращали и как закрывали.
      */
@@ -78,40 +141,70 @@ public interface ControlReturnRepository
     List<ControlReturn> findAllOpen();
 
     /**
-     * Сколько открытых возвратов относится к изделиям, которые его
-     * цех вообще выполняет.
+     * Сколько изделий ждёт решения цеха — счётчик пункта меню.
      *
      * Нужен счётчику в боковом меню: он считается на каждом экране
      * модуля, и строить ради цифры полные карточки было бы потерей.
      *
      * Условие переписывает принадлежность экземпляра подразделению:
-     * строка возврата принадлежит бюро, а не цеху, поэтому в счётчик
-     * возврат попадает ровно тогда, когда у того же экземпляра есть
+     * строка возврата принадлежит бюро, а не цеху, поэтому возврат
+     * попадает в счётчик ровно тогда, когда у того же экземпляра есть
      * строка плана этого цеха.
+     *
+     * Считаются изделия, а не строки возвратов: БТК заводит возврат на
+     * каждую проведённую строку экземпляра, и по строкам возвратов
+     * счётчик показал бы три изделия как девять (по три операции на
+     * каждое). Раз JPQL не считает distinct по составному ключу
+     * экземпляра, считается по одному представителю изделия — строке
+     * цеха с наименьшим id среди его строк: таких строк на изделие
+     * ровно одна, и она попадает в условие тогда же, когда и всё
+     * изделие.
      */
     @Query("""
-            select count(ret)
-            from ControlReturn ret
-            where ret.resolvedAt is null
+            select count(row.id)
+            from OrderScheduleRow row
+            where row.organizationUnit.id in :unitIds
               and (
                     exists (
-                        select other
-                        from OrderScheduleRow other
-                        where ret.scheduleRow.customerOrder.id is not null
-                          and other.customerOrder.id = ret.scheduleRow.customerOrder.id
-                          and other.itemPosition = ret.scheduleRow.itemPosition
-                          and other.instanceIndex = ret.scheduleRow.instanceIndex
-                          and other.organizationUnit.id in :unitIds
+                        select ret.id
+                        from ControlReturn ret
+                        join ret.scheduleRow other
+                        where ret.resolvedAt is null
+                          and row.customerOrder.id is not null
+                          and other.customerOrder.id = row.customerOrder.id
+                          and other.itemPosition = row.itemPosition
+                          and other.instanceIndex = row.instanceIndex
                     )
                  or exists (
-                        select other
-                        from OrderScheduleRow other
-                        where ret.scheduleRow.productionOrder.id is not null
-                          and other.productionOrder.id = ret.scheduleRow.productionOrder.id
-                          and other.itemPosition = ret.scheduleRow.itemPosition
-                          and other.instanceIndex = ret.scheduleRow.instanceIndex
-                          and other.organizationUnit.id in :unitIds
+                        select ret.id
+                        from ControlReturn ret
+                        join ret.scheduleRow other
+                        where ret.resolvedAt is null
+                          and row.productionOrder.id is not null
+                          and other.productionOrder.id = row.productionOrder.id
+                          and other.itemPosition = row.itemPosition
+                          and other.instanceIndex = row.instanceIndex
                     )
+              )
+              and not exists (
+                    select earlier.id
+                    from OrderScheduleRow earlier
+                    where earlier.id < row.id
+                      and earlier.organizationUnit.id in :unitIds
+                      and (
+                            (
+                                row.customerOrder.id is not null
+                                and earlier.customerOrder.id = row.customerOrder.id
+                                and earlier.itemPosition = row.itemPosition
+                                and earlier.instanceIndex = row.instanceIndex
+                            )
+                         or (
+                                row.productionOrder.id is not null
+                                and earlier.productionOrder.id = row.productionOrder.id
+                                and earlier.itemPosition = row.itemPosition
+                                and earlier.instanceIndex = row.instanceIndex
+                            )
+                      )
               )
             """)
     long countOpenForUnits(@Param("unitIds") java.util.Collection<Long> unitIds);

@@ -434,6 +434,10 @@ public class CellReceivingService {
     /**
      * Следующая свободная серия ряда классификатора: максимум реестра
      * и максимум зарезервированных партий, плюс единица.
+     *
+     * Нижняя граница — стартовый номер ряда (миграция V86): приход
+     * склада выдаёт номера того же ряда, что и заказ на производство,
+     * и обязан считаться с ним одинаково.
      */
     private int nextSerial(ProductClassifier classifier) {
 
@@ -451,7 +455,10 @@ public class CellReceivingService {
                 reservedMax == null ? 0 : reservedMax
         );
 
-        return max + 1;
+        return Math.max(
+                max + 1,
+                StartSerialService.resolve(classifier, classifierRepository)
+        );
     }
 
     /**

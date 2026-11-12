@@ -15,6 +15,7 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 /**
@@ -87,6 +88,18 @@ public class ReworkReturn {
      */
     @Column(name = "cascade_to_following", nullable = false)
     private boolean cascadeToFollowing = false;
+
+    /*
+     * Дата плана, которая была у строки до возврата.
+     *
+     * Возврат даёт операции новую дату — переделку проводят заново, —
+     * а прежняя обязана сохраниться: по ней видно, когда работа была
+     * принята и снята. В original_planned_date строки графика её
+     * класть нельзя: там живёт дата планировщика, и возвратом она
+     * была бы потеряна.
+     */
+    @Column(name = "previous_planned_date")
+    private LocalDate previousPlannedDate;
 
     /*
      * Кто и когда вернул на доработку.

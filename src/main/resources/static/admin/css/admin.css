@@ -921,3 +921,73 @@ body {
     font-weight: 500;
 }
 
+/* ============================================================
+   РАЗДЕЛ «СТАРТОВЫЕ НОМЕРА СЕРИЙ»
+   ============================================================ */
+
+.admin-start-serials-filter {
+    display: flex;
+    align-items: flex-end;
+    min-width: 280px;
+}
+
+.admin-start-serials-filter label {
+    margin-bottom: 6px;
+    font-weight: 700;
+    color: var(--navy, #073e75);
+}
+
+.admin-start-serials-filter input[type=search] {
+    width: 100%;
+    padding: 8px 12px;
+    border: 1px solid var(--border, #d1d5db);
+    border-radius: 6px;
+    font-size: 14px;
+}
+
+.admin-start-serials-row.hidden {
+    display: none;
+}
+
+.admin-start-serials-type {
+    margin-left: 6px;
+    font-size: 11px;
+    vertical-align: middle;
+}
+
+.admin-start-serials-warn {
+    display: block;
+    margin-top: 4px;
+    font-size: 12px;
+    color: var(--warning, #d97706);
+    font-weight: 500;
+}
+
+.admin-start-serials-form {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.admin-start-serials-input {
+    width: 90px;
+    padding: 6px 8px;
+    border: 1px solid var(--border, #d1d5db);
+    border-radius: 6px;
+    font-size: 14px;
+    font-variant-numeric: tabular-nums;
+}
+
+.admin-start-serials-input:focus {
+    outline: none;
+    border-color: var(--admin-accent, #ef7d00);
+    box-shadow: 0 0 0 2px rgba(239, 125, 0, 0.2);
+}
+
+.admin-start-serials-next {
+    font-size: 16px;
+    font-weight: 800;
+    color: var(--navy, #073e75);
+    font-variant-numeric: tabular-nums;
+}
+
