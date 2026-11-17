@@ -38,7 +38,8 @@ import java.util.Locale;
         WarehouseSupplierController.class,
         WarehouseKittingController.class,
         SubassemblyKittingController.class,
-        WarehouseStockController.class
+        WarehouseStockController.class,
+        WarehouseSerialSearchController.class
 })
 @RequiredArgsConstructor
 public class WarehouseViewAdvice {

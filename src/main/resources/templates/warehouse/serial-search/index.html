@@ -1,0 +1,753 @@
+<!DOCTYPE html>
+<html lang="ru"
+      xmlns:th="http://www.thymeleaf.org">
+
+<head>
+    <meta charset="UTF-8">
+
+    <meta name="viewport"
+          content="width=device-width, initial-scale=1">
+
+    <title>Поиск номера</title>
+
+    <link rel="stylesheet"
+          th:href="@{/technology/css/technology.css}">
+
+    <link rel="stylesheet"
+          th:href="@{/technology/css/common.css}">
+
+    <link rel="stylesheet"
+          th:href="@{/warehouse/css/warehouse.css}">
+</head>
+
+<body>
+
+<div class="app-shell">
+
+    <aside th:replace="~{warehouse/fragments/layout
+            :: sidebar('serial-search')}">
+    </aside>
+
+    <main class="main">
+
+        <header th:replace="~{warehouse/fragments/layout
+                :: topbar}">
+        </header>
+
+        <div class="page-content warehouse-page">
+
+            <div class="page-head">
+
+                <div class="page-title">
+
+                    <h1>Поиск номера</h1>
+
+                    <p>
+                        Этикетка с QR-кодом повреждена — номер не читается.
+                        Введите известные наводки, и система подберёт
+                        предполагаемые серийные номера
+                    </p>
+
+                </div>
+
+                <div class="page-head-actions">
+
+                    <a class="btn secondary"
+                       th:href="@{/warehouse/stock}">
+                        Наличие на складе
+                    </a>
+
+                    <a class="btn secondary"
+                       th:href="@{/warehouse/general}">
+                        Обзор склада
+                    </a>
+
+                </div>
+            </div>
+
+            <!-- ============================================================
+                 ФОРМА ПОИСКА
+
+                 Все поля необязательны: пользователь вводит то, что
+                 известно, остальные оставляет пустыми. Пустое значение
+                 означает «не выбрано», а не ошибку — экран открывается
+                 с одним известным признаком и позволяет добавлять
+                 наводки по мере надобности.
+
+                 Форма уходит GET'ом: ссылку на «ячейки 5127 на операции
+                 сборки» передают коллеге, и выбор не должен сбрасываться.
+                 ============================================================ -->
+            <form class="ws-filter ws-filter--search"
+                  method="get"
+                  th:action="@{/warehouse/serial-search}">
+
+                <div class="ws-filter__row">
+
+                    <div class="ws-filter__field">
+
+                        <label for="ssClassifier">
+                            Классификатор
+                        </label>
+
+                        <select id="ssClassifier"
+                                name="classifierId">
+
+                            <option value="">
+                                Все изделия
+                            </option>
+
+                            <option th:each="opt : ${productOptions}"
+                                    th:value="${opt.id}"
+                                    th:text="${opt.label}"
+                                    th:selected="${filter != null and filter.classifierId() != null and filter.classifierId() == opt.id}">
+                                5127 — ЯПР56М
+                            </option>
+                        </select>
+
+                        <span class="ws-filter__hint">
+                            Изделие, к которому принадлежит повреждённая
+                            этикетка
+                        </span>
+                    </div>
+
+                    <div class="ws-filter__field">
+
+                        <label for="ssProductName">
+                            Название изделия
+                        </label>
+
+                        <input id="ssProductName"
+                               type="text"
+                               name="productName"
+                               placeholder="Часть наименования"
+                               th:value="${filter != null ? filter.productName() : ''}">
+
+                        <span class="ws-filter__hint">
+                            Частичное совпадение по наименованию
+                        </span>
+                    </div>
+
+                    <div class="ws-filter__field">
+
+                        <label for="ssNumberHint">
+                            Частичный номер
+                        </label>
+
+                        <input id="ssNumberHint"
+                               type="text"
+                               name="numberHint"
+                               placeholder="Например: 5127000"
+                               th:value="${filter != null ? filter.numberHint() : ''}">
+
+                        <span class="ws-filter__hint">
+                            Первые цифры номера или его часть
+                        </span>
+                    </div>
+
+                </div>
+
+                <div class="ws-filter__row">
+
+                    <div class="ws-filter__field">
+
+                        <label for="ssOperationFound">
+                            Операция, на которой обнаружена
+                        </label>
+
+                        <select id="ssOperationFound"
+                                name="operationFoundId">
+
+                            <option value="">
+                                Не указана
+                            </option>
+
+                            <option th:each="op : ${operations}"
+                                    th:value="${op.id}"
+                                    th:text="${op.name}"
+                                    th:selected="${filter != null and filter.operationFoundIdParam() != null and filter.operationFoundIdParam() == op.id}">
+                                Сборка
+                            </option>
+                        </select>
+
+                        <span class="ws-filter__hint">
+                            Операция маршрута, на которой прочесть QR
+                            не удалось
+                        </span>
+                    </div>
+
+                    <div class="ws-filter__field">
+
+                        <label for="ssCompletedOps">
+                            Операции, которые прошли
+                        </label>
+
+                        <select id="ssCompletedOps"
+                                name="completedOperationIds"
+                                multiple
+                                size="1">
+
+                            <option th:each="op : ${operations}"
+                                    th:value="${op.id}"
+                                    th:text="${op.name}">
+                                Сборка
+                            </option>
+                        </select>
+
+                        <span class="ws-filter__hint">
+                            Удерживается Ctrl — номер обязан иметь
+                            ВСЕ выбранные операции в маршруте
+                        </span>
+                    </div>
+
+                </div>
+
+                <div class="ws-filter__row">
+
+                    <div class="ws-filter__field">
+
+                        <label for="ssStatus">
+                            Статус номера
+                        </label>
+
+                        <select id="ssStatus"
+                                name="status">
+
+                            <option value="">
+                                Любой статус
+                            </option>
+
+                            <option th:each="s : ${statuses}"
+                                    th:value="${s.name()}"
+                                    th:text="${s.displayName}"
+                                    th:selected="${filter != null and filter.status() != null and filter.status().name() == s.name()}">
+                                Выпущен
+                            </option>
+                        </select>
+
+                        <span class="ws-filter__hint">
+                            Стадия жизненного цикла номера
+                        </span>
+                    </div>
+
+                    <div class="ws-filter__field">
+
+                        <label for="ssProductType">
+                            Тип изделия
+                        </label>
+
+                        <select id="ssProductType"
+                                name="productType">
+
+                            <option value="">
+                                Все типы
+                            </option>
+
+                            <option th:each="t : ${productTypes}"
+                                    th:value="${t.name()}"
+                                    th:text="${t.displayName}"
+                                    th:selected="${filter != null and filter.productType() != null and filter.productType().name() == t.name()}">
+                                Прибор
+                            </option>
+                        </select>
+
+                        <span class="ws-filter__hint">
+                            Прибор, ячейка, датчик, система
+                        </span>
+                    </div>
+
+                    <div class="ws-filter__field">
+
+                        <label for="ssInputControl">
+                            Входной контроль
+                        </label>
+
+                        <select id="ssInputControl"
+                                name="inputControlType">
+
+                            <option value="">
+                                Любой контроль
+                            </option>
+
+                            <option th:each="ict : ${inputControlTypes}"
+                                    th:value="${ict.name()}"
+                                    th:text="${ict.displayName}"
+                                    th:selected="${filter != null and filter.inputControlType() != null and filter.inputControlType().name() == ict.name()}">
+                                Визуальный
+                            </option>
+                        </select>
+
+                        <span class="ws-filter__hint">
+                            Вид контроля, которым отмечена ячейка
+                        </span>
+                    </div>
+
+                </div>
+
+                <div class="ws-filter__row">
+
+                    <div class="ws-filter__field">
+
+                        <label for="ssDateFrom">
+                            Выпуск с
+                        </label>
+
+                        <input id="ssDateFrom"
+                               type="date"
+                               name="dateFrom"
+                               th:value="${filter != null ? filter.dateFrom() : ''}">
+
+                        <span class="ws-filter__hint">
+                            Дата выпуска номера
+                        </span>
+                    </div>
+
+                    <div class="ws-filter__field">
+
+                        <label for="ssDateTo">
+                            Выпуск по
+                        </label>
+
+                        <input id="ssDateTo"
+                               type="date"
+                               name="dateTo"
+                               th:value="${filter != null ? filter.dateTo() : ''}">
+
+                        <span class="ws-filter__hint">
+                            Указанный день включительно
+                        </span>
+                    </div>
+
+                    <div class="ws-filter__field">
+
+                        <label for="ssSupplier">
+                            Поставщик
+                        </label>
+
+                        <input id="ssSupplier"
+                               type="text"
+                               name="supplierName"
+                               placeholder="Название поставщика"
+                               th:value="${filter != null ? filter.supplierName() : ''}">
+
+                        <span class="ws-filter__hint">
+                            Частичное совпадение по названию
+                        </span>
+                    </div>
+
+                </div>
+
+                <div class="ws-filter__row">
+
+                    <div class="ws-filter__field">
+
+                        <label for="ssIncomingOrder">
+                            Приходный ордер
+                        </label>
+
+                        <input id="ssIncomingOrder"
+                               type="text"
+                               name="incomingOrderNumber"
+                               placeholder="Номер партии"
+                               th:value="${filter != null ? filter.incomingOrderNumber() : ''}">
+
+                        <span class="ws-filter__hint">
+                            Номер приходного ордера партии
+                        </span>
+                    </div>
+
+                    <div class="ws-filter__field">
+
+                        <label for="ssZnpNumber">
+                            ЗНП
+                        </label>
+
+                        <input id="ssZnpNumber"
+                               type="text"
+                               name="znpNumber"
+                               placeholder="Например: ЗНП-2026"
+                               th:value="${filter != null ? filter.znpNumber() : ''}">
+
+                        <span class="ws-filter__hint">
+                            Номер заказ-комплектующего
+                        </span>
+                    </div>
+
+                    <div class="ws-filter__field">
+
+                        <label for="ssProductionOrder">
+                            Производственный заказ (ЗП)
+                        </label>
+
+                        <input id="ssProductionOrder"
+                               type="text"
+                               name="productionOrderNumber"
+                               placeholder="Например: ЗП-2026"
+                               th:value="${filter != null ? filter.productionOrderNumber() : ''}">
+
+                        <span class="ws-filter__hint">
+                            Заказ на производство
+                        </span>
+                    </div>
+
+                    <div class="ws-filter__field">
+
+                        <label for="ssUnitName">
+                            Подразделение
+                        </label>
+
+                        <input id="ssUnitName"
+                               type="text"
+                               name="unitName"
+                               placeholder="Цех сборки"
+                               th:value="${filter != null ? filter.unitName() : ''}">
+
+                        <span class="ws-filter__hint">
+                            Куда передана позиция, ждёт подтверждения
+                        </span>
+                    </div>
+
+                </div>
+
+                <div class="ws-filter__actions">
+
+                    <button type="submit" class="btn primary compact">
+                        Найти
+                    </button>
+
+                    <a class="btn secondary compact"
+                       th:href="@{/warehouse/serial-search(reset=true)}">
+                        Сбросить
+                    </a>
+                </div>
+
+            </form>
+
+            <!-- ============================================================
+                 РЕЗУЛЬТАТЫ ПОИСКА
+                 ============================================================ -->
+            <div class="stats stats--search"
+                 th:if="${rows != null and not #lists.isEmpty(rows)}">
+
+                <div class="stat">
+                    <small>Найдено номеров</small>
+
+                    <strong th:text="${filteredCount}">
+                        0
+                    </strong>
+
+                    <span class="trend">
+                        С учётом исключённых
+                    </span>
+                </div>
+            </div>
+
+            <!-- ============================================================
+                 ПОЛЕ ИСКЛЮЧЕНИЯ
+                 ============================================================ -->
+            <section class="card card--exclude"
+                     th:if="${rows != null and not #lists.isEmpty(rows)}">
+
+                <div class="card-head">
+
+                    <div>
+
+                        <h2>Исключить идентифицированные</h2>
+
+                        <small>
+                            Впишите номера, которые уже определены и не
+                            подходят, через запятую — они будут вычтены
+                            из результата поиска
+                        </small>
+
+                    </div>
+
+                </div>
+
+                <div class="card-body">
+
+                    <form class="exclude-form"
+                          method="get"
+                          th:action="@{/warehouse/serial-search}">
+
+                        <input type="hidden"
+                               name="classifierId"
+                               th:value="${filter != null ? filter.classifierId() : ''}">
+
+                        <input type="hidden"
+                               name="productName"
+                               th:value="${filter != null ? filter.productName() : ''}">
+
+                        <input type="hidden"
+                               name="numberHint"
+                               th:value="${filter != null ? filter.numberHint() : ''}">
+
+                        <input type="hidden"
+                               name="status"
+                               th:value="${filter != null and filter.status() != null ? filter.status().name() : ''}">
+
+                        <input type="hidden"
+                               name="productType"
+                               th:value="${filter != null and filter.productType() != null ? filter.productType().name() : ''}">
+
+                        <input type="hidden"
+                               name="inputControlType"
+                               th:value="${filter != null and filter.inputControlType() != null ? filter.inputControlType().name() : ''}">
+
+                        <input type="hidden"
+                               name="dateFrom"
+                               th:value="${filter != null ? filter.dateFrom() : ''}">
+
+                        <input type="hidden"
+                               name="dateTo"
+                               th:value="${filter != null ? filter.dateTo() : ''}">
+
+                        <input type="hidden"
+                               name="supplierName"
+                               th:value="${filter != null ? filter.supplierName() : ''}">
+
+                        <input type="hidden"
+                               name="incomingOrderNumber"
+                               th:value="${filter != null ? filter.incomingOrderNumber() : ''}">
+
+                        <input type="hidden"
+                               name="znpNumber"
+                               th:value="${filter != null ? filter.znpNumber() : ''}">
+
+                        <input type="hidden"
+                               name="productionOrderNumber"
+                               th:value="${filter != null ? filter.productionOrderNumber() : ''}">
+
+                        <input type="hidden"
+                               name="unitName"
+                               th:value="${filter != null ? filter.unitName() : ''}">
+
+                        <input type="hidden"
+                               name="operationFoundId"
+                               th:value="${filter != null ? filter.operationFoundIdParam() : ''}">
+
+                        <input type="hidden"
+                               name="operationFoundName"
+                               th:value="${filter != null and filter.operationFound() != null ? filter.operationFound().operationName() : ''}">
+
+                        <!--
+                            Пройденные операции возвращают себя списком:
+                            select multiple отдаёт их несколькими
+                            параметрами completedOperationIds, и поле
+                            исключения обязано их сохранить — иначе
+                            «Исключить» сбросило бы фильтр по маршруту.
+                        -->
+                        <th:block th:if="${filter != null}"
+                                  th:each="opId : ${filter.completedOperationIds()}">
+
+                            <input type="hidden"
+                                   name="completedOperationIds"
+                                   th:value="${opId}">
+                        </th:block>
+
+                        <div class="exclude-form__input">
+
+                            <label for="excludeIds">
+                                Номера для исключения
+                            </label>
+
+                            <input id="excludeIds"
+                                   type="text"
+                                   name="excludedIds"
+                                   placeholder="512700011, 512700022"
+                                   th:value="${excludedIds}">
+
+                            <button type="submit"
+                                    class="btn secondary compact">
+                                Исключить
+                            </button>
+
+                        </div>
+
+                    </form>
+
+                </div>
+            </section>
+
+            <!-- ============================================================
+                 РЕЕСТР ПРЕДПОЛАГАЕМЫХ НОМЕРОВ
+                 ============================================================ -->
+            <section class="card"
+                     th:if="${rows != null and not #lists.isEmpty(rows)}">
+
+                <div class="card-head">
+
+                    <div>
+
+                        <h2>Предполагаемые номера</h2>
+
+                        <small>
+                            Строка — один серийный номер. Маршрут показывает
+                            операции, которые номер прошёл; отметки контроля
+                            и приёмки — стадию жизненного цикла
+                        </small>
+
+                    </div>
+
+                </div>
+
+                <div class="card-body">
+
+                    <div class="table-wrap">
+
+                        <table class="data-table warehouse-search-table">
+
+                            <thead>
+
+                            <tr>
+                                <th>Номер</th>
+                                <th>Изделие</th>
+                                <th>Статус</th>
+                                <th>Маршрут</th>
+                                <th>Вх. контроль</th>
+                                <th>Приёмка</th>
+                                <th>ЗНП</th>
+                                <th>Поставщик</th>
+                                <th>Передана в</th>
+                                <th>Выпуск</th>
+                            </tr>
+
+                            </thead>
+
+                            <tbody>
+
+                            <tr th:each="row : ${rows}">
+
+                                <td class="warehouse-number-cell">
+                                    <span class="mono"
+                                          th:text="${row.fullNumber}">
+                                        512700022
+                                    </span>
+                                </td>
+
+                                <td>
+                                    <span th:text="${row.displayName}">
+                                        5127 — ЯПР56М
+                                    </span>
+                                </td>
+
+                                <td>
+                                    <span class="status"
+                                          th:classappend="' ' + ${row.statusBadgeClass}"
+                                          th:text="${row.statusLabel}">
+                                        Выпущен
+                                    </span>
+                                </td>
+
+                                <td>
+                                    <small th:text="${row.completedOperationsLabel}">
+                                        Очистка · Сборка · Контроль
+                                    </small>
+                                </td>
+
+                                <td>
+                                    <small>
+                                        <span th:text="${row.inputControlDisplayLabel}">
+                                            контроль не проведён
+                                        </span>
+                                        <br>
+                                        <span class="text-muted"
+                                              th:if="${row.formattedInputControlAt != null and row.formattedInputControlAt != '—'}"
+                                              th:text="${row.formattedInputControlAt}">
+                                            22.09.2026 14:10
+                                        </span>
+                                        <span class="text-muted"
+                                              th:if="${row.inputControlByName != null and row.inputControlByName != '—'}"
+                                              th:text="${row.inputControlByName}">
+                                            Иванов И.И.
+                                        </span>
+                                    </small>
+                                </td>
+
+                                <td>
+                                    <small>
+                                        <span class="text-muted"
+                                              th:text="${row.formattedAcceptedAt}">
+                                            —
+                                        </span>
+                                        <br>
+                                        <span class="text-muted"
+                                              th:if="${row.acceptedByName != null and row.acceptedByName != '—'}"
+                                              th:text="${row.acceptedByName}">
+                                            Петров П.П.
+                                        </span>
+                                    </small>
+                                </td>
+
+                                <td>
+                                    <span class="mono"
+                                          th:if="${row.znpNumber != null and row.znpNumber != ''}"
+                                          th:text="${row.znpNumber}">
+                                        ЗНП-2026-114
+                                    </span>
+                                    <span class="text-muted"
+                                          th:if="${row.znpNumber == null or row.znpNumber == ''}">
+                                        —
+                                    </span>
+                                </td>
+
+                                <td>
+                                    <span th:if="${row.supplierName != null and row.supplierName != ''}"
+                                          th:text="${row.supplierName}">
+                                        ООО «Компонент»
+                                    </span>
+                                    <span class="text-muted"
+                                          th:if="${row.supplierName == null or row.supplierName == ''}">
+                                        —
+                                    </span>
+                                </td>
+
+                                <td>
+                                    <span class="text-muted"
+                                          th:if="${row.unitName != null and row.unitName != ''}"
+                                          th:text="'«' + ${row.unitName} + '»'">
+                                        «Цех сборки»
+                                    </span>
+                                    <span class="text-muted"
+                                          th:if="${row.unitName == null or row.unitName == ''}">
+                                        —
+                                    </span>
+                                </td>
+
+                                <td>
+                                    <small class="text-muted"
+                                           th:text="${row.formattedIssuedAt}">
+                                        21.09.2026 09:14
+                                    </small>
+                                </td>
+
+                            </tr>
+
+                            </tbody>
+
+                        </table>
+
+                    </div>
+
+                </div>
+            </section>
+
+            <div class="alert success"
+                 th:if="${rows != null and #lists.isEmpty(rows) and filter != null and filter.filtered}"
+                 th:text="'Под выбранные наводки номеров не найдено: попробуйте расширить условия поиска'">
+            </div>
+
+            <div class="alert success"
+                 th:if="${rows != null and #lists.isEmpty(rows) and (filter == null or not filter.filtered)}"
+                 th:text="'Введите хотя бы одну наводку для поиска'">
+            </div>
+
+        </div>
+    </main>
+</div>
+
+<th:block th:replace="~{warehouse/fragments/layout
+        :: commonScripts}">
+</th:block>
+
+</body>
+</html>

@@ -1984,3 +1984,132 @@ body {
         width: auto;
     }
 }
+
+/* =============================================================
+   ПОИСК НОМЕРА (ПОВРЕЖДЁННАЯ QR-ЭТИКЕТКА)
+
+   Форма поиска шире стандартной ws-filter: поля разбиты на строки
+   (ws-filter__row), чтобы не создавать вертикальную прокрутку на
+   экране кладовщика. Подсказки и поля ввода — тот же стиль, что
+   у реестра наличия, но сетка адаптирована под 12-колоночную
+   структуру.
+
+   Сводка stats--search — одна карточка: «найдено номеров».
+   Блок исключения отделён визуально, чтобы не сливался с формой.
+   ============================================================ */
+
+.ws-filter--search {
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+}
+
+/*
+ * Строка полей: когда условий больше, чем помещается в одну строку,
+ * они переносятся на следующую с тем же выравниванием по верху.
+ */
+.ws-filter__row {
+    display: contents;
+}
+
+@media (max-width: 1200px) {
+    .ws-filter--search {
+        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    }
+}
+
+.stats--search {
+    grid-template-columns: repeat(1, minmax(0, 1fr));
+}
+
+/*
+ * Блок исключения: визуально отделён от формы поиска и таблицы
+ * результатов — чтобы кладовщик не перепутал поле ввода исключения
+ * с основной формой.
+ */
+.card--exclude {
+    margin-top: 24px;
+    margin-bottom: 24px;
+}
+
+.card--exclude .card-body {
+    padding: 14px 20px;
+}
+
+.exclude-form {
+    max-width: 600px;
+}
+
+.exclude-form__input {
+    display: flex;
+    gap: 10px;
+    align-items: flex-end;
+}
+
+.exclude-form__input label {
+    min-height: auto;
+    padding-bottom: 8px;
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--muted, #6c7b89);
+    text-transform: uppercase;
+    letter-spacing: 0.2px;
+}
+
+.exclude-form__input input {
+    flex: 1;
+    min-width: 0;
+}
+
+/*
+ * Таблица результатов поиска: узкая колонка для номера,
+ * маршрута и отметок контроля — компактная подача.
+ */
+.warehouse-search-table td small {
+    display: block;
+    margin-top: 2px;
+
+    color: var(--muted, #6c7b89);
+    font-size: 11px;
+}
+
+.warehouse-search-table td .mono {
+    font-family: 'Consolas', 'Courier New', monospace;
+    font-weight: 700;
+}
+
+.warehouse-search-table th:nth-child(3) {
+    width: 80px;
+}
+
+.warehouse-search-table th:nth-child(7),
+.warehouse-search-table th:nth-child(8),
+.warehouse-search-table th:nth-child(9) {
+    width: 110px;
+}
+
+/* Выпадающий список операций: multi-select стилизован */
+.ws-filter__field select[multiple] {
+    height: auto;
+    min-height: 42px;
+    padding: 6px 8px;
+}
+
+@media (max-width: 1050px) {
+    .stats--search {
+        grid-template-columns: 1fr;
+    }
+}
+
+@media (max-width: 800px) {
+    .ws-filter--search {
+        grid-template-columns: 1fr;
+    }
+
+    .exclude-form__input {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .exclude-form__input input {
+        width: 100%;
+    }
+}

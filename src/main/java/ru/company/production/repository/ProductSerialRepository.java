@@ -1111,4 +1111,262 @@ public interface ProductSerialRepository
     int deleteAllByReceivingBatchId(
             @Param("receivingBatchId") Long receivingBatchId
     );
+
+    /*
+     * ============================================================
+     * Поиск серийного номера по наводкам (повреждённая этикетка)
+     * ============================================================
+     *
+     * Раздел отвечает на вопрос «какой это номер?», когда QR-этикетку
+     * на ячейке или подсборке прочесть нельзя. Условия отбора — не
+     * реквизиты позиции, а наводки человека: что помнят о изделии, на
+     * какой операции его нашли и что он успел пройти.
+     *
+     * Скалярная проекция, как у реестра наличия: экран печатает номер,
+     * изделие, статус и отметки маршрута, — fetch join ради этого тянул
+     * бы классификатор, справочник датчиков, партию, заказ и троих
+     * сотрудников.
+     *
+     * Пройдённые операции в этот запрос НЕ входят: их перечень
+     * динамический, а JPQL не умеет «номер обязан иметь все N пар»
+     * параметром-списком. Операцию, на которой позицию нашли, запрос
+     * проверяет через exists — условие одиночное;多选 же считает сервис
+     * по пакетной выборке маршрута (см. findSerialOperations).
+     */
+
+    /**
+     * Номера по текстовым наводкам и одиночному условию операции.
+     *
+     * Все параметры необязательны: пустой снимает условие, а не
+     * отбрасывает строки, — экран открывают с одним известным
+     * признаком и добавляют наводки по мере надобности.
+     *
+     * Текст ищется по подстроке: человек помнит номер и наименование
+     * частично, а не целиком. Полный номер при этом собирается
+     * арифметически (код * 100000 + серия) — тем же приёмом, что
+     * глобальный поиск (V17).
+     *
+     * Граница «позиция ещё на складе» здесь НЕ ставится: повреждённую
+     * этикетку читают и на позиции, уехавшей в цех, и в orders, и в
+     * изоляторе, — иначе поиск молчал бы ровно там, где его ищут.
+     */
+    @Query("""
+            select
+                serial.id                  as id,
+                classifier.id              as classifierId,
+                classifier.code            as classifierCode,
+                classifier.name            as classifierName,
+                sensor.name                as sensorClassName,
+                serial.productType         as productType,
+                serial.serial              as serial,
+                serial.status              as status,
+                serial.znpNumber           as znpNumber,
+                serial.inputControlType    as inputControlType,
+                serial.inputControlAt      as inputControlAt,
+                serial.acceptedAt          as acceptedAt,
+                serial.cellReadyAt         as cellReadyAt,
+                serial.issuedAt            as issuedAt,
+                batch.incomingOrderNumber  as incomingOrderNumber,
+                batch.changeNumber         as changeNumber,
+                batch.supplierName         as supplierName,
+                ord.number                 as productionOrderNumber,
+                icb.fullName               as inputControlByName,
+                acb.fullName               as acceptedByName,
+                crb.fullName               as cellReadyByName
+            from ProductSerial serial
+            join serial.productClassifier classifier
+            left join classifier.sensorCatalog sensor
+            left join serial.receivingBatch batch
+            left join serial.issuedProductionOrder ord
+            left join serial.inputControlBy icb
+            left join serial.acceptedBy acb
+            left join serial.cellReadyBy crb
+            where (:classifierId is null or classifier.id = :classifierId)
+              and (:productName is null
+                   or lower(classifier.name)
+                          like lower(concat('%', :productName, '%'))
+                   or lower(sensor.name)
+                          like lower(concat('%', :productName, '%')))
+              and (:numberHint is null
+                   or cast(classifier.code * 100000 + serial.serial as string)
+                          like concat('%', :numberHint, '%'))
+              and (:status is null or serial.status = :status)
+              and (:productType is null or serial.productType = :productType)
+              and (:inputControlType is null
+                   or serial.inputControlType = :inputControlType)
+              and (:from is null or serial.issuedAt >= :from)
+              and (:to is null or serial.issuedAt < :to)
+              and (:supplierKey is null
+                   or lower(trim(batch.supplierName))
+                          like concat('%', :supplierKey, '%'))
+              and (:incomingOrderNumber is null
+                   or lower(batch.incomingOrderNumber)
+                          like lower(concat('%', :incomingOrderNumber, '%')))
+              and (:znpNumber is null
+                   or lower(serial.znpNumber)
+                          like lower(concat('%', :znpNumber, '%')))
+              and (:productionOrderNumber is null
+                   or lower(ord.number)
+                          like lower(concat('%', :productionOrderNumber, '%')))
+              and (:operationNameId is null
+                   or exists (
+                           select 1
+                           from ProductSerialOperation found
+                           join found.operation foundOperation
+                           where found.serial.id = serial.id
+                             and foundOperation.operationName.id
+                                    = :operationNameId
+                       ))
+            order by classifier.code asc, serial.serial asc
+            """)
+    List<SerialHintSearchView> findSerialsByHints(
+            @Param("classifierId") Long classifierId,
+            @Param("productName") String productName,
+            @Param("numberHint") String numberHint,
+            @Param("status") ProductSerialStatus status,
+            @Param("productType") ProductType productType,
+            @Param("inputControlType") InputControlType inputControlType,
+            @Param("from") java.time.LocalDateTime from,
+            @Param("to") java.time.LocalDateTime to,
+            @Param("supplierKey") String supplierKey,
+            @Param("incomingOrderNumber") String incomingOrderNumber,
+            @Param("znpNumber") String znpNumber,
+            @Param("productionOrderNumber") String productionOrderNumber,
+            @Param("operationNameId") Long operationNameId
+    );
+
+    /** Строка перечня предполагаемых номеров. */
+    interface SerialHintSearchView {
+
+        Long getId();
+
+        Long getClassifierId();
+
+        Integer getClassifierCode();
+
+        String getClassifierName();
+
+        String getSensorClassName();
+
+        ProductType getProductType();
+
+        Integer getSerial();
+
+        ProductSerialStatus getStatus();
+
+        String getZnpNumber();
+
+        InputControlType getInputControlType();
+
+        java.time.LocalDateTime getInputControlAt();
+
+        java.time.LocalDateTime getAcceptedAt();
+
+        java.time.LocalDateTime getCellReadyAt();
+
+        java.time.LocalDateTime getIssuedAt();
+
+        String getIncomingOrderNumber();
+
+        String getChangeNumber();
+
+        String getSupplierName();
+
+        String getProductionOrderNumber();
+
+        String getInputControlByName();
+
+        String getAcceptedByName();
+
+        String getCellReadyByName();
+    }
+
+    /**
+     * Маршрут номеров — строка «номер → операция» за один запрос.
+     *
+     * Нужен и для фильтра «прошёл все выбранные операции» (сервис
+     * сверяет наборы), и для колонки маршрута в перечне. Берутся
+     * закрытые попытки: отправка на доработку — не пройденная
+     * операция, а её незакрытый повтор, и показывать её как пройденную
+     * значило бы соврать о стадии изделия.
+     *
+     * Порядок — по позиции в матрице, затем по номеру попытки: строка
+     * читается человеком как маршрут, а не как набор записей.
+     */
+    @Query("""
+            select
+                pso.serial.id       as serialId,
+                opName.id           as operationNameId,
+                opName.name         as operationName
+            from ProductSerialOperation pso
+            join pso.operation operation
+            join operation.operationName opName
+            where pso.serial.id in :serialIds
+              and pso.status =
+                  ru.company.production.entity.ProductSerialOperationStatus.DONE
+            order by pso.serial.id asc, pso.seq asc, pso.attempt asc
+            """)
+    List<SerialOperationView> findSerialOperations(
+            @Param("serialIds") java.util.Collection<Long> serialIds
+    );
+
+    /** Пара «номер → выполненная операция». */
+    interface SerialOperationView {
+
+        Long getSerialId();
+
+        Long getOperationNameId();
+
+        String getOperationName();
+    }
+
+    /**
+     * Наименования операций, встречающиеся в маршрутах изделий.
+     *
+     * Справочник для выпадающего списка наводок: предлагают только те
+     * операции, по которым реально есть выполнения, — иначе кладовщик
+     * фильтровал бы по операции, которая не встречается ни у одного
+     * номера. Идентификатор — {@code operation_names.id}, а не id
+     * строки operations: одно наименование живёт в матрицах разных
+     * подразделений, и искать нужно по нему.
+     */
+    @Query("""
+            select distinct
+                opName.id   as id,
+                opName.name as name
+            from ProductSerialOperation pso
+            join pso.operation operation
+            join operation.operationName opName
+            order by opName.name asc
+            """)
+    List<OperationNameOption> findOperationNamesInUse();
+
+    /** Опция фильтра «операция». */
+    interface OperationNameOption {
+
+        Long getId();
+
+        String getName();
+    }
+
+    /**
+     * Изделия, номера которых есть в реестре, — опции фильтра.
+     *
+     * Список берут из реестра, а не из справочника классификаторов
+     * целиком: тот же приём, что у реестра наличия, — иначе выпадающий
+     * список на сотни наименований предлагал бы искать изделие, ни
+     * одного номера которого не выпускали.
+     */
+    @Query("""
+            select distinct
+                   classifier.id       as id,
+                   classifier.code     as code,
+                   classifier.name     as name,
+                   sensor.name         as sensorName
+            from ProductSerial serial
+            join serial.productClassifier classifier
+            left join classifier.sensorCatalog sensor
+            order by classifier.code asc
+            """)
+    List<WarehouseStockClassifierOption> findSerialClassifierOptions();
 }
