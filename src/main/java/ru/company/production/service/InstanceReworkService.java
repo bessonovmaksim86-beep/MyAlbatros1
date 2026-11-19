@@ -55,6 +55,13 @@ public class InstanceReworkService {
      * экземпляров раскрывается на десятки строк графика, и три
      * запроса на каждую превратили бы один экран в сотни обращений
      * к базе.
+     *
+     * Сигналы барьерных подразделений в основании не участвуют (см.
+     * {@link ReworkReturnOwnerService#BARRIER_SERVICES}): переделку
+     * закрывает повторное проведение работы цеха, а склад и контроль
+     * свою строку так не закрывают. Открытый сигнал на строке контроля
+     * блокировал бы проведение именно той операции, которая его и
+     * закрывает, — экземпляр зависал бы навсегда.
      */
     @Transactional(readOnly = true)
     public Set<Long> incompleteRowIds(Collection<Long> rowIds) {
@@ -66,7 +73,8 @@ public class InstanceReworkService {
         List<Long> ids = List.copyOf(new LinkedHashSet<>(rowIds));
 
         Set<Long> blocked = new LinkedHashSet<>(
-                controlReturnRepository.findRowIdsOfSignaledInstances(ids));
+                controlReturnRepository.findRowIdsOfSignaledInstances(
+                        ids, ReworkReturnOwnerService.BARRIER_SERVICES));
 
         blocked.addAll(
                 reworkReturnRepository.findRowIdsOfReworkInstances(ids));

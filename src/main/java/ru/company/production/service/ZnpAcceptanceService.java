@@ -31,6 +31,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -741,6 +742,94 @@ public class ZnpAcceptanceService {
             );
         }
 
+        /*
+         * Склад принимает только те экземпляры, что дошли до приёмки по
+         * маршруту: строка операции приёмки проведена быть не может,
+         * пока предшественники этого экземпляра не закрыты. Открытые
+         * строки приёмки без блокировки предшественниками — ровно те
+         * изделия, что физически у склада; остальные ещё в цеху.
+         *
+         * Без этой границы «отметить все» приняло бы и те ячейки, что не
+         * дошли: они выпали бы из перечня непринятых (cell_ready_at),
+         * их строки плана остались бы открытыми, а заказ — закрытым при
+         * недоделанном составе.
+         *
+         * Если строк плана приёмки у заказа нет вовсе (заказ вложен в
+         * выпуск, его работу планирует заказ покупателя), готовности не
+         * по чем мерить — ограничение не применяется.
+         */
+        Operation acceptance = acceptanceOperationOf(order, context);
+
+        List<OrderScheduleRow> openAcceptanceRows = openAcceptanceRows(order, acceptance);
+
+        int deferred = 0;
+
+        /*
+         * Строки плана приёмки, проводимые этой приёмкой, — по одной на
+         * принятый экземпляр. Пусты, когда строк плана у заказа нет
+         * вовсе (заказ вложен в выпуск, его работу планирует заказ
+         * покупателя): проводить нечего, и это норма.
+         */
+        List<OrderScheduleRow> closingRows = new ArrayList<>();
+
+        /*
+         * Принимаются ячейки именно тех экземпляров, что дошли до
+         * приёмки, а не первые по счёту. Экземпляр ячейки — по порядку
+         * её внесения в заказ (i-я внесённая ячейка обслуживает
+         * экземпляр с номером i), ровно так же работу подписывает
+         * раздел распределения (см. WorkshopDistributionSerialService
+         * #resolveAttachedCells).
+         *
+         * Сопоставление по позиции в выбранном перечне подводило: одна
+         * внесённая ячейка ложилась бы на строку первого экземпляра,
+         * даже когда это изделие второго, и склад проводил бы чужую
+         * работу, а заказ закрывался при непройденном контроле.
+         */
+        if (!openAcceptanceRows.isEmpty()) {
+            Map<String, Integer> instanceByCell = cellInstanceIndexes(orderId);
+
+            Map<Integer, OrderScheduleRow> rowByInstance = new HashMap<>();
+
+            for (OrderScheduleRow row : openAcceptanceRows) {
+                if (row.getInstanceIndex() != null) {
+                    rowByInstance.putIfAbsent(row.getInstanceIndex(), row);
+                }
+            }
+
+            List<ProductSerial> ready = new ArrayList<>();
+
+            for (ProductSerial serial : serials) {
+                Integer instance = instanceByCell.get(serial.getFullNumber());
+                OrderScheduleRow row = instance == null
+                        ? null
+                        : rowByInstance.get(instance);
+
+                if (row != null && !context.blockers().containsKey(row.getId())) {
+                    ready.add(serial);
+                    closingRows.add(row);
+                } else {
+                    deferred++;
+                }
+            }
+
+            serials = ready;
+        }
+
+        /*
+         * Ни одно изделие заказа до приёмки не дошло: принимать нечего,
+         * и пустая приёмка не имеет смысла — отметки склада при этом
+         * всё равно ставились бы на пустой перечень.
+         */
+        if (serials.isEmpty()) {
+            return InputControlResult.rejected(
+                    "Ни одно изделие заказа «" + order.getNumber()
+                            + "» ещё не дошло до приёмки: предшествующие"
+                            + " операции техпроцесса по ним не проведены."
+                            + " Склад примет их, когда очередь дойдёт до"
+                            + " приёмки на склад"
+            );
+        }
+
         List<Long> ids = serials.stream()
                 .map(ProductSerial::getId)
                 .toList();
@@ -758,23 +847,37 @@ public class ZnpAcceptanceService {
         journal.recordAccepted(serials, receiver, moment);
         journal.recordCellReady(serials, receiver, moment);
         closeKittingOperations(orderId, Set.copyOf(ids), receiver, moment);
-        completeScheduleRows(
-                order,
-                acceptanceOperationOf(order, context),
-                ids.size(),
-                receiver,
-                moment
-        );
+        completeScheduleRows(closingRows, receiver, moment);
 
         /*
-         * Групповой ЗНП приёмкой на склад завершается: его маршрут
-         * ведёт к этой операции, и после неё заказывать больше нечего.
+         * Ячеек состава, которые склад ещё не принял, — после этой
+         * приёмки. Считается по прочитанному составу, а не новым
+         * запросом: pending взят до отметок, и вычесть принятые сейчас
+         * ровно то же, что перечитать матрицу после записи.
+         *
+         * Сюда попадают и недошедшие экземпляры (их не приняли), и
+         * те, что кладовщик не отметил: заказ остаётся в работе, пока
+         * хоть одна ячейка состава непринята.
+         */
+        int notAccepted = pending.size() - ids.size();
+
+        /*
+         * Групповой ЗНП приёмкой на склад завершается, только когда
+         * приняли ВСЕ изделия его состава: заказ на пять ячеек при
+         * одной принятой остаётся в работе, иначе склад закрыл бы
+         * заказ, изделия которого ещё в цеху, и ни план, ни кладовщик
+         * их бы больше не увидели.
+         *
+         * Ячейки, ушедшие в изолятор брака, закрывать заказ не мешают:
+         * цех, бракуя ячейку, снимает её строку из матрицы состава
+         * (см. WorkshopScrapService#releaseZnpQuota), поэтому в pending
+         * её уже нет и заказ закроется без неё.
          *
          * Серийный ЗНП здесь не закрывают: он входит в выпуск, и его
          * жизнь кончается не складом, а сдачей датчика — заказ закроет
          * FinishedProductClosureService, когда номер пройдёт СГП.
          */
-        if (order.isGroupZnp()) {
+        if (order.isGroupZnp() && notAccepted == 0) {
             order.setStatus(ProductionOrderStatus.DONE);
             productionOrderRepository.save(order);
         }
@@ -782,11 +885,63 @@ public class ZnpAcceptanceService {
         return InputControlResult.accepted(
                 "Принято на склад: " + ids.size() + " яч. по заказу «"
                         + order.getNumber() + "»"
+                        + (deferred > 0
+                                ? ". Ещё " + deferred
+                                  + " яч. не дошли до приёмки — предшествующие"
+                                  + " операции по ним не проведены"
+                                : "")
+                        + (order.isGroupZnp() && notAccepted > 0
+                                ? ". Заказ остаётся в работе: осталось принять "
+                                  + notAccepted + " яч."
+                                : "")
         );
     }
 
     /**
-     * Проводит строки плана приёмки по числу принятых ячеек.
+     * Сопоставление полного номера ячейки экземпляру плана.
+     *
+     * Канон системы: i-я внесённая ячейка (порядок createdAt) обслуживает
+     * экземпляр с номером i, ровно так же работу подписывает раздел
+     * распределения (см. WorkshopDistributionSerialService
+     * #resolveAttachedCells).
+     */
+    private Map<String, Integer> cellInstanceIndexes(Long orderId) {
+
+        List<SerialProductionOrder> attached =
+                linkRepository.findAttachedByOrderIds(Set.of(orderId));
+
+        Map<String, Integer> result = new LinkedHashMap<>();
+
+        for (int i = 0; i < attached.size(); i++) {
+            ProductSerial serial = attached.get(i).getSerial();
+            if (serial != null && serial.getProductClassifier() != null) {
+                result.put(serial.getFullNumber(), i);
+            }
+        }
+
+        return result;
+    }
+
+    /*
+     * Открытые строки плана приёмки заказа — экземпляры, которых приёмка
+     * ещё ждёт. Только ветвь самого заказа: работу вложенного в выпуск
+     * ЗНП планирует заказ покупателя и проводит исполнитель, склад её не
+     * закрывает.
+     */
+    private List<OrderScheduleRow> openAcceptanceRows(ProductionOrder order,
+                                                      Operation acceptance) {
+
+        if (order.getId() == null || acceptance == null
+                || acceptance.getId() == null) {
+            return List.of();
+        }
+
+        return scheduleRowRepository.findOpenRowsOfProductionOrder(
+                order.getId(), acceptance.getId());
+    }
+
+    /**
+     * Проводит строки плана приёмки за принятые ячейки.
      *
      * Цех живёт планом: пока строка «Приёмка на склад» непроведена,
      * зависимость маршрута держит следующую за ней работу закрытой, а
@@ -797,40 +952,29 @@ public class ZnpAcceptanceService {
      * #completeScheduleRow}), иначе разблокировка отстала бы от
      * фактического состава заказа.
      *
-     * Проводится не больше экземпляров, чем приняли ячеек: заказ на
-     * пять изделий при трёх принятых оставляет два экземпляра
-     * открытыми, и это правда, а не недосмотр склада.
+     * Проводятся строки, переданные вызывающим кодом как готовые:
+     * приёмка не имеет права закрыть экземпляр, чьи предшественники ещё
+     * не проведены, — иначе план показал бы принятое изделие, висящее
+     * на передаче в склад.
      *
      * Заказ, вложенный в выпуск, своей ветви строк не имеет — его
      * работу планирует заказ покупателя и проводит исполнитель в «Мои
      * операции», поэтому пустой перечень здесь норма.
      */
-    private void completeScheduleRows(ProductionOrder order,
-                                      Operation acceptance,
-                                      int acceptedCount,
+    private void completeScheduleRows(List<OrderScheduleRow> closingRows,
                                       AppUser receiver,
                                       LocalDateTime moment) {
 
-        if (order.getId() == null || acceptance == null
-                || acceptance.getId() == null || acceptedCount <= 0) {
+        if (closingRows == null || closingRows.isEmpty()) {
             return;
         }
 
-        List<OrderScheduleRow> open = scheduleRowRepository
-                .findOpenRowsOfProductionOrder(order.getId(), acceptance.getId());
-
-        List<OrderScheduleRow> closing = open.stream()
-                .limit(acceptedCount)
-                .toList();
-
-        for (OrderScheduleRow row : closing) {
+        for (OrderScheduleRow row : closingRows) {
             row.setCompletedAt(moment);
             row.setCompletedBy(receiver);
         }
 
-        if (!closing.isEmpty()) {
-            scheduleRowRepository.saveAll(closing);
-        }
+        scheduleRowRepository.saveAll(closingRows);
     }
 
     /**

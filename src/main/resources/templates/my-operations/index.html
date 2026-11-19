@@ -242,7 +242,7 @@
                             <tr>
                                 <th>Операция</th>
                                 <th th:text="${
-                                    groupMode ? 'Номер ячейки' : 'Серийный номер'
+                                    groupMode ? 'Номер изделия' : 'Серийный номер'
                                 }">
                                     Серийный номер
                                 </th>
@@ -483,9 +483,11 @@
                                                                        class="check-all-rows"
                                                                        title="Отметить все доступные экземпляры группы">
                                                             </th>
-                                                            <th th:text="${groupMode}
-                                                                    ? 'Номер ячейки'
-                                                                    : 'Серийный номер'">
+                                                            <th th:text="${op.isDevice()
+                                                                    ? 'Номер прибора'
+                                                                    : (groupMode
+                                                                        ? 'Номер ячейки'
+                                                                        : 'Серийный номер')}">
                                                                 Серийный номер
                                                             </th>
                                                             <th>Наименование</th>
@@ -553,15 +555,17 @@
                                                                     распределены и не проведены,
                                                                     проводить эту позицию нельзя.
                                                                 -->
-                                                                <input th:if="${!inst.completed() and !inst.returnedForRework or hadReturn}"
+                                                                <input th:if="${!inst.completed() and !inst.returnedForRework and !inst.scrapped() or hadReturn}"
                                                                        type="checkbox"
                                                                        name="rowIds"
                                                                        form="control-action-form"
                                                                        th:value="${inst.rowId}"
-                                                                       th:disabled="${inst.blocked()}"
-                                                                       th:title="${inst.blocked()
-                                                                           ? 'Отметить нельзя: ' + inst.blockedLabel()
-                                                                           : 'Отметить экземпляр: ' + inst.productLabel()}">
+                                                                       th:disabled="${inst.blocked() or inst.scrapped()}"
+                                                                       th:title="${inst.scrapped()
+                                                                           ? inst.scrappedLabel()
+                                                                           : (inst.blocked()
+                                                                               ? 'Отметить нельзя: ' + inst.blockedLabel()
+                                                                               : 'Отметить экземпляр: ' + inst.productLabel())}">
 
                                                                 <!--
                                                                     Вместо чекбокса
@@ -573,9 +577,11 @@
                                                                     «почему здесь нельзя
                                                                     отметить».
                                                                 -->
-                                                                <span th:unless="${!inst.completed() and !inst.returnedForRework or hadReturn}"
+                                                                <span th:unless="${!inst.completed() and !inst.returnedForRework and !inst.scrapped() or hadReturn}"
                                                                       class="control-action-col__locked"
-                                                                      title="Позиция на доработке — перемещать нельзя">
+                                                                      th:title="${inst.scrapped()
+                                                                          ? inst.scrappedLabel()
+                                                                          : 'Позиция на доработке — перемещать нельзя'}">
                                                                     —
                                                                 </span>
                                                             </td>
@@ -599,14 +605,33 @@
                                                                     Проведён 01.10.2026 10:30
                                                                 </span>
 
+                                                                <!--
+                                                                    Забракованный экземпляр
+                                                                    (V90): его ячейка снята с
+                                                                    комплектования, изделия в
+                                                                    цеху больше нет. Подпись
+                                                                    обязана объяснить цеху,
+                                                                    почему здесь пусто и почему
+                                                                    нельзя провести — иначе
+                                                                    пустая строка выглядит
+                                                                    сбоем перечня, а рабочая
+                                                                    кнопка рядом с ней invites
+                                                                    провести несуществующее.
+                                                                -->
+                                                                <span class="badge badge--danger"
+                                                                      th:if="${inst.scrapped()}"
+                                                                      th:text="${inst.scrappedLabel()}">
+                                                                    Забраковано: трещина корпуса
+                                                                </span>
+
                                                                 <span class="badge badge--attention"
-                                                                      th:if="${!inst.completed() and inst.blocked()}"
+                                                                      th:if="${!inst.scrapped() and !inst.completed() and inst.blocked()}"
                                                                       th:text="${inst.blockedLabel()}">
                                                                     ждёт: Сборка узла
                                                                 </span>
 
                                                                 <span class="badge"
-                                                                      th:if="${!inst.completed() and !inst.blocked()}">
+                                                                      th:if="${!inst.scrapped() and !inst.completed() and !inst.blocked()}">
                                                                     В работе
                                                                 </span>
 

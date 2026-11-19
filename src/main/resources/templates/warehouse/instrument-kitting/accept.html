@@ -1,0 +1,851 @@
+<!DOCTYPE html>
+<html lang="ru"
+      xmlns:th="http://www.thymeleaf.org">
+
+<head>
+    <meta charset="UTF-8">
+
+    <meta name="viewport"
+          content="width=device-width, initial-scale=1">
+
+    <title>Комплектация групп ЗНП на приборы</title>
+
+    <link rel="stylesheet"
+          th:href="@{/technology/css/technology.css}">
+    <link rel="stylesheet"
+          th:href="@{/technology/css/common.css}">
+    <link rel="stylesheet"
+          th:href="@{/warehouse/css/warehouse.css}">
+</head>
+
+<body>
+
+<div class="app-shell">
+
+    <aside th:replace="~{warehouse/fragments/layout
+            :: sidebar('instrument-kitting')}">
+    </aside>
+
+    <main class="main">
+
+        <header th:replace="~{warehouse/fragments/layout
+                :: topbar}">
+        </header>
+
+        <div class="page-content warehouse-page">
+
+            <div class="page-head">
+
+                <div class="page-title">
+
+                    <h1>
+                        Комплектация
+                        <span class="mono"
+                              th:text="${view.order.number}">
+                            ЗНП-2026-055
+                        </span>
+                    </h1>
+
+                    <p th:text="${
+                        'Операция: ' + view.operationName
+                    }">
+                        Операция: Настройка ячеек для прибора
+                    </p>
+
+                </div>
+
+                <div class="page-head-actions">
+
+                    <a class="btn secondary"
+                       th:href="@{/warehouse/instrument-kitting}">
+                        К списку заказов
+                    </a>
+
+                </div>
+            </div>
+
+            <div class="alert success"
+                 th:if="${successMessage}"
+                 th:text="${successMessage}">
+            </div>
+
+            <div class="alert danger"
+                 th:if="${errorMessage}"
+                 th:text="${errorMessage}">
+            </div>
+
+            <!-- =====================================================
+                 ЗАКАЗ-КОМПЛЕКТУЮЩИЙ
+
+                 Реквизиты заказа: номер, изделие, техпроцесс,
+                 операция, срок.
+            ===================================================== -->
+            <section class="card">
+
+                <div class="card-head">
+
+                    <div>
+
+                        <h2>Заказ-комплектующий</h2>
+
+                        <small>
+                            Реквизиты заказа, в который вносятся ячейки
+                        </small>
+
+                    </div>
+
+                </div>
+
+                <div class="card-body">
+
+                    <dl class="warehouse-summary">
+
+                        <div class="warehouse-summary__row">
+
+                            <dt>Номер заказа</dt>
+
+                            <dd class="mono"
+                                th:text="${view.order.number}">
+                                ЗНП-2026-055
+                            </dd>
+                        </div>
+
+                        <div class="warehouse-summary__row">
+
+                            <dt>Вид заказа</dt>
+
+                            <dd th:text="${view.order.znpKindDisplayName}">
+                                Групповой ЗНП на приборы
+                            </dd>
+                        </div>
+
+                        <div class="warehouse-summary__row">
+
+                            <dt>Изделие заказа</dt>
+
+                            <dd th:text="${view.productLabel}">
+                                5004 — ПВВ1 изм.3
+                            </dd>
+                        </div>
+
+                        <div class="warehouse-summary__row">
+
+                            <dt>Приборов в заказе</dt>
+
+                            <dd th:text="${view.instrumentCount()}">
+                                2
+                            </dd>
+                        </div>
+
+                        <div class="warehouse-summary__row">
+
+                            <dt>Техпроцесс</dt>
+
+                            <dd class="mono"
+                                th:text="${view.order.techProcessCode}">
+                                ТП-010
+                            </dd>
+                        </div>
+
+                        <div class="warehouse-summary__row">
+
+                            <dt>Операция</dt>
+
+                            <dd th:text="${view.operationName}">
+                                Настройка ячеек для прибора
+                            </dd>
+                        </div>
+
+                        <div class="warehouse-summary__row">
+
+                            <dt>Заказ покупателя</dt>
+
+                            <dd class="mono"
+                                th:text="${
+                                    view.order.customerOrderNumber
+                                }">
+                                ЗП-44/2026
+                            </dd>
+                        </div>
+
+                        <div class="warehouse-summary__row">
+
+                            <dt>Статус заказа</dt>
+
+                            <dd>
+                                <span class="status"
+                                      th:classappend="' ' + ${
+                                          view.order.statusBadgeClass
+                                      }"
+                                      th:text="${
+                                          view.order.statusDisplayName
+                                      }">
+                                    В работе
+                                </span>
+                            </dd>
+                        </div>
+
+                        <div class="warehouse-summary__row">
+
+                            <dt>Дата заказа</dt>
+
+                            <dd th:text="${
+                                view.order.formattedOrderDate
+                            }">
+                                17.11.2026
+                            </dd>
+                        </div>
+
+                        <div class="warehouse-summary__row">
+
+                            <dt>Срок выполнения</dt>
+
+                            <dd th:text="${view.formattedDueDate}">
+                                04.12.2026
+                            </dd>
+                        </div>
+
+                        <div class="warehouse-summary__row span-2"
+                             th:if="${
+                                 view.order.note != null
+                                 and !#strings.isEmpty(view.order.note)
+                             }">
+
+                            <dt>Примечание</dt>
+
+                            <dd th:text="${view.order.note}">
+                                Комплект по спецификации 14-К
+                            </dd>
+                        </div>
+
+                    </dl>
+
+                </div>
+            </section>
+
+
+            <!-- =====================================================
+                 ВИДЫ ЯЧЕЕК
+
+                 Каждый вид ячейки — отдельная строка с укомплектованностью.
+                 Технолог задал в операции ТП несколько контролируемых
+                 параметров «Ячейка №» — по строке на каждый вид.
+            ===================================================== -->
+            <section class="card"
+                     th:if="${view.hasKinds()}">
+
+                <div class="card-head">
+
+                    <div>
+
+                        <h2>Виды ячеек заказа</h2>
+
+                        <small>
+                            Ячеек каждого вида требуется:
+                            на один прибор × число приборов в заказе
+                        </small>
+
+                    </div>
+
+                    <span class="warehouse-counter"
+                          th:text="${view.takenCount()} + ' из '
+                              + ${view.requiredCount()} + ' яч.'">
+                        3 из 12 яч.
+                    </span>
+                </div>
+
+                <div class="card-body">
+
+                    <div class="table-wrap">
+
+                        <table class="data-table">
+
+                            <thead>
+
+                            <tr>
+                                <th>Вид ячейки</th>
+                                <th>На один прибор</th>
+                                <th>На весь заказ</th>
+                                <th>Внесено</th>
+                                <th>Статус</th>
+                            </tr>
+
+                            </thead>
+
+                            <tbody>
+
+                            <tr th:each="kind : ${view.kinds}"
+                                th:classappend="${kind.completed()}
+                                    ? ' is-done' : ''">
+
+                                <td>
+                                    <span class="mono"
+                                          th:text="${
+                                              kind.classifierCode
+                                          }">
+                                        ЯДВ3
+                                    </span>
+                                    <br>
+                                    <small th:text="${
+                                        kind.classifierName
+                                    }">
+                                        Ячейка входная
+                                    </small>
+                                </td>
+
+                                <td
+                                    th:text="${kind.perInstrument()}">
+                                    3
+                                </td>
+
+                                <td
+                                    th:text="${kind.requiredTotal()}">
+                                    6
+                                </td>
+
+                                <td
+                                    th:text="${kind.attachedCount()}">
+                                    3
+                                </td>
+
+                                <td>
+                                    <span th:if="${kind.completed()}"
+                                          class="status done">
+                                        укомплектован
+                                    </span>
+                                    <span th:if="${!kind.completed()}"
+                                          class="status work">
+                                        <span th:text="${
+                                            kind.readinessLabel()
+                                        }">
+                                            3 из 6
+                                        </span>
+                                    </span>
+                                </td>
+
+                            </tr>
+
+                            </tbody>
+                        </table>
+
+                    </div>
+
+                </div>
+            </section>
+
+
+            <!-- =====================================================
+                 ВНЕСЕНИЕ ЯЧЕЕК
+
+                 Поле ввода номеров ячеек, принятых на склад полуфабрикатов.
+                 Номера можно вводить вручную или сканировать штрихкодами.
+                 Разрешены только номера ячеек, принятых на склад.
+
+                 Если заказ укомплектован полностью — форма скрывается,
+                 а вместо неё показывается справка, что вносить больше нечего.
+            ===================================================== -->
+            <form method="post"
+                  th:action="@{/warehouse/instrument-kitting/{id}(id=${view.order.id})}"
+                  th:if="${!view.nothingToAdd()}">
+
+                <input th:if="${_csrf != null}"
+                       type="hidden"
+                       th:name="${_csrf.parameterName}"
+                       th:value="${_csrf.token}">
+
+                <section class="card">
+
+                    <div class="card-head">
+
+                        <div>
+
+                            <h2>Внести ячейки в заказ</h2>
+
+                            <small>
+                                Внесите номера ячеек, принятых на склад
+                                полуфабрикатов. Номера можно вводить
+                                вручную или сканировать штрихкодами.
+                                Разрешены только номера ячеек, принятых
+                                на склад и ещё не внесённых в заказ.
+                            </small>
+
+                        </div>
+
+                        <span class="warehouse-counter"
+                              th:text="${view.takenCount()} + ' из '
+                                  + ${view.requiredCount()} + ' яч.'">
+                            3 из 12 яч.
+                        </span>
+                    </div>
+
+                    <div class="card-body">
+
+                        <!--
+                             Поле ввода на каждый вид ячейки заказа.
+                             Видов столько, сколько ячеек привязано к
+                             классификатору прибора (состав изделия).
+
+                             Укомплектованный вид поле не получает:
+                             внести в него уже нечего, а строка ввода
+                             без цели только мешает кладовщику. Статус
+                             вида остаётся виден в таблице выше.
+                        -->
+                        <div class="field"
+                             th:each="kind : ${view.kinds}"
+                             th:if="${!kind.completed()}">
+
+                            <label
+                                th:for="'cellNumbers_' + ${kind.classifierId()}">
+
+                                <span class="mono"
+                                      th:text="${kind.classifierCode}">
+                                    5038
+                                </span>
+                                <span th:text="${kind.classifierName}">
+                                    Ячейка входная
+                                </span>
+
+                                <small class="field-required"
+                                       th:text="' — нужно '
+                                          + ${kind.requiredTotal()}
+                                          + ' яч. ('
+                                          + ${kind.perInstrument()}
+                                          + ' на прибор × '
+                                          + ${view.instrumentCount()}
+                                          + ' пр.)'">
+                                    — нужно 2 яч. (1 на прибор × 2 пр.)
+                                </small>
+                            </label>
+
+                            <textarea th:id="'cellNumbers_' + ${kind.classifierId()}"
+                                      th:name="'cellNumbers_' + ${kind.classifierId()}"
+                                      rows="3"
+                                      class="mono"
+                                      placeholder="Введите или отсканируйте номера ячеек этого вида">
+                            </textarea>
+
+                            <span class="field-hint">
+                                Внесено
+                                <b th:text="${kind.attachedCount()}">0</b>
+                                из
+                                <b th:text="${kind.requiredTotal()}">2</b>.
+                                Номера разделяются переводом строки, запятой
+                                или точкой с запятой. Полный номер: 4 цифры
+                                кода + 5 цифр серии.
+                            </span>
+
+                            <!--
+                                 Свободные ячейки этого вида на складе —
+                                 записями, теми же строками, что и общий
+                                 реестр под формой: номер отдельной
+                                 строкой со своим статусом. Слитая
+                                 перечислением строка не читалась.
+                            -->
+                            <div class="table-wrap"
+                                 th:if="${kind.freeNumbers() != null
+                                         and not #lists.isEmpty(kind.freeNumbers())}">
+
+                                <table class="data-table warehouse-batch-table">
+
+                                    <thead>
+
+                                    <tr>
+                                        <th>№</th>
+                                        <th>Номер ячейки</th>
+                                        <th>Статус</th>
+                                    </tr>
+
+                                    </thead>
+
+                                    <tbody>
+
+                                    <tr th:each="num, iter
+                                            : ${kind.freeNumbers()}">
+
+                                        <td class="warehouse-number-cell"
+                                            th:text="${iter.count}">
+                                            1
+                                        </td>
+
+                                        <td class="warehouse-number-cell">
+                                            <span class="mono"
+                                                  th:text="${num}">
+                                                503800001
+                                            </span>
+                                        </td>
+
+                                        <td>
+                                            <span class="status work">
+                                                свободна
+                                            </span>
+                                        </td>
+
+                                    </tr>
+
+                                    </tbody>
+                                </table>
+
+                            </div>
+
+                            <p class="field-hint"
+                               th:if="${kind.freeNumbers() == null
+                                       or #lists.isEmpty(kind.freeNumbers())}">
+                                Свободных ячеек этого вида на складе нет.
+                            </p>
+
+                        </div>
+
+                        <div class="warehouse-actions">
+
+                            <a class="btn secondary"
+                               th:href="@{/warehouse/instrument-kitting}">
+                                К списку заказов
+                            </a>
+
+                            <button type="submit"
+                                    class="btn primary">
+                                Внести в заказ
+                            </button>
+
+                        </div>
+
+                    </div>
+                </section>
+            </form>
+
+            <!--
+                 Справка, когда вносить больше нечего: заказ укомплектован,
+                 все ячейки оформлены. Форма скрыта, а внесённый состав
+                 ниже раскрыт сразу — кладовщику не нужно ничего искать.
+            -->
+            <section class="card"
+                     th:if="${view.nothingToAdd()}">
+
+                <div class="card-head">
+
+                    <div>
+
+                        <h2>Заказ укомплектован</h2>
+
+                        <small>
+                            В заказ вошло всё заказанное количество ячеек —
+                            вносить нечего. Состав заказа раскрыт ниже.
+                        </small>
+
+                    </div>
+
+                    <span class="warehouse-counter is-complete"
+                          th:text="${view.takenCount()} + ' из '
+                              + ${view.requiredCount()} + ' яч.'">
+                        12 из 12 яч.
+                    </span>
+                </div>
+
+                <div class="card-body">
+
+                    <div class="warehouse-actions">
+
+                        <a class="btn secondary"
+                           th:href="@{/warehouse/instrument-kitting}">
+                            К списку заказов
+                        </a>
+
+                    </div>
+
+                </div>
+            </section>
+
+
+            <!-- =====================================================
+                 ПЕРЕЧЕНЬ СВОБОДНЫХ ЯЧЕЕК СКЛАДА
+
+                 Показывает свободные ячейки каждого вида, принятые
+                 на склад и ещё не внесённые в заказ. Каждая ячейка
+                 отдельной строкой: кладовщик видит и вид ячейки,
+                 и её номер.
+            ===================================================== -->
+            <th:block th:with="freeKinds=${
+                    view.kinds != null
+                        ? view.kinds.?[freeCount > 0]
+                        : null
+                }">
+
+                <details class="collapsible"
+                         th:if="${
+                             freeKinds != null
+                             and not #lists.isEmpty(freeKinds)
+                         }">
+
+                    <summary class="collapsible__summary">
+                        <span>Ячейки на складе полуфабрикатов</span>
+
+                        <span class="collapsible__counter"
+                              th:text="${
+                                  #lists.size(freeKinds)
+                              } + ' ' + ${
+                                  #lists.size(freeKinds) == 1
+                                      ? 'вид'
+                                      : (#lists.size(freeKinds) < 5
+                                          ? 'вида'
+                                          : 'видов')
+                              }">
+                            3 вида
+                        </span>
+                    </summary>
+
+                    <div class="collapsible__body">
+
+                        <p class="field-hint"
+                           style="margin-bottom: 12px;">
+                            Свободные ячейки изделия заказа, принятые на склад.
+                            Эти ячейки ещё не оформлены в заказ.
+                        </p>
+
+                        <div class="table-wrap">
+
+                            <table class="data-table warehouse-batch-table">
+
+                                <thead>
+
+                                <tr>
+                                    <th>№</th>
+                                    <th>Вид ячейки</th>
+                                    <th>Номер ячейки</th>
+                                    <th>Статус</th>
+                                </tr>
+
+                                </thead>
+
+                                <tbody>
+
+                                <th:block th:each="kind : ${freeKinds}"
+                                          th:if="${kind.freeNumbers != null}">
+
+                                    <tr th:each="num, iter
+                                            : ${kind.freeNumbers}">
+
+                                        <td class="warehouse-number-cell"
+                                            th:text="${iter.count}">
+                                            1
+                                        </td>
+
+                                        <td>
+                                            <span class="mono"
+                                                  th:text="${
+                                                      kind.classifierCode
+                                                  }">
+                                                ЯДВ3
+                                            </span>
+                                            <br>
+                                            <small th:text="${
+                                                kind.classifierName
+                                            }">
+                                                Ячейка входная
+                                            </small>
+                                        </td>
+
+                                        <td class="warehouse-number-cell">
+                                            <span class="mono"
+                                                  th:text="${num}">
+                                                121200022
+                                            </span>
+                                        </td>
+
+                                        <td>
+                                            <span class="status work">
+                                                свободна
+                                            </span>
+                                        </td>
+
+                                    </tr>
+                                </th:block>
+
+                                </tbody>
+                            </table>
+
+                        </div>
+
+                    </div>
+                </details>
+
+            </th:block>
+
+
+            <!--
+                 Внесённые в заказ ячейки — для справки.
+                 Они со склада сняты и в свободном остатке не числятся.
+            ===================================================== -->
+            <details class="collapsible"
+                     th:if="${
+                         view.attached != null
+                         and not #lists.isEmpty(view.attached)
+                     }"
+                     th:attr="open=${view.nothingToAdd()} ? '' : null">
+
+                <summary class="collapsible__summary">
+                    <span>Ячейки, внесённые в заказ</span>
+
+                    <span class="collapsible__counter"
+                          th:text="${view.takenCount()} + ' шт.'">
+                        3 шт.
+                    </span>
+                </summary>
+
+                <div class="collapsible__body">
+
+                    <p class="field-hint"
+                       style="margin-bottom: 12px;">
+                        Ячейки, уже оформленные в этот заказ. Они со склада
+                        сняты и принять повторно нельзя.
+                    </p>
+
+                    <div class="table-wrap">
+
+                        <table class="data-table warehouse-batch-table">
+
+                            <thead>
+
+                            <tr>
+                                <th>№</th>
+                                <th>Номер ячейки</th>
+                                <th>Наименование</th>
+                                <th>Статус</th>
+                            </tr>
+
+                            </thead>
+
+                            <tbody>
+
+                            <tr th:each="cell, iteration
+                                    : ${view.attached}"
+                                th:classappend="' is-done'">
+
+                                <td class="warehouse-number-cell"
+                                    th:text="${iteration.count}">
+                                    1
+                                </td>
+
+                                <td class="warehouse-number-cell">
+                                    <span class="mono"
+                                          th:text="${cell.fullNumber()}">
+                                        121200022
+                                    </span>
+                                </td>
+
+                                <td th:text="${cell.displayName()}">
+                                    Ячейка входная
+                                </td>
+
+                                <td>
+                                    <span class="status done">
+                                        внесена в заказ
+                                    </span>
+                                </td>
+
+                            </tr>
+
+                            </tbody>
+                        </table>
+
+                    </div>
+
+                </div>
+            </details>
+
+
+            <!-- =====================================================
+                 ИЗОЛЯТОР БРАКА
+
+                 Ячейки того же изделия, списанные в изолятор. Справочный
+                 блок: на склад они не приняты, и внести их в заказ нельзя.
+            ===================================================== -->
+            <details class="collapsible"
+                     th:if="${
+                         view.quarantine != null
+                         and not #lists.isEmpty(view.quarantine)
+                     }">
+
+                <summary class="collapsible__summary">
+                    <span>Ячейки в изоляторе брака</span>
+
+                    <span class="collapsible__counter"
+                          th:text="${
+                              #lists.size(view.quarantine)
+                          } + ' шт.'">
+                        3 шт.
+                    </span>
+                </summary>
+
+                <div class="collapsible__body">
+
+                    <p class="field-hint"
+                       style="margin-bottom: 12px;">
+                        На склад они не приняты — внести в заказ их нельзя.
+                        Показаны, чтобы было видно, где недостающие ячейки.
+                    </p>
+
+                    <div class="table-wrap">
+
+                        <table class="data-table warehouse-batch-table">
+
+                            <thead>
+
+                            <tr>
+                                <th>№</th>
+                                <th>Номер</th>
+                                <th>Тип</th>
+                                <th>Поставщик</th>
+                                <th>Причина брака</th>
+                            </tr>
+
+                            </thead>
+
+                            <tbody>
+
+                            <tr th:each="cell, iteration
+                                    : ${view.quarantine}">
+
+                                <td class="warehouse-number-cell"
+                                    th:text="${iteration.count}">
+                                    1
+                                </td>
+
+                                <td class="warehouse-number-cell">
+                                    <span class="mono"
+                                          th:text="${cell.fullNumber}">
+                                        777700001
+                                    </span>
+                                </td>
+
+                                <td th:text="${cell.kindLabel}">
+                                    Ячейка
+                                </td>
+
+                                <td th:text="${cell.supplierName}">
+                                    Поставщик
+                                </td>
+
+                                <td th:text="${cell.reasonChain}">
+                                    Механическое повреждение → Скол корпуса
+                                </td>
+
+                            </tr>
+
+                            </tbody>
+                        </table>
+
+                    </div>
+
+                </div>
+            </details>
+
+        </div>
+    </main>
+</div>
+
+<th:block th:replace="~{warehouse/fragments/layout
+        :: commonScripts}">
+</th:block>
+
+</body>
+</html>

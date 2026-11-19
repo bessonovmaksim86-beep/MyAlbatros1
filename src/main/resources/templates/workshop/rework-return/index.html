@@ -213,6 +213,10 @@
 
                     Одна причина на оба действия: цех обязан видеть, что
                     переделывать, и «в свой цех», и «назад по маршруту».
+
+                    Оба поля читаются от первой карточки — той же, из
+                    которой берётся причина: форма одна на все карточки,
+                    и переменная цикла card здесь уже недоступна.
                     ============================================================
                 -->
                 <div class="rework-return__actions">
@@ -234,7 +238,10 @@
 
                         <button type="submit"
                                 class="btn danger"
-                                th:attr="formaction=@{/workshop/rework-return/send-to-predecessor}">
+                                th:attr="formaction=@{/workshop/rework-return/send-to-predecessor}"
+                                th:disabled="${cards == null
+                                              or cards.isEmpty()
+                                              or !cards[0].canSendToPredecessor}">
                             Отправить в предшествующий цех
                         </button>
 

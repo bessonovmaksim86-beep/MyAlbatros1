@@ -288,8 +288,10 @@
                                                 <th:block th:each="item : ${op.items()}">
 
                                                     <div class="item-card"
-                                                         th:classappend="${item.assigned()}
-                                                             ? ' is-assigned' : ''">
+                                                         th:classappend="${item.scrapped()}
+                                                             ? ' is-scrapped'
+                                                             : (${item.assigned()}
+                                                                ? ' is-assigned' : '')">
 
                                                         <div class="item-card__head">
 
@@ -333,6 +335,23 @@
                                                                     2 ч.
                                                                 </span>
 
+                                                                <!--
+                                                                    Забракованный экземпляр
+                                                                    (V90): его ячейка снята с
+                                                                    комплектования, изделия в
+                                                                    цеху больше нет. Бейдж
+                                                                    обязан объяснить мастеру,
+                                                                    почему карточка помечена и
+                                                                    почему под ней нет выбора
+                                                                    исполнителя — иначе блок
+                                                                    выглядел бы сломанным.
+                                                                -->
+                                                                <span class="badge badge--danger"
+                                                                      th:if="${item.scrapped()}"
+                                                                      th:text="${item.scrappedLabel()}">
+                                                                    Забраковано: трещина корпуса
+                                                                </span>
+
                                                                 <span class="badge badge--success"
                                                                       th:if="${item.assigned()}"
                                                                       th:text="${item.executorLabel()}">
@@ -341,7 +360,7 @@
 
                                                         </div>
 
-                                                        <form th:unless="${item.assigned()}"
+                                                        <form th:unless="${item.assigned() or item.scrapped()}"
                                                               th:action="@{/workshop/distribution/assign}"
                                                               method="post"
                                                               class="group-assign-form">
@@ -599,7 +618,9 @@
 
                                                 <th:block th:each="item : ${op.items()}">
 
-                                                    <div class="item-card is-assigned">
+                                                    <div class="item-card is-assigned"
+                                                         th:classappend="${item.scrapped()}
+                                                             ? ' is-scrapped'">
 
                                                         <div class="item-card__head">
 
@@ -641,6 +662,21 @@
                                                                     2 ч.
                                                                 </span>
 
+                                                                <!--
+                                                                    Забракованный экземпляр
+                                                                    (V90): работу могли
+                                                                    закрепить за исполнителем
+                                                                    до решения бюро, и после
+                                                                    снятия ячейки она обязана
+                                                                    читаться снятой, а не
+                                                                    живой задачей.
+                                                                -->
+                                                                <span class="badge badge--danger"
+                                                                      th:if="${item.scrapped()}"
+                                                                      th:text="${item.scrappedLabel()}">
+                                                                    Забраковано: трещина корпуса
+                                                                </span>
+
                                                                 <span class="badge badge--success"
                                                                       th:if="${item.executorLabel() != null}"
                                                                       th:text="${item.executorLabel()}">
@@ -657,7 +693,7 @@
                                                         </div>
 
                                                         <div class="group-panel__actions"
-                                                             th:if="${item.assigned()}">
+                                                             th:if="${item.assigned() and !item.scrapped()}">
 
                                                             <form th:action="@{/workshop/distribution/unassign}"
                                                                   method="post"

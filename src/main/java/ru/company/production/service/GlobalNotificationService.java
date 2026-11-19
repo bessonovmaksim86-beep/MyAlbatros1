@@ -82,6 +82,21 @@ public class GlobalNotificationService {
             addInputControlCounters(result);
         }
 
+        /*
+         * Комплектование на ремонт бюро технического контроля: адрес
+         * открыт обеим ролям БТК, и цифра берётся тем же запросом, что
+         * счётчик в боковом меню раздела.
+         */
+        if (ModuleRoutes.canOpen(
+                user.getRole(), "/technical-control/repair-kitting")) {
+            result.add(new CounterItem(
+                    "btk-repair-kitting",
+                    "Комплектование на ремонт (БТК)",
+                    "/technical-control/repair-kitting",
+                    repairKittingService.countBtkRepairKittingOrders()
+            ));
+        }
+
         if (ModuleRoutes.canOpen(user.getRole(), "/quality/orders")) {
             result.add(new CounterItem(
                     "quality-open-orders",

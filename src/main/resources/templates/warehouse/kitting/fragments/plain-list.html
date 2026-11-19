@@ -254,14 +254,26 @@
                                                         Проведён 12.02.2026 14:05
                                                     </span>
 
+                                                    <!--
+                                                        Забракованный экземпляр (V90):
+                                                        его ячейка снята с комплектования,
+                                                        изделия в цеху больше нет — вместо
+                                                        статуса и кнопки видна причина.
+                                                    -->
+                                                    <span class="badge badge--danger"
+                                                          th:if="${inst.scrapped()}"
+                                                          th:text="${inst.scrappedLabel()}">
+                                                        Забраковано: трещина корпуса
+                                                    </span>
+
                                                     <span class="badge badge--attention"
-                                                          th:if="${!inst.completed() and inst.blocked()}"
+                                                          th:if="${!inst.scrapped() and !inst.completed() and inst.blocked()}"
                                                           th:text="${inst.blockedLabel()}">
                                                         ждёт: Сборка узла
                                                     </span>
 
                                                     <span class="badge"
-                                                          th:if="${!inst.completed() and !inst.blocked()}">
+                                                          th:if="${!inst.scrapped() and !inst.completed() and !inst.blocked()}">
                                                         В работе
                                                     </span>
 

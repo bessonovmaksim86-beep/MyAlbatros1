@@ -213,6 +213,105 @@
                 </section>
 
                 <!--
+                    Состав изделия классификатора.
+
+                    Пользователь открывает карточку прибора, чтобы
+                    увидеть, из чего он собирается. Секция печатает
+                    входящие изделия (classifier_inclusion) и, для
+                    системы, роды датчиков и приборы
+                    (system_components). Пустой состав — секции нет:
+                    прочерк вместо перечня читался бы как потерянные
+                    данные.
+                -->
+                <section class="card"
+                         th:if="${summary.composition != null
+                                 and !summary.composition.isEmpty()}">
+
+                    <div class="card-head">
+
+                        <div>
+
+                            <h2 th:text="${summary.compositionTitle}">
+                                Состав изделия
+                            </h2>
+
+                            <p>
+                                Изделия, входящие в этот классификатор.
+                                Полная карточка каждого доступна в
+                                разделе, где его ведут.
+                            </p>
+                        </div>
+
+                        <span class="search-summary__count"
+                              th:text="${#lists.size(summary.composition)}
+                                  + ' поз.'">
+                            3 поз.
+                        </span>
+                    </div>
+
+                    <div class="card-body">
+
+                        <div class="table-wrap">
+
+                            <table class="search-summary__composition">
+
+                                <thead>
+
+                                <tr>
+                                    <th>Код</th>
+                                    <th>Наименование</th>
+                                    <th>Тип</th>
+                                    <th>Количество</th>
+                                    <th>Режим</th>
+                                </tr>
+
+                                </thead>
+
+                                <tbody>
+
+                                <tr th:each="item : ${summary.composition}">
+
+                                    <td class="mono">
+                                        <a th:if="${item.classifierId != null}"
+                                           th:href="@{${item.classifierUrl}}"
+                                           th:text="${item.codeLabel}">
+                                            5038
+                                        </a>
+                                        <span th:if="${item.classifierId == null}"
+                                              th:text="${item.codeLabel}">
+                                            —
+                                        </span>
+                                    </td>
+
+                                    <td th:text="${item.name}">
+                                        ЯДВ3
+                                    </td>
+
+                                    <td th:text="${item.typeLabel}">
+                                        Ячейка
+                                    </td>
+
+                                    <td class="mono">
+                                        <span th:text="${item.quantity}">2</span>
+                                        <span th:if="${item.unitLabel != null}"
+                                              class="search-summary__unit"
+                                              th:text="${item.unitLabel}">
+                                            шт.
+                                        </span>
+                                    </td>
+
+                                    <td th:text="${item.modeLabel}">
+                                        Обязательно входит
+                                    </td>
+                                </tr>
+
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </section>
+
+                <!--
                     Текущее место изделий.
                     Показывается, когда заказ в работе и позиции стоят
                     на конкретной работе маршрута.

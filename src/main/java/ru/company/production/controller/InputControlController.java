@@ -21,6 +21,7 @@ import ru.company.production.entity.AppUser;
 import ru.company.production.entity.InputControlCard;
 import ru.company.production.entity.InputControlDecision;
 import ru.company.production.entity.InputControlType;
+import ru.company.production.entity.ProductionOrder;
 import ru.company.production.entity.QuarantineCellKind;
 import ru.company.production.repository.UserRepository;
 import ru.company.production.service.InputControlService;
@@ -28,6 +29,7 @@ import ru.company.production.service.QuarantineTransferService;
 import ru.company.production.service.RepairKittingService;
 
 import java.util.List;
+import java.util.Set;
 import java.util.Set;
 
 /**
@@ -248,6 +250,24 @@ public class InputControlController {
                 quarantineTransferService.findPendingNumbers()
         );
 
+        /*
+         * Ячейки, вынесенные в изолятор решением по заявке на
+         * отбраковку (V89): заявка решает судьбу одного номера и группу
+         * брака входного контроля не заводит, поэтому в перечне групп
+         * такая ячейка не читается вовсе, и контролёр не находил её
+         * там, где она реально лежит.
+         *
+         * Отбор идёт по отсутствию группы: строки карточек проверки
+         * группу несут всегда, поэтому два перечня не пересекаются и
+         * один номер не показывается дважды.
+         */
+        model.addAttribute(
+                "scrapTransfers",
+                quarantineTransferService.findScrapRequestTransfers().stream()
+                        .filter(view -> !accepted.contains(view.getFullNumber()))
+                        .toList()
+        );
+
         return "input-control/quarantine/index";
     }
 
@@ -305,11 +325,12 @@ public class InputControlController {
     @GetMapping({"/repair-kitting", "/repair-kitting/"})
     public String repairKitting(Model model) {
 
+        List<ProductionOrder> orders = repairKittingService.findRepairKittingOrders();
+        Set<Long> completedIds = repairKittingService.completedOrderIds(orders);
+
         model.addAttribute("activePage", "repair-kitting");
-        model.addAttribute(
-                "orders",
-                repairKittingService.findRepairKittingOrders()
-        );
+        model.addAttribute("orders", orders);
+        model.addAttribute("completedOrderIds", completedIds);
 
         return "input-control/repair-kitting/index";
     }

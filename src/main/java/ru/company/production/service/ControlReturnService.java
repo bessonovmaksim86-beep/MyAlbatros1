@@ -140,6 +140,9 @@ public class ControlReturnService {
      * Нужен блокировке проведения: БТК возвращает изделие целиком, а не
      * одну операцию, поэтому сигнал, заведённый на строку монтажа,
      * касается и строки контроля того же изделия.
+     *
+     * Сигналы барьерных подразделений основанием не служат — правило
+     * и его обоснование держатся в {@link InstanceReworkService}.
      */
     @Transactional(readOnly = true)
     public Set<Long> rowIdsOfSignaledInstances(Collection<Long> rowIds) {
@@ -149,7 +152,8 @@ public class ControlReturnService {
         }
 
         return new LinkedHashSet<>(
-                controlReturnRepository.findRowIdsOfSignaledInstances(rowIds));
+                controlReturnRepository.findRowIdsOfSignaledInstances(
+                        rowIds, ReworkReturnOwnerService.BARRIER_SERVICES));
     }
 
     /**

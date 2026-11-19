@@ -51,7 +51,16 @@ public record ControlParamView(
         Long actualClassifierId,
 
         /** Подпись фактического классификатора (CELL). */
-        String actualClassifierLabel
+        String actualClassifierLabel,
+
+        /**
+         * Номер ячейки, привязанной к прибору этим параметром
+         * (CELL у заказа на приборы); пусто — привязки нет.
+         */
+        String boundCellNumber,
+
+        /** Подпись классификатора привязанной ячейки. */
+        String boundCellClassifierLabel
 ) {
 
     public enum Mode { LIST, TEXT, CELL }
@@ -60,6 +69,12 @@ public record ControlParamView(
 
     /**
      * Совпадает ли классификатор фактической ячейки с требуемым.
+     *
+     * Для прибора сверяется привязанная ячейка: фактическим
+     * изделием экземпляра здесь является прибор, а не ячейка, и
+     * классификатор подставляется тот, что у внесённого номера
+     * (сервис заполняет actualClassifierId привязкой), поэтому
+     * сравнение остаётся одним и тем же для обоих режимов.
      */
     public boolean isCellClassifierMatch() {
         if (mode != Mode.CELL) {
@@ -76,6 +91,17 @@ public record ControlParamView(
     /** Есть ли у экземпляра фактическая ячейка или серийник. */
     public boolean hasActualCell() {
         return actualCellNumber != null && !actualCellNumber.isBlank();
+    }
+
+    /**
+     * Привязана ли к экземпляру ячейка этого параметра.
+     *
+     * Для заказа на приборы именно эта отметка решает, можно ли
+     * проводить операцию: у прибора несколько видов ячеек, и пока
+     * один из них не внесён, изделие собрано не полностью.
+     */
+    public boolean isCellBound() {
+        return boundCellNumber != null && !boundCellNumber.isBlank();
     }
 
     /*

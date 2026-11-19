@@ -9,10 +9,11 @@ import java.util.List;
  * количество и маршрут (V40). Раскрытие показывает заказанные
  * экземпляры изделия — по одному на каждую строку графика (V56).
  *
- * Разрез обратен основному распределению: там мастер выбирает изделие
- * и его операции, а здесь работа заявлена группой ячеек одного
- * наименования, и думать мастер начинает с того, какие ячейки уже на
- * участке.
+ * Единица показа зависит от вида: у «Группового ЗНП на приборы» это
+ * прибор, у остальных групповых видов — ячейка. Разрез обратен
+ * основному распределению: там мастер выбирает изделие и его операции,
+ * а здесь работа заявлена группой изделий одного наименования, и думать
+ * мастер начинает с того, какие изделия уже на участке.
  *
  * @param id                  идентификатор заказа
  * @param number              номер ЗНП («ЗНП-2026-014»)
@@ -27,6 +28,8 @@ import java.util.List;
  * @param statusBadgeClass    CSS-модификатор статуса
  * @param serials             экземпляры заказа с их операциями
  * @param batchRows           сводка по операциям — пакетное назначение
+ * @param isDevice            true для GROUP_DEVICE: единица показа —
+ *                            прибор, а не ячейка
  */
 public record GroupZnpView(
         Long id,
@@ -41,10 +44,22 @@ public record GroupZnpView(
         String statusDisplayName,
         String statusBadgeClass,
         List<GroupZnpSerialRow> serials,
-        List<GroupZnpBatchRow> batchRows
+        List<GroupZnpBatchRow> batchRows,
+        boolean isDevice
 ) {
 
-    /** Сколько ячеек охвачено раскрытием. */
+    /**
+     * Родительное слово единицы показа: «приборов» либо «ячеек».
+     *
+     * Надпись считается от одного признака во всех подписях экрана,
+     * иначе мастер прочитал бы «приборы» в шапке и «ячейки» в строке
+     * одного и того же заказа.
+     */
+    public String unitWord() {
+        return isDevice ? "приборы" : "ячейки";
+    }
+
+    /** Сколько экземпляров охвачено раскрытием. */
     public long serialCount() {
         return serials == null ? 0L : serials.size();
     }
@@ -101,12 +116,21 @@ public record GroupZnpView(
         return GroupZnpBadge.ofOrderStatus(statusBadgeClass);
     }
 
-    /** Подпись состава: «8 яч. из 10 заказано». */
+    /**
+     * Подпись состава: «8 яч. из 10 заказано» либо «2 приб. из 2».
+     *
+     * Считается по экземплярам показа, а не по матрице комплектования:
+     * у заказа на приборы ячейки вносятся по видам и их число с числом
+     * приборов не совпадает, поэтому «6 из 2» было бы неправдой. Здесь
+     * «из» — заказанное количество изделий, а не внесённых ячеек.
+     */
     public String compositionLabel() {
+        String unit = isDevice ? "приб." : "яч.";
+
         long count = serialCount();
 
         if (count == 0) {
-            return "ячейки не внесены";
+            return isDevice ? "приборы не выпущены" : "ячейки не внесены";
         }
 
         long attached = serials == null
@@ -114,7 +138,7 @@ public record GroupZnpView(
                 : serials.stream().filter(GroupZnpSerialRow::attached).count();
 
         return quantityLabel == null || quantityLabel.isBlank()
-                ? attached + " яч."
-                : attached + " из " + quantityLabel.trim();
+                ? attached + " " + unit
+                : attached + " " + unit + " из " + quantityLabel.trim();
     }
 }

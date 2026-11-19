@@ -63,6 +63,7 @@ public class OperationControlParamService {
     private final ProductionOrderItemRepository productionItemRepo;
     private final ProductSerialRepository productSerialRepo;
     private final WorkshopDistributionService distributionService;
+    private final DeviceCellBindingService deviceBindingService;
 
     /**
      * Есть ли у операции строки графика контролируемые параметры.
@@ -90,6 +91,18 @@ public class OperationControlParamService {
             return List.of();
         }
 
+        /*
+         * Работа над прибором (GROUP_DEVICE) подписывается иначе, чем
+         * выпуск и заказ на ячейки: экземпляр здесь — прибор, а
+         * ячеек у него несколько, по числу видов, заданных
+         * технологом. Поэтому вместо «ячейки экземпляра» форма
+         * получает привязки этого прибора (V91): они и отвечают на
+         * вопрос, что вошло в изделие.
+         */
+        if (deviceBindingService.isDeviceRow(row)) {
+            return deviceViews(row, links);
+        }
+
         ProductSerial serial = findSerial(row);
         ProductClassifier actualClassifier = classifierOf(serial);
         String actualNumber = serial == null ? null : serial.getFullNumber();
@@ -101,6 +114,132 @@ public class OperationControlParamService {
         }
 
         return result;
+    }
+
+    /*
+     * Параметры работы над прибором — с привязанными ячейками.
+     *
+     * Прибор подписывает экземпляр вместо ячейки: строка «Ячейка
+     * экземпляра» показывает изделие, а привязка вида — ту ячейку,
+     * которую в него вставили. Пустая привязка остаётся пустой:
+     * исполнитель обязан внести номер сам, и выдумать его за него
+     * сервис не вправе.
+     */
+    private List<ControlParamView> deviceViews(
+            OrderScheduleRow row,
+            List<TechProcessOperationControlParam> links
+    ) {
+        ProductSerial device = deviceBindingService.deviceOf(row);
+        String deviceNumber = device == null ? null : device.getFullNumber();
+
+        Map<Long, ProductSerial> bound =
+                deviceBindingService.boundCellsByParam(row, links);
+
+        List<ControlParamView> result = new ArrayList<>();
+
+        for (TechProcessOperationControlParam link : links) {
+            ControlParamView view = toView(link, deviceNumber, null);
+
+            if (modeOf(link.getControlParam())
+                    != ControlParamView.Mode.CELL) {
+                result.add(view);
+                continue;
+            }
+
+            ProductSerial cell = bound.get(link.getId());
+
+            result.add(withBoundCell(view, cell));
+        }
+
+        return result;
+    }
+
+    /*
+     * Привязанная ячейка — поверх обычного представления параметра.
+     *
+     * Классификатор привязки подставляется фактическим: сверка с
+     * требованием технолога остаётся одним сравнением, а шаблон не
+     * различает, откуда взялся номер — из матрицы заказа или из
+     * привязки к прибору.
+     */
+    private static ControlParamView withBoundCell(
+            ControlParamView view,
+            ProductSerial cell
+    ) {
+        if (cell == null) {
+            return view;
+        }
+
+        ProductClassifier classifier = cell.getProductClassifier();
+
+        return new ControlParamView(
+                view.id(),
+                view.name(),
+                view.mode(),
+                view.mandatory(),
+                view.options(),
+                view.hint(),
+                view.requiredClassifierId(),
+                view.requiredClassifierLabel(),
+                view.actualCellNumber(),
+                idOf(classifier),
+                labelOf(classifier),
+                cell.getFullNumber(),
+                labelOf(classifier)
+        );
+    }
+
+    /**
+     * Является ли строка работой над прибором (GROUP_DEVICE).
+     *
+     * Нужен контроллеру, чтобы включить на форме поле ввода номера и
+     * кнопку «Привязать» только там, где привязка имеет смысл: у
+     * выпуска и заказа на ячейки экземпляр подписан своей ячейкой
+     * напрямую, и поле ввода было бы лишним.
+     */
+    @Transactional(readOnly = true)
+    public boolean isDeviceRow(Long rowId) {
+        return deviceBindingService.isDeviceRow(requireRow(rowId));
+    }
+
+    /**
+     * Привязать (или заменить) ячейку прибора по параметру формы.
+     *
+     * Точка входа кнопки «Привязать»: исполнитель вводит номер
+     * напротив вида ячейки, сервис сверяет его с составом заказа,
+     * классификатором требования и занятости у других приборов, и
+     * только после этого записывает привязку. Все проверки держится в
+     * {@link DeviceCellBindingService} — здесь лишь находится сам
+     * параметр по идентификатору строки маршрута.
+     *
+     * Возвращается подписанный номер для сообщения об успехе.
+     */
+    @Transactional
+    public String bindCell(
+            Long rowId,
+            Long linkId,
+            String cellNumber,
+            AppUser user
+    ) {
+        OrderScheduleRow row = requireRow(rowId);
+
+        TechProcessOperationControlParam link = findNodeParams(row).stream()
+                .filter(candidate -> candidate.getId().equals(linkId))
+                .findFirst()
+                .orElseThrow(() -> new IllegalArgumentException(
+                        "Параметр не найден в маршруте операции"
+                ));
+
+        if (modeOf(link.getControlParam()) != ControlParamView.Mode.CELL) {
+            throw new IllegalStateException(
+                    "Этот параметр не является ячейкой — привязать его нельзя"
+            );
+        }
+
+        ProductSerial cell = deviceBindingService.bind(
+                row, link, cellNumber, user);
+
+        return cell.getFullNumber();
     }
 
     /**
@@ -136,11 +275,32 @@ public class OperationControlParamService {
         ProductSerial serial = findSerial(row);
         ProductClassifier actualClassifier = classifierOf(serial);
 
+        /*
+         * Работа над прибором: фактической ячейкой параметра считается
+         * не позиция матрицы, а номер, привязанный исполнителем к
+         * этому изделию (V91). Пока хоть один вид не привязан,
+         * изделие собрано не полностью, и проведение запрещено —
+         * цех закрыл бы работу прибором без детали, которую требует
+         * техпроцесс.
+         */
+        Map<Long, ProductSerial> boundByParam =
+                deviceBindingService.isDeviceRow(row)
+                        ? deviceBindingService.boundCellsByParam(row, links)
+                        : Map.of();
+
+        if (deviceBindingService.isDeviceRow(row)) {
+            deviceBindingService.requireAllBound(cellLinks(links),
+                    boundByParam);
+        }
+
         Map<Long, ControlParamValueForm> submitted = indexByParam(values);
 
         for (TechProcessOperationControlParam link : links) {
+            ProductSerial effective = effectiveSerial(
+                    link, serial, boundByParam);
+
             validate(link, submitted.get(link.getId()),
-                    actualClassifier, serial);
+                    classifierOf(effective), effective);
         }
 
         distributionService.completeRow(rowId, user);
@@ -149,8 +309,10 @@ public class OperationControlParamService {
 
         for (TechProcessOperationControlParam link : links) {
             ControlParamValueForm form = submitted.get(link.getId());
+            ProductSerial effective = effectiveSerial(
+                    link, serial, boundByParam);
 
-            if (!isMarked(link, form, serial)) {
+            if (!isMarked(link, form, effective)) {
                 /*
                  * Пустая отметка необязательного параметра — не факт
                  * контроля: в журнале остаётся только то, что
@@ -159,8 +321,44 @@ public class OperationControlParamService {
                 continue;
             }
 
-            ocpRepo.save(toFact(link, form, row, actualClassifier, moment));
+            ocpRepo.save(toFact(link, form, row,
+                    classifierOf(effective), moment));
         }
+    }
+
+    /*
+     * Ячейка, которой сверяется параметр: привязанная либо из матрицы.
+     *
+     * Для прибора привязка первична: она отвечает, какая именно
+     * ячейка вошла в это изделие, тогда как матрица заказа знает
+     * только состав на весь ЗНП разом.
+     */
+    private static ProductSerial effectiveSerial(
+            TechProcessOperationControlParam link,
+            ProductSerial serial,
+            Map<Long, ProductSerial> boundByParam
+    ) {
+        if (boundByParam.isEmpty()) {
+            return serial;
+        }
+
+        return boundByParam.get(link.getId());
+    }
+
+    /* Параметры режима CELL — те, что требуют привязки к прибору. */
+    private List<TechProcessOperationControlParam> cellLinks(
+            List<TechProcessOperationControlParam> links
+    ) {
+        List<TechProcessOperationControlParam> result = new ArrayList<>();
+
+        for (TechProcessOperationControlParam link : links) {
+            if (modeOf(link.getControlParam())
+                    == ControlParamView.Mode.CELL) {
+                result.add(link);
+            }
+        }
+
+        return result;
     }
 
     /*
@@ -399,7 +597,13 @@ public class OperationControlParamService {
                         : null,
                 mode == ControlParamView.Mode.CELL
                         ? labelOf(actualClassifier)
-                        : null
+                        : null,
+                /*
+                 * Привязка к прибору заполняется только device-ветвью
+                 * (withBoundCell): здесь её взять неоткуда.
+                 */
+                null,
+                null
         );
     }
 

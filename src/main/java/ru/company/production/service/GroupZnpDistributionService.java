@@ -147,6 +147,18 @@ public class GroupZnpDistributionService {
                 );
 
         /*
+         * Приборы, выпущенные заказами страницы. Единица плана
+         * «Группового ЗНП на приборы» — прибор, а не ячейка: склад
+         * вносит в такой заказ ячейки по видам, и их число с числом
+         * приборов не совпадает, поэтому подписывать экземпляры обязан
+         * отдельный запрос, а не матрица комплектования.
+         */
+        Map<Long, List<ProductSerial>> instrumentsByOrder =
+                groupInstrumentsByOrder(
+                        groupZnpRepo.findInstrumentsOfGroupZnp(orderIds)
+                );
+
+        /*
          * План цеха по этим заказам: строки операций подразделения.
          */
         List<OrderScheduleRow> planRows =
@@ -176,10 +188,14 @@ public class GroupZnpDistributionService {
             List<SerialProductionOrder> cells =
                     cellsByOrder.getOrDefault(order.getId(), List.of());
 
+            List<ProductSerial> instruments =
+                    instrumentsByOrder.getOrDefault(order.getId(), List.of());
+
             List<OrderScheduleRow> rows = rowsOfOrder(planRows, order.getId());
 
             result.add(toView(
-                    order, cells, rows, serialsById, capableCache, from, to
+                    order, cells, instruments, rows, serialsById,
+                    capableCache, from, to
             ));
         }
 
@@ -326,32 +342,29 @@ public class GroupZnpDistributionService {
      */
 
     /**
-     * Заказ + его ячейки + строки плана → строка раздела.
+     * Заказ + его ячейки + приборы + строки плана → строка раздела.
      *
-     * Уровень ячеек строится по ЭКЗЕМПЛЯРАМ ПЛАНА, а не по матрице
-     * комплектования. Планировщик заводит экземпляры по заказанному
-     * количеству сразу при взятии заказа в работу (V56), а склад вносит
-     * номера позже и вправе внести не все. Строка, построенная от
-     * матрицы, молча теряла бы работы того изделия, которому номер ещё
-     * не присвоен, — и первая же операция заказа («Комплектование
-     * подсборок», которой этот номер и появляется) оставалась бы без
-     * адресата.
+     * Единица показа зависит от вида заказа:
      *
-     * Ячейка сопоставляется экземпляру по порядку: склад закрывает
-     * ближайший незакрытый экземпляр (см.
-     * SubassemblyKittingService#completeScheduleRow), поэтому i-я по
-     * моменту внесения ячейка принадлежит экземпляру с номером i.
-     * Колонки-связи между матрицей и планом в схеме нет.
+     *   * GROUP_DEVICE — прибор (выпущенный серийник изделия);
+     *   * GROUP_CELL и ремонтные — ячейка из матрицы комплектования.
+     *
+     * Строка, построенная от матрицы, молча теряла бы работы того
+     * изделия, которому номер ещё не присвоен, — и первая же операция
+     * заказа осталась бы без адресата.
      */
     private GroupZnpView toView(
             ProductionOrder order,
             List<SerialProductionOrder> cells,
+            List<ProductSerial> instruments,
             List<OrderScheduleRow> rows,
             Map<Long, ProductSerial> serialsById,
             Map<String, List<AssignableExecutor>> capableCache,
             LocalDate from,
             LocalDate to
     ) {
+        boolean isDevice = order.getZnpKind() == ZnpKind.GROUP_DEVICE;
+
         /*
          * Строки плана группируются по экземпляру, а внутри
          * экземпляра сохраняют порядок маршрута (seq) — так раскрытая
@@ -374,15 +387,18 @@ public class GroupZnpDistributionService {
         }
 
         /*
+         * Единица показа: приборы для GROUP_DEVICE, ячейки — для
+         * групповых ячеек и ремонтных видов.
+         *
          * Показываем каждый экземпляр, о чём-либо известном: и тот, у
-         * которого есть работы подразделения, и тот, которому склад уже
-         * присвоил номер. Порядок — по номеру экземпляра, он же порядок
-         * внесения ячеек.
+         * которого есть работы подразделения, и тот, которому уже
+         * присвоен номер. Порядок — по номеру экземпляра.
          */
         java.util.TreeSet<Integer> indexes =
                 new java.util.TreeSet<>(rowsByInstance.keySet());
 
-        for (int i = 0; i < cells.size(); i++) {
+        List<?> source = isDevice ? instruments : cells;
+        for (int i = 0; i < source.size(); i++) {
             indexes.add(i);
         }
 
@@ -390,7 +406,7 @@ public class GroupZnpDistributionService {
                 new ArrayList<>(indexes.size());
 
         for (Integer index : indexes) {
-            ProductSerial serial = serialAt(cells, index, serialsById);
+            ProductSerial serial = serialAt(source, index, serialsById);
 
             serialRows.add(new GroupZnpSerialRow(
                     index + 1,
@@ -402,7 +418,8 @@ public class GroupZnpDistributionService {
                             capableCache,
                             from,
                             to
-                    )
+                    ),
+                    isDevice
             ));
         }
 
@@ -419,7 +436,9 @@ public class GroupZnpDistributionService {
                 order.getStatusDisplayName(),
                 order.getStatusBadgeClass(),
                 serialRows,
-                toBatchRows(rows, cells, serialsById, capableCache, from, to)
+                toBatchRows(rows, source, serialsById, isDevice,
+                        capableCache, from, to),
+                isDevice
         );
     }
 
@@ -477,15 +496,16 @@ public class GroupZnpDistributionService {
      * Сводка по операциям заказа — блок пакетного назначения.
      *
      * Операция показывается одной строкой с чекбоксом «выделить все»:
-     * под ней строки ячеек, и мастер отмечает нужные (или все сразу),
-     * когда работу ведёт один человек. Ключом остаётся {@code rowId},
-     * поэтому снятая отметка исключает ячейку из назначения, а не
-     * перекладывает её на другого.
+     * под ней строки единиц показа (приборы либо ячейки), и мастер
+     * отмечает нужные (или все сразу), когда работу ведёт один человек.
+     * Ключом остаётся {@code rowId}, поэтому снятая отметка исключает
+     * единицу из назначения, а не перекладывает её на другого.
      */
     private List<GroupZnpBatchRow> toBatchRows(
             List<OrderScheduleRow> rows,
-            List<SerialProductionOrder> cells,
+            List<?> source,
             Map<Long, ProductSerial> serialsById,
+            boolean isDevice,
             Map<String, List<AssignableExecutor>> capableCache,
             LocalDate from,
             LocalDate to
@@ -524,7 +544,7 @@ public class GroupZnpDistributionService {
             long assignedCount = 0L;
 
             for (OrderScheduleRow row : group) {
-                ProductSerial serial = serialAt(cells, row, serialsById);
+                ProductSerial serial = serialAt(source, row, serialsById);
 
                 assignRows.add(new GroupZnpAssignRow(
                         row.getId(),
@@ -540,7 +560,8 @@ public class GroupZnpDistributionService {
                                 : WorkshopStaffService.displayName(
                                         row.getExecutor()
                                 ),
-                        row.getCompletedAt() != null
+                        row.getCompletedAt() != null,
+                        isDevice
                 ));
 
                 totalHours = totalHours.add(row.getLaborHours());
@@ -599,6 +620,29 @@ public class GroupZnpDistributionService {
     }
 
     /**
+     * Приборы → группировка по заказу, порядок запроса сохраняется.
+     */
+    private Map<Long, List<ProductSerial>> groupInstrumentsByOrder(
+            List<ProductSerial> instruments
+    ) {
+        Map<Long, List<ProductSerial>> result = new LinkedHashMap<>();
+
+        for (ProductSerial serial : instruments) {
+            if (serial.getIssuedProductionOrder() == null
+                    || serial.getIssuedProductionOrder().getId() == null) {
+                continue;
+            }
+
+            result.computeIfAbsent(
+                    serial.getIssuedProductionOrder().getId(),
+                    k -> new ArrayList<>()
+            ).add(serial);
+        }
+
+        return result;
+    }
+
+    /**
      * Ячейки → группировка по заказу, порядок запроса сохраняется.
      */
     private Map<Long, List<SerialProductionOrder>> groupCellsByOrder(
@@ -637,33 +681,38 @@ public class GroupZnpDistributionService {
     }
 
     /**
-     * Ячейка, соответствующая экземпляру строки плана.
+     * Единица показа (прибор или ячейка) по индексу.
      */
-    private ProductSerial serialAt(
-            List<SerialProductionOrder> cells,
-            OrderScheduleRow row,
-            Map<Long, ProductSerial> serialsById
-    ) {
-        return serialAt(cells, row.getInstanceIndex(), serialsById);
-    }
-
-    /**
-     * Ячейка, соответствующая экземпляру по его номеру.
-     *
-     * Экземпляр без внесённой ячейки — норма, а не ошибка: склад
-     * вносит номера по мере приёмки, и i-й экземпляр получает ячейку,
-     * только когда i-я по счёту подсборка проведена в заказ.
-     */
-    private ProductSerial serialAt(
-            List<SerialProductionOrder> cells,
+    @SuppressWarnings("unchecked")
+    private <T> ProductSerial serialAt(
+            List<T> source,
             Integer index,
             Map<Long, ProductSerial> serialsById
     ) {
-        if (index == null || index < 0 || index >= cells.size()) {
+        if (index == null || index < 0 || index >= source.size()) {
             return null;
         }
 
-        return serialOf(cells.get(index), serialsById);
+        T item = source.get(index);
+        if (item instanceof ProductSerial serial) {
+            return serial;
+        }
+        if (item instanceof SerialProductionOrder link) {
+            return serialOf(link, serialsById);
+        }
+        return null;
+    }
+
+    /**
+     * Единица показа, соответствующая экземпляру строки плана.
+     */
+    @SuppressWarnings("unchecked")
+    private <T> ProductSerial serialAt(
+            List<T> source,
+            OrderScheduleRow row,
+            Map<Long, ProductSerial> serialsById
+    ) {
+        return serialAt(source, row.getInstanceIndex(), serialsById);
     }
 
     /**

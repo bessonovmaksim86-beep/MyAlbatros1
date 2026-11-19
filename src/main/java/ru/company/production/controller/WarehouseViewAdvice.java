@@ -10,6 +10,7 @@ import ru.company.production.entity.AppUser;
 import ru.company.production.repository.UserRepository;
 import ru.company.production.service.BvkAcceptanceService;
 import ru.company.production.service.CellReceivingService;
+import ru.company.production.service.InstrumentKittingService;
 import ru.company.production.service.ModuleRoutes;
 import ru.company.production.service.QuarantineTransferService;
 import ru.company.production.service.QuarantineTransferService.Section;
@@ -39,7 +40,8 @@ import java.util.Locale;
         WarehouseKittingController.class,
         SubassemblyKittingController.class,
         WarehouseStockController.class,
-        WarehouseSerialSearchController.class
+        WarehouseSerialSearchController.class,
+        InstrumentKittingController.class
 })
 @RequiredArgsConstructor
 public class WarehouseViewAdvice {
@@ -51,6 +53,7 @@ public class WarehouseViewAdvice {
     private final QuarantineTransferService quarantineTransferService;
     private final WarehouseKittingService kittingService;
     private final SubassemblyKittingService subassemblyKittingService;
+    private final InstrumentKittingService instrumentKittingService;
 
     @ModelAttribute
     public void addWarehouseContext(
@@ -136,6 +139,16 @@ public class WarehouseViewAdvice {
         model.addAttribute(
                 "subassemblyKittingCount",
                 subassemblyKittingService.countPending()
+        );
+
+        /*
+         * Групповые ЗНП на приборы, укомплектованные не полностью:
+         * кладовщик обязан видеть объём комплектации, не заходя в сам
+         * раздел, — иначе счётчик терялся бы за переходом.
+         */
+        model.addAttribute(
+                "instrumentKittingCount",
+                instrumentKittingService.countPending()
         );
 
         if (authentication == null

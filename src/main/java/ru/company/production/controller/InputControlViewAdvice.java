@@ -45,7 +45,15 @@ import java.util.Locale;
  */
 @ControllerAdvice(assignableTypes = {
         InputControlController.class,
-        PendingDefectsController.class
+        PendingDefectsController.class,
+        /*
+         * Собственный раздел бюро технического контроля рисует цеховую
+         * панель, поэтому ему нужны те же подписи рода подразделения,
+         * его границы и признак btkModule, что разделу «Отбраковка»:
+         * без них меню потеряло бы наименование бюро, а пункт
+         * комплектования не показал бы, что это модуль БТК.
+         */
+        TechnicalControlController.class
 })
 @RequiredArgsConstructor
 public class InputControlViewAdvice {
@@ -66,6 +74,13 @@ public class InputControlViewAdvice {
         model.addAttribute("isBvkMaster", false);
         model.addAttribute("isBtkMaster", false);
         model.addAttribute("isBtkModule", false);
+
+        /*
+         * Счётчик комплектования БТК проставляется и до проверки роли:
+         * пункт меню обращается к нему в th:if, и отсутствие атрибута
+         * на анонимном запросе обернулось бы ошибкой Thymeleaf.
+         */
+        model.addAttribute("btkRepairKittingCount", 0L);
 
         /*
          * Роль читается до счётчиков: очередь отбраковки общая для двух
@@ -180,6 +195,16 @@ public class InputControlViewAdvice {
 
         if (btkModule) {
             addWorkshopMenuContext(model, supervisor);
+
+            /*
+             * Счётчик комплектования — заказы БТК, а не БВК: у бюро
+             * технического контроля своя очередь ремонтных ЗНП, и цифра
+             * обязана совпадать с реестром по этому адресу.
+             */
+            model.addAttribute(
+                    "btkRepairKittingCount",
+                    repairKittingService.countBtkRepairKittingOrders()
+            );
         }
 
         /*

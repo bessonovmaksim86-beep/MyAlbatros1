@@ -67,6 +67,15 @@ public class ReworkReturnService {
      */
     private final WorkingDaysCalculator workingDays;
 
+    /*
+     * Кто владеет решением о доработке: карточку показывает тому цеху,
+     * чей участок маршрута идёт последним перед точкой возврата, и
+     * только его строки этого участка. Держать правило участка в самом
+     * разделе значило бы разъезжать его с логикой отправки назад —
+     * поэтому оно вынесено в отдельный сервис.
+     */
+    private final ReworkReturnOwnerService ownerService;
+
     /* ============================================================
        СПИСОК РАЗДЕЛА
        ============================================================ */
@@ -74,10 +83,15 @@ public class ReworkReturnService {
     /**
      * Изделия, возвращённые на доработку, — карточка на экземпляр.
      *
-     * Основание списка — открытые возвраты БТК: цеху показывают то, что
-     * ему вернули. В карточку попадают все строки маршрута этого
-     * экземпляра, принадлежащие подразделениям руководителя, — иначе он
-     * не увидел бы, какие свои операции придётся переделывать.
+     * Основание списка — открытые сигналы БТК по строкам самого цеха:
+     * показать надо то, что вернули ему. Сигнал строки соседнего цеха
+     * того же изделия в его карточку не попадает: решение о переделке
+     * каждый цех выносит по своим работам сам, и чужое ожидание он ни
+     * принять, ни снять не может.
+     *
+     * В карточку попадают все строки маршрута этого экземпляра,
+     * принадлежащие подразделениям руководителя, — иначе он не увидел
+     * бы, какие свои операции придётся переделывать.
      */
     @Transactional(readOnly = true)
     public List<ReworkReturnCard> findOpenReturns(AppUser supervisor) {
@@ -92,7 +106,8 @@ public class ReworkReturnService {
             return List.of();
         }
 
-        List<ControlReturn> open = controlReturnRepository.findAllOpen();
+        List<ControlReturn> open =
+                controlReturnRepository.findOpenForUnits(scope);
 
         if (open.isEmpty()) {
             return List.of();
@@ -229,6 +244,13 @@ public class ReworkReturnService {
         List<Long> scope = staffService.unitScope(supervisor);
 
         /*
+         * Владелец участка: только последний производственный участок
+         * перед точкой возврата имеет право решать по изделию. Если
+         * вызывающий — не владелец, отклоняем запрос.
+         */
+        assertOwner(chosen.get(0), scope);
+
+        /*
          * Каскад считается до снятий: дата факта — признак того, что
          * строку ещё можно снять, и после снятия строка перестанет
          * попадать в выборку последующих.
@@ -328,14 +350,21 @@ public class ReworkReturnService {
             returns.add(ret);
         }
 
+        /*
+         * Сигнал БТК закрывается и когда снимать проведение нечего:
+         * цех вынес решение по изделию, и карточка обязана исчезнуть из
+         * раздела. Иначе строки, которые БТК вернула, но цех не отметил
+         * (их проведение закрыто и снимать нечего), держали бы открытые
+         * сигналы — изделие возвращалось бы в раздел бесконечно.
+         */
+        closeControlReturns(unwritten.values(), scope, supervisor, now);
+
         if (returns.isEmpty()) {
             return "Уже на доработке: " + alreadyOpen
                     + " — проведение снимать не требуется";
         }
 
         reworkReturnRepository.saveAll(returns);
-
-        closeControlReturns(unwritten.values(), supervisor, now);
 
         return "Возвращено на доработку: " + returns.size()
                 + (alreadyOpen > 0
@@ -431,25 +460,45 @@ public class ReworkReturnService {
     }
 
     /*
-     * Сигнал БТК закрывается решением цеха.
+     * Сигнал БТК закрывается решением цеха — по изделию целиком, но
+     * только в границах своих подразделений.
      *
      * Открытый возврат живёт, пока цех не решил, что переделывать.
-     * Как только снятие сделано, карточка обязана исчезнуть из раздела
-     * — иначе цех возвращал бы изделие самому себе снова и снова.
+     * Как только снятие сделано, карточка обязана исчезнуть из раздела:
+     * цех уже вынес решение, и второй раз возвращать изделие самому
+     * себе незачем.
+     *
+     * Закрываются сигналы всех строк изделия, а не только снятых: БТК
+     * заводит возврат на каждую проведённую строку, а начальник цеха
+     * отмечает переделку по своему усмотрению. Оставься сигнал его же
+     * закрытой строки — карточка строилась бы заново, и изделие
+     * возвращалось бы в раздел до бесконечности.
+     *
+     * Граница по подразделениям обязательна: над изделием работает
+     * несколько цехов, и решение одного не гасит сигнал другого —
+     * иначе цех, ещё не видевший возврата, потерял бы своё изделие.
+     *
      * Исполнитель причину не теряет: она читается из ReworkReturn,
      * заведённого на его собственную строку.
      */
-    private void closeControlReturns(Collection<OrderScheduleRow> rows,
+    private void closeControlReturns(Collection<OrderScheduleRow> decided,
+                                     List<Long> scope,
                                      AppUser supervisor,
                                      LocalDateTime now) {
         List<Long> ids = new ArrayList<>();
 
-        for (OrderScheduleRow row : rows) {
-            ids.add(row.getId());
+        for (OrderScheduleRow row : decided) {
+            if (row != null && row.getId() != null) {
+                ids.add(row.getId());
+            }
+        }
+
+        if (ids.isEmpty()) {
+            return;
         }
 
         List<ControlReturn> open =
-                controlReturnRepository.findOpenByRowIds(ids);
+                controlReturnRepository.findOpenOfInstancesOfRows(ids, scope);
 
         if (open.isEmpty()) {
             return;
@@ -487,6 +536,12 @@ public class ReworkReturnService {
         List<OrderScheduleRow> chosen = requireRows(rowIds, supervisor);
 
         List<Long> scope = staffService.unitScope(supervisor);
+
+        /*
+         * Владелец участка: только владелец может отправить изделие
+         * в предшествующий цех.
+         */
+        assertOwner(chosen.get(0), scope);
 
         /*
          * Экземпляры собираются до снятий: ключ экземпляра читается из
@@ -528,6 +583,14 @@ public class ReworkReturnService {
         }
 
         reworkReturnRepository.saveAll(returns);
+
+        /*
+         * Сигнал БТК закрывается и здесь: изделие отправлено назад по
+         * маршруту, решение цеха вынесено, и карточка обязана уйти из
+         * раздела. Иначе цех видел бы то же изделие до тех пор, пока
+         * предшествующий цех его не переделает.
+         */
+        closeControlReturns(chosen, scope, supervisor, now);
 
         return "Отправлено в предшествующий цех: " + instances.size()
                 + ", снято проведений: " + returns.size();
@@ -571,17 +634,35 @@ public class ReworkReturnService {
        ============================================================ */
 
     /**
-     * Карточка экземпляра: его строки в подразделениях цеха плюс
-     * открытые возвраты этих строк.
+     * Карточка экземпляра: участок-владение цеха плюс открытые возвраты
+     * его строк.
      *
-     * @return {@code null}, если у цеха к экземпляру нет ни одной работы
+     * Карточку получает только тот цех, чей участок маршрута идёт
+     * последним перед точкой возврата (см. {@link ReworkReturnOwnerService}),
+     * и видит он только строки своего участка — не весь маршрут своего
+     * цеха. Участки того же цеха, лежащие раньше чужого цеха, появятся
+     * позже, когда изделие вернётся назад по маршруту.
+     *
+     * @return {@code null}, если экземпляр владеет не этот цех
      */
     private ReworkReturnCard buildCard(String key,
                                        OrderScheduleRow sample,
                                        List<ControlReturn> openReturns,
                                        List<Long> scope) {
 
-        List<OrderScheduleRow> rows = rowsOfInstance(sample, scope);
+        ReworkReturnOwnerService.Ownership ownership =
+                ownerService.resolve(sample);
+
+        /*
+         * Не владелец — карточки нет: изделие ещё держит цех, идущий
+         * ближе к контролю. Сигналы на строках этого цеха остаются
+         * открытыми и закроются, когда решение дойдёт до него.
+         */
+        if (!ownership.isOwnedBy(scope)) {
+            return null;
+        }
+
+        List<OrderScheduleRow> rows = ownership.getOwnerRows();
 
         if (rows.isEmpty()) {
             return null;
@@ -602,6 +683,7 @@ public class ReworkReturnService {
         card.setReturns(groupByRow(openReturns));
         card.setOwnReturns(groupByRework(
                 reworkReturnRepository.findOpenByRowIds(rowIds)));
+        card.setPredecessorKind(ownership.getPredecessor().name());
 
         /*
          * Подпись изделия: серийный номер выпуска для ЗНП,
@@ -859,6 +941,21 @@ public class ReworkReturnService {
         }
 
         return rows;
+    }
+
+    /**
+     * Проверяет, что вызывающий руководитель является владельцем
+     * участка — последним производственным участком перед точкой
+     * возврата. Если нет — выбрасывает исключение.
+     */
+    private void assertOwner(OrderScheduleRow sample, List<Long> scope) {
+        ReworkReturnOwnerService.Ownership ownership =
+                ownerService.resolve(sample);
+        if (!ownership.isOwnedBy(scope)) {
+            throw new IllegalStateException(
+                    "У вас нет прав на это изделие: решение может принять только начальник цеха последнего участка перед контролем"
+            );
+        }
     }
 
     /*

@@ -187,6 +187,20 @@
                                 </dd>
                             </div>
 
+                            <!--
+                                Доработки считают по возвратам БТК, а не
+                                по изолятору: переделка внутри цеха номер
+                                никуда не перемещает и циклом брака не
+                                является, но о качестве работы говорит
+                                прямо.
+                            -->
+                            <div class="search-summary__field">
+                                <dt>Циклов доработок</dt>
+                                <dd th:text="${passport.reworkCycles}">
+                                    1
+                                </dd>
+                            </div>
+
                             <div class="search-summary__field"
                                  th:if="${passport.cancelledRepairs > 0}">
                                 <dt>Отменённых ремонтных ЗНП</dt>
@@ -226,6 +240,7 @@
                                 <th>Событие</th>
                                 <th>Исполнитель</th>
                                 <th>Документ</th>
+                                <th>Всего / Забраковано</th>
                                 <th>Состояние на момент события</th>
                                 <th>Причина</th>
                             </tr>
@@ -252,6 +267,57 @@
 
                                 <td th:text="${row.documentLabel}">
                                     ЗНР 2026-007
+                                </td>
+
+                                <td class="passport-qty-cell">
+
+                                    <span class="passport-qty"
+                                          th:text="${row.quantityLabel}">
+                                        25 шт.
+                                    </span>
+
+                                    <!--
+                                        Номера, вошедшие в заказ, печатают
+                                        прямо в клетке, когда их не больше
+                                        двух: столько читается, не ломая
+                                        сетку таблицы. Больше — уходят под
+                                        раскрывающийся список, иначе заказ
+                                        на десятки ячеек растянул бы строку
+                                        хронологии на весь экран.
+
+                                        details/summary вместо переключателя
+                                        на скрипте: состав обязан
+                                        открываться и касанием, и с
+                                        клавиатуры, а страницы паспорта
+                                        скрипт ради этого не требуют.
+                                    -->
+                                    <span th:if="${#lists.size(row.znpCellNumbers) > 0
+                                                    and #lists.size(row.znpCellNumbers) <= 2}"
+                                          class="passport-znp-short">
+                                        <span th:each="cell : ${row.znpCellNumbers}"
+                                              class="passport-znp-item"
+                                              th:text="${cell}">
+                                            121200022
+                                        </span>
+                                    </span>
+
+                                    <details th:if="${#lists.size(row.znpCellNumbers) > 2}"
+                                             class="passport-znp">
+
+                                        <summary th:text="'Ещё '
+                                                          + ${#lists.size(row.znpCellNumbers)}
+                                                          + ' в составе'">
+                                            Ещё 12 в составе
+                                        </summary>
+
+                                        <div class="passport-znp-list">
+                                            <div th:each="cell : ${row.znpCellNumbers}"
+                                                 class="passport-znp-item"
+                                                 th:text="${cell}">
+                                                121200022
+                                            </div>
+                                        </div>
+                                    </details>
                                 </td>
 
                                 <td th:text="${row.stateLabel}">

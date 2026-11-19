@@ -6,6 +6,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 import ru.company.production.entity.OrderScheduleRow;
+import ru.company.production.entity.ProductSerial;
 import ru.company.production.entity.ProductionOrder;
 import ru.company.production.entity.ScheduleRowStatus;
 import ru.company.production.entity.SerialProductionOrder;
@@ -199,6 +200,40 @@ public interface GroupZnpDistributionRepository
                      serial.serial asc
             """)
     List<SerialProductionOrder> findCellsOfGroupZnp(
+            @Param("orderIds") Collection<Long> orderIds
+    );
+
+    /**
+     * Серийники приборов, выпущенных заказами страницы.
+     *
+     * Единица плана «Группового ЗНП на приборы» — прибор, а не ячейка:
+     * склад вносит в заказ ячейки по видам, и их количество с числом
+     * приборов не совпадает. Экран распределения обязан подписывать
+     * экземпляры номером прибора, поэтому серийники изделия читаются
+     * отдельным пакетным запросом, а не матрицей комплектования.
+     *
+     * Порядок — по серии: экземпляр плана с номером i получает
+     * i-й выпущенный прибор, тот же принцип сопоставления, что у ячеек
+     * в {@link #findCellsOfGroupZnp}.
+     *
+     * Классификатор подтянут fetch-join'ом: open-in-view выключен, а
+     * полный номер и наименование изделия печатаются строкой. Заказ-
+     * выпуск тоже читается графом: сервис группирует приборы по его
+     * идентификатору, и на ленивой прокси это отдельный запрос.
+     */
+    @Query("""
+            select serial
+            from ProductSerial serial
+            left join fetch serial.productClassifier classifier
+            join fetch serial.issuedProductionOrder issuedOrder
+            where issuedOrder.id in :orderIds
+              and issuedOrder.active = true
+              and serial.productType =
+                  ru.company.production.entity.ProductType.DEVICE
+            order by issuedOrder.id asc,
+                     serial.serial asc
+            """)
+    List<ProductSerial> findInstrumentsOfGroupZnp(
             @Param("orderIds") Collection<Long> orderIds
     );
 }

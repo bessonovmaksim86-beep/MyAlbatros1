@@ -697,6 +697,27 @@ public class MyOperationsController {
         model.addAttribute("controlParams", params);
         model.addAttribute("rowId", rowId);
         model.addAttribute("completionForm", new ControlParamCompletionForm());
+
+        /*
+         * Режим прибора включает на форме поле ввода номера и кнопку
+         * «Привязать»: у выпуска и заказа на ячейки экземпляр уже
+         * подписан своей ячейкой из матрицы, и поле было бы лишним.
+         */
+        boolean deviceMode = controlParamService.isDeviceRow(rowId);
+
+        model.addAttribute("deviceMode", deviceMode);
+
+        /*
+         * Сколько видов ещё не привязано — по этой цифре кнопка
+         * проведения неактивна: прибор считают собранным только когда
+         * в него вошёл номер каждого вида, заданного технологом.
+         */
+        model.addAttribute("pendingCellCount", deviceMode
+                ? params.stream()
+                        .filter(ControlParamView::isCellMode)
+                        .filter(param -> !param.isCellBound())
+                        .count()
+                : 0L);
         /*
          * Режим возвращается на форму и обратно: закрытие последнего
          * экземпляра переносит группу в проведённую половину, и человек,
@@ -755,6 +776,54 @@ public class MyOperationsController {
         }
 
         return redirectToList(mode, expanded, periodFrom, periodTo);
+    }
+
+    /**
+     * Привязать ячейку к прибору экземпляра — кнопка «Привязать».
+     *
+     * Отдельный POST, а не часть проведения: исполнитель вносит номер
+     * по одному виду и видит результат сразу, а проведение обязано
+     * остаться закрытым, пока хоть один вид не привязан. Возврат —
+     * та же форма, чтобы исполнитель не потерял остальные отметки.
+     *
+     * Проверки (номер в реестре, ячейка, состав этого ЗНП, совпадение
+     * классификатора и занятость у других приборов заказа) держит
+     * сервис; контроллер лишь передаёт причину отказа.
+     */
+    @PostMapping("/complete/{rowId}/bind-cell")
+    public String bindCell(
+            @PathVariable Long rowId,
+            @RequestParam(name = "linkId") Long linkId,
+            @RequestParam(name = "cellNumber", required = false)
+                    String cellNumber,
+            @RequestParam(name = "mode", required = false) String mode,
+            @RequestParam(name = "expanded", required = false) String expanded,
+            @RequestParam(name = "periodFrom", required = false) String periodFrom,
+            @RequestParam(name = "periodTo", required = false) String periodTo,
+            Authentication authentication,
+            RedirectAttributes redirectAttributes
+    ) {
+        AppUser user = currentUser(authentication);
+
+        String formUrl = "redirect:"
+                + completeFormUrl(rowId, mode, expanded, periodFrom, periodTo);
+
+        try {
+            suspensionService.assertRowOperable(rowId);
+
+            String number = controlParamService.bindCell(
+                    rowId, linkId, cellNumber, user);
+
+            redirectAttributes.addFlashAttribute(
+                    "successMessage",
+                    "Ячейка " + number + " привязана к прибору"
+            );
+        } catch (RuntimeException ex) {
+            redirectError(redirectAttributes, ex);
+            return formUrl;
+        }
+
+        return formUrl;
     }
 
     /* Сообщение об отказе проведения — тем же списком, откуда
@@ -1342,12 +1411,24 @@ public class MyOperationsController {
             RedirectAttributes redirectAttributes
     ) {
         AppUser user = currentUser(authentication);
+        /*
+         * Адрес возврата: по умолчанию — та же форма с сохранённым
+         * отбором, чтобы частичная проводка не роняла человека из
+         * работы. Набор заказа целиком меняет цель перехода — проводить
+         * больше нечего, и человек обязан попасть в перечень бюро, где
+         * заказ остался видимым как «Скомплектовано».
+         */
+        String redirectTo = null;
 
         try {
             RepairKittingOperationService.KittingResult result =
                     repairKittingService.kit(znpId, cells, user);
 
             redirectAttributes.addFlashAttribute("successMessage", result.message());
+
+            if (result.completed() && result.listUrl() != null) {
+                redirectTo = result.listUrl();
+            }
         } catch (RuntimeException ex) {
             redirectAttributes.addFlashAttribute(
                     "errorMessage",
@@ -1355,6 +1436,10 @@ public class MyOperationsController {
                             ? "Не удалось провести комплектование"
                             : ex.getMessage()
             );
+        }
+
+        if (redirectTo != null) {
+            return "redirect:" + redirectTo;
         }
 
         return "redirect:" + repairKittingUrl(znpId, new QuarantineFilter(

@@ -137,6 +137,27 @@ public class SecurityConfig {
                         .requestMatchers("/pending-defects",
                                 "/pending-defects/**")
                         .hasAnyRole(AccessRoles.DEFECT_REQUEST_STAFF)
+                        /*
+                         * Бюро технического контроля: раздел 11.
+                         *
+                         * Собственный адрес нужен потому, что реестры
+                         * партий (входной контроль, изолятор, возврат)
+                         * закрываются ролью BVK_EXECUTOR, и общая
+                         * ссылка на /input-control/** привела бы
+                         * контролёра БТК к 403. Комплектование
+                         * ремонтных ЗНП — единственный раздел, который
+                         * БТК ведёт у себя: остальная работа
+                         * (операции, распределение, отбраковка) живёт в
+                         * цеховом модуле и в «Мои операции».
+                         *
+                         * POST открыт обеим ролям бюро: состав заказа
+                         * проводит исполнитель, а руководитель бюро
+                         * закрывает заказ за того, кто вёл его в этот
+                         * день (см. RepairKittingOperationService).
+                         */
+                        .requestMatchers("/technical-control",
+                                "/technical-control/**")
+                        .hasAnyRole(AccessRoles.BTK_STAFF)
                         .anyRequest().authenticated()
                 )
                 .formLogin(form -> form

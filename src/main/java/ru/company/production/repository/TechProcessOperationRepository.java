@@ -147,6 +147,51 @@ public interface TechProcessOperationRepository
     );
 
     /**
+     * Узлы маршрутов по перечню типов операций и перечню
+     * подразделений.
+     *
+     * Нужен комплектованию ремонтных ЗНП в «Мои операции»: заказ
+     * ведёт тот, чьё подразделение стоит в комплектовочной операции
+     * маршрута, а меню одно для обоих бюро контроля (БВК и БТК).
+     * Подбор держится списком подразделений, а граница «какие заказы
+     * видеть» проводится уже сервисом по правам пользователя — так
+     * исполнитель БВК не увидит заказ БТК, и наоборот, хотя запрос
+     * один.
+     *
+     * Типы тоже списком: ремонтный вид сервис задаёт по
+     * «Комплектованию ячеек» или «Комплектованию подсборок», а
+     * прежние заказы велись «Комплектовочной» операцией; узел обязан
+     * находиться по тем же типам, по которым подобран сам заказ, —
+     * иначе заказ попал бы в список, но проводить его было бы нечем.
+     *
+     * Порядок — по маршруту, затем по позиции: если в маршруте
+     * несколько подходящих операций, ведёт та, что стоит раньше.
+     */
+    @EntityGraph(attributePaths = {
+            "operation",
+            "operation.operationName",
+            "operation.operationType",
+            "operation.organizationUnit"
+    })
+    @Query("""
+            select node
+            from TechProcessOperation node
+            join node.techProcess techProcess
+            join node.operation operation
+            join operation.operationType operationType
+            join operation.organizationUnit unit
+            where techProcess.id in :processIds
+              and operationType.code in :typeCodes
+              and unit.code in :unitCodes
+            order by techProcess.id asc, node.position asc
+            """)
+    List<TechProcessOperation> findKittingNodesForProcesses(
+            @Param("processIds") Collection<Long> processIds,
+            @Param("typeCodes") Collection<String> typeCodes,
+            @Param("unitCodes") Collection<String> unitCodes
+    );
+
+    /**
      * Узлы маршрутов указанного подразделения по перечню типов операций.
      *
      * Отличие от {@link #findUnitKittingNodesForProcesses}: тип один, а

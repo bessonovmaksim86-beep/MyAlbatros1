@@ -187,7 +187,20 @@
                                 </td>
 
                                 <td>
+                                    <!--
+                                        «Скомплектовано» — производный
+                                        признак: заказ остаётся «В
+                                        работе» у диспетчера, но для
+                                        бюро он закрыт (взято не меньше
+                                        заказанного), и проводить по нему
+                                        больше нечего.
+                                    -->
+                                    <span class="status status--done"
+                                          th:if="${completedOrderIds != null and completedOrderIds.contains(order.id)}">
+                                        Скомплектовано
+                                    </span>
                                     <span class="status"
+                                          th:unless="${completedOrderIds != null and completedOrderIds.contains(order.id)}"
                                           th:classappend="' ' + ${order.statusBadgeClass}"
                                           th:text="${order.statusDisplayName}">
                                         В работе

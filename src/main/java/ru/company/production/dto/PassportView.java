@@ -54,6 +54,9 @@ public class PassportView {
     /** Число снятых ремонтных заказов. */
     private final long cancelledRepairs;
 
+    /** Число возвратов на доработку (Возвращена БТК на доработку). */
+    private final long reworkCycles;
+
     /** Хронология сверху вниз: первое событие — первой строкой. */
     private final List<PassportEventRow> events;
 
@@ -82,5 +85,19 @@ public class PassportView {
 
         /** Состояние ячейки на момент события. */
         private final String stateLabel;
+
+        /**
+         * Количество по документу: «всего / забраковано» для прихода,
+         * «N шт.» для заказа. Прочерк, если документ количества не имеет.
+         */
+        private final String quantityLabel;
+
+        /**
+         * Номера, вошедшие в заказ-комплектующий этого события.
+         *
+         * Список пуст у всех прочих строк: разворачивать состав заказа
+         * есть смысл только там, где номер оформлен в ЗНП.
+         */
+        private final List<String> znpCellNumbers;
     }
 }

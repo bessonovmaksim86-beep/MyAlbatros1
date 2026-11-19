@@ -71,6 +71,18 @@ public interface ControlReturnRepository
      * Условие переписывает принадлежность возвратом экземпляру: строка
      * возврата принадлежит бюро, а не цеху, поэтому блокируются ровно
      * строки того же изделия, а не того же подразделения.
+     *
+     * Сигналы барьерных подразделений (склады SGD/SCD и контроль SQ)
+     * основанием не служат: переделку закрывает повторное проведение
+     * работы цеха, а склад и контроль свою строку повторно не проводят
+     * — склад свою работу уже закрыл, а сигнал контроля закроется ровно
+     * тем проведением, которое он сейчас и удерживает. Учёт такого
+     * сигнала запирал бы экземпляр намертво: строка контроля ждёт
+     * закрытия собственного сигнала, а сигнал не закроется, пока строка
+     * заблокирована. Барьерная строка источника определяется по
+     * подразделению; строка без подразделения остаётся основанием —
+     * её принадлежность барьеру неизвестна, и снимать блокировку
+     * наугад нельзя.
      */
     @Query("""
             select row.id
@@ -81,7 +93,11 @@ public interface ControlReturnRepository
                         select ret.id
                         from ControlReturn ret
                         join ret.scheduleRow other
+                        left join other.organizationUnit otherUnit
+                        left join otherUnit.service otherService
                         where ret.resolvedAt is null
+                          and (otherService.code is null
+                                 or otherService.code not in :barrierServices)
                           and row.customerOrder.id is not null
                           and other.customerOrder.id = row.customerOrder.id
                           and other.itemPosition = row.itemPosition
@@ -91,7 +107,11 @@ public interface ControlReturnRepository
                         select ret.id
                         from ControlReturn ret
                         join ret.scheduleRow other
+                        left join other.organizationUnit otherUnit
+                        left join otherUnit.service otherService
                         where ret.resolvedAt is null
+                          and (otherService.code is null
+                                 or otherService.code not in :barrierServices)
                           and row.productionOrder.id is not null
                           and other.productionOrder.id = row.productionOrder.id
                           and other.itemPosition = row.itemPosition
@@ -100,7 +120,8 @@ public interface ControlReturnRepository
               )
             """)
     List<Long> findRowIdsOfSignaledInstances(
-            @Param("rowIds") Collection<Long> rowIds
+            @Param("rowIds") java.util.Collection<Long> rowIds,
+            @Param("barrierServices") java.util.Collection<String> barrierServices
     );
 
     /**
@@ -118,12 +139,13 @@ public interface ControlReturnRepository
     List<ControlReturn> findAllByRowId(@Param("rowId") Long rowId);
 
     /**
-     * Все открытые возвраты с контроля.
+     * Открытые возвраты с контроля по подразделениям цеха.
      *
      * Нужен разделу «Возврат на доработку»: строка возврата принадлежит
-     * бюро, а не цеху, поэтому цех выбирает изделия не по подразделению
-     * возврата, а по принадлежности экземпляра — какие строки этого
-     * изделия выполняет его цех.
+     * тому подразделению, чью работу вернули, и цех обязан видеть ровно
+     * свои сигналы. Сигналы соседнего цеха того же изделия держат его
+     * собственную карточку — решение о переделке каждый цех выносит сам
+     * и не вправе гасить чужое ожидание.
      *
      * Строка и её основание подхватываются сразу: open-in-view отключён,
      * и ключ экземпляра карточка читает уже вне транзакции запроса.
@@ -131,25 +153,77 @@ public interface ControlReturnRepository
     @Query("""
             select ret
             from ControlReturn ret
-            left join fetch ret.scheduleRow row
+            join fetch ret.scheduleRow row
             left join fetch row.customerOrder
             left join fetch row.productionOrder
             left join fetch ret.returnedBy returnedBy
             where ret.resolvedAt is null
+              and row.organizationUnit.id in :unitIds
             order by ret.returnedAt desc, ret.id desc
             """)
-    List<ControlReturn> findAllOpen();
+    List<ControlReturn> findOpenForUnits(
+            @Param("unitIds") Collection<Long> unitIds
+    );
 
     /**
-     * Сколько изделий ждёт решения цеха — счётчик пункта меню.
+     * Открытые сигналы БТК по изделиям указанных строк — все сигналы
+     * каждого затронутого экземпляра в границах указанных подразделений.
+     *
+     * Нужен решению цеха: БТК заводит возврат на каждую проведённую
+     * строку экземпляра, а начальник цеха отмечает переделку по своему
+     * усмотрению. Закрывать сигналы только по снятым строкам означало
+     * бы, что сигналы его же строк, оставшихся закрытыми, держали бы
+     * карточку изделия в разделе — цех возвращал бы изделие самому
+     * себе до бесконечности.
+     *
+     * Граница по подразделениям обязательна: над изделием работают
+     * несколько цехов, и решение одного не гасит сигнал другого —
+     * иначе цех, ещё не видевший возврата, потерял бы своё изделие.
+     */
+    @Query("""
+            select ret
+            from ControlReturn ret
+            join fetch ret.scheduleRow row
+            left join fetch row.customerOrder
+            left join fetch row.productionOrder
+            where ret.resolvedAt is null
+              and row.organizationUnit.id in :unitIds
+              and (
+                    exists (
+                        select 1
+                        from OrderScheduleRow chosen
+                        where chosen.id in :rowIds
+                          and row.customerOrder.id is not null
+                          and chosen.customerOrder.id = row.customerOrder.id
+                          and chosen.itemPosition = row.itemPosition
+                          and chosen.instanceIndex = row.instanceIndex
+                    )
+                 or exists (
+                        select 1
+                        from OrderScheduleRow chosen
+                        where chosen.id in :rowIds
+                          and row.productionOrder.id is not null
+                          and chosen.productionOrder.id = row.productionOrder.id
+                          and chosen.itemPosition = row.itemPosition
+                          and chosen.instanceIndex = row.instanceIndex
+                    )
+              )
+            """)
+    List<ControlReturn> findOpenOfInstancesOfRows(
+            @Param("rowIds") Collection<Long> rowIds,
+            @Param("unitIds") Collection<Long> unitIds
+    );
+
+    /**
+     * Сколько изделий ждёт решения этого цеха — счётчик пункта меню.
      *
      * Нужен счётчику в боковом меню: он считается на каждом экране
      * модуля, и строить ради цифры полные карточки было бы потерей.
      *
-     * Условие переписывает принадлежность экземпляра подразделению:
-     * строка возврата принадлежит бюро, а не цеху, поэтому возврат
-     * попадает в счётчик ровно тогда, когда у того же экземпляра есть
-     * строка плана этого цеха.
+     * Основание то же, что у раздела: сигнал обязан принадлежать
+     * строке цеха. Сигнал соседнего цеха того же изделия — карточка
+     * соседнего цеха, и в счётчик он попадать не должен, иначе цифра
+     * не сошлась бы со списком.
      *
      * Считаются изделия, а не строки возвратов: БТК заводит возврат на
      * каждую проведённую строку экземпляра, и по строкам возвратов
@@ -157,8 +231,7 @@ public interface ControlReturnRepository
      * каждое). Раз JPQL не считает distinct по составному ключу
      * экземпляра, считается по одному представителю изделия — строке
      * цеха с наименьшим id среди его строк: таких строк на изделие
-     * ровно одна, и она попадает в условие тогда же, когда и всё
-     * изделие.
+     * ровно одна.
      */
     @Query("""
             select count(row.id)
@@ -168,24 +241,10 @@ public interface ControlReturnRepository
                     exists (
                         select ret.id
                         from ControlReturn ret
-                        join ret.scheduleRow other
                         where ret.resolvedAt is null
-                          and row.customerOrder.id is not null
-                          and other.customerOrder.id = row.customerOrder.id
-                          and other.itemPosition = row.itemPosition
-                          and other.instanceIndex = row.instanceIndex
+                          and ret.scheduleRow.id = row.id
                     )
-                 or exists (
-                        select ret.id
-                        from ControlReturn ret
-                        join ret.scheduleRow other
-                        where ret.resolvedAt is null
-                          and row.productionOrder.id is not null
-                          and other.productionOrder.id = row.productionOrder.id
-                          and other.itemPosition = row.itemPosition
-                          and other.instanceIndex = row.instanceIndex
-                    )
-              )
+                 )
               and not exists (
                     select earlier.id
                     from OrderScheduleRow earlier

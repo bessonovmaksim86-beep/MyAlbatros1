@@ -605,6 +605,63 @@ public interface OrderScheduleRowRepository
             @Param("unitIds") java.util.Collection<Long> unitIds
     );
 
+    /*
+     * Полный маршрут одного экземпляра — все его строки, без фильтра
+     * по подразделениям.
+     *
+     * Нужен разделу «Возврат на доработку»: карточку получает не тот
+     * цех, у которого вообще есть открытый сигнал БТК, а тот, чей
+     * участок маршрута идёт последним перед точкой возврата. Вынести
+     * этот участок можно, только увидев маршрут целиком: фильтр по
+     * подразделениям самого цеха скрыл бы соседние блоки, и граница
+     * участка оказалась бы неверной.
+     */
+    @EntityGraph(attributePaths = {
+            "operation",
+            "operation.operationName",
+            "operation.operationType",
+            "organizationUnit",
+            "customerOrder"
+    })
+    @Query("""
+            select row
+            from OrderScheduleRow row
+            where row.customerOrder.id = :customerOrderId
+              and row.itemPosition = :itemPosition
+              and row.instanceIndex = :instanceIndex
+            order by row.seq asc, row.id asc
+            """)
+    List<OrderScheduleRow> findFullRouteOfInstance(
+            @Param("customerOrderId") Long customerOrderId,
+            @Param("itemPosition") Integer itemPosition,
+            @Param("instanceIndex") Integer instanceIndex
+    );
+
+    /**
+     * Полный маршрут экземпляра группового ЗНП — см.
+     * {@link #findFullRouteOfInstance}.
+     */
+    @EntityGraph(attributePaths = {
+            "operation",
+            "operation.operationName",
+            "operation.operationType",
+            "organizationUnit",
+            "productionOrder"
+    })
+    @Query("""
+            select row
+            from OrderScheduleRow row
+            where row.productionOrder.id = :productionOrderId
+              and row.itemPosition = :itemPosition
+              and row.instanceIndex = :instanceIndex
+            order by row.seq asc, row.id asc
+            """)
+    List<OrderScheduleRow> findFullRouteOfProductionOrderInstance(
+            @Param("productionOrderId") Long productionOrderId,
+            @Param("itemPosition") Integer itemPosition,
+            @Param("instanceIndex") Integer instanceIndex
+    );
+
     /**
      * Проведённые строки одного экземпляра группового ЗНП.
      *

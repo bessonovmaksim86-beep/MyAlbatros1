@@ -374,14 +374,22 @@ public interface ProductionOrderRepository
 
     /*
      * Комплектование ремонтных ячеек/подсборок из изолятора брака
-     * (страница бюро входного контроля).
+     * (страницы бюро входного контроля и бюро технического контроля).
      *
      * Отбор: ремонтные виды ЗНП (ZnpKind.repairKinds()), статус
      * «В работе», выбранный техпроцесс, и в этом техпроцессе есть
-     * комплектовочная операция подразделения «Бюро входного контроля»
-     * (коды справочников — V15 и V30; передаются параметрами).
+     * комплектовочная операция нужного типа нужного подразделения.
+     * Типы и подразделения передаются списками, а не зашиты: один и
+     * тот же запрос служат оба бюро — БВК и БТК комплектуют ремонтные
+     * заказы по операции маршрута, различаясь признаком комплектования
+     * и кодом своего подразделения (V30 для БВК, V2/V66 для БТК).
+     * Конкретный признак комплектования (тип операции) задаёт
+     * вызывающий сервис, поэтому репозиторий остаётся нейтральным и
+     * переиспользуемым: правка отбора в одном месте не расходится с
+     * другим бюро.
+     *
      * EXISTS, а не join: маршрут с несколькими комплектовочными
-     * операциями БВК не должен размножать строки списка.
+     * операциями бюро не должен размножать строки списка.
      *
      * Справочники дочитаны fetch-join'ом: open-in-view выключен, и
      * изделие, техпроцесс, приоритет и автор в шаблоне читались бы
@@ -402,16 +410,16 @@ public interface ProductionOrderRepository
                   select 1
                   from TechProcessOperation tpo
                   where tpo.techProcess = ord.techProcess
-                    and tpo.operation.operationType.code = :kittingCode
-                    and tpo.operation.organizationUnit.code = :bvkUnitCode
+                    and tpo.operation.operationType.code in :kittingCodes
+                    and tpo.operation.organizationUnit.code in :unitCodes
               )
             order by ord.orderDate desc, ord.number desc
             """)
     List<ProductionOrder> findRepairKittingOrders(
             @Param("status") ProductionOrderStatus status,
             @Param("kinds") List<ZnpKind> kinds,
-            @Param("kittingCode") String kittingCode,
-            @Param("bvkUnitCode") String bvkUnitCode
+            @Param("kittingCodes") List<String> kittingCodes,
+            @Param("unitCodes") List<String> unitCodes
     );
 
     /**
@@ -430,15 +438,15 @@ public interface ProductionOrderRepository
                   select 1
                   from TechProcessOperation tpo
                   where tpo.techProcess = ord.techProcess
-                    and tpo.operation.operationType.code = :kittingCode
-                    and tpo.operation.organizationUnit.code = :bvkUnitCode
+                    and tpo.operation.operationType.code in :kittingCodes
+                    and tpo.operation.organizationUnit.code in :unitCodes
               )
             """)
     long countRepairKittingOrders(
             @Param("status") ProductionOrderStatus status,
             @Param("kinds") List<ZnpKind> kinds,
-            @Param("kittingCode") String kittingCode,
-            @Param("bvkUnitCode") String bvkUnitCode
+            @Param("kittingCodes") List<String> kittingCodes,
+            @Param("unitCodes") List<String> unitCodes
     );
 
     /*
@@ -503,6 +511,9 @@ public interface ProductionOrderRepository
             left join fetch operation.organizationUnit
             where ord.active = true
               and ord.status = :status
+              and (ord.znpKind is null
+                   or ord.znpKind <>
+                      ru.company.production.entity.ZnpKind.GROUP_DEVICE)
               and (
                     (
                           ord.kittingType =
@@ -541,4 +552,65 @@ public interface ProductionOrderRepository
      * считает тот же список, что печатает экран, иначе цифра меню и
      * строки «Взято X из Y» разошлись бы.
      */
+
+    /**
+     * Групповые ЗНП на приборы с операцией комплектования ячеек склада
+     * — список раздела «Комплектация групп ЗНП на приборы».
+     *
+     * Основание то же, что у раздела подсборок (см.
+     * {@link #findSubassemblyKittingOrders}): работу ведёт операция
+     * маршрута, принадлежащая подразделению «Склад полуфабрикатов».
+     * Только тип операции здесь — «Комплектование ячеек» (KITTING_CELL,
+     * V83), а вид заказа — групповой на приборы (GROUP_DEVICE): прибор
+     * набирают несколькими видами ячеек, которые склад берёт с полки.
+     *
+     * В список берут заказы в работе: закрытый или отменённый заказ
+     * складу не интересен, а «новый» ещё не поднят в работу.
+     *
+     * Справочники дочитаны fetch-join'ом: open-in-view выключен, и
+     * номер родителя, вид заказа, наименование операции и автор в
+     * шаблоне читались бы через ленивую связь вне сессии. Техпроцесс
+     * дочитан затем же: когда операции заказа нет, сервис смотрит
+     * наименование комплектования в маршруте.
+     */
+    @Query("""
+            select distinct ord
+            from ProductionOrder ord
+            left join fetch ord.parentProductionOrder parent
+            left join fetch ord.customerOrder customerOrder
+            left join fetch ord.productClassifier
+            left join fetch ord.createdBy
+            left join fetch ord.priority
+            left join fetch ord.techProcess
+            left join fetch ord.productionOperation operation
+            left join fetch operation.operationName
+            left join fetch operation.operationType
+            left join fetch operation.organizationUnit
+            where ord.active = true
+              and ord.status = :status
+              and ord.znpKind = ru.company.production.entity.ZnpKind.GROUP_DEVICE
+              and (
+                    (
+                          ord.productionOperation is not null
+                      and operation.operationType.code = :typeCode
+                      and operation.organizationUnit.code = :unitCode
+                    )
+                 or exists (
+                        select 1
+                        from TechProcessOperation node
+                        join node.operation routeOperation
+                        join routeOperation.operationType routeType
+                        join routeOperation.organizationUnit routeUnit
+                        where node.techProcess = ord.techProcess
+                          and routeType.code = :typeCode
+                          and routeUnit.code = :unitCode
+                    )
+              )
+            order by ord.orderDate desc, ord.number desc
+            """)
+    List<ProductionOrder> findInstrumentKittingOrders(
+            @Param("status") ProductionOrderStatus status,
+            @Param("typeCode") String typeCode,
+            @Param("unitCode") String unitCode
+    );
 }

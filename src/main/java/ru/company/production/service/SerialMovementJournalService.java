@@ -395,6 +395,47 @@ public class SerialMovementJournalService {
     }
 
     /**
+     * Оформлена заявка на отбраковку (V89).
+     *
+     * Отличается от {@link #recordQuarantinedByRequest}: та строка —
+     * итог решения бюро, эта — намерение заявителя. Между ними номер
+     * числится там же, где лежал, и паспорт обязан показать оба шага
+     * раздельно: иначе строка изолятора выглядела бы браком, который
+     * контролёр выдумал сам, а не тем, что затребовал цех.
+     *
+     * Заказ передаётся параметром, а не вычисляется здесь: заявка цеха
+     * знает ЗНП из матрицы комплектования, заявка бюро — не знает
+     * ничего, и выдумывать основание журналу незачем.
+     *
+     * @param order заказ-комплектующий, из которого забраковали номер;
+     *              для заявки бюро — {@code null}
+     */
+    @Transactional
+    public void recordScrapRequested(String fullNumber,
+                                     QuarantineCellKind cellKind,
+                                     ProductSerialStatus serialStatus,
+                                     ProductClassifier classifier,
+                                     CellReceivingBatch batch,
+                                     ProductionOrder order,
+                                     AppUser actor,
+                                     LocalDateTime moment,
+                                     String reason) {
+
+        SerialMovementEvent event = newEvent(
+                fullNumber, serialIdOf(fullNumber),
+                SerialMovementType.SCRAP_REQUESTED,
+                moment, actor, null, order, null);
+
+        event.setCellKind(cellKind);
+        event.setSerialStatus(serialStatus);
+        event.setProductClassifier(classifier);
+        event.setReceivingBatch(batch);
+        event.setNote(truncate(reason, 500));
+
+        journalRepository.save(event);
+    }
+
+    /**
      * Ячейку отбраковали по заявке, которую согласовало бюро.
      *
      * Отличается от {@link #recordDefectDecision}: то событие — итог

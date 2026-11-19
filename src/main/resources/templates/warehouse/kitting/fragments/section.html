@@ -209,15 +209,39 @@
                                     12.02.2026 14:05
                                 </span>
 
+                                <span class="status done"
+                                      th:if="${instance.completed()}"
+                                      th:text="${
+                                          instance.completedLabel() != null
+                                          and !#strings.isEmpty(instance.completedLabel())
+                                              ? instance.completedLabel()
+                                              : 'проведён'
+                                      }">
+                                    12.02.2026 14:05
+                                </span>
+
                                 <span class="status work"
                                       th:unless="${instance.completed()}">
-                                    <span th:if="${instance.blocked()}"
-                                          th:text="${instance.blockedLabel()}">
-                                        ждёт: ФРЕЗЕРНАЯ
+                                    <!--
+                                        Забракованный экземпляр (V90):
+                                        его ячейка снята с комплектования,
+                                        изделия в цеху больше нет.
+                                    -->
+                                    <span th:if="${instance.scrapped()}"
+                                          class="badge badge--danger"
+                                          th:text="${instance.scrappedLabel()}">
+                                        Забраковано: трещина корпуса
                                     </span>
 
-                                    <span th:unless="${instance.blocked()}">
-                                        в работе
+                                    <span th:unless="${instance.scrapped()}">
+                                        <span th:if="${instance.blocked()}"
+                                              th:text="${instance.blockedLabel()}">
+                                            ждёт: ФРЕЗЕРНАЯ
+                                        </span>
+
+                                        <span th:unless="${instance.blocked()}">
+                                            в работе
+                                        </span>
                                     </span>
                                 </span>
                             </td>

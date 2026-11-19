@@ -16,7 +16,9 @@ import ru.company.production.entity.ProductSerial;
 import ru.company.production.entity.ProductSerialOperation;
 import ru.company.production.entity.ProductSerialOperationStatus;
 import ru.company.production.entity.QuarantineCellKind;
+import ru.company.production.entity.ScrappedScheduleInstance;
 import ru.company.production.entity.SerialProductionOrder;
+import ru.company.production.repository.AttachedCellView;
 import ru.company.production.repository.InputControlDefectReasonRepository;
 import ru.company.production.repository.OperationControlParamRepository;
 import ru.company.production.repository.OrderScheduleRowRepository;
@@ -24,6 +26,7 @@ import ru.company.production.repository.PendingDefectRepository;
 import ru.company.production.repository.ProductSerialOperationRepository;
 import ru.company.production.repository.ProductSerialRepository;
 import ru.company.production.repository.ProductionOrderItemRepository;
+import ru.company.production.repository.ScrappedScheduleInstanceRepository;
 import ru.company.production.repository.SerialProductionOrderRepository;
 
 import java.util.ArrayList;
@@ -90,13 +93,31 @@ public class WorkshopScrapService {
     private final InputControlDefectReasonRepository reasonRepository;
     private final OrderScheduleRowRepository scheduleRowRepository;
     private final ProductionOrderItemRepository itemRepository;
-
     /*
      * Где позиция на самом деле (V81): матрица комплектования указывает операцию, под которую
      * заказ заведён, а у заказов со складской приёмкой это приёмка склада. Без передачи цех
      * читал в заявке «Цех: Склад полуфабрикатов» там, где ячейку уже увезли в сборку.
      */
     private final UnitHandoverService handoverService;
+
+    /*
+     * Журнал перемещений (V89): заявка цеха обязана появиться в
+     * паспорте ячейки своим событием, а не только строкой изолятора,
+     * которую бюро пишет своим решением. Иначе хронология обрывалась бы
+     * между принятием ячейки цехом и её попаданием в брак, и по
+     * паспорту нельзя было бы узнать, кто именно затребовал брак.
+     */
+    private final SerialMovementJournalService journal;
+
+    /*
+     * Журнал забракованных экземпляров (V90): снятие ячейки удаляет
+     * строку матрицы, и сопоставление «i-я по внесению ячейка ↔
+     * экземпляр i» съезжает — экземпляр остаётся без номера (пустая
+     * строка перечня с рабочей кнопкой), а шедшие за удалённой ячейки
+     * переезжают на чужие экземпляры. Запись фиксирует потерянную
+     * позицию ДО удаления строки, пока индекс ещё читается из матрицы.
+     */
+    private final ScrappedScheduleInstanceRepository scrappedRepository;
 
     /**
      * Причины брака из справочника БВК — подсказки формы.
@@ -113,14 +134,25 @@ public class WorkshopScrapService {
     }
 
     /**
-     * Заявки цеха на браковку: что уже ждут решения бюро.
+     * Очередь заявок, ожидающих решения бюро.
      *
-     * Нужны форме цеха: руководитель обязан видеть, что на номер
-     * заявка уже оформлена, а не получать отказ после нажатия кнопки.
+     * Цех обязан видеть список — иначе мастер оформит второй раз,
+     * получит отказ и не поймёт причину.
      */
     @Transactional(readOnly = true)
     public List<PendingDefect> findPending() {
         return defectRepository.findPending();
+    }
+
+    /**
+     * Решённые заявки: контролёр видит историю, а мастер — статус.
+     *
+     * Список не исчезает, а становится доступным по фильтру, чтобы
+     * можно было отследить, куда делась заявка.
+     */
+    @Transactional(readOnly = true)
+    public List<PendingDefect> findResolved() {
+        return defectRepository.findResolved();
     }
 
     /**
@@ -172,9 +204,12 @@ public class WorkshopScrapService {
     /**
      * Создать заявку на браковку ячейки или подсборки.
      *
-     * Событие в журнал здесь НЕ пишется: заявка — намерение, а не
-     * перемещение, и до решения бюро номер обязан числиться там же,
-     * где числился.
+     * Заявка — намерение, а не перемещение: до решения бюро номер
+     * обязан числиться там же, где числился. Поэтому проводка матрицы
+     * и снятие операций здесь не идут, но событие в журнал пишется
+     * (V89): паспорт ячейки обязан показывать, кто и когда затребовал
+     * брак и по какой причине, — иначе строка изолятора выглядела бы
+     * решением контролёра, принятым без заявителя.
      *
      * @param fullNumber   номер ячейки/подсборки
      * @param deviceNumber номер изделия, в которое она установлена
@@ -239,7 +274,39 @@ public class WorkshopScrapService {
 
         trainReason(defectReason.trim(), user);
 
-        return defectRepository.save(defect);
+        PendingDefect saved = defectRepository.save(defect);
+
+        /*
+         * Событие заявки (V89) пишется после сохранения: отказ базы не
+         * должен оставить в паспорте строку про заявку, которой нет.
+         * Причина подписывается так же, как её читает перечень цеха, —
+         * паспорт и заявка обязаны называть брак одинаково.
+         */
+        journal.recordScrapRequested(
+                saved.getFullNumber(),
+                saved.getCellKind(),
+                saved.getSerialStatus(),
+                saved.getProductClassifier(),
+                saved.getReceivingBatch(),
+                link.getProductionOrder(),
+                user,
+                saved.getRequestedAt(),
+                scrapReasonLabel(saved)
+        );
+
+        return saved;
+    }
+
+    /**
+     * Причина брака для паспорта и изолятора: дефект, этап и заявитель.
+     *
+     * Строка обязана отвечать на тот же вопрос, что задают разбору
+     * брака: не только «что случилось», но и «где» и «кто сказал».
+     * Этап в заявке обязателен, поэтому отдельная проверка ему не нужна.
+     */
+    private static String scrapReasonLabel(PendingDefect defect) {
+        return defect.getDefectReason()
+                + " · этап: " + defect.getDefectStage();
     }
 
     /**
@@ -312,9 +379,84 @@ public class WorkshopScrapService {
 
         releaseScheduleRows(order, defect.getFullNumber());
 
+        /*
+         * Индекс экземпляра фиксируется ДО удаления строки матрицы:
+         * позиция ячейки в порядке внесения (заказ, момент внесения,
+         * номер — то же правило, что у findAttachedCellsByOrderIds) и
+         * есть номер её экземпляра. После удаления строки порядок
+         * съедает, и восстановить, какой экземпляр остался без изделия,
+         * было бы нечем.
+         */
+        recordScrappedInstance(order, serial, defect, actor);
+
         spoRepository.findBySerial_IdAndProductionOrder_Id(
                         serial.getId(), order.getId())
                 .ifPresent(spoRepository::delete);
+    }
+
+    /**
+     * Записать потерянную позицию плана до снятия ячейки с комплектования.
+     *
+     * Без этой записи перечень работ не узнаёт, что экземпляр остался
+     * без изделия: матрица сжимается, i-й ячейки становится меньше,
+     * и последний экземпляр выходит в перечень пустой строкой с рабочей
+     * кнопкой, а ячейки, шедшие за удалённой, подписывают чужие
+     * экземпляры. Запись обязана пережить и отмену заявки, и удаление
+     * самой заявки, поэтому номер и причину копируют текстом.
+     *
+     * Повторная браковка того же экземпляра (сначала вернули, снова
+     * забраковали) обновляет прежнюю запись: в перечне экземпляр
+     * один, и две подписи под ним читались бы как сбой.
+     */
+    private void recordScrappedInstance(ProductionOrder order,
+                                        ProductSerial serial,
+                                        PendingDefect defect,
+                                        AppUser actor) {
+
+        int index = instanceIndexOf(order, serial.getId());
+
+        if (index < 0) {
+            return;
+        }
+
+        ScrappedScheduleInstance scrapped = scrappedRepository
+                .findByProductionOrderIdAndInstanceIndex(order.getId(), index)
+                .orElseGet(ScrappedScheduleInstance::new);
+
+        scrapped.setProductionOrder(order);
+        scrapped.setInstanceIndex(index);
+        scrapped.setFullNumber(defect.getFullNumber());
+        scrapped.setReason(scrapReasonLabel(defect));
+        scrapped.setDefect(defect);
+        scrapped.setCreatedBy(actor);
+
+        scrappedRepository.save(scrapped);
+    }
+
+    /**
+     * Позиция ячейки в порядке внесения заказа — номер её экземпляра.
+     *
+     * Порядок берётся тем же запросом, что подписывает работы цеху
+     * (см. {@code SerialProductionOrderRepository#findAttachedCellsByOrderIds}),
+     * иначе запись считала бы позицию по одному правилу, а перечень —
+     * по другому и разъехался бы на заказах, где склад вносил номера
+     * не по возрастанию.
+     *
+     * −1 — ячейки в матрице заказа нет: снимать нечего и подписывать
+     * экземпляр нечем.
+     */
+    private int instanceIndexOf(ProductionOrder order, Long serialId) {
+
+        List<AttachedCellView> cells =
+                spoRepository.findAttachedCellsByOrderIds(List.of(order.getId()));
+
+        for (int i = 0; i < cells.size(); i++) {
+            if (serialId.equals(cells.get(i).getSerialId())) {
+                return i;
+            }
+        }
+
+        return -1;
     }
 
     /**

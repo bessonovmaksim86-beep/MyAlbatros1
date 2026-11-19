@@ -40,6 +40,9 @@ import java.util.List;
  * @param serialNumbers серийные номера группы без повторов — подпись
  *                      строки таблицы до раскрытия панели
  * @param itemNames     наименования изделий группы без повторов
+ * @param isDevice      группа относится к заказу на приборы
+ *                      (GROUP_DEVICE): по этому признаку шаблон
+ *                      переключает заголовки «Ячейки» ↔ «Приборы»
  */
 public record AssignedOperationView(
         Long operationId,
@@ -54,7 +57,8 @@ public record AssignedOperationView(
         boolean ownWork,
         List<OperationInstance> instances,
         List<String> serialNumbers,
-        List<String> itemNames
+        List<String> itemNames,
+        boolean isDevice
 ) {
 
     /**

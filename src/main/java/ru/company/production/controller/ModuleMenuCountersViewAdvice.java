@@ -67,6 +67,13 @@ import ru.company.production.service.WorkshopStaffService;
                  * возврат повёл бы на закрытый /workshop/staff.
                  */
                 PendingDefectsController.class,
+                /*
+                 * Раздел «Комплектование на ремонт» бюро технического
+                 * контроля рисует то же цеховое меню, поэтому ему нужны
+                 * счётчик «Моих операций», цифра распределения и ссылка
+                 * возврата в свой модуль.
+                 */
+                TechnicalControlController.class,
                 /* Сам раздел «Мои операции». */
                 MyOperationsController.class,
                 /*

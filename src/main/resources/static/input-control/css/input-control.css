@@ -1314,3 +1314,13 @@ body {
         transition: none !important;
     }
 }
+
+/*
+ * Статус «Скомплектовано» — производный признак: заказ остаётся
+ * «В работе» у диспетчера, но для бюро он закрыт (взято ≥ заказано).
+ */
+.status--done {
+    background: var(--bvk-ok-bg, #e8f5ee);
+    color: var(--bvk-ok, #18794e);
+    border-color: var(--bvk-ok, #18794e);
+}

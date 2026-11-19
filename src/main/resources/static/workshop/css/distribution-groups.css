@@ -375,6 +375,11 @@
     background: #f4fbf7;
 }
 
+.item-card.is-scrapped {
+    border-color: rgba(185, 28, 28, 0.3);
+    background: #fef2f2;
+}
+
 .item-card__head {
     display: flex;
     align-items: baseline;

@@ -748,6 +748,147 @@
 
                 </form>
 
+                    <!--
+                        =====================================================
+                        ЯЧЕЙКИ, ВЫНЕСЕННЫЕ ПО ЗАЯВКЕ НА ОТБРАКОВКУ (V89)
+
+                        Заявка решает судьбу одного номера: бюро подтверждает
+                        брак своим вердиктом, и перемещение создаётся сразу,
+                        минуя группу брака карточки проверки. Поэтому в
+                        перечне выше такой ячейки нет — тот перечень разворачивает
+                        в номера именно группы, и контролёр, забравший ячейку
+                        из цеха по заявке, не находил её в изоляторе вовсе.
+
+                        Колонка отметки здесь общая с перечнем выше, чтобы
+                        строка выглядела позицией изолятора наравне с другими.
+                        Саму отметку ставить нельзя: бюро уже перевело ячейку
+                        решением по заявке, строка ждёт приёмки складом, и
+                        повторное перемещение передал бы одну ячейку дважды —
+                        то же ограничение, что и для «Передана на склад» выше.
+                        Уходит позиция стандартным образом: приёмкой склада,
+                        отдельной кнопки и плашки статуса ей не нужно.
+                        =====================================================
+                    -->
+                    <section class="card"
+                             th:if="${scrapTransfers != null and !#lists.isEmpty(scrapTransfers)}">
+
+                        <div class="card-head">
+
+                            <div>
+
+                                <h2>Вынесены по заявке на отбраковку</h2>
+
+                                <small>
+                                    Ячейки, которые бюро перевело в изолятор
+                                    своим решением по заявке цеха или бюро:
+                                    группа брака карточки проверки у них
+                                    отсутствует, поэтому в перечне выше они
+                                    не читаются
+                                </small>
+
+                            </div>
+
+                            <span class="bvk-counter">
+                                Ячеек/подсборок:
+                                <strong th:text="${#lists.size(scrapTransfers)}">
+                                    1
+                                </strong>
+                            </span>
+                        </div>
+
+                        <div class="card-body">
+
+                            <div class="table-wrap">
+
+                                <table class="data-table bvk-batch-table bvk-cell-table">
+
+                                    <thead>
+
+                                    <tr>
+                                        <th class="bvk-cell-table__pick">
+                                            <span class="visually-hidden">
+                                                Отметка ячейки
+                                            </span>
+                                        </th>
+
+                                        <th>Тип</th>
+                                        <th>Изделие</th>
+                                        <th>Номер ячейки</th>
+                                        <th>Причина брака</th>
+                                        <th>Решение оформил</th>
+                                        <th>Дата перемещения</th>
+                                    </tr>
+
+                                    </thead>
+
+                                    <tbody>
+
+                                    <tr th:each="item : ${scrapTransfers}"
+                                        class="is-transferred">
+
+                                        <td class="bvk-cell-table__pick">
+
+                                            <!--
+                                                Отметка заблокирована: бюро уже
+                                                перевело ячейку решением по
+                                                заявке, она ждёт приёмки складом,
+                                                и переместить её второй раз
+                                                нельзя.
+                                            -->
+                                            <label class="bvk-check">
+
+                                                <input type="checkbox"
+                                                       class="bvk-check__input"
+                                                       disabled>
+
+                                                <span class="visually-hidden">
+                                                    Ячейка
+                                                    <span th:text="${item.fullNumber}">
+                                                        500500007
+                                                    </span>
+                                                    уже передана складу
+                                                </span>
+                                            </label>
+                                        </td>
+
+                                        <td th:text="${item.kindLabel}">
+                                            Подсборка
+                                        </td>
+
+                                        <td th:text="${item.classifierLabel}">
+                                            5005 — ПВ82
+                                        </td>
+
+                                        <td class="mono">
+                                            <a th:href="@{/passport/{number}(number=${item.fullNumber})}"
+                                               th:text="${item.fullNumber}">
+                                                500500007
+                                            </a>
+                                        </td>
+
+                                        <td th:text="${item.reason}">
+                                            Дефект подтверждён. Несоответствие чертежу
+                                        </td>
+
+                                        <td th:text="${item.transferredByLabel}">
+                                            Петров П. П.
+                                        </td>
+
+                                        <td class="mono"
+                                            th:text="${item.transferredAtLabel}">
+                                            16.11.2026 19:10
+                                        </td>
+
+                                    </tr>
+
+                                    </tbody>
+                                </table>
+
+                            </div>
+
+                        </div>
+                    </section>
+
             </th:block>
 
         </div>

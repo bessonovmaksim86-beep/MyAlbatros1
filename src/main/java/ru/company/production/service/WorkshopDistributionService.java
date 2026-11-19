@@ -20,6 +20,7 @@ import ru.company.production.entity.OperationTypeCode;
 import ru.company.production.entity.OrderScheduleRow;
 import ru.company.production.entity.ProductionOrder;
 import ru.company.production.entity.ScheduleRowStatus;
+import ru.company.production.entity.ScrappedScheduleInstance;
 import ru.company.production.entity.TechProcess;
 import ru.company.production.entity.TechProcessOperation;
 import ru.company.production.entity.ZnpKind;
@@ -29,6 +30,7 @@ import ru.company.production.repository.ExecutorDayLoadView;
 import ru.company.production.repository.OpenInstanceRowView;
 import ru.company.production.repository.OrderScheduleRowRepository;
 import ru.company.production.repository.ProductionOrderSerialProjection;
+import ru.company.production.repository.ScrappedScheduleInstanceRepository;
 import ru.company.production.repository.TechProcessOperationControlParamRepository;import ru.company.production.repository.TechProcessOperationRepository;
 import ru.company.production.repository.TechProcessRepository;
 import ru.company.production.repository.UserRepository;
@@ -768,6 +770,13 @@ public class WorkshopDistributionService {
                     .add(row);
         }
 
+        /*
+         * Забракованные экземпляры (V90): передача в toOperationView —
+         * чтобы card получил scrapped-подпись и снял право назначения.
+         */
+        Map<Long, ScrappedScheduleInstance> scrappedMap =
+                serialService.resolveScrappedCells(rows);
+
         List<OperationDistributionView> result =
                 new ArrayList<>(byOperation.size());
 
@@ -780,7 +789,8 @@ public class WorkshopDistributionService {
                     to,
                     withExecutors,
                     capableCache,
-                    cellMap
+                    cellMap,
+                    scrappedMap
             ));
         }
 
@@ -815,11 +825,12 @@ public class WorkshopDistributionService {
      * Тот же сборщик карточек с картой внесённых ячеек.
      *
      * {@code cellMap} передаёт номер ячейки, внесённой складом в
-     * групповой ЗНП (V20): у таких заказов состава выпуска нет, и
+     * групповой ЗНП (V20): у таких заказов состава выпуска нет вовсе, и
      * серийный номер их экземпляров не подписывает ничего. Карта
      * приходит из
      * {@link WorkshopDistributionSerialService#resolveAttachedCells} и
-     * пуста для всех прочих разделов — там работает {@code serialMap}.
+     * пуста для всех прочих разделов — там работает
+     * {@code serialMap}.
      */
     private OperationDistributionView toOperationView(
             List<OrderScheduleRow> group,
@@ -830,6 +841,35 @@ public class WorkshopDistributionService {
             boolean withExecutors,
             Map<String, List<AssignableExecutor>> capableCache,
             Map<Long, AttachedCellView> cellMap
+    ) {
+        return toOperationView(
+                group, serialMap, itemNames, from, to,
+                withExecutors, capableCache, cellMap, Map.of()
+        );
+    }
+
+    /*
+     * Тот же сборщик карточек с журналом забракованных экземпляров (V90).
+     *
+     * {@code scrappedMap} — записи о позициях, чья ячейка снята с
+     * комплектования. Без них карточка изделия в распределении не
+     * отличает экземпляр, потерявший изделие из-за брака, от
+     * экземпляра, в который склад ещё не внёс номер: первый показывает
+     * «— / — / В работе» с кнопкой выбора исполнителя, и мастер
+     * назначает работу над несуществующим изделием. Журнал возвращает
+     * номер списанной ячейки, снимает право назначения и подписывает
+     * работу причиной брака.
+     */
+    private OperationDistributionView toOperationView(
+            List<OrderScheduleRow> group,
+            Map<Long, ProductionOrderSerialProjection> serialMap,
+            Map<String, String> itemNames,
+            LocalDate from,
+            LocalDate to,
+            boolean withExecutors,
+            Map<String, List<AssignableExecutor>> capableCache,
+            Map<Long, AttachedCellView> cellMap,
+            Map<Long, ScrappedScheduleInstance> scrappedMap
     ) {
         OrderScheduleRow head = group.get(0);
 
@@ -846,6 +886,9 @@ public class WorkshopDistributionService {
             AttachedCellView cell = cellMap == null
                     ? null
                     : cellMap.get(row.getId());
+            ScrappedScheduleInstance scrapped = scrappedMap == null
+                    ? null
+                    : scrappedMap.get(row.getId());
 
             totalHours = totalHours.add(row.getLaborHours());
 
@@ -870,7 +913,16 @@ public class WorkshopDistributionService {
                             : WorkshopStaffService.displayName(
                                     row.getExecutor()
                             ),
-                    cell == null ? null : cell.getFullNumber(),
+                    /*
+                     * Номер ячейки: для забракованной позиции — из
+                     * журнала (V90), её строка матрицы удалена вместе с
+                     * изделием, и из матрицы номер взять уже нечем.
+                     */
+                    scrapped != null
+                            ? scrapped.getFullNumber()
+                            : (cell == null ? null : cell.getFullNumber()),
+                    scrapped != null,
+                    scrapped == null ? null : scrapped.getReason(),
                     overdue
             ));
         }
@@ -2201,6 +2253,20 @@ public class WorkshopDistributionService {
             );
         }
 
+        /*
+         * Забракованный экземпляр: позиция снята с комплектования, её
+         * ячейка удалена из матрицы (V90), изделия в цеху больше нет.
+         * Проведение строки приписало бы выполненный факт несуществующему
+         * изделию, и журнал перемещений получил бы «В производстве» над
+         * пустотой.
+         */
+        if (serialService.isScrapped(row)) {
+            throw new IllegalStateException(
+                    "Провести нельзя: экземпляр забракован, его ячейка "
+                            + "списана из комплектования"
+            );
+        }
+
         row.setCompletedAt(java.time.LocalDateTime.now());
         row.setCompletedBy(performer);
 
@@ -2996,6 +3062,14 @@ public class WorkshopDistributionService {
         Set<Long> incompleteReworkRows = instanceReworkService
                 .incompleteRowIds(allRowIds);
 
+        /*
+         * Забракованные экземпляры (V90): позиция снята с комплектования,
+         * её ячейка удалена из матрицы, и без этой карты перечень вышел бы
+         * пустой строкой с рабочей кнопкой вместо подписи «забраковано».
+         */
+        Map<Long, ScrappedScheduleInstance> scrappedMap =
+                serialService.resolveScrappedCells(rows);
+
         Map<String, List<OrderScheduleRow>> grouped = new LinkedHashMap<>();
 
         for (OrderScheduleRow row : rows) {
@@ -3039,7 +3113,7 @@ public class WorkshopDistributionService {
                     buildInstances(
                             group, serialMap, blockers, poolUnitIds, ownWork,
                             cellMap, parametrisedNodes,
-                            incompleteReworkRows
+                            incompleteReworkRows, scrappedMap
                     ),
                     /*
                      * Главная подпись группы. Пока карта ячеек не
@@ -3052,11 +3126,43 @@ public class WorkshopDistributionService {
                     cellMap == null || cellMap.isEmpty()
                             ? serialsOf(group, serialMap)
                             : cellNumbersOf(group, cellMap),
-                    itemNamesOf(group, itemNames)
+                    itemNamesOf(group, itemNames),
+                    /*
+                     * Заказ на приборы (GROUP_DEVICE) подписывает
+                     * экземпляр номером ПРИБОРА, и шаблон по этому
+                     * признаку переключает «Номер ячейки» на «Номер
+                     * прибора». Считается по строкам группы, а не по
+                     * карте: карта пуста, пока серийники приборов ещё
+                     * не выпущены, а заголовок обязан быть верным и до
+                     * выпуска.
+                     */
+                    isDeviceGroup(group)
             ));
         }
 
         return result;
+    }
+
+    /**
+     * Группа относится к заказу на приборы — «Прибор», а не «Ячейка».
+     *
+     * Групповой заказ ведёт один техпроцесс одного изделия, поэтому
+     * вид основания у всех строк группы общий; достаточно первой
+     * определившейся строки. Признак держится у заказа (V37), а не
+     * выводится из наличия номера: до взятия ЗНП в работу приборов в
+     * реестре ещё нет, и по карте ячеек различить виды было бы нельзя.
+     */
+    private boolean isDeviceGroup(List<OrderScheduleRow> group) {
+        for (OrderScheduleRow row : group) {
+            ProductionOrder order = row.getProductionOrder();
+
+            if (order != null
+                    && order.getZnpKind() == ZnpKind.GROUP_DEVICE) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /*
@@ -3455,6 +3561,34 @@ public class WorkshopDistributionService {
             Set<String> parametrisedNodes,
             Set<Long> signaledRows
     ) {
+        return buildInstances(
+                group, serialMap, blockers, poolUnitIds, ownWork,
+                cellMap, parametrisedNodes, signaledRows, Map.of()
+        );
+    }
+
+    /*
+     * Тот же сборщик с журналом забракованных экземпляров (V90).
+     *
+     * {@code scrappedMap} — записи о позициях, чья ячейка снята с
+     * комплектования. Без них перечень не отличает экземпляр, потерявший
+     * изделие из-за брака, от экземпляра, в который склад ещё не внёс
+     * номер: первый показывает пустую строку «— / — / В работе» с
+     * рабочей кнопкой, и цех проводит изделие, которого не существует.
+     * Запись возвращает номер списанной ячейки, снимает право проведения
+     * и подписывает работу причиной брака.
+     */
+    private List<OperationInstance> buildInstances(
+            List<OrderScheduleRow> group,
+            Map<Long, ProductionOrderSerialProjection> serialMap,
+            Map<Long, InstanceBlocker> blockers,
+            List<Long> poolUnitIds,
+            boolean ownWork,
+            Map<Long, AttachedCellView> cellMap,
+            Set<String> parametrisedNodes,
+            Set<Long> signaledRows,
+            Map<Long, ScrappedScheduleInstance> scrappedMap
+    ) {
         List<OperationInstance> instances = new ArrayList<>();
 
         for (OrderScheduleRow row : group) {
@@ -3471,6 +3605,9 @@ public class WorkshopDistributionService {
             boolean returned = signaledRows != null
                     && row.getId() != null
                     && signaledRows.contains(row.getId());
+            ScrappedScheduleInstance scrapped = scrappedMap == null
+                    ? null
+                    : scrappedMap.get(row.getId());
 
             instances.add(new OperationInstance(
                     row.getId(),
@@ -3501,6 +3638,11 @@ public class WorkshopDistributionService {
                      * цеха, и закрыть его работу нельзя, пока не
                      * отмечены операции переделки, они не распределены
                      * и не проведены.
+                     *
+                     * Забракованный экземпляр не проводится никогда:
+                     * изделия, на котором стояла снятая ячейка, в цеху
+                     * больше нет, и закрытие его работы приписало бы
+                     * выполненный факт несуществующему изделию.
                      */
                     (row.getExecutor() != null
                             || isWarehouseKitting(row)
@@ -3508,7 +3650,8 @@ public class WorkshopDistributionService {
                             || (ownWork && isSupervisorOwnRow(row)))
                             && row.getCompletedAt() == null
                             && !blocker.blocked()
-                            && !returned,
+                            && !returned
+                            && scrapped == null,
                     serial == null ? null : serial.getFullNumber(),
                     /*
                      * Наименование изделия. Для строки выпуска — из
@@ -3522,7 +3665,16 @@ public class WorkshopDistributionService {
                             : (cell == null ? null : cell.getDisplayName()),
                     blocker.blocked(),
                     blocker.blockerLabel(),
-                    cell == null ? null : cell.getFullNumber(),
+                    /*
+                     * Номер ячейки. Забракованная позиция читается из
+                     * журнала (V90): её строка матрицы удалена вместе с
+                     * изделием, и из матрицы номер взять уже нечем, а
+                     * исполнитель обязан видеть, какое именно изделие
+                     * здесь списали.
+                     */
+                    scrapped != null
+                            ? scrapped.getFullNumber()
+                            : (cell == null ? null : cell.getFullNumber()),
                     /*
                      * Отметка контролируемых параметров обязательна, если
                      * технолог задал их в этом узле маршрута: такое
@@ -3537,7 +3689,9 @@ public class WorkshopDistributionService {
                                             ? null
                                             : row.getOperation().getId()
                             )),
-                    returned
+                    returned,
+                    scrapped != null,
+                    scrapped == null ? null : scrapped.getReason()
             ));
         }
 

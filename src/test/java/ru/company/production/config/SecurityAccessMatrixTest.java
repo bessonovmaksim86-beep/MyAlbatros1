@@ -304,7 +304,7 @@ class SecurityAccessMatrixTest {
              * отдельного правила у него нет. Проверка фиксирует, что
              * адрес не закрылся частным matcher'ом: пункт меню рисуют по
              * признаку canRework, и ссылка, ведущая в 403, была бы
-             * расхождением меню и права (docs, раздел 12).
+             * расхождением меню и права (docs, раздел 13).
              */
             for (String role : AccessRoles.UNIT_MANAGERS) {
                 expectAllowed(role, "/workshop/rework-return");
@@ -420,6 +420,47 @@ class SecurityAccessMatrixTest {
              */
             expectDenied(Role.SDP_SA_MASTER.name(), "/pending-defects");
             expectDenied(Role.SDP_SA_EXECUTOR.name(), "/pending-defects");
+        }
+    }
+
+    @Nested
+    @DisplayName("комплектование на ремонт бюро техконтроля")
+    class RepairKittingOfBtk {
+
+        @Test
+        @DisplayName("ведёт любое из двух бюро контроля — и исполнитель, и руководитель")
+        void bothBtkRolesEnter() throws Exception {
+            /*
+             * Комплектование проводит исполнитель бюро, руководитель читает
+             * очередь ради контроля подчинённого — тот же порядок, что у
+             * отбраковки (docs, раздел 11).
+             */
+            for (String role : AccessRoles.BTK_STAFF) {
+                expectAllowed(role, "/technical-control/repair-kitting");
+            }
+        }
+
+        @Test
+        @DisplayName("входному контролю, цеху и складу раздел закрыт")
+        void otherRolesAreDenied() throws Exception {
+            /*
+             * У бюро входного контроля свой реестр тех же заказов
+             * (/input-control/repair-kitting): заказы разделены узлом
+             * техпроцесса, и чужой адрес был бы вторым окном в тот же
+             * реестр в обход границы подразделения (docs, раздел 11).
+             */
+            expectDenied(Role.BVK_EXECUTOR.name(),
+                    "/technical-control/repair-kitting");
+            expectDenied(Role.BVK_MASTER.name(),
+                    "/technical-control/repair-kitting");
+            expectDenied(Role.SDP_SA_MASTER.name(),
+                    "/technical-control/repair-kitting");
+            expectDenied(Role.SDP_SA_EXECUTOR.name(),
+                    "/technical-control/repair-kitting");
+            expectDenied(Role.OMTSIK_EXECUTOR.name(),
+                    "/technical-control/repair-kitting");
+            expectDenied(Role.SK_GENERAL.name(),
+                    "/technical-control/repair-kitting");
         }
     }
 

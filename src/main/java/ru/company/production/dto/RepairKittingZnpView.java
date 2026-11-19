@@ -22,6 +22,7 @@ public record RepairKittingZnpView(
         String number,
         String plannedDateLabel,
         String classifierLabel,
+        Long classifierId,
         String quantityLabel,
         String techProcessLabel,
         ZnpKind znpKind,

@@ -58,21 +58,13 @@
                     </a>
 
                     <!--
-                        Комплектование ремонтных ячеек/подсборок —
-                        отдельный раздел: заказы заводит диспетчер, а
-                        бюро по ним комплектует, поэтому кнопка стоит
-                        рядом с входным контролем, а не внутри него.
-                    -->
-                    <a class="btn secondary"
-                       th:href="@{/input-control/repair-kitting}">
-
                         Комплектование ремонтных ячеек/подсборок
-                        <span class="bvk-navigation__counter"
-                              th:if="${repairKittingCount != null and repairKittingCount > 0}"
-                              th:text="${repairKittingCount}">
-                            2
-                        </span>
-                    </a>
+                        перенесено в боковое меню бюро
+                        (input-control/fragments/layout): к разделу
+                        возвращаются с карточки комплектования, где
+                        кнопок обзора нет, — в меню ссылка доступна с
+                        любого экрана.
+                    -->
 
                 </div>
             </div>

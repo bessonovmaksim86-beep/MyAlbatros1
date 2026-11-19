@@ -65,6 +65,23 @@ public class ReworkReturnCard {
      */
     private Map<Long, List<ReworkReturn>> ownReturns;
 
+    /*
+     * Предшественник владельца в маршруте. NONE — передавать некуда
+     * (владелец первый), WAREHOUSE — предшественник склад (переделку
+     * он не выполняет), WORKSHOP — цех, которому можно вернуть изделие.
+     * Заполняет {@link ru.company.production.service.ReworkReturnOwnerService}.
+     */
+    private String predecessorKind = "NONE";
+
+    /**
+     * Изделие можно отправить в предшествующий цех: он существует и
+     * не склад. Иначе кнопка «Отправить в предшествующий цех»
+     * неактивна — цех обязан переделать изделие своими силами.
+     */
+    public boolean isCanSendToPredecessor() {
+        return "WORKSHOP".equals(predecessorKind);
+    }
+
     /** Есть ли открытые возвраты с контроля. */
     public boolean hasOpenReturns() {
         return returns != null && !returns.isEmpty();

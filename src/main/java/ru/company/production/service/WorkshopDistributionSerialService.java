@@ -6,11 +6,15 @@ import org.springframework.transaction.annotation.Transactional;
 import ru.company.production.entity.CustomerOrder;
 import ru.company.production.entity.OrderScheduleRow;
 import ru.company.production.entity.ProductionOrder;
+import ru.company.production.entity.ScrappedScheduleInstance;
+import ru.company.production.entity.ZnpKind;
 import ru.company.production.repository.AttachedCellView;
 import ru.company.production.repository.CustomerOrderItemRepository;
 import ru.company.production.repository.OrderItemNameView;
+import ru.company.production.repository.ProductSerialRepository;
 import ru.company.production.repository.ProductionOrderItemRepository;
 import ru.company.production.repository.ProductionOrderSerialProjection;
+import ru.company.production.repository.ScrappedScheduleInstanceRepository;
 import ru.company.production.repository.SerialProductionOrderRepository;
 
 import java.util.ArrayList;
@@ -20,13 +24,14 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.TreeSet;
 import java.util.stream.Collectors;
 
 /**
  * Подвязка серийных номеров и полных наименований к экземплярам
  * графика в разделе распределения.
  *
- * Класс намеренно вынесен из {@link WorkshopDistributionService}: тот
+ * Класс намеренно выведен из {@link WorkshopDistributionService}: тот
  * считает планирование, загрузки и подбор исполнителей, а здесь —
  * только обогащение готовых строк выпускаемыми реквизитами. Разделение
  * держит тяжёлый сервис распределения неизменным по логике и не
@@ -50,6 +55,8 @@ public class WorkshopDistributionSerialService {
     private final ProductionOrderItemRepository productionItemRepo;
     private final CustomerOrderItemRepository customerItemRepo;
     private final SerialProductionOrderRepository serialLinkRepo;
+    private final ScrappedScheduleInstanceRepository scrappedRepo;
+    private final ProductSerialRepository productSerialRepo;
 
     /**
      * Серийник и полное наименование для каждого экземпляра графика.
@@ -162,6 +169,15 @@ public class WorkshopDistributionSerialService {
      * распределения групповых заказов — два экрана обязаны подписывать
      * работу одним номером.
      *
+     * Забракованная позиция выпадает из ряда, но не из плана. Матрица
+     * хранит только оставшиеся ячейки, и наивное «cells.get(index)»
+     * подписало бы экземпляр 5 ячейкой, которая принадлежит экземпляру
+     * 6, а последний экземпляр вышел бы вовсе без номера (пустая строка
+     * перечня с рабочей кнопкой). Поэтому порядковый номер ячейки
+     * сдвигается на число забракованных позиций, шедших перед ней:
+     * ряд плана остаётся семизначным, а ряд матрицы — шестизначным, и
+     * их надо свести, а не накладывать как есть.
+     *
      * Экземпляр без ячейки в карту не попадает: кладовщик вправе внести
      * не все номера, а работы незакрытого экземпляра существуют до
      * внесения. Прочерк честнее выдуманного номера.
@@ -177,29 +193,63 @@ public class WorkshopDistributionSerialService {
             return Map.of();
         }
 
-        Set<Long> orderIds = rows.stream()
-                .map(OrderScheduleRow::getProductionOrder)
-                .filter(Objects::nonNull)
-                .map(ProductionOrder::getId)
-                .filter(Objects::nonNull)
-                .collect(Collectors.toSet());
+        Set<Long> orderIds = orderIdsOf(rows);
 
         if (orderIds.isEmpty()) {
             return Map.of();
         }
 
+        /*
+         * Заказ на приборы (GROUP_DEVICE) подписывает экземпляр
+         * номером ПРИБОРА, а не ячейкой: единица его плана — прибор,
+         * серийник которого рождается в момент взятия ЗНП в работу.
+         * Матрица комплектования (V20) у такого заказа не заполняется,
+         * и журнал брака (V90) к нему не применяется — брак там
+         * относится к изделию-прибору, а не к строке матрицы ячеек.
+         * Поэтому перечень берётся из реестра DEVICE-серийников, а
+         * сопоставление идёт напрямую по индексу экземпляра.
+         */
+        Set<Long> deviceOrderIds = deviceOrderIdsOf(rows);
+
+        Set<Long> cellOrderIds = new java.util.LinkedHashSet<>(orderIds);
+        cellOrderIds.removeAll(deviceOrderIds);
+
         Map<Long, List<AttachedCellView>> cellsByOrder = new LinkedHashMap<>();
 
-        for (AttachedCellView cell
-                : serialLinkRepo.findAttachedCellsByOrderIds(orderIds)) {
-            if (cell.getOrderId() == null) {
-                continue;
-            }
+        if (!cellOrderIds.isEmpty()) {
+            for (AttachedCellView cell
+                    : serialLinkRepo.findAttachedCellsByOrderIds(
+                            cellOrderIds)) {
+                if (cell.getOrderId() == null) {
+                    continue;
+                }
 
-            cellsByOrder
-                    .computeIfAbsent(cell.getOrderId(), k -> new ArrayList<>())
-                    .add(cell);
+                cellsByOrder
+                        .computeIfAbsent(
+                                cell.getOrderId(), k -> new ArrayList<>())
+                        .add(cell);
+            }
         }
+
+        if (!deviceOrderIds.isEmpty()) {
+            for (AttachedCellView device
+                    : productSerialRepo.findDevicesByOrderIds(
+                            deviceOrderIds)) {
+                if (device.getOrderId() == null) {
+                    continue;
+                }
+
+                cellsByOrder
+                        .computeIfAbsent(
+                                device.getOrderId(), k -> new ArrayList<>())
+                        .add(device);
+            }
+        }
+
+        Map<Long, TreeSet<Integer>> scrappedByOrder =
+                cellOrderIds.isEmpty()
+                        ? Map.of()
+                        : scrappedIndexesByOrder(cellOrderIds);
 
         Map<Long, AttachedCellView> result = new HashMap<>();
 
@@ -218,14 +268,208 @@ public class WorkshopDistributionSerialService {
 
             List<AttachedCellView> cells = cellsByOrder.get(order.getId());
 
-            if (cells == null || index < 0 || index >= cells.size()) {
+            if (cells == null || index < 0) {
                 continue;
             }
 
-            result.put(row.getId(), cells.get(index));
+            /*
+             * Прибор подписывается напрямую по индексу: журнал брака
+             * (V90) заводит ячейки матрицы, а у заказа на приборов
+             * матрицы нет, и сдвиг на забракованные позиции применил бы
+             * чужой номер.
+             */
+            if (deviceOrderIds.contains(order.getId())) {
+                if (index < cells.size()) {
+                    result.put(row.getId(), cells.get(index));
+                }
+                continue;
+            }
+
+            TreeSet<Integer> scrapped = scrappedByOrder.get(order.getId());
+
+            /*
+             * Собственный индекс экземпляра в журнале брака — значит,
+             * изделие списано и ячейки у него нет вовсе. Выдать ему
+             * следующую по ряду нельзя: она принадлежит соседу, а
+             * цеху этот экземпляр покажется обычным изделием, которое
+             * он проведёт до конца.
+             */
+            if (scrapped != null && scrapped.contains(index)) {
+                continue;
+            }
+
+            int position = index - scrappedBefore(scrapped, index);
+
+            if (position < 0 || position >= cells.size()) {
+                continue;
+            }
+
+            result.put(row.getId(), cells.get(position));
         }
 
         return result;
+    }
+
+    /*
+     * Идентификаторы заказов-оснований вида «Групповой ЗНП на приборы».
+     *
+     * Отделяют приборные заказы от всех прочих: у первых экземпляр
+     * подписывается номером прибора из реестра, у вторых — ячейкой из
+     * матрицы комплектования.
+     */
+    private Set<Long> deviceOrderIdsOf(List<OrderScheduleRow> rows) {
+        return rows.stream()
+                .map(OrderScheduleRow::getProductionOrder)
+                .filter(Objects::nonNull)
+                .filter(order -> order.getZnpKind()
+                        == ZnpKind.GROUP_DEVICE)
+                .map(ProductionOrder::getId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toCollection(
+                        java.util.LinkedHashSet::new));
+    }
+
+    /**
+     * Забракованные экземпляры строк графика — подпись «забраковано».
+     *
+     * Снятие ячейки с комплектования удаляет строку матрицы, и перечень
+     * работ теряет из неё и номер, и признак: экземпляр выходит пустой
+     * строкой «— / — / В работе» с рабочей кнопкой, которую цех и жмёт,
+     * проводя несуществующее изделие. Журнал забракованных позиций
+     * (V90) отвечает на вопрос «почему здесь пусто» и снимает право
+     * проведения, поэтому карта нужна тем же разделам, что и карта
+     * внесённых ячеек.
+     *
+     * Ключ результата — {@code rowId} строки графика, как у
+     * {@link #resolveAttachedCells}: сборщик перечня читает обе карты
+     * одинаково.
+     */
+    @Transactional(readOnly = true)
+    public Map<Long, ScrappedScheduleInstance> resolveScrappedCells(
+            List<OrderScheduleRow> rows
+    ) {
+        if (rows == null || rows.isEmpty()) {
+            return Map.of();
+        }
+
+        Set<Long> orderIds = orderIdsOf(rows);
+
+        if (orderIds.isEmpty()) {
+            return Map.of();
+        }
+
+        Map<Long, List<ScrappedScheduleInstance>> byOrder =
+                new LinkedHashMap<>();
+
+        for (ScrappedScheduleInstance scrapped
+                : scrappedRepo.findByProductionOrderIdIn(orderIds)) {
+            if (scrapped.getProductionOrder() == null) {
+                continue;
+            }
+
+            byOrder
+                    .computeIfAbsent(
+                            scrapped.getProductionOrder().getId(),
+                            k -> new ArrayList<>()
+                    )
+                    .add(scrapped);
+        }
+
+        if (byOrder.isEmpty()) {
+            return Map.of();
+        }
+
+        Map<Long, ScrappedScheduleInstance> result = new HashMap<>();
+
+        for (OrderScheduleRow row : rows) {
+            ProductionOrder order = row.getProductionOrder();
+            Integer index = row.getInstanceIndex();
+
+            if (order == null || order.getId() == null || index == null) {
+                continue;
+            }
+
+            for (ScrappedScheduleInstance scrapped
+                    : byOrder.getOrDefault(order.getId(), List.of())) {
+                if (scrapped.getInstanceIndex() == index) {
+                    result.put(row.getId(), scrapped);
+                    break;
+                }
+            }
+        }
+
+        return result;
+    }
+
+    /**
+     * Проведение запрещено, потому что позиция списана в брак.
+     *
+     * Нужен проведению строки графика: перечни снимают кнопку, но
+     * страница могла быть открыта до решения бюро, а массовое проведение
+     * и вовсе идёт списком идентификаторов. Проверка на сервере обязана
+     * отвечать тем же журналом (V90), что и подпись в перечне, иначе
+     * цех закрыл бы работу изделия, которого в цеху больше нет.
+     */
+    @Transactional(readOnly = true)
+    public boolean isScrapped(OrderScheduleRow row) {
+        return row != null
+                && !resolveScrappedCells(List.of(row)).isEmpty();
+    }
+
+    /* Идентификаторы заказов-оснований строк — пакетная загрузка. */
+    private Set<Long> orderIdsOf(List<OrderScheduleRow> rows) {
+        return rows.stream()
+                .map(OrderScheduleRow::getProductionOrder)
+                .filter(Objects::nonNull)
+                .map(ProductionOrder::getId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+    }
+
+    /*
+     * Забракованные индексы заказов, отсортированные внутри заказа.
+     *
+     * Дерево держит порядок: сдвиг считается числом позиций, шедших
+     * перед данной, а оно требует именно упорядоченного множества.
+     */
+    private Map<Long, TreeSet<Integer>> scrappedIndexesByOrder(
+            Set<Long> orderIds
+    ) {
+        Map<Long, TreeSet<Integer>> result = new LinkedHashMap<>();
+
+        for (ScrappedScheduleInstance scrapped
+                : scrappedRepo.findByProductionOrderIdIn(orderIds)) {
+            if (scrapped.getProductionOrder() == null) {
+                continue;
+            }
+
+            result
+                    .computeIfAbsent(
+                            scrapped.getProductionOrder().getId(),
+                            k -> new TreeSet<>()
+                    )
+                    .add(scrapped.getInstanceIndex());
+        }
+
+        return result;
+    }
+
+    /* Сколько забракованных позиций шло перед экземпляром с этим индексом. */
+    private static int scrappedBefore(TreeSet<Integer> scrapped, int index) {
+        if (scrapped == null || scrapped.isEmpty()) {
+            return 0;
+        }
+
+        int shift = 0;
+
+        for (Integer scrappedIndex : scrapped) {
+            if (scrappedIndex >= index) {
+                break;
+            }
+            shift++;
+        }
+
+        return shift;
     }
 
     /*

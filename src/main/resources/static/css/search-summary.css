@@ -198,6 +198,159 @@
     }
 }
 
+/*
+ * Карточка «Сведения о номере» — строки полей растягиваются на всю
+ * ширину контейнера, но подписи и значения не должны сжиматься
+ * до нечитаемых строк. Минимальная ширина карточки — 780px,
+ * чтобы «Циклов доработок» не переносился на новую строку.
+ */
+.passport .card-body {
+    min-width: 0;
+}
+
+.search-summary__field dt {
+    min-width: 160px;
+}
+
+/*
+ * Карточка «Сведения о номере» стоит в паспорте шириной 1200px, и
+ * одноколоночный перечень оставлял правую половину пустой: значения
+ * жались к подписям, а свободное место не читалось как часть карточки.
+ * Здесь поля раскладываются в две колонки — перечень занимает всю
+ * ширину и остаётся читаемым по вертикали.
+ *
+ * Разделитель печатают СВЕРХУ поля, а не снизу: число полей нечётное
+ * (последнее печатается условно), и нижняя граница повисла бы над
+ * пустой половиной строки. Верхняя граница первой строки снимается.
+ */
+.passport .search-summary__fields {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    column-gap: 40px;
+}
+
+.passport .search-summary__field {
+    border-bottom: 0;
+    border-top: 1px solid var(--line);
+}
+
+.passport .search-summary__field:nth-child(-n+2) {
+    border-top: 0;
+}
+
+@media (max-width: 900px) {
+    .passport .search-summary__fields {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .passport .search-summary__field:first-child {
+        border-top: 0;
+    }
+
+    .passport .search-summary__field:nth-child(2) {
+        border-top: 1px solid var(--line);
+    }
+}
+
+/* ---------- Колонка количества и состава ЗНП ---------- */
+
+/*
+ * Клетка количества держит и цифру, и перечень номеров: заказывает
+ * изделие одна строка, а состав заказа — список, который обязан
+ * раскрыться, не трогая соседние колонки таблицы.
+ */
+.passport-qty-cell {
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+}
+
+.passport-qty {
+    font-weight: 600;
+    color: var(--text);
+}
+
+.passport-znp-item {
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+}
+
+/*
+ * Два номера печатают списком без переключателя: столько читается в
+ * клетке, и прятать их за ссылкой значило бы заставлять человека
+ * кликать ради строк, которые и так на виду.
+ */
+.passport-znp-short {
+    display: block;
+    margin-top: 2px;
+    font-size: 11px;
+    color: var(--navy);
+    line-height: 1.5;
+}
+
+.passport-znp-short .passport-znp-item {
+    display: block;
+}
+
+/*
+ * Длинный состав уходит под details/summary: элемент раскрывается
+ * касанием и с клавиатуры без единой строки скрипта, а закрытый
+ * занимает одну строку и не растягивает хронологию.
+ */
+.passport-znp {
+    margin-top: 2px;
+    font-size: 11px;
+    line-height: 1.5;
+}
+
+.passport-znp summary {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    color: var(--navy);
+    cursor: pointer;
+    list-style: none;
+}
+
+.passport-znp summary::-webkit-details-marker {
+    display: none;
+}
+
+/*
+ * Стрелка нарисована рамкой, а не символом: символ зависел бы от
+ * шрифта и вёрстки, а граница повёрнута одинаково везде.
+ */
+.passport-znp summary::before {
+    content: '';
+    width: 6px;
+    height: 6px;
+    border-right: 1.5px solid currentColor;
+    border-bottom: 1.5px solid currentColor;
+    transform: rotate(45deg);
+    transition: transform .15s ease;
+    flex-shrink: 0;
+}
+
+.passport-znp summary:hover {
+    color: var(--orange);
+}
+
+.passport-znp[open] summary::before {
+    transform: rotate(225deg);
+}
+
+.passport-znp-list {
+    margin-top: 3px;
+    padding-left: 11px;
+    color: var(--muted);
+    font-size: 11px;
+    line-height: 1.6;
+    max-height: 220px;
+    overflow-y: auto;
+}
+
+.passport-znp-list .passport-znp-item {
+    display: block;
+}
+
 /* ---------- Страница поиска ---------- */
 
 .search-page {
@@ -695,4 +848,73 @@ a.tp-matrix__cell-number:hover {
     .search-summary__head {
         flex-direction: column;
     }
+}
+
+/* ---------- Состав изделия классификатора ---------- */
+
+/*
+ * Сводка по классификатору печатает входящие изделия отдельной
+ * карточкой. Таблица, а не плоский перечень: код, наименование, тип и
+ * количество сверяют по колонкам, и в столбце слов их не соотнести.
+ */
+.search-summary__composition {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+}
+
+.search-summary__composition th {
+    text-align: left;
+    background: #f8fafc;
+    color: var(--muted);
+    font-weight: 700;
+    padding: 10px 12px;
+}
+
+.search-summary__composition td {
+    padding: 11px 12px;
+    border-top: 1px solid var(--line);
+    color: var(--text);
+    vertical-align: top;
+}
+
+.search-summary__composition td:first-child,
+.search-summary__composition .mono {
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+
+.search-summary__composition a {
+    color: var(--navy);
+    text-decoration: underline;
+}
+
+.search-summary__composition a:hover {
+    color: var(--technology-accent);
+}
+
+/*
+ * Единица измерения стоит рядом с числом серым подписанным блоком:
+ * «2 шт.» читается как величина, а не как два независимых столбца.
+ */
+.search-summary__unit {
+    margin-left: 4px;
+    color: var(--muted);
+    font-size: 12px;
+}
+
+/*
+ * Счётчик поз. состава — тот же пилюльный стиль, что у counter
+ * остальных сводок: правый край шапки карточки держит одну метрику.
+ */
+.search-summary__count {
+    display: inline-flex;
+    align-items: center;
+    padding: 6px 12px;
+    border-radius: 99px;
+    background: #eaf1f7;
+    color: var(--navy);
+    font-size: 12px;
+    font-weight: 800;
+    white-space: nowrap;
 }

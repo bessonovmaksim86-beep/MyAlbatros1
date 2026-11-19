@@ -111,6 +111,119 @@
 }
 
 /*
+ * Подпись решения бюро. Базовый .badge задан в technology.css и по
+ * умолчанию зелёный — модификаторы переопределяют цвет под вердикт:
+ * подтверждённый брак обязан выглядеть отказом, а не успехом.
+ */
+.badge--danger {
+    background: #fff0f1;
+    color: var(--red, #c73a43);
+}
+
+.badge--success {
+    background: #e8f5ee;
+    color: var(--green, #198754);
+}
+
+.badge--warning {
+    background: #fff1dd;
+    color: #a45c00;
+}
+
+/*
+ * Переключатель очереди заявок. Кнопки фильтра стоят рядом, и активный
+ * режим обязан отличаться без перехода на другую страницу: заявки не
+ * исчезают из раздела, а лишь скрываются за выбранным состоянием.
+ */
+.filter-bar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.btn.active {
+    background: var(--navy, #073e75);
+    color: #fff;
+}
+
+/*
+ * Форма вердикта в строке перечня. Решать приходится по каждой заявке
+ * отдельно, поэтому поля стоят в той же строке, что и сама заявка, —
+ * контролёр не прокручивает таблицу к общей кнопке.
+ */
+.inline-decision-form {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    margin: 0;
+}
+
+.inline-decision-form input[type="text"] {
+    flex: 1 1 120px;
+    min-width: 120px;
+    border: 1px solid var(--line, #dce4eb);
+    border-radius: 8px;
+    padding: 7px 9px;
+    font-size: 12px;
+}
+
+.inline-decision-form label {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--navy, #073e75);
+    white-space: nowrap;
+}
+
+.btn--sm {
+    padding: 6px 11px;
+    font-size: 12px;
+    background: var(--navy, #073e75);
+    color: #fff;
+}
+
+.btn--sm:hover {
+    background: #052f5a;
+}
+
+/*
+ * Цех очередь видит, но вердикт не выносит: вместо формы — пояснение,
+ * почему кнопок нет.
+ */
+.readonly-hint {
+    color: var(--muted, #6c7b89);
+    font-size: 11px;
+    white-space: nowrap;
+}
+
+.empty-state {
+    margin: 0;
+    color: var(--muted, #6c7b89);
+    font-size: 13px;
+}
+
+/*
+ * Решённая заявка в общем списке приглушается: она уже проведена, и
+ * не должна выглядеть ожидающей.
+ */
+.resolved-row td {
+    color: var(--muted, #6c7b89);
+}
+
+/*
+ * Адаптив: на узком экране форма вердикта переносится под реквизиты
+ * заявки, а не сжимает колонки таблицы.
+ */
+@media (max-width: 760px) {
+    .inline-decision-form input[type="text"] {
+        flex-basis: 100%;
+    }
+}
+
+/*
  * Адаптив: на узком экране сетка предпросмотра переходит
  * в одну колонку, как и форма.
  */

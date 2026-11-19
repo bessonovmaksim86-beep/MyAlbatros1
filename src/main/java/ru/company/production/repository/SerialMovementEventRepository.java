@@ -74,6 +74,7 @@ public interface SerialMovementEventRepository
             left join fetch classifier.sensorCatalog
             left join fetch event.receivingBatch batch
             left join fetch event.quarantineTransfer transfer
+            left join fetch event.unitHandover handover
             where event.fullNumber = :fullNumber
             order by event.occurredAt asc, event.id asc
             """)

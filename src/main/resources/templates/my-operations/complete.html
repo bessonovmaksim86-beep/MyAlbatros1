@@ -76,6 +76,11 @@
                  th:text="${errorMessage}">
             </div>
 
+            <div class="alert success"
+                 th:if="${successMessage}"
+                 th:text="${successMessage}">
+            </div>
+
             <section class="card">
 
                 <div class="card-head">
@@ -145,7 +150,7 @@
                              th:classappend="${cp.cellMode} ? ' is-cell' : ''">
 
                             <input type="hidden"
-                                   name="values[__${stat.index}__].paramId"
+                                   th:name="|values[${stat.index}].paramId|"
                                    th:value="${cp.id}">
 
                             <div class="control-param-row__info">
@@ -186,8 +191,28 @@
                                         </strong>
                                     </p>
 
+                                    <!--
+                                        Прибор подписывает экземпляр
+                                        вместо ячейки: у заказа на
+                                        приборы их несколько видов, и
+                                        форма показывает изделие, а
+                                        ячейку к нему вносит сам
+                                        исполнитель.
+                                    -->
                                     <p class="control-param-row__cell"
-                                       th:if="${cp.hasActualCell()}">
+                                       th:if="${deviceMode}">
+                                        <span>Прибор экземпляра:</span>
+                                        <strong th:text="${
+                                            cp.actualCellNumber != null
+                                                ? cp.actualCellNumber
+                                                : 'ещё не выпущен'
+                                        }">
+                                            200100001
+                                        </strong>
+                                    </p>
+
+                                    <p class="control-param-row__cell"
+                                       th:if="${!deviceMode and cp.hasActualCell()}">
                                         <span>Ячейка экземпляра:</span>
                                         <strong th:text="${
                                             cp.actualCellNumber
@@ -201,15 +226,42 @@
                                     </p>
 
                                     <p class="control-param-row__cell is-empty"
-                                       th:unless="${cp.hasActualCell()}">
+                                       th:if="${!deviceMode and !cp.hasActualCell()}">
                                         Номер ячейки у экземпляра ещё не внесён —
                                         провести операцию нельзя, пока склад не
                                         оформит состав заказа.
                                     </p>
 
+                                    <!--
+                                        Привязанная ячейка: вид и
+                                        номер, внесённые исполнителем.
+                                        Пусто — вид ещё не закрыт, и
+                                        проведение запрещено.
+                                    -->
+                                    <p class="control-param-row__cell"
+                                       th:if="${deviceMode and cp.isCellBound()}">
+                                        <span>Ячейка в приборе:</span>
+                                        <strong th:text="${
+                                            cp.boundCellNumber
+                                            + ' — '
+                                            + (cp.boundCellClassifierLabel != null
+                                                ? cp.boundCellClassifierLabel
+                                                : 'классификатор не определён')
+                                        }">
+                                            503800001 — 5038 — ЯДВ3
+                                        </strong>
+                                    </p>
+
+                                    <p class="control-param-row__cell is-empty"
+                                       th:if="${deviceMode and !cp.isCellBound()}">
+                                        Ячейка этого вида в прибор ещё не
+                                        привязана — провести операцию нельзя.
+                                    </p>
+
                                     <p class="control-param-row__verdict is-ok"
                                        th:if="${
-                                           cp.hasActualCell()
+                                           !deviceMode
+                                           and cp.hasActualCell()
                                            and cp.cellClassifierMatch
                                        }">
                                         Классификатор совпадает
@@ -217,11 +269,22 @@
 
                                     <p class="control-param-row__verdict is-bad"
                                        th:if="${
-                                           cp.hasActualCell()
+                                           !deviceMode
+                                           and cp.hasActualCell()
                                            and !cp.cellClassifierMatch
                                        }">
                                         Классификатор не совпадает с требованием
                                         техпроцесса
+                                    </p>
+
+                                    <p class="control-param-row__verdict is-bad"
+                                       th:if="${
+                                           deviceMode
+                                           and cp.isCellBound()
+                                           and !cp.cellClassifierMatch
+                                       }">
+                                        Привязанная ячейка не соответствует
+                                        требованию техпроцесса
                                     </p>
 
                                 </th:block>
@@ -252,7 +315,45 @@
                                                : 'Значение параметра'
                                        }">
 
-                                <div th:if="${cp.cellMode}"
+                                <div th:if="${cp.cellMode and deviceMode}"
+                                     class="control-param-row__value">
+
+                                    <!--
+                                        Поле и кнопка живут внутри
+                                        основной формы, но уходят в
+                                        форму привязки атрибутом form:
+                                        вложенные формы HTML запрещает,
+                                        а привязка — отдельное
+                                        действие, не проведение.
+                                    -->
+                                    <input type="text"
+                                           th:id="'cellNumber-' + ${cp.id}"
+                                           th:name="cellNumber"
+                                           th:form="'bind-cell-form-' + ${stat.index}"
+                                           maxlength="9"
+                                           inputmode="numeric"
+                                           placeholder="Номер ячейки: 9 цифр"
+                                           aria-label="Номер привязываемой ячейки">
+
+                                    <button type="submit"
+                                            class="btn primary compact"
+                                            th:form="'bind-cell-form-' + ${stat.index}">
+                                        <span th:if="${cp.isCellBound()}">
+                                            Изменить номер
+                                        </span>
+                                        <span th:unless="${cp.isCellBound()}">
+                                            Привязать
+                                        </span>
+                                    </button>
+
+                                    <small class="control-param-row__hint">
+                                        Разрешён только номер, внесённый
+                                        складом в состав этого заказа.
+                                    </small>
+
+                                </div>
+
+                                <div th:if="${cp.cellMode and !deviceMode}"
                                      class="control-param-row__value">
 
                                     <p class="control-param-row__verdict is-ok"
@@ -288,7 +389,16 @@
 
                         <div class="control-params-footer">
 
-                            <button type="submit" class="btn primary">
+                            <!--
+                                Привязка держит проведение: прибор
+                                считают собранным, только когда в него
+                                вошёл номер каждого вида. Пока хоть
+                                один вид пуст, кнопка неактивна, а
+                                рядом читается причина — исполнитель
+                                не гадал бы, почему действие молчит.
+                            -->
+                            <button type="submit" class="btn primary"
+                                    th:disabled="${deviceMode and pendingCellCount > 0}">
                                 Провести операцию
                             </button>
 
@@ -297,6 +407,51 @@
                             </a>
 
                         </div>
+
+                    </form>
+
+                    <!--
+                        Формы привязки — по одной на каждый вид
+                        ячейки. Они стоят вне основной формы (вложенные
+                        формы HTML запрещает), а поле и кнопка
+                        подключаются к ним атрибутом form, оставаясь
+                        в своей строке рядом с подписью параметра.
+
+                        Срок и режим возвращаются тем же списком, что
+                        и у проведения: отказ обязан вернуть человека
+                        в ту же форму, а не выбросить его в список.
+                    -->
+                    <form th:each="cp, stat : ${controlParams}"
+                          th:if="${cp.cellMode and deviceMode}"
+                          th:id="'bind-cell-form-' + ${stat.index}"
+                          th:action="@{/my-operations/complete/{rowId}/bind-cell(rowId=${rowId})}"
+                          method="post"
+                          class="bind-cell-form">
+
+                        <input th:if="${_csrf != null}"
+                               type="hidden"
+                               th:name="${_csrf.parameterName}"
+                               th:value="${_csrf.token}">
+
+                        <input type="hidden"
+                               name="linkId"
+                               th:value="${cp.id}">
+
+                        <input type="hidden"
+                               name="mode"
+                               th:value="${operationMode}">
+
+                        <input type="hidden"
+                               name="expanded"
+                               th:value="${expanded}">
+
+                        <input type="hidden"
+                               name="periodFrom"
+                               th:value="${periodFrom}">
+
+                        <input type="hidden"
+                               name="periodTo"
+                               th:value="${periodTo}">
 
                     </form>
 

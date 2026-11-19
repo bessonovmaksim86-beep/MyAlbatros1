@@ -117,7 +117,27 @@ public class PendingDefectService {
         defect.setDefectStage(form.getDefectStage().trim());
         defect.setRequestedBy(user);
 
-        return pendingDefectRepository.save(defect);
+        PendingDefect saved = pendingDefectRepository.save(defect);
+
+        /*
+         * Событие заявки (V89): паспорт обязан показать, что брак
+         * затребовали, а не только то, что бюро его провело. Заказ у
+         * заявки бюро отсутствует — она оформляется по номеру, а не по
+         * матрице комплектования цеха, поэтому основание не указывается.
+         */
+        journal.recordScrapRequested(
+                saved.getFullNumber(),
+                saved.getCellKind(),
+                saved.getSerialStatus(),
+                saved.getProductClassifier(),
+                saved.getReceivingBatch(),
+                null,
+                user,
+                saved.getRequestedAt(),
+                saved.getDefectReason() + " · этап: " + saved.getDefectStage()
+        );
+
+        return saved;
     }
 
     /**

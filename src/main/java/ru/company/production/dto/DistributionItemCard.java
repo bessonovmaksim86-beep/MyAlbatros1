@@ -26,6 +26,11 @@ import java.time.format.DateTimeFormatter;
  * @param executorLabel закреплённый исполнитель (для распределённых)
  * @param cellNumber    номер ячейки, внесённой складом в групповой ЗНП
  *                      (V20); для строк выпуска — пусто
+ * @param scrapped      экземпляр забракован — его ячейка снята с
+ *                      комплектования (V90), проведение и распределение
+ *                      запрещены
+ * @param scrappedReason причина отбраковки — отображается вместо
+ *                      статуса «В работе»
  * @param overdueDays   сколько дней просрочена: если дата плана прошла
  *                      и работа не проведена, сколько дней назад она
  *                      должна была быть выполнена; 0 — в норме
@@ -42,6 +47,8 @@ public record DistributionItemCard(
         boolean assigned,
         String executorLabel,
         String cellNumber,
+        boolean scrapped,
+        String scrappedReason,
         long overdueDays
 ) {
 
@@ -148,5 +155,21 @@ public record DistributionItemCard(
         }
 
         return "просрочка " + overdueDays + " " + noun;
+    }
+
+    /**
+     * Подпись забракованного экземпляра: «Забраковано: причина».
+     *
+     * Появляется вместо «В работе» или «Завершено» и снимает право
+     * выбора исполнителя — изделия на этом экземпляре больше нет.
+     */
+    public String scrappedLabel() {
+        if (!scrapped) {
+            return "—";
+        }
+
+        return scrappedReason == null || scrappedReason.isBlank()
+                ? "Забраковано"
+                : "Забраковано: " + scrappedReason.trim();
     }
 }

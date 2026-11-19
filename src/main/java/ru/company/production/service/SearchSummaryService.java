@@ -5,11 +5,14 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import ru.company.production.dto.SearchSummaryView;
 import ru.company.production.entity.CellReceivingBatch;
+import ru.company.production.entity.ClassifierInclusion;
 import ru.company.production.entity.CustomerOrder;
 import ru.company.production.entity.Operation;
 import ru.company.production.entity.ProductClassifier;
 import ru.company.production.entity.ProductSerial;
 import ru.company.production.entity.ProductionOrder;
+import ru.company.production.entity.SensorCatalog;
+import ru.company.production.entity.SystemComponent;
 import ru.company.production.entity.TechProcess;
 import ru.company.production.entity.WorkPlace;
 import ru.company.production.repository.CellReceivingBatchRepository;
@@ -162,6 +165,25 @@ public class SearchSummaryService {
                 ? null
                 : classifier.getProductType().getDisplayName());
 
+        /*
+         * Состав изделия.
+         *
+         * Пользователь открывает карточку прибора, чтобы увидеть, из
+         * чего он собирается. Раньше сводка печатала только код,
+         * наименование и тип, и входящие изделия были не видны — их
+         * приходилось искать в разделе классификатора.
+         *
+         * Источник состава различается типом изделия:
+         *   * прибор и ячейка собираются из входящих изделий
+         *     (classifier_inclusion — связь owner→target);
+         *   * система собирается из родов датчиков и приборов
+         *     (system_components).
+         * Поэтому обходятся оба списка: у конкретного типа заполнен
+         * ровно один, и пустой не добавит строк.
+         */
+        List<SearchSummaryView.CompositionItem> composition =
+                compositionOf(classifier);
+
         return new SearchSummaryView(
                 "classifier",
                 classifier.getFullDisplayName(),
@@ -169,8 +191,116 @@ public class SearchSummaryService {
                 classifier.getProductType() == null
                         ? null
                         : classifier.getProductType().getDisplayName(),
-                fields
+                fields,
+                composition,
+                composition.isEmpty() ? null : "Состав изделия"
         );
+    }
+
+    /*
+     * Строки состава классификатора: входящие изделия и система.
+     *
+     * Связи читаются внутри readOnly-транзакции сводки, поэтому
+     * ленивые target и systemComponents догружаются без
+     * LazyInitializationException (open-in-view выключен, но сессия
+     * транзакции открыта).
+     */
+    private List<SearchSummaryView.CompositionItem> compositionOf(
+            ProductClassifier classifier) {
+
+        List<SearchSummaryView.CompositionItem> rows = new ArrayList<>();
+
+        for (ClassifierInclusion inclusion : classifier.getInclusions()) {
+
+            ProductClassifier target = inclusion.getTarget();
+
+            if (target == null) {
+                continue;
+            }
+
+            rows.add(new SearchSummaryView.CompositionItem(
+                    target.getId(),
+                    target.getCode(),
+                    target.getFullDisplayName(),
+                    target.getProductType() == null
+                            ? null
+                            : target.getProductType().getDisplayName(),
+                    formatQuantity(inclusion.getQuantity()),
+                    inclusion.getUnit() == null
+                            ? null
+                            : inclusion.getUnit().getDisplayName(),
+                    inclusion.getInclusionMode() == null
+                            ? null
+                            : inclusion.getInclusionMode().getDisplayName()
+            ));
+        }
+
+        for (SystemComponent component : classifier.getSystemComponents()) {
+
+            /*
+             * Род датчика: отдельной карточки классификатора у него нет,
+             * поэтому classifierId остаётся null — ссылка не строится,
+             * строка печатается текстом.
+             */
+            if (component.getSensorCatalog() != null) {
+
+                SensorCatalog sensor = component.getSensorCatalog();
+
+                rows.add(new SearchSummaryView.CompositionItem(
+                        null,
+                        null,
+                        sensor.getName(),
+                        "Датчик",
+                        formatQuantity(component.getQuantity()),
+                        component.getUnit() == null
+                                ? null
+                                : component.getUnit().getDisplayName(),
+                        component.getInclusionMode() == null
+                                ? null
+                                : component.getInclusionMode().getDisplayName()
+                ));
+
+                continue;
+            }
+
+            ProductClassifier componentClassifier =
+                    component.getComponentClassifier();
+
+            if (componentClassifier == null) {
+                continue;
+            }
+
+            rows.add(new SearchSummaryView.CompositionItem(
+                    componentClassifier.getId(),
+                    componentClassifier.getCode(),
+                    componentClassifier.getFullDisplayName(),
+                    componentClassifier.getProductType() == null
+                            ? null
+                            : componentClassifier.getProductType()
+                                  .getDisplayName(),
+                    formatQuantity(component.getQuantity()),
+                    component.getUnit() == null
+                            ? null
+                            : component.getUnit().getDisplayName(),
+                    component.getInclusionMode() == null
+                            ? null
+                            : component.getInclusionMode().getDisplayName()
+            ));
+        }
+
+        return rows;
+    }
+
+    /*
+     * Количество состава без хвостовых нулей: «2», а не «2.000».
+     * Дробное количество (кг, метры) сохраняется как есть.
+     */
+    private static String formatQuantity(BigDecimal quantity) {
+        if (quantity == null) {
+            return null;
+        }
+
+        return quantity.stripTrailingZeros().toPlainString();
     }
 
     private SearchSummaryView operation(Long id) {

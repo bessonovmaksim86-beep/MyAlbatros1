@@ -420,6 +420,18 @@ public interface ProductSerialRepository
     long countByReceivingBatchIsNotNull();
 
     /**
+     * Сколько приборов выпущено заказом (product_type=DEVICE).
+     *
+     * Нужен взятию группового ЗНП на приборы в работу: серийники
+     * изделия заводятся по заказанному количеству, и повторное взятие
+     * обязано довыпустить только недостающие, а не удвоить ряд.
+     */
+    long countByIssuedProductionOrder_IdAndProductType(
+            Long productionOrderId,
+            ProductType productType
+    );
+
+    /**
      * Занятые серии области в диапазоне, который партия хочет занять.
      *
      * Проверка нужна при подтверждении прихода: диапазон резервируется
@@ -1070,6 +1082,43 @@ public interface ProductSerialRepository
             """)
     List<ProductSerial> findByProductionOrderIds(
             @Param("productionOrderIds") java.util.Collection<Long> productionOrderIds
+    );
+
+    /**
+     * Приборы заказов — те же строки, что и состав ячеек, но из
+     * выпущенных серийников DEVICE.
+     *
+     * Единица плана «Группового ЗНП на приборы» — прибор, а не ячейка:
+     * цех подписывает экземпляр маршрута номером изделия, поэтому там,
+     * где групповой заказ на ячейки читает матрицу комплектования, заказ
+     * на приборы читает этот перечень. Форма проекции совпадает с
+     * {@link AttachedCellView} намеренно: сборщик перечня подставляет
+     * номер и наименование одним и тем же кодом, различая лишь источник.
+     *
+     * Порядок — по заказу, затем серии: экземпляр плана с номером i
+     * получает i-й выпущенный прибор, тот же принцип сопоставления, что
+     * у ячеек по моменту внесения.
+     */
+    @Query("""
+            select
+                ord.id as orderId,
+                serialRow.id as serialId,
+                classifier.code as classifierCode,
+                serialRow.serial as serial,
+                classifier.name as classifierName,
+                sensor.name as sensorName
+            from ProductSerial serialRow
+            join serialRow.issuedProductionOrder ord
+            join serialRow.productClassifier classifier
+            left join classifier.sensorCatalog sensor
+            where ord.id in :orderIds
+              and ord.active = true
+              and serialRow.productType =
+                  ru.company.production.entity.ProductType.DEVICE
+            order by ord.id asc, serialRow.serial asc
+            """)
+    List<AttachedCellView> findDevicesByOrderIds(
+            @Param("orderIds") java.util.Collection<Long> orderIds
     );
 
     /**

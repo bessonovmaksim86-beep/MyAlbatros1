@@ -78,12 +78,42 @@
 
             <!--
                 ============================================================
-                ФОРМА
+                ФИЛЬТР ОЧЕРЕДИ
+                ============================================================
+            -->
+            <section class="card">
 
-                Мастер вводит номер ячейки и причину. ЗНП, разновидность
-                и местоположение сервер берёт из матрицы комплектования:
-                заявка обязана зафиксировать тот заказ, из которого ячейку
-                забраковали, а не тот, который вписал человек.
+                <div class="card-body">
+
+                    <div class="filter-bar">
+
+                        <a class="btn"
+                           th:classappend="${filter == 'pending'} ? ' active' : ' secondary'"
+                           th:href="@{/workshop/scrap(filter='pending')}">
+                            Ожидают решения
+                        </a>
+
+                        <a class="btn secondary"
+                           th:classappend="${filter == 'resolved'} ? ' active' : ''"
+                           th:href="@{/workshop/scrap(filter='resolved')}">
+                            Решённые
+                        </a>
+
+                        <a class="btn secondary"
+                           th:classappend="${filter == 'all'} ? ' active' : ''"
+                           th:href="@{/workshop/scrap(filter='all')}">
+                            Все
+                        </a>
+
+                    </div>
+
+                </div>
+
+            </section>
+
+            <!--
+                ============================================================
+                ФОРМА — новая заявка на браковку
                 ============================================================
             -->
             <section class="card">
@@ -168,13 +198,6 @@
 
                         </div>
 
-                        <!--
-                            Предпросмотр ячейки: что сервер нашёл по
-                            введённому номеру. Пока он пустой, форма не
-                            понимает, какую ячейку оформляет мастер, —
-                            поэтому панель показывается сразу при вводе,
-                            а не после отказа.
-                        -->
                         <div class="scrap-preview"
                              id="scrapPreview"
                              hidden>
@@ -218,15 +241,6 @@
                                     Причина брака
                                 </label>
 
-                                <!--
-                                    Список подсказок даёт справочник
-                                    причин: свободный ввод собрал бы
-                                    «царапина», «Царапина» и «царапина на
-                                    корпусе» в три разные строки отчёта,
-                                    а по причинам считают рекламации.
-                                    Своё написать можно — datalist не
-                                    запрещает.
-                                -->
                                 <input type="text"
                                        id="defectReason"
                                        list="defectReasonOptions"
@@ -303,15 +317,12 @@
 
             <!--
                 ============================================================
-                ОЧЕРЕДЬ ЗАЯВОК ЦЕХА
-
-                Мастер обязан видеть, что на номер заявка уже оформлена:
-                иначе он оформил бы вторую и получил отказ, не понимая
-                причины.
+                ОЧЕРЕДЬ ЗАЯВОК — с формой решения прямо в строке
                 ============================================================
             -->
             <section class="card"
-                     th:if="${pending != null and !#lists.isEmpty(pending)}">
+                     th:if="${(filter == 'pending' or filter == 'all')
+                              and pending != null and !#lists.isEmpty(pending)}">
 
                 <div class="card-head">
 
@@ -335,6 +346,7 @@
                                 <th>Изделие в цеху</th>
                                 <th>Причина брака</th>
                                 <th>Дата заявки</th>
+                                <th>Действие</th>
                             </tr>
 
                             </thead>
@@ -376,6 +388,59 @@
                                     22.10.2026 09:15
                                 </td>
 
+                                <td>
+                                    <!--
+                                        Форма решения БТК/БВК — прямо в
+                                        строке заявки. Видна только
+                                        контролёру бюро (canDecide),
+                                        цех видит статус, но не может
+                                        решать.
+                                    -->
+                                    <form th:if="${canDecide}"
+                                          th:action="@{/workshop/scrap/decide}"
+                                          method="post"
+                                          class="inline-decision-form">
+
+                                        <input type="hidden"
+                                               name="defectId"
+                                               th:value="${defect.id}">
+
+                                        <input type="radio"
+                                               th:id="'confirm_' + ${defect.id}"
+                                               name="decision"
+                                               value="CONFIRMED"
+                                               required>
+                                        <label th:for="'confirm_' + ${defect.id}">
+                                            Подтв.
+                                        </label>
+
+                                        <input type="radio"
+                                               th:id="'deny_' + ${defect.id}"
+                                               name="decision"
+                                               value="DENIED"
+                                               required>
+                                        <label th:for="'deny_' + ${defect.id}">
+                                            Откл.
+                                        </label>
+
+                                        <input type="text"
+                                               name="comment"
+                                               maxlength="500"
+                                               placeholder="Комментарий">
+
+                                        <button type="submit"
+                                                class="btn btn--sm">
+                                            ✓
+                                        </button>
+
+                                    </form>
+
+                                    <span th:if="${!canDecide}"
+                                          class="readonly-hint">
+                                        Только контролёр
+                                    </span>
+                                </td>
+
                             </tr>
 
                             </tbody>
@@ -383,6 +448,110 @@
                         </table>
 
                     </div>
+
+                </div>
+
+            </section>
+
+            <!--
+                ============================================================
+                РЕШЁННЫЕ ЗАЯВКИ
+                ============================================================
+            -->
+            <section class="card"
+                     th:if="${filter == 'resolved'
+                              or filter == 'all'}">
+
+                <div class="card-head">
+
+                    <h2>Решённые заявки</h2>
+
+                </div>
+
+                <div class="card-body"
+                     th:if="${resolved != null and !#lists.isEmpty(resolved)}">
+
+                    <div class="table-wrap">
+
+                        <table class="data-table">
+
+                            <thead>
+
+                            <tr>
+                                <th>Номер ячейки</th>
+                                <th>Вид</th>
+                                <th>Изделие</th>
+                                <th>ЗНП</th>
+                                <th>Причина брака</th>
+                                <th>Дата заявки</th>
+                                <th>Решение</th>
+                                <th>Дата решения</th>
+                            </tr>
+
+                            </thead>
+
+                            <tbody>
+
+                            <tr th:each="defect : ${resolved}">
+
+                                <td class="mono">
+                                    <a th:href="@{/passport/{number}(number=${defect.fullNumber})}"
+                                       th:text="${defect.fullNumber}">
+                                        121200022
+                                    </a>
+                                </td>
+
+                                <td th:text="${defect.cellKindLabel}">
+                                    Ячейка
+                                </td>
+
+                                <td th:text="${defect.classifierLabel}">
+                                    1212 — Подсборка ЯПР56
+                                </td>
+
+                                <td class="mono"
+                                    th:text="${defect.znpNumberLabel}">
+                                    ЗНП-2026-014
+                                </td>
+
+                                <td th:text="${defect.defectReason}">
+                                    Скол корпуса
+                                </td>
+
+                                <td th:text="${defect.formattedRequestedAt}">
+                                    22.10.2026 09:15
+                                </td>
+
+                                <td>
+                                    <span th:if="${defect.defectConfirmed != null}"
+                                          th:class="'badge badge--' + ${defect.defectConfirmedBadgeClass}"
+                                          th:text="${defect.defectConfirmedLabel}">
+                                        Подтверждено
+                                    </span>
+                                </td>
+
+                                <td th:if="${defect.approvedAt != null}"
+                                    th:text="${defect.formattedApprovedAt}">
+                                    23.10.2026 14:30
+                                </td>
+                                <td th:if="${defect.approvedAt == null}">—</td>
+
+                            </tr>
+
+                            </tbody>
+
+                        </table>
+
+                    </div>
+
+                </div>
+
+                <div class="card-body"
+                     th:if="${resolved == null or #lists.isEmpty(resolved)}">
+
+                    <p class="empty-state">
+                        Решённых заявок нет
+                    </p>
 
                 </div>
 

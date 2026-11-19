@@ -40,6 +40,11 @@ import java.math.RoundingMode;
  * @param returnedForRework возвращён с контроля БТК, но цех ещё не
  *                      принял на доработку — проведение и перемещение
  *                      заблокированы до решения цеха
+ * @param scrapped        экземпляр забракован — его ячейка удалена из
+ *                      матрицы комплектования (V90), проведение
+ *                      запрещено, в перечне видна подпись
+ * @param scrappedReason причина отбраковки — отображается вместо
+ *                      статуса «В работе»
  */
 public record OperationInstance(
         Long rowId,
@@ -56,7 +61,9 @@ public record OperationInstance(
         String blockerLabel,
         String cellNumber,
         boolean needsControlParams,
-        boolean returnedForRework
+        boolean returnedForRework,
+        boolean scrapped,
+        String scrappedReason
 ) {
 
     /**
@@ -142,5 +149,21 @@ public record OperationInstance(
         return itemFullName == null || itemFullName.isBlank()
                 ? "—"
                 : itemFullName.trim();
+    }
+
+    /**
+     * Подпись забракованного экземпляра: «Забраковано: причина».
+     *
+     * Появляется вместо статуса «В работе» и отключает кнопку
+     * проведения — экземпляр больше не существует в матрице.
+     */
+    public String scrappedLabel() {
+        if (!scrapped) {
+            return "—";
+        }
+
+        return scrappedReason == null || scrappedReason.isBlank()
+                ? "Забраковано"
+                : "Забраковано: " + scrappedReason.trim();
     }
 }

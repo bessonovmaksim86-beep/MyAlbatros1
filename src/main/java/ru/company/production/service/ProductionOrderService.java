@@ -144,6 +144,24 @@ public class ProductionOrderService {
     /* Верхняя граница пятизначной серии (chk_product_serial_range). */
     private static final int MAX_SERIAL = 99999;
 
+    /*
+     * Коды подразделений, задающих вид группового ЗНП первой операцией
+     * маршрута (миграции V2/V66, V30). Держатся кодами, а не id: id
+     * зависят от порядка заполнения базы, код заведён миграцией и
+     * неизменен.
+     */
+
+    /** Склад полуфабрикатов: выпуск ячеек и подсборок (групповые виды). */
+    private static final String WAREHOUSE_UNIT_CODE =
+            "SEMI_FINISHED_PRODUCT_WAREHOUSE";
+
+    /** Бюро технического контроля: ремонт ячеек и подсборок. */
+    private static final String BTK_UNIT_CODE =
+            "TECHNICAL_CONTROL_DEPARTMENT";
+
+    /** Бюро входного контроля: ремонт ячеек и подсборок. */
+    private static final String BVK_UNIT_CODE = "Input Control Bureau";
+
     /**
      * Ближайший свободный номер заказа вида ЗНП-ГГГГ-NNN,
      * где ГГГГ — текущий год.
@@ -871,9 +889,7 @@ public class ProductionOrderService {
         order.setZnpKind(kind);
         order.setProductClassifier(groupClassifier);
         order.setQuantity(groupQuantity);
-        order.setKittingType(form.getKittingType() != null
-                ? KittingType.ofNullable(form.getKittingType())
-                : null);
+        order.setKittingType(resolveKittingType(kind, techProcess));
         order.setProductionOperation(operation);
         order.setTechProcess(techProcess);
         order.setOrderDate(form.getOrderDate());
@@ -1140,9 +1156,7 @@ public class ProductionOrderService {
         order.setZnpKind(kind);
         order.setProductClassifier(groupClassifier);
         order.setQuantity(groupQuantity);
-        order.setKittingType(form.getKittingType() != null
-                ? KittingType.ofNullable(form.getKittingType())
-                : null);
+        order.setKittingType(resolveKittingType(kind, techProcess));
         order.setProductionOperation(operation);
         order.setTechProcess(techProcess);
         order.setOrderDate(form.getOrderDate());
@@ -1247,6 +1261,25 @@ public class ProductionOrderService {
          * осталась бы переведённой.
          */
         requireChildrenPlanned(order);
+
+        /*
+         * Для группового ЗНП на приборы серийники изделия заводятся ДО
+         * перевода заказа в работу: пакетное обновление статусов
+         * (applyStatus) захватывает их тем же запросом, и прибор
+         * появляется в реестре сразу «В работе», а не висящим «Новым»
+         * при работающем заказе. Довыпускаются только недостающие —
+         * повторное взятие ряд не удваивает.
+         *
+         * Единица плана такого заказа — прибор, а не ячейка: цех
+         * подписывает экземпляры маршрута номером изделия, поэтому
+         * серийник DEVICE обязан существовать с момента, когда заказ
+         * открыт цеху, а не когда кладовщик внесёт ячейки. Количество
+         * задаёт позиция заказа (V38).
+         */
+        if (order.getZnpKind() == ZnpKind.GROUP_DEVICE
+                && order.getProductClassifier() != null) {
+            issueDevicesForGroupZnp(order);
+        }
 
         applyStatus(order, ProductionOrderStatus.IN_WORK);
 
@@ -2035,6 +2068,24 @@ public class ProductionOrderService {
     private ProductSerial issueSerial(ProductClassifier classifier,
                                       ProductionOrder order) {
 
+        return issueSerial(classifier, order,
+                takenSerials(SerialNumbering.keyFor(classifier), order));
+    }
+
+    /**
+     * Выдача номера с готовым множеством занятых серий.
+     *
+     * Третий параметр нужен заказу на приборы: он заводится уже после
+     * того, как {@code applyStatus} прогнал позиции и серийники пакетным
+     * UPDATE с {@code clearAutomatically}, — заказ отсоединён, и
+     * собственный обход {@code order.getItems()} внутри этой же выдачи
+     * оборвался бы {@code LazyInitializationException}. Множество
+     * занятых серий тогда считает вызывающий по реестру.
+     */
+    private ProductSerial issueSerial(ProductClassifier classifier,
+                                      ProductionOrder order,
+                                      Set<Integer> taken) {
+
         ProductType productType = classifier.getProductType();
 
         if (productType == null) {
@@ -2061,8 +2112,6 @@ public class ProductionOrderService {
          * но ещё не записаны, поэтому занятые значения собираются из
          * уже выданных в этом заказе серийников.
          */
-        Set<Integer> taken = takenSerials(numberingKey, order);
-
         while (candidate <= MAX_SERIAL
                 && (taken.contains(candidate)
                 || productSerialRepository
@@ -2098,6 +2147,89 @@ public class ProductionOrderService {
         serial.setStatus(ProductSerialStatus.NEW);
 
         return productSerialRepository.save(serial);
+    }
+
+    /**
+     * Приборы группового ЗНП на приборы, выпущенные при взятии в работу.
+     *
+     * Единица плана такого заказа — прибор, а не ячейка: цех подписывает
+     * экземпляры маршрута номером изделия, поэтому серийник DEVICE обязан
+     * существовать с момента, когда заказ открыт цеху, а не когда кладовщик
+     * внесёт ячейки. Количество задаёт позиция заказа (V38): прибор
+     * заказывается количеством, как ячейка у GROUP_CELL.
+     *
+     * Довыпускаются только недостающие: повторное взятие в работу не должно
+     * удвоить ряд, поэтому уже созданные по этому заказу приборы
+     * пересчитываются и ряд продолжается с оставшегося числа.
+     */
+    private void issueDevicesForGroupZnp(ProductionOrder order) {
+
+        ProductClassifier classifier = order.getProductClassifier();
+
+        if (classifier == null) {
+            return;
+        }
+
+        int required = instanceCount(order.getQuantity());
+
+        long already = productSerialRepository
+                .countByIssuedProductionOrder_IdAndProductType(
+                        order.getId(), ProductType.DEVICE);
+
+        if (already >= required) {
+            return;
+        }
+
+        /*
+         * Занятые серии читаются репозиторием, а не коллекцией
+         * order.getItems(): взятие в работу (applyStatus) переводит
+         * позиции и серийники пакетным UPDATE с clearAutomatically,
+         * после чего заказ отсоединён, и обращение к его lazy-составу
+         * оборвалось бы LazyInitializationException прямо на кнопке
+         * «В работу».
+         */
+        String numberingKey = SerialNumbering.keyFor(classifier);
+        Set<Integer> taken = takenSerialsOfOrder(numberingKey, order);
+
+        for (int issued = (int) already; issued < required; issued++) {
+            ProductSerial device = issueSerial(classifier, order, taken);
+
+            /*
+             * Ряд пополняется сразу: следующий прибор обязан занять
+             * следующую серию, не полагаясь на авто-flush перед
+             * проверкой занятости.
+             */
+            taken.add(device.getSerial());
+        }
+    }
+
+    /**
+     * Серии заказа в пределах области нумерации — выборкой из реестра.
+     *
+     * Двойник {@link #takenSerials} для случаев, когда заказ уже
+     * отсоединён от сессии: смысл тот же (не выдать серию, которую этот
+     * заказ занял ранее), но источник — запрос, а не lazy-коллекция.
+     */
+    private Set<Integer> takenSerialsOfOrder(String numberingKey,
+                                             ProductionOrder order) {
+
+        Set<Integer> taken = new HashSet<>();
+
+        for (ProductSerial serial
+                : productSerialRepository.findByProductionOrderId(
+                        order.getId())) {
+
+            ProductClassifier serialClassifier =
+                    serial.getProductClassifier();
+
+            if (serialClassifier != null
+                    && numberingKey.equals(
+                            SerialNumbering.keyFor(serialClassifier))) {
+                taken.add(serial.getSerial());
+            }
+        }
+
+        return taken;
     }
 
     /**
@@ -2475,12 +2607,22 @@ public class ProductionOrderService {
          * Маршрут обязан вести работу комплектованием: именно оно
          * решает, чем занят заказ и кто его выполняет (см.
          * resolveKindByTechProcess). Без такой операции заказ не
-         * описывает состав — ни склад, ни БТК его работу не увидят,
-         * и диспетчер завёл бы документ, по которому нечего выполнить.
+         * описывает состав — ни склад, ни бюро контроля его работу не
+         * увидят, и диспетчер завёл бы документ, по которому нечего
+         * выполнить.
          *
          * Проверяется наличие комплектования, а не совпадение вида с
          * предложенным: диспетчер вправе переключить тип вручную, но
          * выбирать тип из пустоты он не может.
+         *
+         * Вторым шагом сверяется ПОДРАЗДЕЛЕНИЕ первой операции: вид
+         * заказа и владелец комплектования обязаны согласоваться,
+         * иначе заказ ушёл бы в раздел, который его не комплектует.
+         * Групповой заказ на ячейки или приборы собирает склад
+         * полуфабрикатов, ремонтный заказ на ячейки или подсборки —
+         * только бюро контроля (БТК либо БВК). Без этой проверки
+         * переключённый вручную вид дал бы документ, по которому
+         * ни один из разделов не показал бы работу.
          */
         if (kind.requiresTechProcess()) {
             GroupZnpKindProposal proposal =
@@ -2493,9 +2635,12 @@ public class ProductionOrderService {
                                 + " — добавьте в начало маршрута операцию"
                                 + " «Комплектование ячеек» или"
                                 + " «Комплектование подсборок»"
-                                + " склада полуфабрикатов либо БТК"
+                                + " склада полуфабрикатов либо бюро"
+                                + " контроля (БТК/БВК)"
                 );
             }
+
+            assertKindMatchesOwnerUnit(kind, process, proposal.ownerUnitCode());
         }
 
         if (classifier == null) {
@@ -2546,9 +2691,116 @@ public class ProductionOrderService {
                 .findUnitNodesForProcesses(
                         List.of(techProcessId),
                         List.of("RECEIVING"),
-                        "SEMI_FINISHED_PRODUCT_WAREHOUSE"
+                        WAREHOUSE_UNIT_CODE
                 )
                 .isEmpty();
+    }
+
+    /**
+     * Тип комплектования, определяемый техпроцессом.
+     *
+     * Поле убрано из формы: тип задаёт не диспетчер, а первая операция
+     * маршрута — «Комплектование подсборок» склада означает, что
+     * ячейки собирают из подсборок ({@link KittingType#SUBASSEMBLY}),
+     * «Комплектование ячеек» — что обычным выпуском (тип пустой).
+     * Ручной выбор отменяется ещё и потому, что вид заказа
+     * переключением уже сверен с маршрутом
+     * ({@link #assertKindMatchesOwnerUnit}), и второй ручной признак
+     * только разошёлся бы с операцией, по которой заказ комплектует
+     * склад.
+     *
+     * Тип применим только групповому заказу на ячейки
+     * ({@link ZnpKind#isKittingTypeApplicable()}); прочим видам —
+     * пусто, даже если маршрут что-то предложил.
+     */
+    private KittingType resolveKittingType(ZnpKind kind,
+                                           TechProcess techProcess) {
+
+        if (techProcess == null || !kind.isKittingTypeApplicable()) {
+            return null;
+        }
+
+        GroupZnpKindProposal proposal =
+                resolveKindByTechProcess(techProcess.getId());
+
+        return proposal.isApplicable() ? proposal.kittingType() : null;
+    }
+
+    /**
+     * Совпадает ли вид заказа с подразделением—владельцем его
+     * комплектования.
+     *
+     * Правило одностороннее и проверяется ДО сохранения: групповой
+     * заказ на ячейки или приборы укомплектовывает склад
+     * полуфабрикатов, ремонтный заказ на ячейки или подсборки — бюро
+     * контроля (техническое или входное). Вид диспетчер вправе
+     * переключить вручную, и без этой проверки переключённый вид ушёл
+     * бы по маршруту чужого подразделения: ни склад, ни бюро такой
+     * заказ в свой раздел не взяли бы, и заказ повис бы «в работе»
+     * без единого исполнителя.
+     *
+     * Отдельный метод, а не развёртывание условия в requireTechProcess:
+     * требование «вид ↔ подразделение» читается и при создании, и при
+     * правке заказа одним вызовом, а внутри метода остаётся одна
+     * парная проверка.
+     */
+    private void assertKindMatchesOwnerUnit(ZnpKind kind,
+                                            TechProcess process,
+                                            String ownerUnitCode) {
+
+        if (kind.isRepairKind()) {
+
+            if (BTK_UNIT_CODE.equals(ownerUnitCode)
+                    || BVK_UNIT_CODE.equals(ownerUnitCode)) {
+                return;
+            }
+
+            throw new IllegalArgumentException(
+                    "Заказ «" + kind.getDisplayName() + "» комплектует "
+                            + "бюро контроля, а первая операция техпроцесса "
+                            + "«" + process.getCode() + "» принадлежит "
+                            + unitCaption(ownerUnitCode) + " — выберите "
+                            + "маршрут с комплектованием БТК или БВК"
+            );
+        }
+
+        if (WAREHOUSE_UNIT_CODE.equals(ownerUnitCode)) {
+            return;
+        }
+
+        throw new IllegalArgumentException(
+                "Заказ «" + kind.getDisplayName() + "» комплектует склад "
+                        + "полуфабрикатов, а первая операция техпроцесса "
+                        + "«" + process.getCode() + "» принадлежит "
+                        + unitCaption(ownerUnitCode) + " — выберите "
+                        + "маршрут со складским комплектованием"
+        );
+    }
+
+    /**
+     * Подпись подразделения для текста отказа.
+     *
+     * Код подставляется в сообщение только как «неизвестное
+     * подразделение»: диспетчеру важно имя, а не служебный код, и
+     * печатать код значило бы дать ссылку, которую он не расшифрует.
+     */
+    private static String unitCaption(String ownerUnitCode) {
+
+        if (WAREHOUSE_UNIT_CODE.equals(ownerUnitCode)) {
+            return "склад полуфабрикатов";
+        }
+
+        if (BTK_UNIT_CODE.equals(ownerUnitCode)) {
+            return "бюро технического контроля";
+        }
+
+        if (BVK_UNIT_CODE.equals(ownerUnitCode)) {
+            return "бюро входного контроля";
+        }
+
+        return "подразделение «" + (ownerUnitCode == null
+                ? "не указано"
+                : ownerUnitCode) + "»";
     }
 
     /**
@@ -2764,9 +3016,9 @@ public class ProductionOrderService {
         }
 
         /*
-         * БТК: ремонтные виды.
+         * Бюро контроля (БТК или БВК): ремонтные виды.
          */
-        if (isBtkKitting(code, unitCode)) {
+        if (isRepairKitting(code, unitCode)) {
             ZnpKind kind = "KITTING_SUBASSEMBLY".equals(code)
                     ? ZnpKind.SUBASSEMBLY_REPAIR
                     : ZnpKind.CELL_REPAIR;
@@ -2775,14 +3027,14 @@ public class ProductionOrderService {
                     kind,
                     null,
                     opLabel,
-                    "Первая операция — комплектование БТК. "
+                    "Первая операция — комплектование бюро контроля. "
                             + "Заказ будет создан как ремонтный ЗНП",
                     unitCode
             );
         }
 
         /*
-         * Первая операция — не комплектование склада или БТК.
+         * Первая операция — не комплектование склада или бюро контроля.
          * Вид заказа не определяется.
          */
         return GroupZnpKindProposal.notApplicable(
@@ -2802,24 +3054,44 @@ public class ProductionOrderService {
      */
     private boolean isWarehouseKitting(String typeCode, String unitCode) {
 
-        return "SEMI_FINISHED_PRODUCT_WAREHOUSE".equals(unitCode)
-                && ("KITTING_CELL".equals(typeCode)
-                        || "KITTING_SUBASSEMBLY".equals(typeCode));
+        return WAREHOUSE_UNIT_CODE.equals(unitCode)
+                && isKittingCellOrSubassembly(typeCode);
     }
 
     /**
-     * Является ли операция комплектованием БТК.
+     * Является ли операция комплектованием бюро контроля, то есть
+     * задаёт ли она ремонтный вид заказа.
      *
-     * Бюро технического контроля — TECHNICAL_CONTROL_DEPARTMENT.
+     * Ремонт ведут оба бюро службы качества: бюро технического
+     * контроля (TECHNICAL_CONTROL_DEPARTMENT, V2/V66) и бюро входного
+     * контроля (Input Control Bureau, V30). Раздел комплектования
+     * ремонтных ЗНП открыт обоим (см. RepairKittingService), поэтому и
+     * вид обязан определяться по операции любого из них: признавал бы
+     * он только БТК — диспетчер не смог бы завести ремонтный заказ по
+     * маршруту с комплектованием БВК, хотя бюро такой заказ уже
+     * комплектует.
      *
-     * Только KITTING_CELL и KITTING_SUBASSEMBLY задают вид группового
-     * заказа; обычная KITTING — вид не задаёт.
+     * Только KITTING_CELL и KITTING_SUBASSEMBLY задают вид; обычная
+     * KITTING — вид не задаёт.
      */
-    private boolean isBtkKitting(String typeCode, String unitCode) {
+    private boolean isRepairKitting(String typeCode, String unitCode) {
 
-        return "TECHNICAL_CONTROL_DEPARTMENT".equals(unitCode)
-                && ("KITTING_CELL".equals(typeCode)
-                        || "KITTING_SUBASSEMBLY".equals(typeCode));
+        return (BTK_UNIT_CODE.equals(unitCode)
+                || BVK_UNIT_CODE.equals(unitCode))
+                && isKittingCellOrSubassembly(typeCode);
+    }
+
+    /**
+     * Относится ли тип операции к комплектованию ячеек или подсборок.
+     *
+     * Общий признак двух ветвей (склад и бюро): именно эти два типа
+     * различают выпуск нового изделия и ремонт, а «Комплектовочная»
+     * (KITTING) остаётся за заказом внутри выпуска.
+     */
+    private boolean isKittingCellOrSubassembly(String typeCode) {
+
+        return "KITTING_CELL".equals(typeCode)
+                || "KITTING_SUBASSEMBLY".equals(typeCode);
     }
 
     /**

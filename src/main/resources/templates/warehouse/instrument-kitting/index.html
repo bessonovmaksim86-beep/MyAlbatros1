@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="ru"
+      xmlns:th="http://www.thymeleaf.org">
+
+<head>
+    <meta charset="UTF-8">
+
+    <meta name="viewport"
+          content="width=device-width, initial-scale=1">
+
+    <title>Комплектация групп ЗНП на приборы</title>
+
+    <link rel="stylesheet"
+          th:href="@{/technology/css/technology.css}">
+    <link rel="stylesheet"
+          th:href="@{/technology/css/common.css}">
+    <link rel="stylesheet"
+          th:href="@{/warehouse/css/warehouse.css}">
+</head>
+
+<body>
+
+<div class="app-shell">
+
+    <aside th:replace="~{warehouse/fragments/layout
+            :: sidebar('instrument-kitting')}">
+    </aside>
+
+    <main class="main">
+
+        <header th:replace="~{warehouse/fragments/layout
+                :: topbar}">
+        </header>
+
+        <div class="page-content warehouse-page">
+
+            <div class="page-head">
+
+                <div class="page-title">
+
+                    <h1>
+                        Комплектация групп ЗНП на приборы
+                    </h1>
+
+                    <p>
+                        Групповые заказы-комплектующие, в которые склад
+                        вносит ячейки по видам, заданным в маршруте
+                    </p>
+
+                </div>
+
+            </div>
+
+            <div class="alert success"
+                 th:if="${successMessage}"
+                 th:text="${successMessage}">
+            </div>
+
+            <div class="alert danger"
+                 th:if="${errorMessage}"
+                 th:text="${errorMessage}">
+            </div>
+
+            <!--
+                 СПИСОК ЗАКАЗОВ
+
+                 Каждый заказ — строка с реквизитами и счётчиком
+                 укомплектованности. Кладовщик открывает заказ и
+                 переходит на экран внесения ячеек.
+            -->
+            <section class="card"
+                     th:if="${orders != null and not #lists.isEmpty(orders)}">
+
+                <div class="card-head">
+
+                    <div>
+
+                        <h2>Заказы к комплектации</h2>
+
+                        <small>
+                            Групповые ЗНП на приборы с операцией
+                            комплектования ячеек склада
+                        </small>
+
+                    </div>
+
+                </div>
+
+                <div class="card-body">
+
+                    <div class="table-wrap">
+
+                        <table class="data-table">
+
+                            <thead>
+
+                            <tr>
+                                <th>Номер заказа</th>
+                                <th>Изделие</th>
+                                <th>Техпроцесс</th>
+                                <th>Операция</th>
+                                <th>Заказано</th>
+                                <th>Статус</th>
+                                <th>Срок</th>
+                                <th>Действие</th>
+                            </tr>
+
+                            </thead>
+
+                            <tbody>
+
+                            <tr th:each="order : ${orders}"
+                                th:classappend="${!order.completed()}
+                                    ? ' is-highlighted' : ''">
+
+                                <td class="warehouse-number-cell">
+                                    <a class="mono"
+                                       th:href="@{/warehouse/instrument-kitting/{id}(id=${order.id})}"
+                                       th:text="${order.number}">
+                                        ЗНП-2026-055
+                                    </a>
+                                </td>
+
+                                <td th:text="${order.classifierLabel}">
+                                    5004 — ПВВ1 изм.3
+                                </td>
+
+                                <td class="mono"
+                                    th:text="${order.techProcessCode}">
+                                    ТП-010
+                                </td>
+
+                                <td th:text="${order.operationName}">
+                                    Настройка ячеек для прибора
+                                </td>
+
+                                <td>
+                                    <span th:if="${order.awaitingKinds()}"
+                                          class="status draft">
+                                        <span th:text="${order.kittingLabel()}">
+                                            виды ячеек не заданы
+                                        </span>
+                                    </span>
+                                    <span th:unless="${order.awaitingKinds()}"
+                                          class="status"
+                                          th:classappend="${order.kittingBadgeClass()}">
+                                        <span th:text="${order.kittingLabel()}">
+                                            укомплектован
+                                        </span>
+                                    </span>
+                                </td>
+
+                                <td>
+                                    <span class="status"
+                                          th:classappend="' ' + ${order.statusBadgeClass}"
+                                          th:text="${order.statusDisplayName}">
+                                        В работе
+                                    </span>
+                                </td>
+
+                                <td th:text="${order.formattedDueDate}">
+                                    04.12.2026
+                                </td>
+
+                                <td class="table-actions">
+
+                                    <!--
+                                        Кнопка ведёт в экран внесения: без
+                                        неё строка выглядит некликабельной,
+                                        а кладовщик ищет именно кнопку.
+                                        У укомплектованного заказа кнопка
+                                        «Состав» — заходить вносить нечего.
+                                    -->
+                                    <a class="btn primary compact"
+                                       th:if="${!order.completed()}"
+                                       th:href="@{/warehouse/instrument-kitting/{id}(id=${order.id})}">
+                                        Скомплектовать
+                                    </a>
+
+                                    <a class="btn secondary compact"
+                                       th:if="${order.completed()}"
+                                       th:href="@{/warehouse/instrument-kitting/{id}(id=${order.id})}">
+                                        Состав заказа
+                                    </a>
+
+                                </td>
+
+                            </tr>
+
+                            </tbody>
+                        </table>
+
+                    </div>
+
+                </div>
+            </section>
+
+            <!--
+                 Пустой список: заказов к комплектации нет.
+            -->
+            <section class="card"
+                     th:if="${orders == null or #lists.isEmpty(orders)}">
+
+                <div class="card-head">
+
+                    <div>
+
+                        <h2>Нет заказов к комплектации</h2>
+
+                        <small>
+                            Групповых ЗНП на приборы с операцией
+                            комплектования ячеек склада в работе нет
+                        </small>
+
+                    </div>
+
+                </div>
+
+            </section>
+
+        </div>
+    </main>
+</div>
+
+<th:block th:replace="~{warehouse/fragments/layout
+        :: commonScripts}">
+</th:block>
+
+</body>
+</html>

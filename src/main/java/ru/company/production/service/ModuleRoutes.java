@@ -334,6 +334,21 @@ public final class ModuleRoutes {
                                     "/workshop"
                             )
                     ),
+                    /*
+                     * Бюро технического контроля не имеет реестров партий,
+                     * но свой раздел комплектования на ремонт есть: он
+                     * открыт и контролёру, и руководителю. Мастер при этом
+                     * сохраняет цеховой модуль — границы его сотрудников и
+                     * распределения проходит подразделение учётной записи.
+                     */
+                    Map.entry(
+                            Role.BTK_MASTER,
+                            List.of("/workshop", "/technical-control")
+                    ),
+                    Map.entry(
+                            Role.BTK_EXECUTOR,
+                            List.of("/technical-control")
+                    ),
                     Map.entry(
                             Role.SK_GENERAL,
                             List.of("/quality", "/workshop/distribution")

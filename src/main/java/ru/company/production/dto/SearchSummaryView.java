@@ -84,6 +84,24 @@ public class SearchSummaryView {
     private final TechProcessSummary techProcessSummary;
 
     /**
+     * Состав изделия: изделия, привязанные к классификатору.
+     *
+     * Заполняется только для изделия классификатора. Пусто — значит,
+     * состав не описан, и секция не рисуется: прочерк вместо перечня
+     * читался бы как потерянные данные.
+     */
+    private final List<CompositionItem> composition;
+
+    /**
+     * Заголовок секции состава.
+     *
+     * Разные типы изделия собирают состав по-разному: система — из
+     * родов датчиков и приборов, прибор и ячейка — из входящих
+     * изделий, поэтому заголовок задаёт сервис, а не шаблон.
+     */
+    private final String compositionTitle;
+
+    /**
      * Текущее место: где изделия стоят прямо сейчас.
      *
      * Подпись строится по незакрытым строкам плана: если группа
@@ -250,7 +268,7 @@ public class SearchSummaryView {
                              String statusLabel,
                              List<Field> fields) {
         this(category, title, categoryLabel, statusLabel, fields,
-                null, null, null, null, null, null);
+                null, null, null, null, null, null, null, null);
     }
 
     public SearchSummaryView(String category,
@@ -260,7 +278,7 @@ public class SearchSummaryView {
                              List<Field> fields,
                              String passportUrl) {
         this(category, title, categoryLabel, statusLabel, fields,
-                passportUrl, null, null, null, null, null);
+                passportUrl, null, null, null, null, null, null, null);
     }
 
     public SearchSummaryView(String category,
@@ -272,7 +290,51 @@ public class SearchSummaryView {
                              String actionUrl,
                              String actionLabel) {
         this(category, title, categoryLabel, statusLabel, fields,
-                passportUrl, actionUrl, actionLabel, null, null, null);
+                passportUrl, actionUrl, actionLabel, null, null, null,
+                null, null);
+    }
+
+    /**
+     * Сводка заказа с техпроцессом: состав не печатается, поэтому
+     * обе строки состава приходятся {@code null}.
+     *
+     * Держится отдельным конструктором, чтобы вызов сводки заказа не
+     * разрастался двумя лишними {@code null} в конце аргументов.
+     */
+    public SearchSummaryView(String category,
+                             String title,
+                             String categoryLabel,
+                             String statusLabel,
+                             List<Field> fields,
+                             String passportUrl,
+                             String actionUrl,
+                             String actionLabel,
+                             CurrentLocation currentLocation,
+                             List<OperationPassage> operationPassages,
+                             TechProcessSummary techProcessSummary) {
+        this(category, title, categoryLabel, statusLabel, fields,
+                passportUrl, actionUrl, actionLabel, currentLocation,
+                operationPassages, techProcessSummary, null, null);
+    }
+
+    /**
+     * Сводка с составом изделия.
+     *
+     * Отдельный конструктор, а не рост списка параметров у канонического:
+     * состав нужен только классификатору, и передавать его шестью
+     * {@code null} в каждую остальную категорию значило бы размывать
+     * назначение сводки.
+     */
+    public SearchSummaryView(String category,
+                             String title,
+                             String categoryLabel,
+                             String statusLabel,
+                             List<Field> fields,
+                             List<CompositionItem> composition,
+                             String compositionTitle) {
+        this(category, title, categoryLabel, statusLabel, fields,
+                null, null, null, null, null, null,
+                composition, compositionTitle);
     }
 
     public SearchSummaryView(String category,
@@ -285,7 +347,9 @@ public class SearchSummaryView {
                              String actionLabel,
                              CurrentLocation currentLocation,
                              List<OperationPassage> operationPassages,
-                             TechProcessSummary techProcessSummary) {
+                             TechProcessSummary techProcessSummary,
+                             List<CompositionItem> composition,
+                             String compositionTitle) {
         this.category = category;
         this.title = title;
         this.categoryLabel = categoryLabel;
@@ -297,6 +361,53 @@ public class SearchSummaryView {
         this.currentLocation = currentLocation;
         this.operationPassages = operationPassages;
         this.techProcessSummary = techProcessSummary;
+        this.composition = composition;
+        this.compositionTitle = compositionTitle;
+    }
+
+    /**
+     * Одно изделие, входящее в состав классификатора.
+     *
+     * @param classifierId идентификатор классификатора — по нему строка
+     *                     ссылается на его карточку в поиске
+     * @param code         4-значный код изделия
+     * @param name         наименование изделия
+     * @param typeLabel    тип изделия («Ячейка», «Прибор», «Датчик»)
+     * @param quantity     количество в составе
+     * @param unitLabel    единица измерения количества
+     * @param modeLabel    режим включения («Обязательно входит» /
+     *                     «Может входить»); пусто, когда состав задан
+     *                     без различения обязательности
+     */
+    @Getter
+    @AllArgsConstructor
+    public static class CompositionItem {
+
+        private final Long classifierId;
+
+        private final Integer code;
+
+        private final String name;
+
+        private final String typeLabel;
+
+        private final String quantity;
+
+        private final String unitLabel;
+
+        private final String modeLabel;
+
+        /** Подпись кода для таблицы: пусто превращается в прочерк. */
+        public String getCodeLabel() {
+            return code == null ? "—" : String.valueOf(code);
+        }
+
+        /** Ссылка на карточку изделия в нейтральном интерфейсе поиска. */
+        public String getClassifierUrl() {
+            return classifierId == null
+                    ? null
+                    : "/search/object/classifier/" + classifierId;
+        }
     }
 
     /** Одна строка сводки: подпись свойства и его значение. */

@@ -25,6 +25,8 @@ import ru.company.production.repository.ControlReturnRepository;
 import ru.company.production.repository.OrderScheduleRowRepository;
 import ru.company.production.repository.ProductionOrderSerialProjection;
 import ru.company.production.repository.ReworkReturnRepository;
+import ru.company.production.service.ReworkReturnOwnerService.Ownership;
+import ru.company.production.service.ReworkReturnOwnerService.Predecessor;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -37,6 +39,7 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -69,6 +72,7 @@ class ReworkReturnServiceTest {
     @Mock private OrderScheduleRowRepository scheduleRowRepository;
     @Mock private WorkshopStaffService staffService;
     @Mock private WorkshopDistributionSerialService serialService;
+    @Mock private ReworkReturnOwnerService ownerService;
 
     private ReworkReturnService service;
 
@@ -80,8 +84,25 @@ class ReworkReturnServiceTest {
                 scheduleRowRepository,
                 staffService,
                 serialService,
-                new WorkingDaysCalculator()
+                new WorkingDaysCalculator(),
+                ownerService
         );
+
+        /*
+         * По умолчанию: владелец — подразделение цеха.
+         * Предшественник — цех (для корректного UI кнопки).
+         * Поля Ownership пакетно-доступны: тест в том же пакете.
+         */
+        Ownership defaultOwnership = new Ownership();
+        defaultOwnership.ownerUnitId = UNIT_ID;
+        defaultOwnership.predecessor = Predecessor.WORKSHOP;
+
+        /*
+         * lenient: часть тестов проверяет отказы и до проверки
+         * владения не доходит — строгая настройка сочла бы заглушку
+         * лишней.
+         */
+        lenient().when(ownerService.resolve(any())).thenReturn(defaultOwnership);
     }
 
     /* ============================================================
@@ -400,6 +421,8 @@ class ReworkReturnServiceTest {
                     .thenReturn(List.of(chosen));
             when(controlReturnRepository.findOpenByRowIds(any()))
                     .thenReturn(List.of(signal));
+            when(controlReturnRepository.findOpenOfInstancesOfRows(any(), any()))
+                    .thenReturn(List.of(signal));
 
             service.markForRework(List.of(100L), null, master);
 
@@ -407,6 +430,67 @@ class ReworkReturnServiceTest {
             assertEquals(master, signal.getResolvedBy());
 
             verify(controlReturnRepository).saveAll(List.of(signal));
+        }
+
+        @Test
+        @DisplayName("Сигналы остальных строк изделия закрываются — карточка не возвращается")
+        void signalsOfWholeInstanceAreClosed() {
+
+            OrderScheduleRow chosen = row(100L, 5, order(), unit(), true);
+            OrderScheduleRow untouched = row(101L, 6, order(), unit(), true);
+
+            ControlReturn own = controlReturn(chosen, "Не пропаян разъём X2");
+            ControlReturn sibling = controlReturn(untouched, "Не пропаян разъём X2");
+
+            AppUser master = user(Role.SDP_SA_MASTER);
+
+            when(staffService.unitScope(master)).thenReturn(List.of(UNIT_ID));
+            when(scheduleRowRepository.findAllById(List.of(100L)))
+                    .thenReturn(List.of(chosen));
+            when(controlReturnRepository.findOpenByRowIds(any()))
+                    .thenReturn(List.of(own));
+
+            /*
+             * БТК заводит возврат на каждую проведённую строку, а цех
+             * отметил одну: запрос обязан вернуть сигналы всего изделия,
+             * иначе закрытый сигнал его же строки построил бы карточку
+             * заново, и изделие висело бы в разделе бесконечно.
+             */
+            when(controlReturnRepository.findOpenOfInstancesOfRows(any(), any()))
+                    .thenReturn(List.of(own, sibling));
+
+            service.markForRework(List.of(100L), null, master);
+
+            assertNotNull(sibling.getResolvedAt());
+
+            /*
+             * Нераспределённая строка при этом остаётся закрытой: цех
+             * решил её не переделывать.
+             */
+            assertNotNull(untouched.getCompletedAt());
+        }
+
+        @Test
+        @DisplayName("Снимать нечего — сигналы всё равно закрываются")
+        void signalsClosedWhenNothingToUnwrite() {
+
+            OrderScheduleRow chosen = row(100L, 5, order(), unit(), false);
+            ControlReturn signal = controlReturn(chosen, "Трещина пайки");
+
+            AppUser master = user(Role.SDP_SA_MASTER);
+
+            when(staffService.unitScope(master)).thenReturn(List.of(UNIT_ID));
+            when(scheduleRowRepository.findAllById(List.of(100L)))
+                    .thenReturn(List.of(chosen));
+            when(controlReturnRepository.findOpenByRowIds(any()))
+                    .thenReturn(List.of(signal));
+            when(controlReturnRepository.findOpenOfInstancesOfRows(any(), any()))
+                    .thenReturn(List.of(signal));
+
+            String message = service.markForRework(List.of(100L), null, master);
+
+            assertTrue(message.startsWith("Уже на доработке"));
+            assertNotNull(signal.getResolvedAt());
         }
 
         @Test
@@ -472,6 +556,34 @@ class ReworkReturnServiceTest {
                             List.of(100L, 101L), "причина", master));
 
             verifyNoInteractions(reworkReturnRepository, staffService);
+        }
+
+        @Test
+        @DisplayName("Цех не владелец участка — отказ")
+        void notOwnerRejected() {
+
+            OrderScheduleRow chosen = row(100L, 5, order(), unit(), true);
+
+            AppUser master = user(Role.SDP_SA_MASTER);
+
+            when(staffService.unitScope(master)).thenReturn(List.of(UNIT_ID));
+            when(scheduleRowRepository.findAllById(List.of(100L)))
+                    .thenReturn(List.of(chosen));
+
+            /*
+             * Решение по изделию принимает последний участок перед
+             * контролем: раньше идущий участок своего цеха обязан ждать,
+             * пока изделие вернётся назад по маршруту.
+             */
+            Ownership foreign = new Ownership();
+            foreign.ownerUnitId = 99L;
+            when(ownerService.resolve(any())).thenReturn(foreign);
+
+            assertThrows(IllegalStateException.class,
+                    () -> service.markForRework(List.of(100L), "причина", master));
+
+            verify(scheduleRowRepository, never()).save(any());
+            verifyNoInteractions(reworkReturnRepository);
         }
     }
 
@@ -559,6 +671,30 @@ class ReworkReturnServiceTest {
                     scheduleRowRepository,
                     staffService
             );
+        }
+
+        @Test
+        @DisplayName("Цех не владелец участка — назад не отправляет")
+        void notOwnerRejected() {
+
+            OrderScheduleRow chosen = row(100L, 5, order(), unit(), true);
+
+            AppUser master = user(Role.SDP_SA_MASTER);
+
+            when(staffService.unitScope(master)).thenReturn(List.of(UNIT_ID));
+            when(scheduleRowRepository.findAllById(List.of(100L)))
+                    .thenReturn(List.of(chosen));
+
+            Ownership foreign = new Ownership();
+            foreign.ownerUnitId = 99L;
+            when(ownerService.resolve(any())).thenReturn(foreign);
+
+            assertThrows(IllegalStateException.class,
+                    () -> service.sendToPredecessor(
+                            List.of(100L), "Изделие не годится", master));
+
+            verify(scheduleRowRepository, never()).save(any());
+            verifyNoInteractions(reworkReturnRepository);
         }
     }
 
@@ -652,7 +788,8 @@ class ReworkReturnServiceTest {
             AppUser master = user(Role.SDP_SA_MASTER);
 
             when(staffService.unitScope(master)).thenReturn(List.of(UNIT_ID));
-            when(controlReturnRepository.findAllOpen()).thenReturn(List.of());
+            when(controlReturnRepository.findOpenForUnits(List.of(UNIT_ID)))
+                    .thenReturn(List.of());
 
             assertEquals(0, service.findOpenReturns(master).size());
         }

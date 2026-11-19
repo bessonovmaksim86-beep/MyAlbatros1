@@ -1471,19 +1471,31 @@ public class TechProcessService {
         /*
          * Повтор параметра в одной операции.
          *
-         * Значение больше не различает строки: у списка его нет
-         * вовсе, у ячейки и текста оно необязательное. Поэтому
-         * повтором считается один и тот же параметр, выбранный дважды,
-         * — индекс uk_tp_operation_control_param на таком нас не
-         * поймает (control_param_value_id пуст), и проверка живёт
-         * здесь.
+         * Для TEXT/LIST повтором считается сам параметр, выбранный
+         * дважды: у них нет различающего значения.
+         *
+         * Для ячеечного параметра повтором считается пара
+         * «параметр + ячейка»: технолог вправе задать один параметр
+         * «Ячейка №» несколько раз, указав разные ячейки (ЯДВ3, ЯПР39
+         * и т. д.), и каждая строка — самостоятельное требование.
+         * Одинаковая ячейка, указанная дважды, остаётся ошибкой.
          */
-        Set<Long> distinctParams = new HashSet<>();
+        Set<String> distinctKeys = new HashSet<>();
 
         for (TechProcessOperationControlParam controlParam
                 : node.getControlParams()) {
-            if (!distinctParams.add(
-                    controlParam.getControlParam().getId())) {
+            String key;
+
+            if (controlParam.getControlParam().isCellMode()
+                    && controlParam.getCellClassifier() != null) {
+                key = controlParam.getControlParam().getId()
+                        + ":" + controlParam.getCellClassifier().getId();
+            } else {
+                key = String.valueOf(
+                        controlParam.getControlParam().getId());
+            }
+
+            if (!distinctKeys.add(key)) {
                 throw new IllegalArgumentException(
                         "Операция «"
                                 + operationName

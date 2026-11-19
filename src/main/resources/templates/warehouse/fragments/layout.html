@@ -42,6 +42,7 @@
                           kittingActive=${
                               activePage == 'kitting-znp'
                               or activePage == 'kitting-plain'
+                              or activePage == 'instrument-kitting'
                           }">
 
         <a class="department-brand"
@@ -348,6 +349,24 @@
                     <span class="warehouse-submenu__counter"
                           th:if="${kittingSemiCount != null and kittingSemiCount > 0}"
                           th:text="${kittingSemiCount}">
+                        1
+                    </span>
+                </a>
+
+                <a class="warehouse-submenu__item"
+                   th:classappend="${activePage == 'instrument-kitting'} ? ' is-active' : ''"
+                   th:href="@{/warehouse/instrument-kitting}"
+                   role="menuitem"
+                   title="Комплектация групп ЗНП на приборы: внесение ячеек нескольких видов со склада"
+                      data-help="Комплектация групповых ЗНП на приборы: склад вносит ячейки нескольких видов, заданных технологам в контролируемых параметрах операции маршрута.&#10;Как провести:&#10;1) Открыть заказ из очереди — в списке показаны виды ячеек и счётчик укомплектованности каждого.&#10;2) Внести номера ячеек (вручную или сканером) — разрешены только принятые складом ячейки.&#10;3) Когда все виды укомплектованы — операция закрыта, ЗНП сдвинут к следующему подразделению по ТП.">
+
+                    <span class="warehouse-submenu__text">
+                        Комплектация групп ЗНП на приборы
+                    </span>
+
+                    <span class="warehouse-submenu__counter"
+                          th:if="${instrumentKittingCount != null and instrumentKittingCount > 0}"
+                          th:text="${instrumentKittingCount}">
                         1
                     </span>
                 </a>

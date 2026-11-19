@@ -58,12 +58,18 @@ class OperationControlParamServiceCellModeTest {
     @Mock private ProductionOrderItemRepository productionItemRepo;
     @Mock private ProductSerialRepository productSerialRepo;
     @Mock private WorkshopDistributionService distributionService;
+    @Mock private DeviceCellBindingService deviceBindingService;
 
     private OperationControlParamService service;
 
     /*
      * Порядок аргументов повторяет порядок полей сервиса, который
      * задаёт Lombok @RequiredArgsConstructor: конструктор позиционный.
+     *
+     * Привязка к прибору в этих тестах не задействована: строка
+     * держит заказ вида «комплектование», и mock по умолчанию
+     * отвечает «это не прибор», оставляя прежнее поведение сверки по
+     * ячейке экземпляра.
      */
     @BeforeEach
     void setUp() {
@@ -74,7 +80,8 @@ class OperationControlParamServiceCellModeTest {
                 serialLinkRepo,
                 productionItemRepo,
                 productSerialRepo,
-                distributionService
+                distributionService,
+                deviceBindingService
         );
     }
 

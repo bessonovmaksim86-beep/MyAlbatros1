@@ -11,6 +11,7 @@ import ru.company.production.dto.RepairKittingZnpView;
 import ru.company.production.entity.AppUser;
 import ru.company.production.entity.Operation;
 import ru.company.production.entity.OperationTypeCode;
+import ru.company.production.entity.OrderScheduleRow;
 import ru.company.production.entity.ProductClassifier;
 import ru.company.production.entity.ProductSerial;
 import ru.company.production.entity.ProductSerialOperation;
@@ -19,17 +20,20 @@ import ru.company.production.entity.ProductionOrder;
 import ru.company.production.entity.ProductionOrderStatus;
 import ru.company.production.entity.QuarantineCellKind;
 import ru.company.production.entity.RepairKittingItem;
+import ru.company.production.entity.SerialProductionOrder;
 import ru.company.production.entity.StaffBindingType;
 import ru.company.production.entity.TechProcessOperation;
 import ru.company.production.entity.WorkshopStaffBinding;
 import ru.company.production.entity.ZnpKind;
 import ru.company.production.repository.InputControlDefectGroupRepository;
 import ru.company.production.repository.OperationRepository;
+import ru.company.production.repository.OrderScheduleRowRepository;
 import ru.company.production.repository.ProductClassifierRepository;
 import ru.company.production.repository.ProductSerialOperationRepository;
 import ru.company.production.repository.ProductSerialRepository;
 import ru.company.production.repository.ProductionOrderRepository;
 import ru.company.production.repository.RepairKittingItemRepository;
+import ru.company.production.repository.SerialProductionOrderRepository;
 import ru.company.production.repository.TechProcessOperationRepository;
 import ru.company.production.repository.WorkshopStaffBindingRepository;
 
@@ -53,11 +57,21 @@ import java.util.Set;
  * Комплектование ремонтных заказов-комплектующих ячейками из изолятора.
  *
  * Диспетчер заводит ЗНП на ремонт ячеек или подсборок (V37) и ведёт его
- * по техпроцессу, в котором есть комплектовочная операция бюро входного
- * контроля (V30). Бюро эту операцию исполняет так: открывает изолятор
+ * по техпроцессу, в котором есть комплектовочная операция бюро
+ * контроля. Bureau два — входного (V30) и технического (V2/V66): какое
+ * именно комплектует заказ, решает подразделение операции маршрута, а
+ * не вид заказа. Бюро эту операцию исполняет так: открывает изолятор
  * брака с тем же фильтром, что и служба качества, отмечает нужные
  * ячейки и проводит их — заказ закрывается не «галочкой», а списком
  * фактически взятых номеров ({@link RepairKittingItem}, V52).
+ *
+ * МЕНЮ ОДНО НА ОБА БЮРО. Раздел живёт в «Мои операции», адрес которого
+ * открыт всем аутентифицированным, поэтому подбор заказов держится
+ * сразу обоих подразделений, а границу «какие заказы видеть» проводит
+ * {@link #permittedOperationIds}: исполнителю БВК доступны операции
+ * только его подразделения, и заказ БТК он не увидит, и наоборот.
+ * Держать два отдельных запроса означало бы расходиться в отборе при
+ * первой же правке.
  *
  * ОТЛИЧИЕ ОТ СКЛАДСКОГО КОМПЛЕКТОВАНИЯ. Склад принимает ячейки, уже
  * выпущенные как серийные номера, и лишь подтверждает строку,
@@ -78,7 +92,38 @@ import java.util.Set;
 public class RepairKittingOperationService {
 
     /** Код подразделения «Бюро входного контроля» (миграция V30). */
-    public static final String BVK_UNIT_CODE = "Input Control Bureau";
+    public static final String BVK_UNIT_CODE =
+            RepairKittingService.BVK_UNIT_CODE;
+
+    /** Код подразделения «Бюро технического контроля» (миграции V2, V66). */
+    public static final String BTK_UNIT_CODE =
+            RepairKittingService.BTK_UNIT_CODE;
+
+    /**
+     * Подразделения, чьи комплектовочные операции ведёт этот раздел.
+     *
+     * Оба бюро контроля: меню одно, а кому из них принадлежит заказ,
+     * решает операция маршрута. Границу видимости держит
+     * {@link #permittedOperationIds}, а не этот список.
+     */
+    private static final List<String> KITTING_UNIT_CODES = List.of(
+            BVK_UNIT_CODE,
+            BTK_UNIT_CODE
+    );
+
+    /**
+     * Типы комплектовочной операции ремонтного заказа.
+     *
+     * Те же три кода, что у {@link RepairKittingService}: узел маршрута
+     * обязан находиться по тому же признаку, по которому подобран сам
+     * заказ, — иначе заказ попал бы в список, а провести его было бы не
+     * по чему.
+     */
+    private static final List<String> KITTING_TYPE_CODES = List.of(
+            OperationTypeCode.KITTING.name(),
+            OperationTypeCode.KITTING_CELL.name(),
+            OperationTypeCode.KITTING_SUBASSEMBLY.name()
+    );
 
     /** Дата плана в подписи строки — тот же формат, что у ProductionOrder. */
     private static final DateTimeFormatter DATE_FORMATTER =
@@ -101,6 +146,24 @@ public class RepairKittingOperationService {
     private final WorkshopStaffService staffService;
     private final InputControlService inputControlService;
     private final SerialMovementJournalService journalService;
+
+    /*
+     * Матрица комплектования (V20): SerialProductionOrder создаётся при
+     * каждой внесённой ячейке. Цеховой resolveAttachedCells читает эту
+     * таблицу, и без строки здесь «Получение комплектации» показывало
+     * бы «—» вместо номера.
+     */
+    private final SerialProductionOrderRepository serialProductionOrderRepository;
+
+    /*
+     * План заказа (V56): строки графика второй ветви — то, что читает
+     * цех в «Получении комплектации». Бюро обязано провести свою
+     * комплектовочную строку само, иначе «Комплектование ремонтных
+     * подсборок» осталось бы незакрытым в плане и следующая по маршруту
+     * операция цеха не разблокировалась бы, даже когда весь состав
+     * взят (тот же приём, что у SubassemblyKittingService).
+     */
+    private final OrderScheduleRowRepository scheduleRowRepository;
 
     /* ============================================================
      * МЕНЮ «ОПЕРАЦИЯ → ЗНП В РАБОТЕ»
@@ -259,6 +322,17 @@ public class RepairKittingOperationService {
      * показывать её в перечне значило бы подталкивать к ошибке, которую
      * потом отклонит проверка проведения.
      *
+     * Изделие подставляется по классификатору заказа по той же причине:
+     * ремонтный ЗНП собран под одно изделие (5004 — ПВБ1), и подсборка
+     * другого изделия (5005 — ПВБ2) в его состав не входит, хотя род у
+     * них общий. Без этой подстановки перечень показывал бы все
+     * подсборки изолятора, а селекта изделия в форме нет — отбирать
+     * было бы нечем.
+     *
+     * Подстановка не перекрывает выбор человека: если изделие задано
+     * фильтром, оно и остаётся (сужение внутри заказа безвредно, а
+     * сброс фильтра возвращает именно изделие заказа).
+     *
      * Уже взятые номера помечаются, а не убираются из перечня:
      * исполнитель обязан видеть, что заказ частично закрыт ранее (возможно,
      * другим контролёром), иначе он искал бы ячейку, которой «нет».
@@ -276,7 +350,9 @@ public class RepairKittingOperationService {
 
         QuarantineFilter effective = new QuarantineFilter(
                 applied.kind() == null ? required : applied.kind(),
-                applied.classifierId(),
+                applied.classifierId() == null
+                        ? order.getClassifierId()
+                        : applied.classifierId(),
                 applied.reasonId()
         );
 
@@ -341,7 +417,7 @@ public class RepairKittingOperationService {
         ProductionOrder order = requireRepairOrder(orderId);
         TechProcessOperation node = kittingNode(order)
                 .orElseThrow(() -> new IllegalStateException(
-                        "У заказа нет комплектовочной операции бюро входного "
+                        "У заказа нет комплектовочной операции бюро "
                                 + "контроля — провести его не по чему"
                 ));
 
@@ -404,6 +480,39 @@ public class RepairKittingOperationService {
             );
         }
 
+        /*
+         * Изделие проверяется следом за родом: перечень изолятора уже
+         * отобран по классификатору заказа, но форма приходит от
+         * человека, и адрес можно отправить вручную. Подсборка другого
+         * изделия (5005 — ПВБ2) в заказ на 5004 — ПВБ1 не входит, хотя
+         * род у них общий: заказ закрывается изделием, и чужая позиция
+         * не закрыла бы его, а маршрут заказа проходил бы по чужому
+         * техпроцессу.
+         *
+         * Заказ без изделия (классификатор не выбран) проверки не
+         * получает: отвергать нечем, а выдумывать изделие — значит
+         * отказывать по признаку, которого в заказе нет.
+         */
+        Long orderClassifier = order.getClassifierId();
+
+        if (orderClassifier != null) {
+            List<String> wrongClassifier = picked.stream()
+                    .filter(available::containsKey)
+                    .filter(number ->
+                            !orderClassifier.equals(
+                                    available.get(number).getClassifierId()))
+                    .toList();
+
+            if (!wrongClassifier.isEmpty()) {
+                throw new IllegalStateException(
+                        "Заказ «" + order.getNumber() + "» заявлен на изделие "
+                                + order.getClassifierLabel()
+                                + ". Не то изделие: "
+                                + String.join(", ", wrongClassifier)
+                );
+            }
+        }
+
         long requiredCount = requiredCount(order);
         long done = itemRepository.findFullNumbersByOrderId(orderId).size();
         long room = Math.max(requiredCount - done, 0L);
@@ -435,16 +544,89 @@ public class RepairKittingOperationService {
 
         for (RepairKittingItem item : items) {
             performSerialOperation(item, order, operation, node, user, moment);
+            /*
+             * Строка плана комплектования закрывается на каждую взятую
+             * ячейку: цеховой «получатель» блокируется по экземпляру
+             * (номер основания + позиция + номер экземпляра + пара
+             * маршрута), поэтому взятая ячейка обязана снять ровно одну
+             * открытую строку предка — иначе следующая операция осталась
+             * бы в «ждёт», даже когда весь состав набран.
+             */
+            completeScheduleRow(order, operation, user);
         }
 
         journalService.recordKittedToRepairZnp(items, order, user, moment);
 
+        long totalDone = done + items.size();
+        boolean completed = requiredCount > 0 && totalDone >= requiredCount;
+
         return new KittingResult(
                 "Проведено " + items.size() + " яч. по заказу «"
                         + order.getNumber() + "»: "
-                        + (done + items.size()) + " из " + requiredCount,
-                items.size()
+                        + totalDone + " из " + requiredCount,
+                items.size(),
+                completed,
+                completed ? kittingListUrl(node) : null
         );
+    }
+
+    /**
+     * Проведение строки плана комплектования.
+     *
+     * Берётся ближайшая незакрытая строка этой операции заказа (тот же
+     * приём, что у {@link SubassemblyKittingService}): порядок по
+     * номеру экземпляра важен, — строки проводятся последовательно, и
+     * закрытие всегда идёт по ближайшему незакрытому, иначе следующая
+     * по маршруту операция цеха разблокировалась бы не для того изделия.
+     *
+     * Открытых строк может не оказаться вовсе (заказ взят в работу до
+     * V56 либо техпроцесс пуст) — это норма, и тогда проводить нечего.
+     */
+    private void completeScheduleRow(ProductionOrder order,
+                                     Operation operation,
+                                     AppUser user) {
+
+        if (order.getId() == null || operation == null
+                || operation.getId() == null) {
+            return;
+        }
+
+        List<OrderScheduleRow> open = scheduleRowRepository
+                .findOpenRowsOfProductionOrder(order.getId(), operation.getId());
+
+        if (open.isEmpty()) {
+            return;
+        }
+
+        OrderScheduleRow row = open.get(0);
+
+        row.setCompletedAt(LocalDateTime.now());
+        row.setCompletedBy(user);
+        scheduleRowRepository.save(row);
+    }
+
+    /**
+     * Адрес списка комплектования того бюро, чья операция ведёт заказ.
+     *
+     * Редирект после полного укомплектования ведёт в перечень бюро —
+     * именно там заказ остаётся видимым как «Скомплектовано»
+     * (только просмотр). Подразделение берётся по операции маршрута, а
+     * не по виду заказа: какое бюро комплектует, решает подразделение
+     * операции (тот же признак, что у {@link #permittedOperationIds}).
+     * Неизвестное подразделение ведёт в БВК — список по умолчанию.
+     */
+    private String kittingListUrl(TechProcessOperation node) {
+
+        String unitCode = node.getOperation() == null
+                || node.getOperation().getOrganizationUnit() == null
+                ? null
+                : node.getOperation().getOrganizationUnit().getCode();
+
+        if (BTK_UNIT_CODE.equals(unitCode)) {
+            return "/technical-control/repair-kitting";
+        }
+
+        return "/input-control/repair-kitting";
     }
 
     /**
@@ -476,6 +658,23 @@ public class RepairKittingOperationService {
 
         ProductSerial entity = found.get();
 
+        /*
+         * Матрица комплектования (V20): строка SerialProductionOrder
+         * отвечает на вопрос «чем укомплектован экземпляр», и именно её
+         * читает цех в «Получении комплектации» (resolveAttachedCells →
+         * findAttachedCellsByOrderIds). Без строки здесь цех видел бы
+         * «—» вместо номера ячейки, даже когда комплектация проведена.
+         *
+         * Порядок внесения задаёт сопоставление ячейки экземпляру плана
+         * (i-я по внесению ячейка — экземпляру с номером i), поэтому
+         * строка создаётся на каждую взятую ячейку, а не на заказ.
+         *
+         * Уникальный ключ uk_spo_serial_order (серия + заказ) отклонил
+         * бы повтор, поэтому существующая связь пропускается: повторный
+         * клик не должен ломать уже внесённую ячейку.
+         */
+        attachToOrderMatrix(entity, order, operation, user);
+
         Optional<ProductSerialOperation> last =
                 serialOperationRepository
                         .findFirstBySerialIdAndOperationIdOrderByAttemptDesc(
@@ -492,9 +691,13 @@ public class RepairKittingOperationService {
 
             row.setProductionOrder(order);
             row.setStatus(ProductSerialOperationStatus.DONE);
-            row.setPlannedDate(row.getPlannedDate() == null
-                    ? order.getDueDate()
-                    : row.getPlannedDate());
+            /*
+             * План не подставляется при закрытии открытой попытки:
+             * факт (текущая дата) будет раньше срока заказа, и
+             * CHECK chk_pso_dates нарушится. Если план уже стоял —
+             * оставляем; если не стоял — оставляем null, как в
+             * SubassemblyKittingService.
+             */
             row.setActualDate(moment.toLocalDate());
             row.setExecutor(user);
             row.setPerformedBy(user);
@@ -512,7 +715,6 @@ public class RepairKittingOperationService {
         /* Проведение после переделки — следующая попытка, прежняя остаётся в истории. */
         row.setAttempt(last.map(existing -> existing.getAttempt() + 1).orElse(1));
         row.setStatus(ProductSerialOperationStatus.DONE);
-        row.setPlannedDate(order.getDueDate());
         row.setActualDate(moment.toLocalDate());
         row.setExecutor(user);
         row.setPerformedBy(user);
@@ -520,6 +722,44 @@ public class RepairKittingOperationService {
         row.setNote("Комплектование ремонтного ЗНП из изолятора брака");
 
         serialOperationRepository.save(row);
+    }
+
+    /**
+     * Внесение ячейки в матрицу комплектования заказа (V20).
+     *
+     * Строка {@link SerialProductionOrder} — единственный источник, из
+     * которого цех подписывает работу номером ячейки: у группового и
+     * ремонтного ЗНП серийника выпуска нет, и без этой связи
+     * «Получение комплектации» показывало бы прочерк там, где номер
+     * уже взят в заказ.
+     *
+     * Существующая связь пропускается: уникальный ключ
+     * {@code uk_spo_serial_order} отклонил бы вторую строку той же
+     * пары, а пользователю нужно сообщение о деле, а не о ключи базы.
+     */
+    private void attachToOrderMatrix(ProductSerial serial,
+                                     ProductionOrder order,
+                                     Operation operation,
+                                     AppUser user) {
+
+        if (serial.getId() == null || order.getId() == null) {
+            return;
+        }
+
+        if (serialProductionOrderRepository
+                .existsBySerial_IdAndProductionOrder_Id(serial.getId(), order.getId())) {
+            return;
+        }
+
+        SerialProductionOrder link = new SerialProductionOrder();
+
+        link.setSerial(serial);
+        link.setProductionOrder(order);
+        link.setOperation(operation);
+        link.setCreatedBy(user);
+        link.setNote("Комплектование ремонтного ЗНП из изолятора брака");
+
+        serialProductionOrderRepository.save(link);
     }
 
     /**
@@ -630,12 +870,16 @@ public class RepairKittingOperationService {
              * свободен. Личная привязка при этом продолжает учитываться —
              * она расширяет право, когда операцию записали на человека, а
              * подразделение в карточке поменяли позже.
+             *
+             * Правило одинаково для обоих бюро: граница проходит по
+             * подразделению учётной записи, поэтому контролёр БВК не
+             * получает операций БТК, и наоборот.
              */
-            case BVK_EXECUTOR -> union(
+            case BVK_EXECUTOR, BTK_EXECUTOR -> union(
                     unitOperationIds(user),
                     boundOperationIds(user)
             );
-            case BVK_MASTER, SK_GENERAL -> unitOperationIds(user);
+            case BVK_MASTER, BTK_MASTER, SK_GENERAL -> unitOperationIds(user);
             default -> Set.of();
         };
     }
@@ -693,12 +937,23 @@ public class RepairKittingOperationService {
      * ВСПОМОГАТЕЛЬНОЕ
      * ============================================================ */
 
+    /**
+     * Ремонтные заказы в работе по обоим бюро контроля.
+     *
+     * Подбор держится тех же типов и подразделений, что и поиск узла
+     * маршрута ({@link #kittingNodesByProcess}) и отбор раздела у
+     * {@link RepairKittingService}: список, счётчик и форма обязаны
+     * сходиться, иначе заказ попал бы в меню без возможности провести
+     * его. Кому из бюро заказ принадлежит, решает уже
+     * {@link #permittedOperationIds} — исполнитель видит только
+     * операции своего подразделения.
+     */
     private List<ProductionOrder> repairOrders() {
         return productionOrderRepository.findRepairKittingOrders(
                 ProductionOrderStatus.IN_WORK,
                 ZnpKind.repairKinds(),
-                OperationTypeCode.KITTING.name(),
-                BVK_UNIT_CODE
+                KITTING_TYPE_CODES,
+                KITTING_UNIT_CODES
         );
     }
 
@@ -735,12 +990,17 @@ public class RepairKittingOperationService {
     }
 
     /**
-     * Комплектовочная операция бюро для перечня заказов — один запрос.
+     * Комплектовочные узлы маршрутов для перечня заказов — один запрос.
      *
      * Ключ — идентификатор техпроцесса, значение — первый узел маршрута
      * (запрос отсортирован по позиции): если в маршруте несколько
      * комплектовочных операций бюро, ведёт та, что стоит раньше, — тот
      * же порядок, что при плане операций изделия.
+     *
+     * Поиск держится тех же типов и подразделений, что и подбор заказов
+     * ({@link #repairOrders}), — список и форма обязаны сходиться: если
+     * заказ попал в меню, узел маршрута обязан найтись по тому же
+     * признаку, иначе провести его было бы нечем.
      */
     private Map<Long, TechProcessOperation> kittingNodesByProcess(
             List<ProductionOrder> orders) {
@@ -758,10 +1018,11 @@ public class RepairKittingOperationService {
         Map<Long, TechProcessOperation> result = new LinkedHashMap<>();
 
         for (TechProcessOperation node
-                : techProcessOperationRepository.findUnitKittingNodesForProcesses(
-                        processIds,
-                        OperationTypeCode.KITTING.name(),
-                        BVK_UNIT_CODE)) {
+                : techProcessOperationRepository
+                        .findKittingNodesForProcesses(
+                                processIds,
+                                KITTING_TYPE_CODES,
+                                KITTING_UNIT_CODES)) {
 
             if (node.getTechProcess() == null
                     || node.getTechProcess().getId() == null
@@ -910,6 +1171,7 @@ public class RepairKittingOperationService {
                 order.getNumber(),
                 plan == null ? "—" : plan.format(DATE_FORMATTER),
                 order.getClassifierLabel(),
+                order.getClassifierId(),
                 order.getFormattedQuantity(),
                 techProcessLabel(order),
                 order.getZnpKind(),
@@ -930,7 +1192,16 @@ public class RepairKittingOperationService {
      *
      * Число возвращается отдельно — форма после возврата обязана
      * показать обновлённый состав, а не тот же список с надписью.
+     *
+     * Признак «укомплектовано полностью» и адрес списка бюро нужны
+     * контроллеру: набранный заказ больше нечего проводить, и человек
+     * обязан вернуться в перечень, где заказ остался видимым как
+     * «Скомплектовано». Пустой адрес — «вести некуда», частичная
+     * проводка остаётся на форме.
      */
-    public record KittingResult(String message, long kittedCount) {
+    public record KittingResult(String message,
+                                long kittedCount,
+                                boolean completed,
+                                String listUrl) {
     }
 }

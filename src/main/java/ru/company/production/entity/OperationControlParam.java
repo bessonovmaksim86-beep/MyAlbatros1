@@ -20,7 +20,17 @@ import java.time.LocalDateTime;
  * mandatory = true — поле не может быть пустым при проведении.
  */
 @Entity
-@Table(name = "operation_control_params")
+@Table(
+        name = "operation_control_params",
+        uniqueConstraints = @UniqueConstraint(
+                name = "uk_ocp_row_param_cell",
+                columnNames = {
+                        "schedule_row_id",
+                        "control_param_id",
+                        "cell_mode_key"
+                }
+        )
+)
 @Getter
 @Setter
 @NoArgsConstructor

@@ -10,6 +10,7 @@ import ru.company.production.entity.AppUser;
 import ru.company.production.repository.UserRepository;
 import ru.company.production.service.InputControlService;
 import ru.company.production.service.PendingDefectService;
+import ru.company.production.service.RepairKittingService;
 import ru.company.production.service.ReworkReturnService;
 import ru.company.production.service.WorkshopStaffService;
 
@@ -83,6 +84,7 @@ public class WorkshopViewAdvice {
     private final InputControlService inputControlService;
     private final PendingDefectService pendingDefectService;
     private final ReworkReturnService reworkReturnService;
+    private final RepairKittingService repairKittingService;
 
     @ModelAttribute
     public void addWorkshopContext(
@@ -118,6 +120,13 @@ public class WorkshopViewAdvice {
          */
         model.addAttribute("canRework", false);
         model.addAttribute("reworkReturnCount", 0L);
+
+        /*
+         * Счётчик комплектования на ремонт проставляется до проверки
+         * аутентификации по той же причине: пункт меню БТК обращается к
+         * нему в th:if.
+         */
+        model.addAttribute("btkRepairKittingCount", 0L);
 
         if (authentication == null
                 || !authentication.isAuthenticated()
@@ -259,6 +268,20 @@ public class WorkshopViewAdvice {
         if (bvkModule || btkModule) {
             model.addAttribute(
                     "pendingDefectCount", pendingDefectService.countPending()
+            );
+        }
+
+        /*
+         * Счётчик комплектования на ремонт нужен только БТК: у бюро
+         * технического контроля своя очередь ремонтных ЗНП (узел
+         * техпроцесса относится к БТК), и цифра обязана совпадать с
+         * реестром по адресу /technical-control/repair-kitting. Заказы
+         * бюро входного контроля в неё не входят.
+         */
+        if (btkModule) {
+            model.addAttribute(
+                    "btkRepairKittingCount",
+                    repairKittingService.countBtkRepairKittingOrders()
             );
         }
 
