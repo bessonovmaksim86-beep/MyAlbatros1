@@ -28,7 +28,14 @@ import java.util.Locale;
         AdminSwitchController.class,
         AdminHolidayController.class,
         AdminDataCleanupController.class,
-        AdminStartSerialsController.class
+        AdminStartSerialsController.class,
+        /*
+         * Внесение данных входного контроля: страница живёт в
+         * модуле администрирования и рисует его меню с верхней
+         * панелью, поэтому ей нужны те же подписи администратора и
+         * список ролей.
+         */
+        AdminInputControlImportController.class
 })
 @RequiredArgsConstructor
 public class AdminViewAdvice {

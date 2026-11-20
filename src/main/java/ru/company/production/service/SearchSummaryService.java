@@ -15,6 +15,7 @@ import ru.company.production.entity.SensorCatalog;
 import ru.company.production.entity.SystemComponent;
 import ru.company.production.entity.TechProcess;
 import ru.company.production.entity.WorkPlace;
+import ru.company.production.entity.ZnpKind;
 import ru.company.production.repository.CellReceivingBatchRepository;
 import ru.company.production.repository.CustomerOrderRepository;
 import ru.company.production.repository.OperationRepository;
@@ -36,7 +37,6 @@ import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.TreeMap;
 
 /**
  * Общая сводка по найденному объекту для поиска.
@@ -540,9 +540,16 @@ public class SearchSummaryService {
 
         /*
          * Матрица прохождения ТП: строки = операции, колонки = ячейки.
+         *
+         * Для заказа на приборы колонки сопоставляются экземплярам
+         * плана по виду ячейки, а не по порядку внесения — см.
+         * buildMatrixColumns.
          */
         List<SearchSummaryView.OperationPassage> operationPassages =
-                buildOperationPassagesMatrix(cells, allSteps);
+                buildOperationPassagesMatrix(
+                        cells,
+                        allSteps,
+                        order.getZnpKind() == ZnpKind.GROUP_DEVICE);
 
         /*
          * Сводка техпроцесса: код, изделие, сколько работ проведено.
@@ -680,7 +687,8 @@ public class SearchSummaryService {
      */
     private List<SearchSummaryView.OperationPassage> buildOperationPassagesMatrix(
             List<ZnpCellPassageView> cells,
-            List<OrderScheduleRowRepository.RouteStepRow> allSteps) {
+            List<OrderScheduleRowRepository.RouteStepRow> allSteps,
+            boolean deviceOrder) {
 
         /*
          * Матрица без колонек бессмысленна: строки плана есть почти у
@@ -707,13 +715,11 @@ public class SearchSummaryService {
         /*
          * Порядок обхода важен: колонки матрицы должны идти одинаково
          * во всех строках, иначе одна ячейка прыгнула бы между
-         * столбцами. TreeMap фиксирует порядок по номеру экземпляра.
+         * столбцами. Список колонок фиксирует этот порядок во всех
+         * строках матрицы.
          */
-        Map<Integer, ZnpCellPassageView> cellByInstance = new TreeMap<>();
-
-        for (int i = 0; i < cells.size(); i++) {
-            cellByInstance.put(i, cells.get(i));
-        }
+        List<MatrixColumn> columns =
+                buildMatrixColumns(cells, allSteps, deviceOrder);
 
         List<SearchSummaryView.OperationPassage> result =
                 new ArrayList<>(byOperation.size());
@@ -722,10 +728,105 @@ public class SearchSummaryService {
 
         for (List<OrderScheduleRowRepository.RouteStepRow> rows
                 : byOperation.values()) {
-            result.add(buildOperationPassage(rows, cellByInstance, today));
+            result.add(buildOperationPassage(rows, columns, today));
         }
 
         return result;
+    }
+
+    /**
+     * Колонки матрицы — внесённые изделия и экземпляр плана каждого.
+     *
+     * Обычный случай (выпуск, групповой ЗНП на ячейки): экземпляр
+     * плана = порядок внесения, правило V56, отдельной связи «строка
+     * плана — серийник» в схеме нет.
+     *
+     * Заказ на приборы по этому правилу разъезжается: экземпляр плана
+     * там — ПРИБОР, и строк плана по числу приборов, а колонок — по
+     * числу внесённых ячеек (каждый вид × число приборов). Ячейки,
+     * внесённые после числа приборов, экземпляра не находили, работа
+     * считалась незакрытой — и сводка писала «0 из 6 работ проведено»
+     * там, где цех уже провёл работу по всем приборам.
+     *
+     * Поэтому для заказа на приборы ячейка подписывается прибором
+     * своего вида: склад вносит состав по видам, и i-я ячейка вида
+     * идёт i-му прибору — тот же принцип, что у
+     * {@link DeviceCellBindingService#deviceOf} (i-й выпущенный
+     * прибор закрывает экземпляр с номером i). Остаток от деления
+     * держит правило рабочим, когда видов на один прибор приходится
+     * больше одного.
+     */
+    private List<MatrixColumn> buildMatrixColumns(
+            List<ZnpCellPassageView> cells,
+            List<OrderScheduleRowRepository.RouteStepRow> allSteps,
+            boolean deviceOrder) {
+
+        int instances = plannedInstanceCount(allSteps);
+
+        Map<Integer, Integer> takenByKind = new HashMap<>();
+
+        List<MatrixColumn> columns = new ArrayList<>(cells.size());
+
+        for (int i = 0; i < cells.size(); i++) {
+
+            ZnpCellPassageView cell = cells.get(i);
+
+            Integer instance;
+
+            if (deviceOrder && instances > 0) {
+                int position = takenByKind.merge(
+                        kindKeyOf(cell), 1, Integer::sum) - 1;
+
+                instance = position % instances;
+            } else {
+                instance = i;
+            }
+
+            columns.add(new MatrixColumn(cell, instance, i + 1));
+        }
+
+        return columns;
+    }
+
+    /**
+     * Сколько экземпляров заложено планом — знаменатель колонки.
+     *
+     * Считаются различные индексы экземпляра, а не число строк:
+     * операция могла быть распределена не на все изделия, и «строк
+     * больше» не означает «изделий больше».
+     */
+    private static int plannedInstanceCount(
+            List<OrderScheduleRowRepository.RouteStepRow> allSteps) {
+
+        Map<Integer, Boolean> seen = new HashMap<>();
+
+        for (OrderScheduleRowRepository.RouteStepRow row : allSteps) {
+            if (row.getInstanceIndex() != null) {
+                seen.put(row.getInstanceIndex(), Boolean.TRUE);
+            }
+        }
+
+        return seen.size();
+    }
+
+    /* Ключ вида ячейки: код классификатора, пустой — отдельной группой. */
+    private static Integer kindKeyOf(ZnpCellPassageView cell) {
+        return cell.getClassifierCode() == null ? -1 : cell.getClassifierCode();
+    }
+
+    /**
+     * Колонка матрицы: внесённое изделие и экземпляр плана, к которому
+     * оно отнесено.
+     *
+     * Держится отдельным типом, а не парой «индекс → изделие»: у
+     * заказа на приборов экземпляру принадлежат несколько ячеек, и
+     * отображение с уникальным ключом индекса часть колонок потеряла
+     * бы.
+     */
+    private record MatrixColumn(
+            ZnpCellPassageView cell,
+            Integer instanceIndex,
+            int position) {
     }
 
     /*
@@ -737,7 +838,7 @@ public class SearchSummaryService {
      */
     private SearchSummaryView.OperationPassage buildOperationPassage(
             List<OrderScheduleRowRepository.RouteStepRow> rows,
-            Map<Integer, ZnpCellPassageView> cellByInstance,
+            List<MatrixColumn> columns,
             LocalDate today) {
 
         OrderScheduleRowRepository.RouteStepRow first = rows.get(0);
@@ -749,7 +850,7 @@ public class SearchSummaryService {
          * «проведено» по строкам соврало бы о готовности группы.
          */
         List<SearchSummaryView.CellPassage> cells =
-                buildCellPassages(rows, cellByInstance, today);
+                buildCellPassages(rows, columns, today);
 
         int passed = 0;
         boolean overdue = false;
@@ -857,10 +958,15 @@ public class SearchSummaryService {
      * Обход идёт по внесённым ячейкам, а не по строкам плана: колонок
      * должно быть ровно столько, сколько изделий в заказе, иначе
      * таблица показала бы работы, которых у изделий ещё нет.
+     *
+     * Строка плана берётся по экземпляру, который колонке назначил
+     * buildMatrixColumns: для заказа на приборы несколько ячеек
+     * принадлежат одному экземпляру, и состояние работы по ним
+     * обязано читаться одинаково.
      */
     private List<SearchSummaryView.CellPassage> buildCellPassages(
             List<OrderScheduleRowRepository.RouteStepRow> rows,
-            Map<Integer, ZnpCellPassageView> cellByInstance,
+            List<MatrixColumn> columns,
             LocalDate today) {
 
         Map<Integer, OrderScheduleRowRepository.RouteStepRow>
@@ -874,12 +980,13 @@ public class SearchSummaryService {
 
         List<SearchSummaryView.CellPassage> cells = new ArrayList<>();
 
-        for (Map.Entry<Integer, ZnpCellPassageView> entry
-                : cellByInstance.entrySet()) {
+        for (MatrixColumn column : columns) {
 
-            ZnpCellPassageView cell = entry.getValue();
+            ZnpCellPassageView cell = column.cell();
             OrderScheduleRowRepository.RouteStepRow row =
-                    rowByInstance.get(entry.getKey());
+                    column.instanceIndex() == null
+                            ? null
+                            : rowByInstance.get(column.instanceIndex());
 
             boolean completed = row != null && row.getCompletedAt() != null;
             boolean overdue = row != null && !completed
@@ -888,7 +995,7 @@ public class SearchSummaryService {
 
             cells.add(new SearchSummaryView.CellPassage(
                     cell.getSerialId(),
-                    entry.getKey() + 1,
+                    column.position(),
                     cell.getFullNumber(),
                     cell.getCellReadyAt() != null ? "Ячейка" : "Подсборка",
                     row == null ? "—" : executorLabelOrDash(row),

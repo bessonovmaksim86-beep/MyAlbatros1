@@ -1,0 +1,348 @@
+<!DOCTYPE html>
+<html lang="ru"
+      xmlns:th="http://www.thymeleaf.org">
+
+<body>
+
+<!-- =========================================================
+     ФОРМА ЗАПИСИ ЖУРНАЛА КОМПЛЕКТУЮЩИХ
+
+     Общий фрагмент для внесения и правки: реквизиты строки
+     те же, отличается только заголовок и подпись кнопки, их
+     рисует страница. Идентификатор лежит скрытым полем,
+     поэтому одна отправка закрывает и создание, и правку.
+
+     Даты биндятся th:field: @DateTimeFormat(pattern=dd.MM.yyyy)
+     на поле формы задаёт и разбор введённого, и обратную
+     отрисовку, поэтому отдельный форматтер странице не нужен.
+
+     Поставщик задаётся двумя полями — выбором из справочника
+     и новым именем. Сервис откажет, если заполнены оба: строка
+     журнала обязана ссылаться на одно написание.
+     ========================================================= -->
+<form th:fragment="entryForm(isEdit)"
+      class="bvk-form"
+      th:action="@{/input-control/components/save}"
+      th:object="${inputControlComponentForm}"
+      method="post">
+
+    <input th:if="${_csrf != null}"
+           type="hidden"
+           th:name="${_csrf.parameterName}"
+           th:value="${_csrf.token}">
+
+    <!-- Идентификатор: пустой — новая строка, задан — правка. -->
+    <input type="hidden"
+           th:field="*{id}">
+
+    <!--
+        Неизменяемые реквизиты правки: дата контроля и вид контроля
+        стоят в журнале с момента внесения, поэтому их показывают
+        только для чтения — сдвинуть дату значило бы переписать
+        место строки в журнале.
+    -->
+    <div class="bvk-journal-form__grid"
+         th:if="${isEdit and editing != null}">
+
+        <div class="bvk-journal-form__field">
+
+            <span class="bvk-journal-form__label">
+                Дата контроля
+            </span>
+
+            <p class="bvk-journal-form__fixed mono"
+               th:text="${editing.formattedControlDate}">
+                09.09.2026
+            </p>
+        </div>
+
+        <div class="bvk-journal-form__field">
+
+            <span class="bvk-journal-form__label">
+                Вид контроля
+            </span>
+
+            <p class="bvk-journal-form__fixed"
+               th:text="${editing.controlType.displayName}">
+                Входной
+            </p>
+        </div>
+
+        <div class="bvk-journal-form__field">
+
+            <span class="bvk-journal-form__label">
+                Контролёр
+            </span>
+
+            <p class="bvk-journal-form__fixed"
+               th:text="${editing.checkerName}">
+                Иванов И. И.
+            </p>
+        </div>
+
+    </div>
+
+    <!--
+        Наименование — единственное обязательное поле: без него
+        строку невозможно ни сверить с документом, ни отдать в
+        рекламацию.
+    -->
+    <div class="bvk-journal-form__field bvk-journal-form__field--wide">
+
+        <label for="productName">
+            Наименование, марка, тип продукции
+            <span class="bvk-journal-form__required">*</span>
+        </label>
+
+        <input type="text"
+               id="productName"
+               th:field="*{productName}"
+               maxlength="500"
+               autocomplete="off"
+               placeholder="Втулка УНКР.713341.035"
+               required>
+
+        <small class="bvk-journal-form__hint bvk-journal-form__hint--danger"
+               th:if="${#fields.hasErrors('productName')}"
+               th:errors="*{productName}">
+            Укажите наименование продукции
+        </small>
+    </div>
+
+    <!--
+        Предприятие-поставщик: справочник либо новое написание.
+        Оба поля не заполняют одновременно — исключение видно по
+        подписям и проверяется сервисом.
+    -->
+    <div class="bvk-journal-form__field bvk-journal-form__field--wide">
+
+        <label>
+            Предприятие-поставщик
+            <span class="bvk-journal-form__required">*</span>
+        </label>
+
+        <div class="bvk-supplier-switch">
+
+            <div class="bvk-supplier-switch__part">
+
+                <label for="supplierId">
+                    Из справочника
+                </label>
+
+                <select id="supplierId"
+                        th:field="*{supplierId}">
+
+                    <option value="">— не выбран —</option>
+
+                    <option th:each="supplier : ${suppliers}"
+                            th:value="${supplier.id}"
+                            th:text="${supplier.name}">
+                        Энергосила
+                    </option>
+
+                </select>
+            </div>
+
+            <div class="bvk-supplier-switch__part">
+
+                <label for="newSupplierName">
+                    Новое наименование
+                </label>
+
+                <input type="text"
+                       id="newSupplierName"
+                       th:field="*{newSupplierName}"
+                       maxlength="255"
+                       autocomplete="off"
+                       placeholder="Поставщика нет в справочнике">
+            </div>
+
+            <span class="bvk-journal-form__hint bvk-supplier-switch__hint">
+                Достаточно одного из двух: выбранное написание из
+                справочника или новое имя. Новое имя заводится в
+                справочник при сохранении
+            </span>
+
+            <small class="bvk-journal-form__hint bvk-journal-form__hint--danger"
+                   th:if="${#fields.hasErrors('newSupplierName')}"
+                   th:errors="*{newSupplierName}">
+                Новый поставщик: не более 255 символов
+            </small>
+        </div>
+    </div>
+
+    <!--
+        Реквизиты сопроводительного документа и количества —
+        короткими полями в ряд: их сверяют с актом по очереди.
+    -->
+    <div class="bvk-journal-form__grid">
+
+        <div class="bvk-journal-form__field">
+
+            <label for="docNumber">
+                Номер сопроводительного документа
+            </label>
+
+            <input type="text"
+                   id="docNumber"
+                   th:field="*{docNumber}"
+                   maxlength="100"
+                   autocomplete="off"
+                   placeholder="СФ № 1470">
+        </div>
+
+        <div class="bvk-journal-form__field">
+
+            <label for="docDate">
+                Дата сопроводительного документа
+            </label>
+
+            <input type="text"
+                   id="docDate"
+                   th:field="*{docDate}"
+                   maxlength="10"
+                   autocomplete="off"
+                   placeholder="дд.мм.гггг"
+                   title="Формат даты: дд.мм.гггг">
+        </div>
+
+        <div class="bvk-journal-form__field">
+
+            <label for="totalQuantity">
+                Общее количество по документу
+            </label>
+
+            <input type="number"
+                   id="totalQuantity"
+                   th:field="*{totalQuantity}"
+                   min="0"
+                   placeholder="—">
+        </div>
+
+        <div class="bvk-journal-form__field">
+
+            <label for="checkedQuantity">
+                Количество проверенной продукции
+            </label>
+
+            <input type="number"
+                   id="checkedQuantity"
+                   th:field="*{checkedQuantity}"
+                   min="0"
+                   placeholder="—">
+        </div>
+
+        <div class="bvk-journal-form__field">
+
+            <label for="scrapQuantity">
+                Количество забракованной продукции
+            </label>
+
+            <input type="number"
+                   id="scrapQuantity"
+                   th:field="*{scrapQuantity}"
+                   min="0"
+                   placeholder="—">
+        </div>
+
+    </div>
+
+    <!--
+        Акт об установлении расхождения: заполняют, только когда
+        расхождение по количеству или качеству оформлено актом.
+    -->
+    <div class="bvk-journal-form__grid">
+
+        <div class="bvk-journal-form__field">
+
+            <label for="actNumber">
+                Номер акта о расхождении
+            </label>
+
+            <input type="text"
+                   id="actNumber"
+                   th:field="*{actNumber}"
+                   maxlength="100"
+                   autocomplete="off"
+                   placeholder="Акт № 12">
+        </div>
+
+        <div class="bvk-journal-form__field">
+
+            <label for="actDate">
+                Дата акта о расхождении
+            </label>
+
+            <input type="text"
+                   id="actDate"
+                   th:field="*{actDate}"
+                   maxlength="10"
+                   autocomplete="off"
+                   placeholder="дд.мм.гггг"
+                   title="Формат даты: дд.мм.гггг">
+        </div>
+
+    </div>
+
+    <div class="bvk-journal-form__field bvk-journal-form__field--wide">
+
+        <label for="description">
+            Описание несоответствия (+/−)
+        </label>
+
+        <textarea id="description"
+                  th:field="*{description}"
+                  rows="3"
+                  maxlength="1000"
+                  placeholder="Что не соответствует: повреждение, отклонение размера, отсутствие элемента"></textarea>
+    </div>
+
+    <div class="bvk-journal-form__field bvk-journal-form__field--wide">
+
+        <label for="measures">
+            Принятые меры
+        </label>
+
+        <textarea id="measures"
+                  th:field="*{measures}"
+                  rows="2"
+                  maxlength="1000"
+                  placeholder="Возврат поставщику, доработка, замена"></textarea>
+    </div>
+
+    <div class="bvk-journal-form__field bvk-journal-form__field--wide">
+
+        <label for="note">
+            Примечание
+        </label>
+
+        <textarea id="note"
+                  th:field="*{note}"
+                  rows="2"
+                  maxlength="2000"
+                  placeholder="Дополнительные сведения"></textarea>
+    </div>
+
+    <div class="bvk-actions">
+
+        <button type="submit" class="btn primary">
+
+            <span th:if="${isEdit}">
+                Обновить запись
+            </span>
+
+            <span th:unless="${isEdit}">
+                Внести запись
+            </span>
+        </button>
+
+        <a class="btn secondary"
+           th:href="@{/input-control/components}">
+            Отмена
+        </a>
+    </div>
+
+</form>
+
+</body>
+</html>

@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="ru"
+      xmlns:th="http://www.thymeleaf.org">
+
+<head>
+    <meta charset="UTF-8">
+
+    <meta name="viewport"
+          content="width=device-width, initial-scale=1">
+
+    <title>Запись журнала входного контроля</title>
+
+    <link rel="stylesheet"
+          th:href="@{/technology/css/technology.css}">
+
+    <link rel="stylesheet"
+          th:href="@{/technology/css/common.css}">
+
+    <link rel="stylesheet"
+          th:href="@{/input-control/css/input-control.css}">
+
+    <link rel="stylesheet"
+          th:href="@{/input-control/css/components-journal.css}">
+</head>
+
+<body>
+
+<div class="app-shell">
+
+    <aside th:replace="~{input-control/fragments/layout
+            :: sidebar('components')}">
+    </aside>
+
+    <main class="main">
+
+        <header th:replace="~{input-control/fragments/layout
+                :: topbar}">
+        </header>
+
+        <div class="bvk-page">
+
+            <div class="page-head">
+
+                <div class="page-title">
+
+                    <h1>Входной контроль комплектующих</h1>
+
+                    <p>
+                        Новая запись журнала: наименование, поставщик,
+                        сопроводительный документ и количества. Дата
+                        контроля проставляется при сохранении, вид
+                        контроля всегда «Входной»
+                    </p>
+
+                </div>
+
+                <div class="page-head-actions">
+
+                    <a class="btn secondary"
+                       th:href="@{/input-control/components}">
+                        К перечню
+                    </a>
+
+                </div>
+            </div>
+
+            <div class="alert danger"
+                 th:if="${errorMessage}"
+                 th:text="${errorMessage}">
+            </div>
+
+            <section class="card">
+
+                <div class="card-head">
+
+                    <div>
+
+                        <h2>Новая запись</h2>
+
+                        <small>
+                            Поля со звёздочкой обязательны: без
+                            наименования и поставщика строку нечем
+                            ни сверить с документом, ни отдать в
+                            рекламацию
+                        </small>
+
+                    </div>
+                </div>
+
+                <div class="card-body">
+
+                    <div th:replace="~{input-control/components/form
+                            :: entryForm(false)}">
+                    </div>
+
+                </div>
+            </section>
+
+        </div>
+    </main>
+</div>
+
+<th:block th:replace="~{input-control/fragments/layout
+        :: commonScripts}">
+</th:block>
+
+</body>
+</html>

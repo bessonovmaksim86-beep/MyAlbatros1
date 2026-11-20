@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="ru"
+      xmlns:th="http://www.thymeleaf.org">
+
+<head>
+    <meta charset="UTF-8">
+
+    <meta name="viewport"
+          content="width=device-width, initial-scale=1">
+
+    <title>Приёмка групповых ЗНП на приборы</title>
+
+    <link rel="stylesheet"
+          th:href="@{/technology/css/technology.css}">
+
+    <link rel="stylesheet"
+          th:href="@{/technology/css/common.css}">
+
+    <link rel="stylesheet"
+          th:href="@{/warehouse/css/warehouse.css}">
+</head>
+
+<body>
+
+<div class="app-shell">
+
+    <aside th:replace="~{warehouse/fragments/layout
+            :: sidebar('device-acceptance')}">
+    </aside>
+
+    <main class="main">
+
+        <header th:replace="~{warehouse/fragments/layout
+                :: topbar}">
+        </header>
+
+        <div class="page-content warehouse-page">
+
+            <div class="page-head">
+
+                <div class="page-title">
+
+                    <h1>Приёмка групповых ЗНП на приборы</h1>
+
+                    <p>
+                        Групповые ЗНП на приборы, в которых цех собрал
+                        изделия: склад сверяет номера приборов и
+                        проводит приёмку разом — все приборы заказа
+                        переходят в «принято», заказ закрывается, а
+                        приборы закрепляются за складом
+                    </p>
+
+                </div>
+
+                <div class="page-head-actions">
+
+                    <a class="btn secondary"
+                       th:href="@{/warehouse/instrument-kitting}">
+                        Комплектация групп ЗНП на приборы
+                    </a>
+
+                    <a class="btn secondary"
+                       th:href="@{/warehouse/general}">
+                        Обзор склада
+                    </a>
+
+                </div>
+            </div>
+
+            <div class="alert success"
+                 th:if="${successMessage}"
+                 th:text="${successMessage}">
+            </div>
+
+            <div class="alert danger"
+                 th:if="${errorMessage}"
+                 th:text="${errorMessage}">
+            </div>
+
+            <section class="card">
+
+                <div class="card-head">
+
+                    <div>
+
+                        <h2>Заказы на приборы</h2>
+
+                        <small>
+                            В список попадают групповые ЗНП на приборы,
+                            взятые цехом в работу: прибор считается
+                            собранным, когда в него привязаны все виды
+                            ячеек состава. Принять можно заказ, у
+                            которого собран каждый прибор и хоть один
+                            прибор ещё непринят; остальные остаются в
+                            списке с пометкой «Ждёт сборки» и счётчик
+                            их не считает
+                        </small>
+
+                    </div>
+
+                    <span class="badge"
+                          th:if="${deviceAcceptanceCount != null
+                                  and deviceAcceptanceCount > 0}">
+
+                        Ожидают приёмки:
+
+                        <strong th:text="${deviceAcceptanceCount}">
+                            1
+                        </strong>
+                    </span>
+                </div>
+
+                <div class="card-body">
+
+                    <div class="alert danger"
+                         th:if="${orders == null or #lists.isEmpty(orders)}">
+
+                        <p>
+                            Заказов на приборы в работе пока нет:
+                            раздел заполняет групповой ЗНП на приборы,
+                            который диспетчер завёл изделием «Прибор» и
+                            взял в работу
+                        </p>
+
+                    </div>
+
+                    <div class="table-wrap"
+                         th:unless="${orders == null or #lists.isEmpty(orders)}">
+
+                        <table class="data-table warehouse-batch-table">
+
+                            <thead>
+
+                            <tr>
+                                <th>Заказ-комплектующий</th>
+                                <th>Вид</th>
+                                <th>Прибор</th>
+                                <th>Количество</th>
+                                <th>Дата заказа</th>
+                                <th>Срок</th>
+                                <th>Статус</th>
+                                <th></th>
+                            </tr>
+
+                            </thead>
+
+                            <tbody>
+
+                            <tr th:each="row : ${orders}">
+
+                                <td class="warehouse-number-cell">
+                                    <a class="mono"
+                                       th:href="@{/warehouse/devices/{id}(id=${row.order.id})}"
+                                       th:text="${row.order.number}">
+                                        ЗНП-2026-022
+                                    </a>
+                                </td>
+
+                                <td th:text="${row.order.znpKindDisplayName}">
+                                    Групповой ЗНП на приборы
+                                </td>
+
+                                <td>
+                                    <span th:text="${row.productLabel}">
+                                        2001 — Преобразователь ПВС4
+                                    </span>
+
+                                    <small class="field-hint"
+                                           style="display: block;"
+                                           th:if="${not #strings.isEmpty(row.productTypeLabel)}"
+                                           th:text="${row.productTypeLabel}">
+                                        Прибор
+                                    </small>
+                                </td>
+
+                                <td th:text="${row.order.formattedQuantity}">
+                                    2 шт.
+                                </td>
+
+                                <td th:text="${row.order.formattedOrderDate}">
+                                    16.09.2026
+                                </td>
+
+                                <td th:text="${row.order.formattedDueDate}">
+                                    30.09.2026
+                                </td>
+
+                                <td>
+                                    <span class="status"
+                                          th:classappend="' ' + ${row.order.statusBadgeClass}"
+                                          th:text="${row.order.statusDisplayName}">
+                                        В работе
+                                    </span>
+                                </td>
+
+                                <td class="table-actions">
+
+                                    <a class="btn primary compact"
+                                       th:if="${row.acceptanceAvailable}"
+                                       th:href="@{/warehouse/devices/{id}(id=${row.order.id})}">
+                                        Принять на склад
+                                    </a>
+
+                                    <span class="badge"
+                                          th:unless="${row.acceptanceAvailable}"
+                                          title="Приёмка откроется, когда цех привяжет все виды ячеек ко всем приборам заказа">
+                                        Ждёт сборки
+                                    </span>
+
+                                </td>
+
+                            </tr>
+
+                            </tbody>
+                        </table>
+
+                    </div>
+
+                </div>
+            </section>
+
+        </div>
+    </main>
+</div>
+
+<th:block th:replace="~{warehouse/fragments/layout
+        :: commonScripts}">
+</th:block>
+
+</body>
+</html>

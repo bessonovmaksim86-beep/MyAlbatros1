@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html lang="ru"
+      xmlns:th="http://www.thymeleaf.org">
+
+<head>
+    <meta charset="UTF-8">
+
+    <meta name="viewport"
+          content="width=device-width, initial-scale=1">
+
+    <title>Внесение данных входного контроля</title>
+
+    <link rel="stylesheet"
+          th:href="@{/technology/css/technology.css}">
+
+    <link rel="stylesheet"
+          th:href="@{/technology/css/common.css}">
+
+    <link rel="stylesheet"
+          th:href="@{/admin/css/admin.css}">
+</head>
+
+<body>
+
+<div class="app-shell">
+
+    <aside th:replace="~{admin/fragments/layout
+            :: sidebar('inputControlImport')}">
+    </aside>
+
+    <main class="main">
+
+        <header th:replace="~{admin/fragments/layout
+                :: topbar}">
+        </header>
+
+        <div class="page-content admin-page">
+
+            <div class="page-head">
+
+                <div>
+
+                    <h1>Внесение данных входного контроля</h1>
+
+                    <p>
+                        Перенос журнала входного контроля комплектующих из
+                        файла Microsoft Excel в журнал бюро входного
+                        контроля. Строки листа попадают в тот же журнал,
+                        который ведут контролёры БВК руками, и проходят те же
+                        проверки: поставщик, количество проверенного и брака.
+                    </p>
+
+                    <p>
+                        Файл сначала разбирается и показывается в
+                        предпросмотре — в базу он не записан. Внесение
+                        подтверждают отдельной кнопкой; до подтверждения
+                        лист можно отменить и загрузить другой.
+                    </p>
+                </div>
+            </div>
+
+            <div class="alert success"
+                 th:if="${successMessage}"
+                 th:text="${successMessage}">
+            </div>
+
+            <div class="alert danger"
+                 th:if="${errorMessage}"
+                 th:text="${errorMessage}">
+            </div>
+
+            <!-- =========================================================
+                 ШАГ 1. ФАЙЛ И ИСПОЛНИТЕЛЬ
+
+                 Исполнителя выбирают здесь же, до разбора: строку журнала
+                 подписывает тот, кто вёл контроль, а не администратор,
+                 нажавший кнопку. Выбор переживает перезагрузку страницы
+                 через сессию, поэтому после загрузки файла его не нужно
+                 делать заново.
+                 ========================================================= -->
+            <section class="card">
+
+                <div class="card-head">
+
+                    <div>
+
+                        <h2>Файл журнала</h2>
+
+                        <p>
+                            Лист журнала: дата контроля, наименование, поставщик,
+                            количество, реквизиты документа и акта. Колонки
+                            находим по заголовкам в файле — порядок вкладок
+                            значения не имеет, система сама выбирает самый
+                            свежий лист.
+                        </p>
+                    </div>
+                </div>
+
+                <div class="card-body">
+
+                    <form th:action="@{/admin/input-control-import/upload}"
+                          method="post"
+                          enctype="multipart/form-data">
+
+                        <input th:if="${_csrf != null}"
+                               type="hidden"
+                               th:name="${_csrf.parameterName}"
+                               th:value="${_csrf.token}">
+
+                        <div class="form-grid">
+
+                            <div class="field">
+
+                                <label for="journalFile">
+                                    Файл .xlsx
+                                </label>
+
+                                <input type="file"
+                                       id="journalFile"
+                                       name="file"
+                                       accept=".xls,.xlsx"
+                                       required>
+
+                                <small class="field-hint">
+                                    Microsoft Excel: .xlsx или старый .xls.
+                                    Если в книге несколько листов, берутся
+                                    строки самого свежего по дате контроля.
+                                </small>
+                            </div>
+
+                            <div class="field">
+
+                                <label for="executorId">
+                                    Исполнитель службы качества
+                                </label>
+
+                                <select id="executorId"
+                                        name="executorId"
+                                        required>
+
+                                    <option value="">
+                                        — Выберите контролёра —
+                                    </option>
+
+                                    <option th:each="executor : ${executors}"
+                                            th:value="${executor.id}"
+                                            th:selected="${executor.id == selectedExecutorId}"
+                                            th:text="${executor.fullName}">
+                                        Петрова А. С.
+                                    </option>
+                                </select>
+
+                                <small class="field-hint">
+                                    Сотрудники БВК и БТК. Имя контролёра
+                                    становится подписью каждой внесённой
+                                    строки, поэтому его выбирают до
+                                    внесения, а не после.
+                                </small>
+                            </div>
+                        </div>
+
+                        <div class="form-actions">
+
+                            <button type="submit" class="btn primary">
+                                Разобрать файл
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </section>
+
+            <!-- =========================================================
+                 ШАГ 2. ПРЕДПРОСМОТР И ПОДТВЕРЖДЕНИЕ
+
+                 Разобранный лист живёт в сессии, поэтому подтверждение —
+                 отдельный POST без повторной передачи файла. Пока лист не
+                 подтверждён, он остаётся в сессии: страница, открытая по
+                 «назад», показывает предпросмотр снова.
+                 ========================================================= -->
+            <section class="card"
+                     th:if="${preview != null and !preview.isEmpty()}">
+
+                <div class="card-head">
+
+                    <div>
+
+                        <h2>Предпросмотр</h2>
+
+                        <p>
+                            <span th:text="${'Разобрано строк: ' + #lists.size(preview)}">
+                                Разобрано строк: 0
+                            </span>
+                            <span th:if="${previewSheet != null}"
+                                  th:text="${' (лист «' + previewSheet + '»)'
+                                            }">
+                                (лист «Журнал с 06.26»)
+                            </span>
+                            — проверьте, что колонки файла попали в нужные поля.
+                        </p>
+                    </div>
+                </div>
+
+                <div class="card-body">
+
+                    <div class="table-wrap">
+
+                        <table class="admin-import-table">
+
+                            <thead>
+                                <tr>
+                                    <th>№ строки</th>
+                                    <th>Дата контроля</th>
+                                    <th>Наименование</th>
+                                    <th>Поставщик</th>
+                                    <th>Документ</th>
+                                    <th>Всего</th>
+                                    <th>Проверено</th>
+                                    <th>Брак</th>
+                                    <th>Акт</th>
+                                    <th>Примечание</th>
+                                </tr>
+                            </thead>
+
+                            <tbody>
+                                <tr th:each="row : ${preview}">
+
+                                    <td th:text="${row.lineNo()}">
+                                        2
+                                    </td>
+
+                                    <td th:text="${row.controlDate() != null
+                                                  ? #temporals.format(row.controlDate(), 'dd.MM.yyyy')
+                                                  : '—'}">
+                                        06.08.2026
+                                    </td>
+
+                                    <td th:text="${row.productName()}">
+                                        Датчик ДУУ2М
+                                    </td>
+
+                                    <td th:text="${row.supplier() != null and !row.supplier().isBlank()
+                                                  ? row.supplier()
+                                                  : '—'}">
+                                        Поставщик
+                                    </td>
+
+                                    <td th:text="${row.docNumber() != null and !row.docNumber().isBlank()
+                                                  ? row.docNumber()
+                                                  : '—'}">
+                                        СФ № 45512
+                                    </td>
+
+                                    <td th:text="${row.totalQuantity() != null ? row.totalQuantity() : '—'}">
+                                        10
+                                    </td>
+
+                                    <td th:text="${row.checkedQuantity() != null ? row.checkedQuantity() : '—'}">
+                                        10
+                                    </td>
+
+                                    <td th:text="${row.scrapQuantity() != null ? row.scrapQuantity() : '—'}"
+                                        th:style="${row.scrapQuantity() != null and row.scrapQuantity() > 0}
+                                                   ? 'color:#a12d35;font-weight:700' : ''">
+                                        0
+                                    </td>
+
+                                    <td th:text="${row.actNumber() != null and !row.actNumber().isBlank()
+                                                  ? row.actNumber()
+                                                  : '—'}">
+                                        14
+                                    </td>
+
+                                    <td th:text="${row.note() != null and !row.note().isBlank()
+                                                  ? row.note()
+                                                  : '—'}">
+                                        —
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <form th:action="@{/admin/input-control-import/confirm}"
+                          method="post">
+
+                        <input th:if="${_csrf != null}"
+                               type="hidden"
+                               th:name="${_csrf.parameterName}"
+                               th:value="${_csrf.token}">
+
+                        <input type="hidden"
+                               name="executorId"
+                               th:value="${selectedExecutorId}">
+
+                        <div class="form-actions">
+
+                            <a class="btn secondary"
+                               th:href="@{/admin/input-control-import/clear}">
+                                Отменить предпросмотр
+                            </a>
+
+                            <button type="submit"
+                                    class="btn primary"
+                                    th:disabled="${selectedExecutorId == null}">
+                                Внести в журнал
+                            </button>
+                        </div>
+
+                        <p class="field-hint"
+                           th:if="${selectedExecutorId == null}">
+                            Кнопка внесения станет доступна, когда выше
+                            выбран исполнитель.
+                        </p>
+                    </form>
+                </div>
+            </section>
+
+        </div>
+    </main>
+</div>
+
+<th:block th:replace="~{admin/fragments/layout
+        :: commonScripts}">
+</th:block>
+
+</body>
+</html>

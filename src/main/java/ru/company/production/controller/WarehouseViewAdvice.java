@@ -10,6 +10,7 @@ import ru.company.production.entity.AppUser;
 import ru.company.production.repository.UserRepository;
 import ru.company.production.service.BvkAcceptanceService;
 import ru.company.production.service.CellReceivingService;
+import ru.company.production.service.DeviceZnpAcceptanceService;
 import ru.company.production.service.InstrumentKittingService;
 import ru.company.production.service.ModuleRoutes;
 import ru.company.production.service.QuarantineTransferService;
@@ -41,7 +42,8 @@ import java.util.Locale;
         SubassemblyKittingController.class,
         WarehouseStockController.class,
         WarehouseSerialSearchController.class,
-        InstrumentKittingController.class
+        InstrumentKittingController.class,
+        WarehouseDeviceZnpAcceptanceController.class
 })
 @RequiredArgsConstructor
 public class WarehouseViewAdvice {
@@ -54,6 +56,7 @@ public class WarehouseViewAdvice {
     private final WarehouseKittingService kittingService;
     private final SubassemblyKittingService subassemblyKittingService;
     private final InstrumentKittingService instrumentKittingService;
+    private final DeviceZnpAcceptanceService deviceAcceptanceService;
 
     @ModelAttribute
     public void addWarehouseContext(
@@ -149,6 +152,16 @@ public class WarehouseViewAdvice {
         model.addAttribute(
                 "instrumentKittingCount",
                 instrumentKittingService.countPending()
+        );
+
+        /*
+         * Групповые ЗНП на приборы, собранные и ожидающие приёмки:
+         * склад обязан видеть объём приёмки, не заходя в раздел, —
+         * иначе счётчик терялся бы за переходом.
+         */
+        model.addAttribute(
+                "deviceAcceptanceCount",
+                deviceAcceptanceService.countPending()
         );
 
         if (authentication == null

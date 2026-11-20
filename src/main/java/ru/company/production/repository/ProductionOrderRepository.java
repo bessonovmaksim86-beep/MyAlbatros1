@@ -613,4 +613,37 @@ public interface ProductionOrderRepository
             @Param("typeCode") String typeCode,
             @Param("unitCode") String unitCode
     );
+
+    /**
+     * Групповые ЗНП на приборы в работе: список раздела «Приёмка
+     * групповых ЗНП».
+     *
+     * В отличие от {@link #findInstrumentKittingOrders} здесь нет
+     * условия по операции комплектования: раздел показывает заказы,
+     * у которых приборы уже собраны (все виды ячеек привязаны), а не
+     * те, что ждут внесения состава. Операция комплектования у такого
+     * заказа уже закрыта — склад идёт дальше по маршруту.
+     *
+     * Справочники дочитаны fetch-join'ом: open-in-view выключен, и
+     * изделие, техпроцесс, операция и автор в шаблоне читались бы через
+     * ленивую связь вне сессии.
+     */
+    @Query("""
+            select distinct ord
+            from ProductionOrder ord
+            left join fetch ord.parentProductionOrder parent
+            left join fetch ord.customerOrder customerOrder
+            left join fetch ord.productClassifier
+            left join fetch ord.createdBy
+            left join fetch ord.techProcess
+            left join fetch ord.productionOperation operation
+            left join fetch operation.operationName
+            where ord.active = true
+              and ord.status = :status
+              and ord.znpKind = ru.company.production.entity.ZnpKind.GROUP_DEVICE
+            order by ord.orderDate desc, ord.number desc
+            """)
+    List<ProductionOrder> findGroupDeviceOrdersInWork(
+            @Param("status") ProductionOrderStatus status
+    );
 }

@@ -1,0 +1,415 @@
+<!DOCTYPE html>
+<html lang="ru"
+      xmlns:th="http://www.thymeleaf.org">
+
+<head>
+    <meta charset="UTF-8">
+
+    <meta name="viewport"
+          content="width=device-width, initial-scale=1">
+
+    <title>Входной контроль комплектующих</title>
+
+    <link rel="stylesheet"
+          th:href="@{/technology/css/technology.css}">
+
+    <link rel="stylesheet"
+          th:href="@{/technology/css/common.css}">
+
+    <link rel="stylesheet"
+          th:href="@{/input-control/css/input-control.css}">
+
+    <!-- Форма отбора: классы bvk-filter задаёт карантин.css -->
+    <link rel="stylesheet"
+          th:href="@{/input-control/css/quarantine.css}">
+
+    <!-- Поля ввода фильтра, сетка формы записи и таблица журнала -->
+    <link rel="stylesheet"
+          th:href="@{/input-control/css/components-journal.css}">
+</head>
+
+<body>
+
+<div class="app-shell">
+
+    <aside th:replace="~{input-control/fragments/layout
+            :: sidebar('components')}">
+    </aside>
+
+    <main class="main">
+
+        <header th:replace="~{input-control/fragments/layout
+                :: topbar}">
+        </header>
+
+        <div class="bvk-page">
+
+            <div class="page-head">
+
+                <div class="page-title">
+
+                    <h1>Входной контроль комплектующих</h1>
+
+                    <p>
+                        Журнал несерийных комплектующих: позиции без
+                        серийного номера, которые не проходят через
+                        партии ячеек. Строка фиксирует принятое и
+                        забракованное количество по сопроводительному
+                        документу
+                    </p>
+
+                </div>
+
+                <div class="page-head-actions">
+
+                    <a class="btn secondary"
+                       th:href="@{/input-control/general}">
+                        Обзор бюро
+                    </a>
+
+                </div>
+            </div>
+
+            <div class="alert success"
+                 th:if="${successMessage}"
+                 th:text="${successMessage}">
+            </div>
+
+            <div class="alert danger"
+                 th:if="${errorMessage}"
+                 th:text="${errorMessage}">
+            </div>
+
+            <!--
+                Внесение записи ведёт на отдельную страницу, а не
+                разворачивает форму над перечнем: реквизитов в строке
+                много, и перечерчивать ради них весь журнал — значит
+                лишить контролёра вида записей, которые он уже внёс.
+            -->
+            <div class="bvk-actions bvk-actions--plain">
+
+                <a class="btn primary"
+                   th:href="@{/input-control/components/new}">
+                    Добавить запись
+                </a>
+
+            </div>
+
+            <!--
+                ============================================================
+                ОТБОР
+
+                GET, а не POST: ссылку на срез («за сентябрь по
+                поставщику X») передают коллеге, и отбор не должен
+                сбрасываться при переходе по другим пунктам меню.
+                Пустое условие снимает фильтр, а не применяет его.
+                ============================================================
+            -->
+            <form class="bvk-filter"
+                  method="get"
+                  th:action="@{/input-control/components}">
+
+                <div class="bvk-filter__field">
+
+                    <label for="filterDateFrom">
+                        Дата контроля с
+                    </label>
+
+                    <input type="date"
+                           id="filterDateFrom"
+                           name="dateFrom"
+                           th:value="${filterDateFrom}">
+
+                    <span class="bvk-filter__hint">
+                        Дата проставляется при внесении строки
+                    </span>
+                </div>
+
+                <div class="bvk-filter__field">
+
+                    <label for="filterDateTo">
+                        Дата контроля по
+                    </label>
+
+                    <input type="date"
+                           id="filterDateTo"
+                           name="dateTo"
+                           th:value="${filterDateTo}">
+
+                    <span class="bvk-filter__hint">
+                        Последний день входит в отбор целиком
+                    </span>
+                </div>
+
+                <div class="bvk-filter__field">
+
+                    <label for="filterSupplier">
+                        Поставщик
+                    </label>
+
+                    <select id="filterSupplier" name="supplierId">
+
+                        <option value=""
+                                th:selected="${filterSupplierId == null}">
+                            Все поставщики
+                        </option>
+
+                        <option th:each="supplier : ${suppliers}"
+                                th:value="${supplier.id}"
+                                th:text="${supplier.name}"
+                                th:selected="${filterSupplierId != null and filterSupplierId == supplier.id}">
+                            Энергосила
+                        </option>
+
+                    </select>
+
+                    <span class="bvk-filter__hint">
+                        Справочник поставщиков склада
+                    </span>
+                </div>
+
+                <div class="bvk-filter__field">
+
+                    <label for="filterProductName">
+                        Наименование
+                    </label>
+
+                    <input type="text"
+                           id="filterProductName"
+                           name="productName"
+                           maxlength="200"
+                           placeholder="Втулка, корпус, кабельный ввод"
+                           th:value="${filterProductName}">
+
+                    <span class="bvk-filter__hint">
+                        Подстрока в наименовании, марке или типе
+                    </span>
+                </div>
+
+                <div class="bvk-filter__actions">
+
+                    <button type="submit" class="btn primary">
+                        Применить отбор
+                    </button>
+
+                    <a class="btn secondary"
+                       th:href="@{/input-control/components}">
+                        Сбросить
+                    </a>
+
+                </div>
+            </form>
+
+            <!--
+                ============================================================
+                ПЕРЕЧЕНЬ ЖУРНАЛА
+                ============================================================
+            -->
+            <section class="card">
+
+                <div class="card-head">
+
+                    <div>
+
+                        <h2>Записи журнала</h2>
+
+                        <small>
+                            Новые записи — сверху. Строку правят по
+                            «Изменить», удаляют по «Удалить»; дата
+                            контроля при правке не меняется
+                        </small>
+
+                    </div>
+
+                    <span class="bvk-counter"
+                          th:if="${components != null}">
+
+                        Записей:
+
+                        <strong th:text="${#lists.size(components)}">
+                            12
+                        </strong>
+                    </span>
+                </div>
+
+                <div class="card-body">
+
+                    <div class="alert danger"
+                         th:if="${components == null or #lists.isEmpty(components)}">
+
+                        <!--
+                            Пустой перечень различают по признаку
+                            отбора: «журнал пуст» и «по условиям
+                            ничего не найдено» — разные сообщения, и
+                            во втором случае контролёру нужно снять
+                            фильтр, а не начинать внесение.
+                        -->
+                        <p th:if="${searchApplied}">
+                            По заданным условиям записей нет: измените
+                            отбор или сбросьте его
+                        </p>
+
+                        <p th:unless="${searchApplied}">
+                            Журнал пуст: добавьте первую запись
+                            кнопкой «Добавить запись»
+                        </p>
+
+                    </div>
+
+                    <div class="table-wrap"
+                         th:unless="${components == null or #lists.isEmpty(components)}">
+
+                        <table class="data-table bvk-journal-table">
+
+                            <thead>
+
+                            <tr>
+                                <th>Дата контроля</th>
+                                <th>Вид</th>
+                                <th>Наименование, марка, тип</th>
+                                <th>Поставщик</th>
+                                <th>Документ</th>
+                                <th class="qty">Всего</th>
+                                <th class="qty">Проверено</th>
+                                <th class="qty">Забраковано</th>
+                                <th>Акт расхождения</th>
+                                <th>Несоответствие</th>
+                                <th>Принятые меры</th>
+                                <th>Контролёр</th>
+                                <th></th>
+                            </tr>
+
+                            </thead>
+
+                            <tbody>
+
+                            <tr th:each="row : ${components}">
+
+                                <td class="mono"
+                                    th:text="${row.formattedControlDate}">
+                                    09.09.2026
+                                </td>
+
+                                <td th:text="${row.controlType.displayName}">
+                                    Входной
+                                </td>
+
+                                <td class="doc"
+                                    th:text="${row.productName}">
+                                    Втулка УНКР.713341.035
+                                </td>
+
+                                <td th:text="${row.supplierLabel}">
+                                    Энергосила
+                                </td>
+
+                                <td class="doc">
+                                    <span th:if="${row.docNumber != null}"
+                                          th:text="${row.docNumber}">
+                                        СФ № 1470
+                                    </span>
+                                    <span th:if="${row.docDate != null}"
+                                          th:text="' от ' + ${row.formattedDocDate}">
+                                         от 28.08.2026
+                                    </span>
+                                    <span class="empty"
+                                          th:if="${row.docNumber == null and row.docDate == null}">
+                                        —
+                                    </span>
+                                </td>
+
+                                <td class="qty"
+                                    th:text="${row.totalQuantity != null ? row.totalQuantity : '—'}">
+                                    140
+                                </td>
+
+                                <td class="qty"
+                                    th:text="${row.checkedQuantity != null ? row.checkedQuantity : '—'}">
+                                    10
+                                </td>
+
+                                <td class="qty qty--scrap"
+                                    th:classappend="${row.scrapQuantity != null and row.scrapQuantity > 0} ? ' is-nonzero' : ''"
+                                    th:text="${row.scrapQuantity != null ? row.scrapQuantity : '—'}">
+                                    0
+                                </td>
+
+                                <td class="doc">
+                                    <span th:if="${row.actNumber != null}"
+                                          th:text="${row.actNumber}">
+                                        Акт № 12
+                                    </span>
+                                    <span th:if="${row.actDate != null}"
+                                          th:text="' от ' + ${row.formattedActDate}">
+                                         от 01.09.2026
+                                    </span>
+                                    <span class="empty"
+                                          th:if="${row.actNumber == null and row.actDate == null}">
+                                        —
+                                    </span>
+                                </td>
+
+                                <td class="text-cell"
+                                    th:text="${row.description != null ? row.description : '—'}">
+                                    КЗ после переделки шлейфа
+                                </td>
+
+                                <td class="text-cell"
+                                    th:text="${row.measures != null ? row.measures : '—'}">
+                                    Возврат поставщику
+                                </td>
+
+                                <td th:text="${row.checkerName}">
+                                    Иванов И. И.
+                                </td>
+
+                                <td class="table-actions">
+
+                                    <a class="btn secondary compact"
+                                       th:href="@{/input-control/components/edit/{id}(id=${row.id})}">
+                                        Изменить
+                                    </a>
+
+                                    <!--
+                                        Удаление — POST с подтверждением:
+                                        запись журнала необратима, и
+                                        случайный клик не должен снимать
+                                        строку.
+                                    -->
+                                    <form th:action="@{/input-control/components/{id}/delete(id=${row.id})}"
+                                          method="post"
+                                          onsubmit="return confirm('Удалить запись журнала?');">
+
+                                        <input th:if="${_csrf != null}"
+                                               type="hidden"
+                                               th:name="${_csrf.parameterName}"
+                                               th:value="${_csrf.token}">
+
+                                        <button type="submit"
+                                                class="btn danger compact">
+                                            Удалить
+                                        </button>
+                                    </form>
+
+                                </td>
+
+                            </tr>
+
+                            </tbody>
+                        </table>
+
+                    </div>
+
+                </div>
+            </section>
+
+        </div>
+    </main>
+</div>
+
+<th:block th:replace="~{input-control/fragments/layout
+        :: commonScripts}">
+</th:block>
+
+</body>
+</html>

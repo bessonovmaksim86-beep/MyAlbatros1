@@ -18,6 +18,7 @@ import ru.company.production.repository.CellInstrumentBindingRepository;
 import ru.company.production.repository.ProductSerialRepository;
 import ru.company.production.repository.SerialProductionOrderRepository;
 
+import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -70,6 +71,7 @@ public class DeviceCellBindingService {
     private final ProductSerialRepository productSerialRepo;
     private final SerialProductionOrderRepository serialLinkRepo;
     private final CellInstrumentBindingRepository bindingRepo;
+    private final SerialMovementJournalService journal;
 
     /**
      * Является ли строка графика работой над прибором.
@@ -249,6 +251,15 @@ public class DeviceCellBindingService {
         binding.setCreatedBy(user);
 
         bindingRepo.save(binding);
+
+        /*
+         * Паспорт ячейки обязан показать, что номер вошёл в прибор:
+         * до этого события путь номера обрывался на строке выпуска,
+         * и по хронологии нельзя было узнать, в какое именно изделие
+         * вложили ячейку (V94).
+         */
+        journal.recordEnteredInstrument(
+                cell, device, order, user, LocalDateTime.now());
 
         return cell;
     }

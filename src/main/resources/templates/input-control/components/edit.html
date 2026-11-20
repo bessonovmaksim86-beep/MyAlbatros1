@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="ru"
+      xmlns:th="http://www.thymeleaf.org">
+
+<head>
+    <meta charset="UTF-8">
+
+    <meta name="viewport"
+          content="width=device-width, initial-scale=1">
+
+    <title>Изменить запись журнала входного контроля</title>
+
+    <link rel="stylesheet"
+          th:href="@{/technology/css/technology.css}">
+
+    <link rel="stylesheet"
+          th:href="@{/technology/css/common.css}">
+
+    <link rel="stylesheet"
+          th:href="@{/input-control/css/input-control.css}">
+
+    <link rel="stylesheet"
+          th:href="@{/input-control/css/components-journal.css}">
+</head>
+
+<body>
+
+<div class="app-shell">
+
+    <aside th:replace="~{input-control/fragments/layout
+            :: sidebar('components')}">
+    </aside>
+
+    <main class="main">
+
+        <header th:replace="~{input-control/fragments/layout
+                :: topbar}">
+        </header>
+
+        <div class="bvk-page">
+
+            <div class="page-head">
+
+                <div class="page-title">
+
+                    <h1>Запись журнала входного контроля</h1>
+
+                    <p>
+                        Правка внесённой строки: реквизиты документа,
+                        количества и примечания
+                    </p>
+
+                </div>
+
+                <div class="page-head-actions">
+
+                    <a class="btn secondary"
+                       th:href="@{/input-control/components}">
+                        К перечню
+                    </a>
+
+                </div>
+            </div>
+
+            <div class="alert danger"
+                 th:if="${errorMessage}"
+                 th:text="${errorMessage}">
+            </div>
+
+            <section class="card">
+
+                <div class="card-head">
+
+                    <div>
+
+                        <h2 th:text="${
+                            editing != null
+                                ? 'Запись от ' + editing.formattedControlDate
+                                : 'Запись журнала'
+                        }">
+                            Запись от 09.09.2026
+                        </h2>
+
+                        <small>
+                            Дата контроля и контролёр, строку
+                            зарегистрировавший, не меняются: они
+                            определяют место записи в журнале и её
+                            подпись
+                        </small>
+
+                    </div>
+                </div>
+
+                <div class="card-body">
+
+                    <div th:replace="~{input-control/components/form
+                            :: entryForm(true)}">
+                    </div>
+
+                </div>
+            </section>
+
+        </div>
+    </main>
+</div>
+
+<th:block th:replace="~{input-control/fragments/layout
+        :: commonScripts}">
+</th:block>
+
+</body>
+</html>

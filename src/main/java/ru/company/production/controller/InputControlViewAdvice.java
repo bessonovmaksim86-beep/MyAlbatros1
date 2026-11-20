@@ -9,6 +9,7 @@ import org.springframework.web.bind.annotation.ModelAttribute;
 import ru.company.production.entity.AppUser;
 import ru.company.production.entity.Role;
 import ru.company.production.repository.UserRepository;
+import ru.company.production.service.InputControlComponentService;
 import ru.company.production.service.InputControlService;
 import ru.company.production.service.RepairKittingService;
 import ru.company.production.service.WorkshopStaffService;
@@ -47,6 +48,14 @@ import java.util.Locale;
         InputControlController.class,
         PendingDefectsController.class,
         /*
+         * Журнал несерийных комплектующих рисует то же меню бюро,
+         * поэтому ему нужны те же подписи контролёра и счётчики
+         * пунктов: без подключения совета боковая панель потеряла бы
+         * currentUser и isBvkMaster и не отрисовала бы руководящие
+         * пункты.
+         */
+        InputControlComponentController.class,
+        /*
          * Собственный раздел бюро технического контроля рисует цеховую
          * панель, поэтому ему нужны те же подписи рода подразделения,
          * его границы и признак btkModule, что разделу «Отбраковка»:
@@ -60,6 +69,7 @@ public class InputControlViewAdvice {
 
     private final UserRepository userRepository;
     private final InputControlService inputControlService;
+    private final InputControlComponentService componentJournalService;
     private final RepairKittingService repairKittingService;
     private final WorkshopStaffService staffService;
     private final PendingDefectService pendingDefectService;
@@ -136,6 +146,17 @@ public class InputControlViewAdvice {
             model.addAttribute(
                     "repairKittingCount",
                     repairKittingService.countRepairKittingOrders()
+            );
+
+            /*
+             * Счётчик журнала комплектующих — число записей. Он
+             * отвечает на вопрос «сколько позиций уже внесено», а не
+             * «сколько ждут проверки»: журнал не очередь, а реестр,
+             * и цифра нужна, чтобы видеть наполнение без захода.
+             */
+            model.addAttribute(
+                    "componentJournalCount",
+                    componentJournalService.count()
             );
         }
 

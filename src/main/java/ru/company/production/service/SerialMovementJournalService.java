@@ -141,6 +141,37 @@ public class SerialMovementJournalService {
     }
 
     /**
+     * Приборы приняты складом полуфабрикатов (раздел «Приборы»).
+     *
+     * Отличается от {@link #recordAccepted}: та отметка кладёт на
+     * склад ячейку или подсборку, эта — готовый ПРИБОР, собранный
+     * цехом из ячеек и принятый складом целиком. Разновидность у
+     * события пустая: прибор не ячейка и не подсборка, и ставить ему
+     * одну из них значило бы соврать в паспорте — колонку «Вид» читают
+     * только ячейки.
+     */
+    @Transactional
+    public void recordDeviceAccepted(List<ProductSerial> devices,
+                                     AppUser actor,
+                                     LocalDateTime moment) {
+        for (ProductSerial device : devices) {
+            SerialMovementEvent event = newEvent(
+                    device.getFullNumber(), device.getId(),
+                    SerialMovementType.ACCEPTED,
+                    moment, actor, null, null, null);
+
+            applySerialState(event, device);
+            /*
+             * Разновидность снимают: applySerialState вывел бы её по
+             * отметке готовности ячейки, а у прибора её нет.
+             */
+            event.setCellKind(null);
+
+            journalRepository.save(event);
+        }
+    }
+
+    /**
      * Ячейки отмечены готовыми ячейками (V75).
      *
      * Отличие от ACCEPTED: та отметка кладёт позицию на склад, но
@@ -578,6 +609,39 @@ public class SerialMovementJournalService {
 
             journalRepository.save(event);
         }
+    }
+
+    /**
+     * Ячейка привязана к конкретному прибору (V94).
+     *
+     * Пара к {@link #recordInProduction}: то событие ставит выпуск,
+     * когда номер входит в заказ-комплектующий, это — цех, когда
+     * исполнитель вложил ячейку в конкретное изделие. Без него паспорт
+     * обрывался на выпуске: по хронологии нельзя было узнать, в какой
+     * прибор вошла ячейка и когда её вложили.
+     *
+     * Прибор попадает в note, а заказ-комплектующий — в колонку
+     * основания: документная колонка паспорта уже печатает заказ, и
+     * прибору остаётся подпись в причине, где читатель и ищет ответ
+     * на вопрос «куда именно вошла ячейка».
+     */
+    @Transactional
+    public void recordEnteredInstrument(ProductSerial cell,
+                                        ProductSerial device,
+                                        ProductionOrder order,
+                                        AppUser actor,
+                                        LocalDateTime moment) {
+
+        SerialMovementEvent event = newEvent(
+                cell.getFullNumber(), cell.getId(),
+                SerialMovementType.ENTERED_INSTRUMENT,
+                moment, actor, null, order, null);
+
+        applySerialState(event, cell);
+        event.setNote(truncate(
+                "Вошла в прибор «" + device.getFullNumber() + "»", 500));
+
+        journalRepository.save(event);
     }
 
     /**

@@ -1,0 +1,565 @@
+<!DOCTYPE html>
+<html lang="ru"
+      xmlns:th="http://www.thymeleaf.org">
+
+<head>
+    <meta charset="UTF-8">
+
+    <meta name="viewport"
+          content="width=device-width, initial-scale=1">
+
+    <title>Приёмка приборов заказа-комплектующего на склад</title>
+
+    <link rel="stylesheet"
+          th:href="@{/technology/css/technology.css}">
+
+    <link rel="stylesheet"
+          th:href="@{/technology/css/common.css}">
+
+    <link rel="stylesheet"
+          th:href="@{/warehouse/css/warehouse.css}">
+</head>
+
+<body>
+
+<div class="app-shell">
+
+    <aside th:replace="~{warehouse/fragments/layout
+            :: sidebar('device-acceptance')}">
+    </aside>
+
+    <main class="main">
+
+        <header th:replace="~{warehouse/fragments/layout
+                :: topbar}">
+        </header>
+
+        <div class="page-content warehouse-page"
+             th:with="order=${view.order},
+                      devices=${view.devices},
+                      techProcessName=${view.techProcessName},
+                      acceptanceAvailable=${view.acceptanceAvailable}">
+
+            <div class="page-head">
+
+                <div class="page-title">
+
+                    <h1>
+                        Приёмка на склад
+                        <span class="mono"
+                              th:text="${order.number}">
+                            ЗНП-2026-022
+                        </span>
+                    </h1>
+
+                    <p th:text="${
+                        'Склад принимает ' + #lists.size(devices)
+                        + ' приб. состава заказа — прибор принимается, '
+                        + 'когда в него привязаны все виды ячеек состава'
+                    }">
+                        Склад принимает 2 приб. состава заказа
+                    </p>
+
+                </div>
+
+                <div class="page-head-actions">
+
+                    <span class="status"
+                          th:classappend="' ' + ${order.statusBadgeClass}"
+                          th:text="${order.statusDisplayName}">
+                        В работе
+                    </span>
+
+                    <a class="btn secondary"
+                       th:href="@{/warehouse/devices}">
+                        К списку заказов
+                    </a>
+
+                </div>
+            </div>
+
+            <div class="alert success"
+                 th:if="${successMessage}"
+                 th:text="${successMessage}">
+            </div>
+
+            <div class="alert danger"
+                 th:if="${errorMessage}"
+                 th:text="${errorMessage}">
+            </div>
+
+            <!-- =====================================================
+                 РЕКВИЗИТЫ ЗАКАЗА-КОМПЛЕКТУЮЩЕГО
+
+                 Заказ читается детальным запросом, поэтому изделие,
+                 техпроцесс и автор доступны: по ним кладовщик сверяет,
+                 какие приборы он принимает, прежде чем закрепить их за
+                 складом.
+                 ===================================================== -->
+            <section class="card">
+
+                <div class="card-head">
+
+                    <div>
+
+                        <h2>Заказ-комплектующий</h2>
+
+                        <small>
+                            Реквизиты заказа: по ним сверяют, приборы
+                            какого изделия принимает склад
+                        </small>
+
+                    </div>
+
+                    <span class="warehouse-counter"
+                          th:text="${#lists.size(devices)} + ' приб.'">
+                        2 приб.
+                    </span>
+                </div>
+
+                <div class="card-body">
+
+                    <dl class="warehouse-summary">
+
+                        <div class="warehouse-summary__row">
+
+                            <dt>Номер заказа</dt>
+
+                            <dd class="mono"
+                                th:text="${order.number}">
+                                ЗНП-2026-022
+                            </dd>
+                        </div>
+
+                        <div class="warehouse-summary__row">
+
+                            <dt>Вид заказа</dt>
+
+                            <dd th:text="${order.znpKindDisplayName}">
+                                Групповой ЗНП на приборы
+                            </dd>
+                        </div>
+
+                        <div class="warehouse-summary__row">
+
+                            <dt>Прибор</dt>
+
+                            <dd th:text="${order.classifierLabel}">
+                                2001 — Преобразователь ПВС4
+                            </dd>
+                        </div>
+
+                        <div class="warehouse-summary__row">
+
+                            <dt>Техпроцесс</dt>
+
+                            <dd th:text="${techProcessName}">
+                                ТП-ПРБ-01
+                            </dd>
+                        </div>
+
+                        <div class="warehouse-summary__row">
+
+                            <dt>Количество</dt>
+
+                            <dd th:text="${order.formattedQuantity}">
+                                2 шт.
+                            </dd>
+                        </div>
+
+                        <div class="warehouse-summary__row">
+
+                            <dt>Статус заказа</dt>
+
+                            <dd th:text="${order.statusDisplayName}">
+                                В работе
+                            </dd>
+                        </div>
+
+                        <div class="warehouse-summary__row">
+
+                            <dt>Дата заказа</dt>
+
+                            <dd th:text="${order.formattedOrderDate}">
+                                16.09.2026
+                            </dd>
+                        </div>
+
+                        <div class="warehouse-summary__row">
+
+                            <dt>Срок выполнения</dt>
+
+                            <dd th:text="${order.formattedDueDate}">
+                                30.09.2026
+                            </dd>
+                        </div>
+
+                        <div class="warehouse-summary__row">
+
+                            <dt>Автор заказа</dt>
+
+                            <dd th:text="${
+                                order.createdBy != null
+                                and !#strings.isEmpty(order.createdBy.fullName)
+                                    ? order.createdBy.fullName
+                                    : '—'
+                            }">
+                                Диспетчер Д. Д.
+                            </dd>
+                        </div>
+
+                        <div class="warehouse-summary__row span-2">
+
+                            <dt>Примечание заказа</dt>
+
+                            <dd th:text="${
+                                order.note != null and !#strings.isEmpty(order.note)
+                                    ? order.note
+                                    : 'не указано'
+                            }">
+                                Комплект по спецификации 14-К
+                            </dd>
+                        </div>
+
+                    </dl>
+
+                </div>
+            </section>
+
+            <!-- =====================================================
+                 ПРИЁМКА НА СКЛАД
+
+                 Объект приёмки — заказ, а не отдельный прибор:
+                 перечень задаёт сам заказ. Проведение возможно один
+                 раз, поэтому состав обязан оставаться читаемым и после
+                 отметки.
+                 ===================================================== -->
+            <section class="card">
+
+                <div class="card-head">
+
+                    <div>
+
+                        <h2>Приёмка приборов на склад</h2>
+
+                        <small>
+                            Приёмку проводят один раз: после проведения
+                            приборы заказа отмечены принятыми, заказ
+                            закрыт — вернуть состав назад нельзя
+                        </small>
+
+                    </div>
+
+                    <span class="warehouse-counter"
+                          th:text="'принять ' + ${#lists.size(devices)} + ' приб.'">
+                        принять 2 приб.
+                    </span>
+                </div>
+
+                <div class="card-body">
+
+                    <div class="warehouse-problem"
+                         th:if="${#lists.isEmpty(devices)}">
+
+                        <h3>Принимать на склад нечего</h3>
+
+                        <p>
+                            В заказе «
+                            <span class="mono"
+                                  th:text="${order.number}">
+                                ЗНП-2026-022
+                            </span>
+                            » ещё не выпущены приборы: приёмку открывает
+                            заказ, по которому цех начал сборку изделий.
+                        </p>
+
+                    </div>
+
+                    <div class="warehouse-problem"
+                         th:if="${!acceptanceAvailable
+                                 and !#lists.isEmpty(devices)}">
+
+                        <h3>Приёмка ещё не открылась</h3>
+
+                        <p>
+                            Заказ «
+                            <span class="mono"
+                                  th:text="${order.number}">
+                                ЗНП-2026-022
+                            </span>
+                            » ждёт сборки: не ко всем приборам привязаны
+                            все виды ячеек состава, и принимать на склад
+                            пока нечего. Кнопка появится, когда
+                            исполнитель завершит сборку; заказ остаётся
+                            в списке, чтобы приборы не потерялись из виду.
+                        </p>
+
+                    </div>
+
+                    <form method="post"
+                          id="deviceAcceptanceForm"
+                          th:if="${acceptanceAvailable
+                                  and !#lists.isEmpty(devices)}"
+                          th:action="@{/warehouse/devices/{id}(id=${order.id})}"
+                          th:attr="data-device-count=${#lists.size(devices)}">
+
+                        <input th:if="${_csrf != null}"
+                               type="hidden"
+                               th:name="${_csrf.parameterName}"
+                               th:value="${_csrf.token}">
+
+                        <dl class="warehouse-summary">
+
+                            <div class="warehouse-summary__row">
+
+                                <dt>Принимается приборов</dt>
+
+                                <dd th:text="${#lists.size(devices)} + ' шт.'">
+                                    2 шт.
+                                </dd>
+                            </div>
+
+                            <div class="warehouse-summary__row">
+
+                                <dt>Принимает на склад</dt>
+
+                                <dd th:text="${userDisplayName}">
+                                    Иванов И.
+                                </dd>
+                            </div>
+
+                            <div class="warehouse-summary__row span-2">
+
+                                <dt>Состав приёмки</dt>
+
+                                <dd class="mono"
+                                    th:text="${#strings.listJoin(
+                                        devices.![fullNumber], ', ')}">
+                                    200100001, 200100002
+                                </dd>
+                            </div>
+
+                        </dl>
+
+                        <div class="warehouse-actions">
+
+                            <a class="btn secondary"
+                               th:href="@{/warehouse/devices}">
+                                К списку заказов
+                            </a>
+
+                            <button type="submit"
+                                    class="btn primary"
+                                    id="deviceAcceptButton">
+                                Провести приёмку на склад
+                            </button>
+
+                        </div>
+
+                    </form>
+
+                </div>
+            </section>
+
+            <!-- =====================================================
+                 ПЕРЕЧЕНЬ ПРИБОРОВ
+
+                 Строка печатает номер прибора и привязанные к нему
+                 ячейки; непривязанные виды называет прямо в строке,
+                 чтобы кладовщик видел, чего не хватает, не открывая
+                 карточку изделия.
+                 ===================================================== -->
+            <section class="card"
+                     th:unless="${#lists.isEmpty(devices)}">
+
+                <div class="card-head">
+
+                    <div>
+
+                        <h2>Приборы заказа</h2>
+
+                        <small>
+                            Сверяйте этикетки с этим перечнем: прибор
+                            принят, когда помечен «принят»; жёлтым
+                            подсвечен прибор, в который вошли не все
+                            виды ячеек
+                        </small>
+
+                    </div>
+
+                    <span class="warehouse-counter"
+                          th:text="${#lists.size(devices)} + ' шт.'">
+                        2 шт.
+                    </span>
+                </div>
+
+                <div class="card-body">
+
+                    <div class="table-wrap">
+
+                        <table class="data-table">
+
+                            <thead>
+
+                            <tr>
+                                <th>№</th>
+                                <th>Прибор</th>
+                                <th>Наименование</th>
+                                <th>Ячейки в приборе</th>
+                                <th>Состояние</th>
+                            </tr>
+
+                            </thead>
+
+                            <tbody>
+
+                            <tr th:each="device, iteration : ${devices}">
+
+                                <td th:text="${iteration.count}">
+                                    1
+                                </td>
+
+                                <td class="warehouse-number-cell">
+                                    <a class="mono"
+                                       th:if="${device.serialId != null}"
+                                       th:href="@{/search/object/serial/{id}(id=${device.serialId})}"
+                                       th:text="${device.fullNumber}">
+                                        200100001
+                                    </a>
+
+                                    <span class="mono"
+                                          th:unless="${device.serialId != null}"
+                                          th:text="${device.fullNumber}">
+                                        200100001
+                                    </span>
+                                </td>
+
+                                <td th:text="${device.displayName}">
+                                    Преобразователь ПВС4
+                                </td>
+
+                                <td>
+                                    <span th:if="${device.ready()}"
+                                          class="badge badge--ok">
+                                        все виды привязаны
+                                    </span>
+
+                                    <span th:unless="${device.ready()}"
+                                          class="badge badge--attention">
+                                        не хватает:
+
+                                        <strong th:text="${#strings.listJoin(device.missing, ', ')}">
+                                            ЯПР64
+                                        </strong>
+                                    </span>
+                                </td>
+
+                                <td>
+                                    <span class="badge badge--ok"
+                                          th:if="${device.accepted}">
+                                        принят
+                                    </span>
+
+                                    <span class="badge badge--muted"
+                                          th:unless="${device.accepted}">
+                                        ждёт приёмки
+                                    </span>
+                                </td>
+
+                            </tr>
+
+                            </tbody>
+                        </table>
+
+                    </div>
+
+                </div>
+            </section>
+
+        </div>
+    </main>
+</div>
+
+<!-- =============================================================
+     ПОДТВЕРЖДЕНИЕ ПРИЁМКИ ПРИБОРОВ
+     ============================================================= -->
+<div class="warehouse-accept-dialog"
+     id="deviceAcceptDialog"
+     hidden>
+
+    <div class="warehouse-accept-dialog__box"
+         role="alertdialog"
+         aria-modal="true"
+         aria-labelledby="deviceAcceptDialogText"
+         aria-describedby="deviceAcceptDialogNote">
+
+        <h2 id="deviceAcceptDialogText">
+            Внимательно проверьте номера приборов и их количество
+        </h2>
+
+        <p id="deviceAcceptDialogNote">
+            После проведения информацию изменить будет невозможно.
+            Принимается
+            <strong id="deviceAcceptDialogCount">0</strong>
+            приб. — все приборы заказа.
+        </p>
+
+        <div class="warehouse-accept-dialog__actions">
+
+            <button type="button"
+                    class="btn secondary"
+                    id="deviceAcceptDialogCancel">
+                Отмена
+            </button>
+
+            <button type="button"
+                    class="btn primary"
+                    id="deviceAcceptDialogConfirm">
+                Подтверждаю
+            </button>
+
+        </div>
+    </div>
+</div>
+
+<th:block th:replace="~{warehouse/fragments/layout
+        :: commonScripts}">
+</th:block>
+
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    var form = document.getElementById('deviceAcceptanceForm');
+    if (!form) return;
+
+    var dialog = document.getElementById('deviceAcceptDialog');
+    var dialogCount = document.getElementById('deviceAcceptDialogCount');
+    var confirmBtn = document.getElementById('deviceAcceptDialogConfirm');
+    var cancelBtn = document.getElementById('deviceAcceptDialogCancel');
+    var submitBtn = document.getElementById('deviceAcceptButton');
+
+    var count = parseInt(
+        form.getAttribute('data-device-count') || '0', 10) || 0;
+
+    /*
+     * Приёмка сразу всего состава: форма не отправляется, пока
+     * кладовщик не нажмёт «Подтверждаю» в диалоге.
+     */
+    submitBtn.addEventListener('click', function (e) {
+        e.preventDefault();
+        dialogCount.textContent = count;
+        dialog.removeAttribute('hidden');
+    });
+
+    confirmBtn.addEventListener('click', function () {
+        dialog.setAttribute('hidden', '');
+        form.submit();
+    });
+
+    cancelBtn.addEventListener('click', function () {
+        dialog.setAttribute('hidden', '');
+    });
+});
+</script>
+
+</body>
+</html>

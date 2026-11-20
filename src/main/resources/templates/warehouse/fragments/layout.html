@@ -39,6 +39,9 @@
                           cellActive=${
                               activePage == 'quarantine-transfer-cells'
                           },
+                          deviceActive=${
+                              activePage == 'device-acceptance'
+                          },
                           kittingActive=${
                               activePage == 'kitting-znp'
                               or activePage == 'kitting-plain'
@@ -367,6 +370,65 @@
                     <span class="warehouse-submenu__counter"
                           th:if="${instrumentKittingCount != null and instrumentKittingCount > 0}"
                           th:text="${instrumentKittingCount}">
+                        1
+                    </span>
+                </a>
+
+            </div>
+
+            <!--
+                Раздел «Приборы»: приёмка собранных приборов.
+
+                Отличие от «Комплектования»: там склад отдаёт ячейки в
+                заказ, здесь — принимает обратно готовый прибор, в
+                который цех вложил эти ячейки. Прибор — изделие другого
+                типа, и приёмку по нему ведут отдельно от приёмки
+                ячеек, поэтому группа вынесена отдельным пунктом.
+            -->
+            <a class="warehouse-navigation__item warehouse-dropdown-trigger"
+               th:classappend="${deviceActive} ? ' is-active' : ''"
+               href="#"
+               aria-expanded="false"
+               aria-haspopup="true"
+               title="Приборы"
+                  data-help="Группа операций склада с приборами: приёмка изделий, собранных цехом из ячеек.&#10;Как пользоваться:&#10;1) Раскройте пункт — внутри «Приёмка групповых ЗНП».&#10;2) Прибор готов к приёмке, когда в него привязаны все виды ячеек состава; собранный не полностью заказ остаётся в списке без кнопки.&#10;Счётчик у подраздела — заказы, готовые к приёмке.">
+
+                <span class="warehouse-navigation__icon">
+                    <svg viewBox="0 0 24 24" aria-hidden="true">
+                        <path d="M4 4h16a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1h-6l1 3h2v2H7v-2h2l1-3H4a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1Zm1 2v8h14V6H5Zm3 2h8v2H8V8Z"/>
+                    </svg>
+                </span>
+
+                <span class="warehouse-navigation__text">
+                    Приборы
+                </span>
+
+                <span class="warehouse-navigation__chevron" aria-hidden="true">
+                    <svg viewBox="0 0 24 24">
+                        <path d="M7 10l5 5 5-5Z"/>
+                    </svg>
+                </span>
+            </a>
+
+            <!-- Выпадающее подменю «Приборы» -->
+            <div class="warehouse-submenu"
+                 role="menu"
+                 aria-label="Приборы">
+
+                <a class="warehouse-submenu__item"
+                   th:classappend="${activePage == 'device-acceptance'} ? ' is-active' : ''"
+                   th:href="@{/warehouse/devices}"
+                   role="menuitem"
+                   title="Приёмка групповых ЗНП на приборы"
+                      data-help="Приёмка групповых ЗНП на приборы: склад проверяет номера собранных приборов и закрепляет их за складом.&#10;Как провести:&#10;1) Открыть заказ из очереди — в списке видны приборы и непривязанные виды ячеек.&#10;2) Сверить номера приборов с этикетками.&#10;3) «Провести приёмку на склад» — приборы отмечены принятыми, заказ закрыт.&#10;Заказ с не полностью собранным прибором кнопки не даёт: дождитесь, пока исполнитель привяжет недостающие ячейки.">
+
+                    <span class="warehouse-submenu__text">
+                        Приёмка групповых ЗНП
+                    </span>
+
+                    <span class="warehouse-submenu__counter"
+                          th:if="${deviceAcceptanceCount != null and deviceAcceptanceCount > 0}"
+                          th:text="${deviceAcceptanceCount}">
                         1
                     </span>
                 </a>

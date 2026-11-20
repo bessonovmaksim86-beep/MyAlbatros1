@@ -156,6 +156,53 @@
                     </span>
                 </a>
 
+                <!--
+                    Группа «Внесение внешних данных» — выпадающее подменю
+                    в образце склада (warehouse-dropdown-trigger /
+                    admin-submenu). Сейчас внутри только один пункт.
+                -->
+                <a class="admin-navigation__item admin-dropdown-trigger"
+                   th:classappend="${activePage == 'inputControlImport'} ? ' is-active' : ''"
+                   href="#"
+                   aria-expanded="false"
+                   aria-haspopup="true"
+                   title="Внесение внешних данных">
+
+                    <span class="admin-navigation__icon">
+                        <svg viewBox="0 0 24 24" aria-hidden="true">
+                            <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2Z"/>
+                        </svg>
+                    </span>
+
+                    <span class="admin-navigation__text">
+                        Внесение внешних данных
+                    </span>
+
+                    <span class="admin-navigation__chevron" aria-hidden="true">
+                        <svg viewBox="0 0 24 24">
+                            <path d="M7 10l5 5 5-5Z"/>
+                        </svg>
+                    </span>
+                </a>
+
+                <!-- Выпадающее подменю «Внесение внешних данных» -->
+                <div class="admin-submenu"
+                     role="menu"
+                     aria-label="Внесение внешних данных">
+
+                    <a class="admin-submenu__item"
+                       th:classappend="${activePage == 'inputControlImport'} ? ' is-active' : ''"
+                       th:href="@{/admin/input-control-import}"
+                       role="menuitem"
+                       title="Внесение данных входного контроля из Excel">
+
+                        <span class="admin-submenu__text">
+                            Внесение данных входного контроля
+                        </span>
+                    </a>
+
+                </div>
+
             </nav>
 
             <div class="admin-sidebar__divider"></div>

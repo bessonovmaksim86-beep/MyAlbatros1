@@ -991,3 +991,164 @@ body {
     font-variant-numeric: tabular-nums;
 }
 
+/* ============================================================
+   ВЫПАДАЮЩЕЕ ПОДМЕНЮ (группа «Внесение внешних данных»)
+   ============================================================ */
+
+.admin-navigation__item.admin-dropdown-trigger {
+    cursor: pointer;
+}
+
+/* Стрелка-индикатор раскрытия */
+.admin-navigation__chevron {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+
+    width: 18px;
+    height: 18px;
+    margin-left: auto;
+    padding-left: 6px;
+
+    opacity: 0;
+    transform: translateX(-4px);
+
+    transition:
+        opacity 130ms ease,
+        transform 130ms ease;
+}
+
+.admin-navigation__chevron svg {
+    display: block;
+    width: 14px;
+    height: 14px;
+    fill: currentColor;
+}
+
+.admin-sidebar:hover .admin-navigation__chevron,
+.admin-sidebar:focus-within .admin-navigation__chevron {
+    opacity: 0.5;
+}
+
+.admin-navigation__item.is-open .admin-navigation__chevron {
+    opacity: 1;
+    transform: rotate(180deg);
+}
+
+/* Выпадающее подменю — скрыто по умолчанию */
+.admin-submenu {
+    display: flex;
+    flex-direction: column;
+
+    gap: 2px;
+
+    max-height: 0;
+    overflow: hidden;
+
+    opacity: 0;
+
+    transition:
+        max-height 240ms ease,
+        opacity 200ms ease;
+}
+
+.admin-submenu.is-open {
+    max-height: 300px;
+    opacity: 1;
+}
+
+.admin-submenu__item {
+    position: relative;
+
+    display: flex;
+    align-items: center;
+
+    box-sizing: border-box;
+    width: 266px;
+    min-height: 38px;
+    padding: 6px 13px 6px 36px;
+
+    overflow: hidden;
+
+    color: #c5d0da;
+    font-size: 13px;
+    font-weight: 500;
+    line-height: 1.25;
+    text-decoration: none;
+    white-space: nowrap;
+
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 8px;
+
+    transition:
+        color 160ms ease,
+        background-color 160ms ease,
+        border-color 160ms ease;
+}
+
+.admin-submenu__item:hover,
+.admin-submenu__item:focus-visible {
+    color: #ffffff;
+    text-decoration: none;
+    background: rgba(255, 255, 255, 0.06);
+}
+
+.admin-submenu__item.is-active {
+    color: #ffffff;
+    background: rgba(255, 255, 255, 0.1);
+    border-color: rgba(255, 255, 255, 0.06);
+    box-shadow: inset 3px 0 0 var(--admin-accent);
+}
+
+.admin-submenu__text {
+    min-width: 0;
+    overflow: hidden;
+
+    text-overflow: ellipsis;
+}
+
+/* ============================================================
+   ТАБЛИЦА ПРЕДПРОСМОТРА ИМПОРТА
+   ============================================================ */
+
+.admin-import-table {
+    width: 100%;
+    font-size: 12px;
+    border-collapse: collapse;
+}
+
+.admin-import-table th {
+    text-align: left;
+    padding: 9px 12px;
+    background: #f8fafc;
+    color: #748494;
+    font-weight: 700;
+    font-size: 11px;
+    white-space: nowrap;
+}
+
+.admin-import-table td {
+    padding: 9px 12px;
+    border-top: 1px solid #e9eef2;
+    vertical-align: top;
+}
+
+.admin-import-table__scrap {
+    color: #a12d35;
+    font-weight: 700;
+}
+
+/*
+ * Столбцы предпросмотра читают построчно, а не по колонкам: широкие
+ * значения (наименование, примечание) не должны растягивать таблицу
+ * за пределы карточки — прокрутку даёт .table-wrap из technology.css.
+ */
+.admin-import-table th:first-child,
+.admin-import-table td:first-child {
+    width: 1%;
+    white-space: nowrap;
+    color: var(--muted, #6c7b89);
+    font-variant-numeric: tabular-nums;
+}
+

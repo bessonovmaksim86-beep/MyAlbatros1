@@ -1,0 +1,274 @@
+/* ============================================================
+   ЖУРНАЛ ВХОДНОГО КОНТРОЛЯ КОМПЛЕКТУЮЩИХ
+
+   Форму отбора (.bvk-filter) и поля (.bvk-field) раздел берёт из
+   карантин.css и input-control.css: разметка та же, поэтому и
+   классы общие. Здесь добавлено только то, чего в тех файлах нет:
+
+   * поля ввода в фильтре (там определены лишь select) — фильтр
+     журнала содержит даты и текст;
+   * сетка формы записи и таблицы журнала;
+   * переключатель «поставщик из справочника / новое имя».
+
+   Стили не трогают палитру раздела: переменные --bvk-* берутся из
+   input-control.css, который страница подключает первой.
+   ============================================================ */
+
+/* ------------------------------------------------------------
+   ФИЛЬТР: ПОЛЯ ВВОДА ДАТЫ И ТЕКСТА
+
+   В карантине фильтр содержит только списки, и .bvk-filter__field
+   оформляет select. Журнал добавляет period-поля и текст, и без
+   этого правила они остались бы без рамок и отступов.
+   ------------------------------------------------------------ */
+.bvk-filter__field input[type="date"],
+.bvk-filter__field input[type="text"],
+.bvk-filter__field input[type="number"] {
+    width: 100%;
+    padding: 9px 12px;
+    border: 1px solid #cfd8e8;
+    border-radius: 8px;
+    background: #fff;
+    color: #1d2738;
+    font-size: 14px;
+    font-family: inherit;
+}
+
+.bvk-filter__field input[type="date"]:focus,
+.bvk-filter__field input[type="text"]:focus,
+.bvk-filter__field input[type="number"]:focus {
+    outline: none;
+    border-color: #1f4f9c;
+    box-shadow: 0 0 0 3px rgba(31, 79, 156, .15);
+}
+
+/* ------------------------------------------------------------
+   ФОРМА ЗАПИСИ
+
+   .bvk-form задаёт вертикальные отступы; сетка ниже раскладывает
+   короткие реквизиты по колонкам, чтобы строка бланка читалась
+   группами: документ и количества стоят рядом, длинные тексты
+   (описание, меры, примечание) уходят на всю ширину.
+   ------------------------------------------------------------ */
+.bvk-journal-form__grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 16px 18px;
+}
+
+.bvk-journal-form__field {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.bvk-journal-form__field--wide {
+    grid-column: 1 / -1;
+}
+
+.bvk-journal-form__field--span2 {
+    grid-column: span 2;
+}
+
+.bvk-journal-form__field label {
+    font-size: 13px;
+    font-weight: 600;
+    color: #2b3a55;
+}
+
+.bvk-journal-form__field input[type="text"],
+.bvk-journal-form__field input[type="date"],
+.bvk-journal-form__field input[type="number"],
+.bvk-journal-form__field select,
+.bvk-journal-form__field textarea {
+    width: 100%;
+    padding: 9px 12px;
+    border: 1px solid #cfd8e8;
+    border-radius: 8px;
+    background: #fff;
+    color: #1d2738;
+    font-size: 14px;
+    font-family: inherit;
+}
+
+.bvk-journal-form__field textarea {
+    min-height: 84px;
+    resize: vertical;
+    line-height: 1.5;
+}
+
+.bvk-journal-form__field input:focus,
+.bvk-journal-form__field select:focus,
+.bvk-journal-form__field textarea:focus {
+    outline: none;
+    border-color: #1f4f9c;
+    box-shadow: 0 0 0 3px rgba(31, 79, 156, .15);
+}
+
+.bvk-journal-form__hint {
+    font-size: 12px;
+    color: #6b7a93;
+    line-height: 1.35;
+}
+
+/* Отказ сервиса: сообщение видно у того поля, которого оно касается. */
+.bvk-journal-form__hint--danger {
+    color: var(--bvk-danger, #b3261e);
+    font-weight: 700;
+}
+
+/* Звёздочка обязательного поля: знак, а не подпись отказа. */
+.bvk-journal-form__required {
+    color: var(--bvk-danger, #b3261e);
+    font-weight: 800;
+}
+
+/* Подпись неизменяемого реквизита — как label, но без интерактива. */
+.bvk-journal-form__label {
+    font-size: 13px;
+    font-weight: 600;
+    color: #6b7a93;
+}
+
+/*
+ * Значение только для чтения: дата контроля, вид и контролёр при
+ * правке не редактируются, но должны оставаться на экране, иначе
+ * контролёр не поймёт, почему поле отсутствует.
+ */
+.bvk-journal-form__fixed {
+    margin: 0;
+    padding: 9px 12px;
+    border: 1px dashed #cfd8e8;
+    border-radius: 8px;
+    background: #f4f6fa;
+    color: #2b3a55;
+    font-size: 14px;
+}
+
+.bvk-journal-form__fixed.mono {
+    font-variant-numeric: tabular-nums;
+}
+
+.bvk-journal-form__error {
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--bvk-danger, #b3261e);
+}
+
+/*
+ * Переключатель поставщика: справочник и новое имя исключают друг
+ * друга, поэтому стоят в одном блоке. Правило не запрещает ввод —
+ * отказ даёт сервис, и его сообщение попадает под поля.
+ */
+.bvk-supplier-switch {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 12px;
+    padding: 14px;
+    border: 1px solid #e0e6f0;
+    border-radius: 10px;
+    background: #f7f9fd;
+}
+
+.bvk-supplier-switch__part {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.bvk-supplier-switch__part label {
+    font-size: 12px;
+    font-weight: 600;
+    color: #2b3a55;
+}
+
+.bvk-supplier-switch__part select,
+.bvk-supplier-switch__part input[type="text"] {
+    width: 100%;
+    padding: 9px 12px;
+    border: 1px solid #cfd8e8;
+    border-radius: 8px;
+    background: #fff;
+    color: #1d2738;
+    font-size: 14px;
+    font-family: inherit;
+}
+
+.bvk-supplier-switch__part select:focus,
+.bvk-supplier-switch__part input[type="text"]:focus {
+    outline: none;
+    border-color: #1f4f9c;
+    box-shadow: 0 0 0 3px rgba(31, 79, 156, .15);
+}
+
+/* Подсказка занимает обе колонки блока. */
+.bvk-supplier-switch__hint {
+    grid-column: 1 / -1;
+}
+
+/* ------------------------------------------------------------
+   ТАБЛИЦА ЖУРНАЛА
+
+   Реквизитов много, и на узких экранах таблица уходит в горизон-
+   тальную прокрутку (.table-wrap уже даёт её из общих стилей).
+   Ширины колонок заданы, чтобы количества не растягивали таблицу.
+   ------------------------------------------------------------ */
+.bvk-journal-table {
+    min-width: 1280px;
+}
+
+.bvk-journal-table .qty {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+
+/* Забракованное количество отличают цветом: ноль читают как норму. */
+.bvk-journal-table .qty--scrap.is-nonzero {
+    color: var(--bvk-danger, #b3261e);
+    font-weight: 700;
+}
+
+.bvk-journal-table .doc {
+    max-width: 220px;
+    word-break: break-word;
+}
+
+.bvk-journal-table .text-cell {
+    max-width: 260px;
+    font-size: 12px;
+    line-height: 1.4;
+    color: #3a4759;
+}
+
+/*
+ * Пустое количество в журнале — не «ноль», а «не внесено»: строки
+ * из импорта могут прийти без части реквизитов, и прочерк отделяет
+ * пропуск от реального нуля.
+ */
+.bvk-journal-table .empty {
+    color: #a7b0c0;
+}
+
+/* ------------------------------------------------------------
+   АДАПТИВ
+
+   Три колонки формы на узких экранах складываются в одну-две,
+   иначе поля дат и количеств сжимаются до нечитаемой ширины.
+   ------------------------------------------------------------ */
+@media (max-width: 1100px) {
+    .bvk-journal-form__grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
+@media (max-width: 680px) {
+    .bvk-journal-form__grid {
+        grid-template-columns: 1fr;
+    }
+
+    .bvk-journal-form__field--span2,
+    .bvk-journal-form__field--wide {
+        grid-column: 1 / -1;
+    }
+}
