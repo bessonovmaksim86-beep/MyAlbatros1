@@ -56,7 +56,7 @@
 
                     <a class="btn secondary"
                        th:href="@{/warehouse/receiving}">
-                        К оформлению прихода
+                        Назад
                     </a>
 
                 </div>
@@ -70,6 +70,18 @@
             <div class="alert danger"
                  th:if="${errorMessage}"
                  th:text="${errorMessage}">
+            </div>
+
+            <!-- Удалённая партия: резерв номеров снят и они могли
+                 перейти следующей партии, печатать этикетки нельзя. -->
+            <div class="alert danger"
+                 th:if="${batch.deleted}">
+
+                <p>
+                    Партия удалена — оприходование по ней невозможно,
+                    зарезервированные номера освобождены
+                </p>
+
             </div>
 
             <ol class="warehouse-steps">

@@ -1335,6 +1335,41 @@ body {
     box-shadow: inset 0 0 0 1px #b9cdef;
 }
 
+/*
+ * Бейдж «Удалена»: приход отменён кладовщиком, резерв номеров снят.
+ * Серый и без рамки — партия исключена из движения склада, и цвет не
+ * должен читаться ни как занятие (оранжевый), ни как успех (зелёный).
+ */
+.status.deleted {
+    color: #64748b;
+    background: #f1f5f9;
+    box-shadow: inset 0 0 0 1px #cbd5e1;
+}
+
+/*
+ * Строка удалённой партии остаётся в журнале: реквизиты отменённого
+ * прихода сверяют так же, как и проведённого. Приглушаем её, чтобы
+ * отменённая позиция не выглядела незакрытой.
+ */
+.warehouse-batch-table tr.is-deleted td {
+    color: #94a3b8;
+    background: #fafcfe;
+}
+
+.warehouse-batch-table tr.is-deleted .warehouse-number-cell {
+    text-decoration: line-through;
+}
+
+/*
+ * Формы кнопок в колонке действий: «Удалить» стоит рядом со ссылками
+ * «Смотреть»/«Сканировать» и обязана вставать с ними в одну строку,
+ * а не разбивать ячейку на два блока.
+ */
+.warehouse-batch-table .table-actions .warehouse-delete-form {
+    display: inline;
+    margin: 0;
+}
+
 /* Приёмка короче прихода: шагов четыре, но подписи длиннее. */
 .warehouse-steps--acceptance .warehouse-steps__item {
     padding-right: 10px;

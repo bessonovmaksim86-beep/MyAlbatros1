@@ -267,9 +267,78 @@
         field.focus();
     }
 
+    /*
+     * Отмена партии прихода: мягкое удаление через диалог склада.
+     *
+     * Кнопка «Удалить» в таблице открывает модальное окно с
+     * реквизитами партии — ордер и диапазон номеров — и отправляет
+     * форму строки после подтверждения.
+     */
+    function initializeDeleteDialog() {
+        const dialog = document.getElementById('deleteBatchDialog');
+
+        if (!dialog) {
+            return;
+        }
+
+        const orderEl = document.getElementById('deleteBatchOrder');
+        const rangeEl = document.getElementById('deleteBatchRange');
+        const confirmBtn = document.getElementById('deleteBatchConfirm');
+        const cancelBtn = document.getElementById('deleteBatchCancel');
+
+        let activeForm = null;
+
+        /*
+         * Каждая строка таблицы содержит свою форму с action и
+         * скрытым полем CSRF: достаточно подменить action и отправить.
+         */
+        document.querySelectorAll('.warehouse-delete-form').forEach((form) => {
+
+            form.addEventListener('submit', (event) => {
+                event.preventDefault();
+
+                const order = form.getAttribute('data-order');
+                const range = form.getAttribute('data-range');
+
+                if (orderEl) orderEl.textContent = order;
+                if (rangeEl) rangeEl.textContent = range;
+
+                dialog.hidden = false;
+                activeForm = form;
+            });
+        });
+
+        if (confirmBtn) {
+            confirmBtn.addEventListener('click', () => {
+                if (activeForm) {
+                    activeForm.submit();
+                }
+            });
+        }
+
+        if (cancelBtn) {
+            cancelBtn.addEventListener('click', () => {
+                dialog.hidden = true;
+                activeForm = null;
+            });
+        }
+
+        /*
+         * Закрытие по клику на оверлей — стандартный паттерн склада:
+         * кладовщик может отменить действие, просто щёлкнув мимо окна.
+         */
+        dialog.addEventListener('click', (event) => {
+            if (event.target === dialog) {
+                dialog.hidden = true;
+                activeForm = null;
+            }
+        });
+    }
+
     function initialize() {
         initializeQrStep();
         initializeScanStep();
+        initializeDeleteDialog();
     }
 
     if (document.readyState === 'loading') {

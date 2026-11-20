@@ -91,8 +91,21 @@
 
             </ol>
 
+            <!-- Удалённая партия: резерв номеров снят, и продолжить
+                 приход по ней нельзя — иначе оператор сканировал бы
+                 номера, которые уже отданы следующей партии. -->
+            <div class="alert danger"
+                 th:if="${batch.deleted}">
+
+                <p>
+                    Партия удалена — оприходование по ней невозможно,
+                    зарезервированные номера освобождены
+                </p>
+
+            </div>
+
             <div class="warehouse-confirm-note"
-                 th:if="${batch.pending}">
+                 th:if="${batch.pending and !batch.deleted}">
 
                 <strong>Генерация QR-кодов закончена — необходимо
                     окончательно оприходовать ячейки</strong>
@@ -105,7 +118,7 @@
             </div>
 
             <div class="alert success"
-                 th:unless="${batch.pending}">
+                 th:if="${!batch.pending}">
 
                 <p>
                     Партия оприходована
@@ -241,13 +254,13 @@
 
                             <a class="btn secondary"
                                th:href="@{/warehouse/receiving}">
-                                Отменить и вернуться
+                                К списку приходов
                             </a>
 
                         </div>
 
                         <a class="btn primary"
-                           th:if="${batch.pending}"
+                           th:if="${batch.pending and !batch.deleted}"
                            th:href="@{/warehouse/receiving/{id}/scan(id=${batch.id})}">
                             Подтверждаю, перейти к сканированию
                         </a>

@@ -73,7 +73,7 @@ public class CellReceivingService {
     /** Партии, не доведённые до сканирования, — счётчик в меню. */
     @Transactional(readOnly = true)
     public long countPending() {
-        return batchRepository.countByConfirmedAtIsNull();
+        return batchRepository.countByConfirmedAtIsNullAndDeletedFalse();
     }
 
     /** Ячеек, уже внесённых приходом склада в реестр. */
@@ -169,6 +169,8 @@ public class CellReceivingService {
 
         CellReceivingBatch batch = get(id);
 
+        requireNotDeleted(batch);
+
         if (batch.getQrPrintedAt() == null) {
             batch.setQrPrintedAt(LocalDateTime.now());
 
@@ -193,6 +195,17 @@ public class CellReceivingService {
     public CellScanningResult confirm(Long id, List<String> scannedLines) {
 
         CellReceivingBatch batch = get(id);
+
+        if (batch.isDeleted()) {
+            return new CellScanningResult(
+                    false,
+                    List.of(),
+                    List.of(),
+                    List.of(),
+                    List.of(),
+                    "Партия удалена — оприходование по ней невозможно"
+            );
+        }
 
         if (!batch.isPending()) {
             return new CellScanningResult(
@@ -513,9 +526,51 @@ public class CellReceivingService {
                 ));
     }
 
+    /**
+     * Удалённую партию нельзя ни печатать, ни оприходовать: её резерв
+     * снят, и номера ряда уже может занять следующая партия или заказ
+     * на производство.
+     */
+    private static void requireNotDeleted(CellReceivingBatch batch) {
+        if (batch.isDeleted()) {
+            throw new IllegalStateException(
+                    "Партия «" + batch.getIncomingOrderNumber()
+                            + "» удалена: продолжение по ней невозможно"
+            );
+        }
+    }
     /** Номера партии в порядке печати — список для шага QR. */
     @Transactional(readOnly = true)
     public List<String> fullNumbersOf(Long id) {
         return get(id).fullNumbers();
+    }
+
+    /**
+     * Отмена партии прихода.
+     *
+     * Разрешено только для черновиков — партия, которую оператор
+     * сформировал, но ещё не оприходовал. Если сканирование уже
+     * прошло (confirmedAt не null), номера внесены в реестр и
+     * трогать их нельзя: они могли уйти на входной контроль, в сборку
+     * или на БВК.
+     *
+     * Операция снимает резерв диапазона: nextSerial больше не будет
+     * учитывать эту партию при поиске следующего свободного номера.
+     * product_serials за такие партии не записываются (подтверждения
+     * сканированием не было), поэтому освобождать больше нечего.
+     *
+     * @return true если партия отменена, false если оприходована
+     */
+    @Transactional
+    public boolean delete(Long id) {
+        CellReceivingBatch batch = get(id);
+
+        if (batch.getConfirmedAt() != null) {
+            return false;
+        }
+
+        batch.setDeleted(true);
+        batchRepository.save(batch);
+        return true;
     }
 }

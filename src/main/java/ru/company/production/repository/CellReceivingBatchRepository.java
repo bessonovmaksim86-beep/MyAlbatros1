@@ -70,8 +70,11 @@ public interface CellReceivingBatchRepository
      * Незакрытые приходы: номера под них зарезервированы, но в реестр
      * они ещё не попали. Именно эти партии оператору нужно довести до
      * сканирования — счётчик стоит в боковом меню.
+     *
+     * Отменённые партии не считаются: их резерв снят, и доводить до
+     * сканирования нечего.
      */
-    long countByConfirmedAtIsNull();
+    long countByConfirmedAtIsNullAndDeletedFalse();
 
     /**
      * Партии, вернувшиеся от БВК: приход закрыт, проверка входного
@@ -127,11 +130,16 @@ public interface CellReceivingBatchRepository
      * предыдущий приход ещё не подтверждён сканированием, его диапазон
      * в product_serials не виден, и без этого запроса следующая партия
      * получила бы уже занятые номера.
+     *
+     * Отменённые партии исключены: их резерв снят при удалении, и
+     * держать из-за них ряд занятым — значит потерять номера, которые
+     * кладовщик больше не собирается оприходовать.
      */
     @Query("""
             select max(batch.lastSerial)
             from CellReceivingBatch batch
             where batch.cellClassifier.id = :classifierId
+              and batch.deleted = false
             """)
     Integer findMaxReservedSerial(
             @Param("classifierId") Long classifierId

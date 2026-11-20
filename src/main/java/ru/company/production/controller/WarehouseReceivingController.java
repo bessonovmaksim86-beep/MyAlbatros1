@@ -328,6 +328,42 @@ public class WarehouseReceivingController {
         }
     }
 
+    /**
+     * Отмена партии прихода.
+     *
+     * Разрешена для партий, не доведённых до оприходования: их номера
+     * ещё не в реестре, и резерв диапазона освобождается. Проведённую
+     * партию удалять нельзя — номера могли уйти на входной контроль
+     * или в сборку.
+     */
+    @PostMapping("/{id}/delete")
+    public String delete(
+            @PathVariable Long id,
+            RedirectAttributes redirectAttributes
+    ) {
+        try {
+            if (receivingService.delete(id)) {
+                redirectAttributes.addFlashAttribute(
+                        "successMessage",
+                        "Партия удалена: зарезервированные за ней номера освобождены"
+                );
+            } else {
+                redirectAttributes.addFlashAttribute(
+                        "errorMessage",
+                        "Партию удалить нельзя: она уже оприходована, "
+                                + "её номера внесены в реестр"
+                );
+            }
+        } catch (EntityNotFoundException exception) {
+            redirectAttributes.addFlashAttribute(
+                    "errorMessage",
+                    exception.getMessage()
+            );
+        }
+
+        return "redirect:/warehouse/receiving";
+    }
+
     private void fillIndexModel(Model model) {
         model.addAttribute("activePage", "receiving");
 

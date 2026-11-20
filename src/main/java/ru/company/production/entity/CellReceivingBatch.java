@@ -163,6 +163,10 @@ public class CellReceivingBatch {
     @Column(name = "note", length = 2000)
     private String note;
 
+    /** Флаг удаления партии (оператор отменил приход). */
+    @Column(name = "deleted", nullable = false)
+    private boolean deleted = false;
+
     /** Номера ещё не подтверждены сканированием. */
     @Transient
     public boolean isPending() {
@@ -254,32 +258,41 @@ public class CellReceivingBatch {
      * что выпущены, «Ждёт сканирования» — этикетки напечатаны, но
      * приход не закрыт, «Оприходовано» — ячейки в реестре,
      * «Подсборка принята на склад» — партию вернулся с БВК и склад
-     * принял её целиком или за вычетом брака.
+     * принял её целиком или за вычетом брака, «Удалена» — приход
+     * отменён, зарезервированные номера освобождены.
      */
     @Transient
     public String getStatusLabel() {
+        if (deleted) {
+            return "Удалена";
+        }
+
         if (isAccepted()) {
             return "Подсборка принята на склад";
         }
 
-        if (!isPending()) {
-            return "Оприходовано";
+        if (confirmedAt == null) {
+            return isQrPrinted() ? "Ждёт сканирования" : "Черновик";
         }
 
-        return isQrPrinted() ? "Ждёт сканирования" : "Черновик";
+        return "Оприходовано";
     }
 
     @Transient
     public String getStatusBadgeClass() {
+        if (deleted) {
+            return "deleted";
+        }
+
         if (isAccepted()) {
             return "accepted";
         }
 
-        if (!isPending()) {
-            return "done";
+        if (confirmedAt == null) {
+            return isQrPrinted() ? "work" : "draft";
         }
 
-        return isQrPrinted() ? "work" : "draft";
+        return "done";
     }
 
     @Transient

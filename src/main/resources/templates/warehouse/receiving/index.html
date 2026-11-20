@@ -363,7 +363,8 @@
 
                             <tbody>
 
-                            <tr th:each="batch : ${batches}">
+                            <tr th:each="batch : ${batches}"
+                                th:classappend="${batch.deleted} ? ' is-deleted' : ''">
 
                                 <td th:text="${batch.supplierName}">
                                     ООО «Компонент»
@@ -405,22 +406,47 @@
                                 <td class="table-actions">
 
                                     <a class="btn secondary compact"
-                                       th:if="${batch.pending and !batch.qrPrinted}"
+                                       th:if="${batch.pending and batch.deleted}"
+                                       th:href="@{/warehouse/receiving/{id}/confirm(id=${batch.id})}">
+                                        Смотреть
+                                    </a>
+
+                                    <a class="btn secondary compact"
+                                       th:if="${batch.pending and !batch.deleted and !batch.qrPrinted}"
                                        th:href="@{/warehouse/receiving/{id}/qr(id=${batch.id})}">
                                         Номера и QR
                                     </a>
 
                                     <a class="btn secondary compact"
-                                       th:if="${batch.pending and batch.qrPrinted}"
+                                       th:if="${batch.pending and !batch.deleted and batch.qrPrinted}"
                                        th:href="@{/warehouse/receiving/{id}/scan(id=${batch.id})}">
                                         Сканировать
                                     </a>
 
                                     <a class="btn secondary compact"
-                                       th:unless="${batch.pending}"
+                                       th:if="${!batch.pending}"
                                        th:href="@{/warehouse/receiving/{id}/confirm(id=${batch.id})}">
                                         Смотреть
                                     </a>
+
+                                    <!-- Отменить приход можно только до
+                                         оприходования: номера удалённой
+                                         партии выходят из резерва. -->
+                                    <form method="post"
+                                          th:if="${batch.pending and !batch.deleted}"
+                                          th:action="@{/warehouse/receiving/{id}/delete(id=${batch.id})}"
+                                          class="warehouse-delete-form"
+                                          th:attr="data-order=${batch.incomingOrderNumber},data-range=${batch.numberRangeLabel}">
+
+                                        <input th:if="${_csrf != null}"
+                                               type="hidden"
+                                               th:name="${_csrf.parameterName}"
+                                               th:value="${_csrf.token}">
+
+                                        <button type="submit" class="btn danger compact">
+                                            Удалить
+                                        </button>
+                                    </form>
 
                                 </td>
 
@@ -439,9 +465,57 @@
     </main>
 </div>
 
+<!--
+    Диалог отмены партии: удаление снимает резерв номеров, и
+    кладовщик обязан понимать это до нажатия, а не после. Системное
+    окно браузера здесь не подходит — тот же приём, что у подтверждения
+    приёмки с БВК. Скрипт подставляет в текст ордер и диапазон той
+    строки, чью кнопку нажали, и отправляет её же форму.
+-->
+<div class="warehouse-accept-dialog"
+     id="deleteBatchDialog"
+     hidden>
+
+    <div class="warehouse-accept-dialog__box"
+         role="alertdialog"
+         aria-modal="true"
+         aria-labelledby="deleteBatchDialogText">
+
+        <h2 id="deleteBatchDialogText">
+            Отменить приход?
+        </h2>
+
+        <p>
+            Партия <strong id="deleteBatchOrder">ТОРГ-12/44</strong>
+            с номерами <strong id="deleteBatchRange">121200022 … 121200025</strong>
+            будет помечена удалённой, а зарезервированные за ней номера
+            освободятся и перейдут следующей партии или заказу на
+            производство. Реквизиты прихода останутся в базе.
+        </p>
+
+        <div class="warehouse-accept-dialog__actions">
+
+            <button type="button"
+                    class="btn secondary"
+                    id="deleteBatchCancel">
+                Не удалять
+            </button>
+
+            <button type="button"
+                    class="btn danger"
+                    id="deleteBatchConfirm">
+                Удалить партию
+            </button>
+
+        </div>
+    </div>
+</div>
+
 <th:block th:replace="~{warehouse/fragments/layout
         :: commonScripts}">
 </th:block>
+
+<script th:src="@{/warehouse/js/receiving.js}"></script>
 
 </body>
 </html>
