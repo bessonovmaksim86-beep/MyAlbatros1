@@ -1152,3 +1152,31 @@ body {
     font-variant-numeric: tabular-nums;
 }
 
+/* ---------- ИНТЕГРАЦИЯ С 1С ---------- */
+
+/*
+ * Форма выборки ЗП: те же правила раскладки, что у поиска очистки,
+ * но полей три (два периода и режим), поэтому полям нужна меньшая
+ * ширина переноса — иначе кнопки уходят на четвёртую строку раньше,
+ * чем того требует экран.
+ */
+.admin-1c-search {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    align-items: flex-end;
+}
+
+.admin-1c-search .field {
+    flex: 1 1 200px;
+    min-width: 0;
+}
+
+.admin-1c-search .form-actions {
+    display: flex;
+    gap: 8px;
+    flex: 0 0 auto;
+    align-self: flex-start;
+    padding-top: 24px;
+}
+

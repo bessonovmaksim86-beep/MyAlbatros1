@@ -1,0 +1,107 @@
+/* ============================================================
+   КНОПКА ГОЛОСОВОГО ВВОДА
+
+   Круглая кнопка-микрофон справа внутри поля поиска.
+   При нажатии включается распознавание речи (Web Speech API),
+   результат вставляется в поле и поиск идёт автоматически.
+   ============================================================ */
+
+/*
+ * Кнопка живёт в двух раскладках, и обе заданы здесь, а не в
+ * стилях разделов: голосовой ввод — общий слой, и ни один модуль не
+ * должен дописывать под него своё оформление.
+ *
+ * Базовый вид — отдельная кнопка в ряд (страница поиска, где форма
+ * уже flex и место для кнопки есть).
+ */
+.vs__btn {
+    flex: 0 0 auto;
+
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    width: 30px;
+    height: 30px;
+
+    padding: 0;
+
+    color: #7d8c9c;
+    background: #f2f6fa;
+    border: 1px solid var(--line, #dfe6ed);
+    border-radius: 50%;
+    cursor: pointer;
+
+    transition:
+        color 160ms ease,
+        background-color 160ms ease,
+        border-color 160ms ease;
+}
+
+/*
+ * В выпадающем виджете поля в ряд нет: кнопка кладётся на правый
+ * край самого поля. Контейнер .gs уже position: relative, поэтому
+ * привязка идёт к нему, а не ко всей верхней панели.
+ */
+.gs .vs__btn {
+    position: absolute;
+    top: 50%;
+    right: 7px;
+    transform: translateY(-50%);
+
+    width: 28px;
+    height: 28px;
+
+    background: transparent;
+    border: none;
+}
+
+/*
+ * Текст запроса не должен заводиться под кнопку. Отступ задан
+ * безусловно, а не через :has(кнопка видна): зависеть от видимости
+ * значит остаться без отступа в браузере без распознавания, где
+ * правило не сработало бы, — а пустое место справа полю не вредит.
+ */
+.gs .gs__input {
+    padding-right: 42px;
+}
+
+.vs__btn:hover {
+    color: #2c6da7;
+    background: #f2f7fc;
+}
+
+.vs__btn:disabled {
+    cursor: default;
+    color: #c5cdd6;
+    pointer-events: none;
+}
+
+.vs__icon--listening {
+    display: none;
+}
+
+.vs__btn.is-listening .vs__icon {
+    display: none;
+}
+
+.vs__btn.is-listening .vs__icon--listening {
+    display: block;
+
+    animation: vs-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes vs-pulse {
+    0%, 100% {
+        opacity: 1;
+    }
+
+    50% {
+        opacity: 0.4;
+    }
+}
+
+.vs__btn.is-processing {
+    cursor: wait;
+    opacity: 0.7;
+}

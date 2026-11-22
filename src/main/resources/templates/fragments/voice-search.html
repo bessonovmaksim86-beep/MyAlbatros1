@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="ru"
+      xmlns:th="http://www.thymeleaf.org">
+
+<body>
+
+<!-- =========================================================
+     КНОПКА ГОЛОСОВОГО ВВОДА
+
+     Ставится ВНУТРЬ контейнера поля поиска (в глобальном
+     виджете — в label.gs__field, на странице поиска — в
+     обёртку поля), чтобы кнопка легла на правый край поля:
+
+         <div th:replace="~{fragments/voice-search :: button}"></div>
+
+     Кнопка скрыта в разметке: js/voice-search.js показывает её
+     только в браузерах с распознаванием речи, и неработающая
+     кнопка не обещает лишнего.
+     ========================================================= -->
+<th:block th:fragment="button">
+
+    <link rel="stylesheet"
+          th:href="@{/css/voice-search.css}">
+
+    <button class="vs__btn"
+            type="button"
+            title="Продиктовать запрос"
+            aria-label="Голосовой ввод"
+            th:attr="data-voice-url=@{/voice/command}"
+            hidden>
+
+        <!-- Обычная иконка: микрофон. -->
+        <svg class="vs__icon"
+             viewBox="0 0 24 24" width="16" height="16"
+             fill="currentColor" aria-hidden="true">
+            <path d="M12 2a3 3 0 0 0-3 3v4a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Zm7
+                     7h-2a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.93V21h2v-5.07A7 7
+                     0 0 0 19 9Z"/>
+        </svg>
+
+        <!-- Иконка слушания: точка, пульсирует через CSS. -->
+        <svg class="vs__icon vs__icon--listening"
+             viewBox="0 0 24 24" width="16" height="16"
+             fill="currentColor" aria-hidden="true">
+            <circle cx="12" cy="12" r="6"/>
+        </svg>
+    </button>
+
+    <script th:src="@{/js/voice-search.js}"></script>
+</th:block>
+
+</body>
+</html>

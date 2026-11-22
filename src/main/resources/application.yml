@@ -68,3 +68,31 @@ application:
     header: true
     copies: ${LABEL_PRINT_COPIES:1}
     timeout-seconds: ${LABEL_PRINT_TIMEOUT:60}
+
+  # Подключение к базе 1С (PostgreSQL).
+  #
+  # Выключено по умолчанию: 1С стоит на другой машине, её адрес
+  # и учётные данные известны только на рабочем месте. Попытка
+  # соединиться при запуске без них означала бы ошибку в логе
+  # на каждом старте приложения.
+  #
+  # Параметры задаются переменными окружения:
+  #   ONEC_URL=jdbc:postgresql://192.168.1.100:5432/1c_prod
+  #   ONEC_USERNAME=readonly
+  #   ONEC_PASSWORD=secret
+  #
+  # Структура таблиц 1С формируется автоматически при загрузке
+  # конфигурации, поэтому SQL-запрос задаётся текстом. Требуется
+  # ровно пять колонок в таком порядке: номер, дата, заказ
+  # покупателя, клиент, статус.
+  #
+  # ЗП-запрос по умолчанию — примерный. Уточните имена таблиц
+  # после просмотра структуры базы 1С.
+  onec:
+    enabled: ${ONEC_ENABLED:false}
+    url: ${ONEC_URL:}
+    username: ${ONEC_USERNAME:}
+    password: ${ONEC_PASSWORD:}
+    zp-query: ${ONEC_ZP_QUERY:}
+    max-rows: ${ONEC_MAX_ROWS:500}
+    connect-timeout-seconds: ${ONEC_CONNECT_TIMEOUT:10}

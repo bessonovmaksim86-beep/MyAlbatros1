@@ -203,6 +203,30 @@
 
                 </div>
 
+                <!--
+                    Интеграция с 1С: отдельный раздел, а не пункт
+                    «Внесения внешних данных». Импорт журнала заполняет
+                    свою базу из файла, здесь же база отдаёт данные
+                    внешней системе — направление обмена противоположное,
+                    и смешивать их в одном меню значило бы путать
+                    «принять» с «передать».
+                -->
+                <a class="admin-navigation__item"
+                   th:classappend="${activePage == 'oneCIntegration'} ? ' is-active' : ''"
+                   th:href="@{/admin/1c}"
+                   title="Выгрузка заказов на производство (ЗП) в 1С">
+
+                    <span class="admin-navigation__icon">
+                        <svg viewBox="0 0 24 24" aria-hidden="true">
+                            <path d="M12 3 3 8v8l9 5 9-5V8l-9-5Zm0 2.3 6.1 3.4L12 12.1 5.9 8.7 12 5.3ZM5 10.3l6 3.4v5.6l-6-3.3v-5.7Zm8 9v-5.6l6-3.4v5.7l-6 3.3Z"/>
+                        </svg>
+                    </span>
+
+                    <span class="admin-navigation__text">
+                        Интеграция с 1С
+                    </span>
+                </a>
+
             </nav>
 
             <div class="admin-sidebar__divider"></div>

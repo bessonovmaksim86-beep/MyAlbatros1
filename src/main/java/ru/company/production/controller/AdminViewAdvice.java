@@ -35,7 +35,13 @@ import java.util.Locale;
          * панелью, поэтому ей нужны те же подписи администратора и
          * список ролей.
          */
-        AdminInputControlImportController.class
+        AdminInputControlImportController.class,
+        /*
+         * Интеграция с 1С: тот же модуль и то же меню, поэтому
+         * раздел получает подписи администратора наравне с остальными
+         * страницами.
+         */
+        AdminOneCIntegrationController.class
 })
 @RequiredArgsConstructor
 public class AdminViewAdvice {

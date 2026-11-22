@@ -7,6 +7,7 @@ import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 import ru.company.production.entity.CellReceivingBatch;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
@@ -247,6 +248,8 @@ public interface CellReceivingBatchRepository
         Integer getFirstSerial();
 
         Integer getLastSerial();
+
+        LocalDateTime getCreatedAt();
     }
 
     /**
@@ -268,7 +271,8 @@ public interface CellReceivingBatchRepository
                 sensor.name           as sensorClassName,
                 batch.quantity        as quantity,
                 batch.firstSerial     as firstSerial,
-                batch.lastSerial      as lastSerial
+                batch.lastSerial      as lastSerial,
+                batch.createdAt       as createdAt
             from CellReceivingBatch batch
             join batch.cellClassifier classifier
             left join classifier.sensorCatalog sensor
@@ -280,6 +284,63 @@ public interface CellReceivingBatchRepository
             """)
     List<ReceivingSearchView> search(
             @Param("term") String term,
+            Pageable pageable
+    );
+
+    /**
+     * Приходы по параметрам, которые назвал оператор.
+     *
+     * Все четыре условия необязательны: null означает «по этому
+     * признаку не фильтровать», и запрос превращается ровно в тот
+     * перечень, который человек сумел произнести. Так «поставщик ГОЛ
+     * с 12.12.2025 по 14.12.2025» даёт две границы и поставщика, а
+     * «с 12.12.2025» — только начало периода.
+     *
+     * Период считается по {@code createdAt} — дате оформления партии.
+     * Из трёх дат прихода она первая по смыслу и единственная, которая
+     * заполнена у любой партии: {@code confirmedAt} появляется только
+     * после подтверждения сканированием, {@code acceptedAt} — после
+     * приёмки с БВК, и фильтр по ним молчал бы именно на тех приходах,
+     * которые ищут чаще всего, — на ещё не закрытых.
+     *
+     * Отменённые партии отсечены: приход, который склад отозвал, в
+     * перечне найденного искать нечего.
+     */
+    @Query("""
+            select
+                batch.id              as id,
+                batch.incomingOrderNumber as incomingOrderNumber,
+                batch.supplierName    as supplierName,
+                classifier.code       as classifierCode,
+                classifier.name       as classifierName,
+                sensor.name           as sensorClassName,
+                batch.quantity        as quantity,
+                batch.firstSerial     as firstSerial,
+                batch.lastSerial      as lastSerial,
+                batch.createdAt       as createdAt
+            from CellReceivingBatch batch
+            join batch.cellClassifier classifier
+            left join classifier.sensorCatalog sensor
+            where batch.deleted = false
+              and (:term is null
+                       or lower(batch.incomingOrderNumber)
+                           like lower(concat('%', :term, '%'))
+                       or lower(batch.supplierName)
+                           like lower(concat('%', :term, '%')))
+              and (:supplierKey is null
+                       or lower(trim(batch.supplierName))
+                           like lower(concat('%', :supplierKey, '%')))
+              and (:dateFrom is null
+                       or batch.createdAt >= :dateFrom)
+              and (:dateTo is null
+                       or batch.createdAt < :dateTo)
+            order by batch.createdAt desc, batch.id desc
+            """)
+    List<ReceivingSearchView> searchByParameters(
+            @Param("term") String term,
+            @Param("supplierKey") String supplierKey,
+            @Param("dateFrom") LocalDateTime dateFrom,
+            @Param("dateTo") LocalDateTime dateTo,
             Pageable pageable
     );
 }
