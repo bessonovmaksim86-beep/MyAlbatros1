@@ -8,11 +8,10 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.servlet.mvc.support.RedirectAttributes;
-import ru.company.production.repository.ZpExportView;
 import ru.company.production.service.OneCIntegrationService;
+import ru.company.production.service.OneCIntegrationService.OneCQueryResult;
 
 import java.time.LocalDate;
-import java.util.List;
 
 /**
  * Раздел «Интеграция с 1С» в модуле администрирования.
@@ -63,10 +62,13 @@ public class AdminOneCIntegrationController {
         boolean requested = !isBlank(periodFrom) || !isBlank(periodTo);
 
         if (requested) {
-            List<ZpExportView> rows = oneCService.loadZp(from, to, selectedMode);
+            OneCQueryResult result = oneCService.loadZp(from, to, selectedMode);
 
-            model.addAttribute("rows", rows);
-            model.addAttribute("rowCount", rows.size());
+            model.addAttribute("rows", result.rows());
+            model.addAttribute("rowCount", result.rows().size());
+            model.addAttribute("source", result.source().name());
+            model.addAttribute("fromOneC", result.fromOneC());
+            model.addAttribute("comStatus", result.comStatus());
         }
 
         return "admin/1c-integration";
@@ -99,16 +101,16 @@ public class AdminOneCIntegrationController {
         }
 
         String selectedMode = normalizeMode(mode);
-        List<ZpExportView> rows = oneCService.loadZp(from, to, selectedMode);
+        OneCQueryResult result = oneCService.loadZp(from, to, selectedMode);
 
-        boolean sent = oneCService.sendTo1C(rows);
+        boolean sent = oneCService.sendTo1C(result.rows());
 
         redirectAttributes.addFlashAttribute(
                 sent ? "successMessage" : "errorMessage",
                 sent
-                        ? "Отправка в 1С выполнена (записей: " + rows.size()
-                                + "). Реальный обмен включим после выбора протокола."
-                        : "1С не приняла данные: проверьте параметры подключения."
+                        ? "Отправка в 1С выполнена (записей: " + result.rows().size()
+                                + "). Реальная проводка включим после сверки имён метаданных."
+                        : "1С недоступна: проверьте, что COM-канал включён и 1С отвечает."
         );
 
         return redirectWithPeriod(from, to, selectedMode);

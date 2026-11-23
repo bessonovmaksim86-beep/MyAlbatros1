@@ -154,36 +154,46 @@
                         </p>
                     </div>
 
-                    <form th:if="${rowCount > 0}"
-                          th:action="@{/admin/1c/send}"
-                          method="post"
-                          class="form-inline">
+                    <!--
+                        Источник выдачи подписан явно: при недоступной
+                        1С таблица заполняется собственной базой, и без
+                        подписи администратор принял бы эти строки за
+                        данные 1С.
+                    -->
+                    <span class="badge"
+                          th:if="${fromOneC}"
+                          title="Данные получены из 1С через COM-соединение">
+                        Данные из 1С
+                    </span>
 
-                        <input th:if="${_csrf != null}"
-                               type="hidden"
-                               th:name="${_csrf.parameterName}"
-                               th:value="${_csrf.token}">
-
-                        <input type="hidden"
-                               name="periodFrom"
-                               th:value="${periodFrom}">
-
-                        <input type="hidden"
-                               name="periodTo"
-                               th:value="${periodTo}">
-
-                        <input type="hidden"
-                               name="mode"
-                               th:value="${mode}">
-
-                        <button type="submit"
-                                class="btn secondary">
-                            Отправить в 1С
-                        </button>
-                    </form>
+                    <span class="badge"
+                          th:unless="${fromOneC}"
+                          title="1С недоступна, показаны заказы из собственной базы">
+                        Собственная база
+                    </span>
                 </div>
 
                 <div class="card-body">
+
+                    <!--
+                        Причина подмены источника: выключен канал, либо
+                        1С не ответила. Пустая таблица без пояснения
+                        читалась бы как «заказов нет».
+                    -->
+                    <div class="alert danger"
+                         th:if="${comStatus == 3}">
+                        1С недоступна: COM-соединение не установлено.
+                        Показаны заказы из собственной базы.
+                        Проверьте, что обмен включён (ONEC_ENABLED=true)
+                        и платформа 1С установлена на этой машине.
+                    </div>
+
+                    <div class="alert"
+                         th:if="${comStatus == 0}">
+                        Обмен с 1С выключен, показаны заказы из собственной
+                        базы. Включите его переменной ONEC_ENABLED=true
+                        на машине, где установлена 1С.
+                    </div>
 
                     <p class="empty-inline"
                        th:if="${#lists.isEmpty(rows)}">
@@ -232,6 +242,46 @@
                             </tbody>
                         </table>
                     </div>
+
+                    <!--
+                        Отправка появляется только когда есть что
+                        отправлять. Это POST: проводка документа меняет
+                        состояние 1С, и повторять её кнопкой «назад»
+                        нельзя.
+                    -->
+                    <form th:if="${rowCount > 0}"
+                          th:action="@{/admin/1c/send}"
+                          method="post"
+                          class="admin-1c-send">
+
+                        <input th:if="${_csrf != null}"
+                               type="hidden"
+                               th:name="${_csrf.parameterName}"
+                               th:value="${_csrf.token}">
+
+                        <input type="hidden"
+                               name="periodFrom"
+                               th:value="${periodFrom}">
+
+                        <input type="hidden"
+                               name="periodTo"
+                               th:value="${periodTo}">
+
+                        <input type="hidden"
+                               name="mode"
+                               th:value="${mode}">
+
+                        <button type="submit"
+                                class="btn primary"
+                                th:disabled="${!fromOneC}">
+                            Отправить в 1С
+                        </button>
+
+                        <small class="field-hint"
+                               th:if="${!fromOneC}">
+                            Отправка доступна, когда данные получены из 1С.
+                        </small>
+                    </form>
 
                 </div>
             </section>
