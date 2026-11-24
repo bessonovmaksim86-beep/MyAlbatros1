@@ -67,6 +67,7 @@ class SubassemblyKittingQuarantineTest {
     @Mock private QuarantineTransferService quarantineTransferService;
     @Mock private UnitHandoverService handoverService;
     @Mock private OrderScheduleRowRepository scheduleRowRepository;
+    @Mock private CellReceivingService cellReceivingService;
 
     private SubassemblyKittingService service;
 
@@ -83,7 +84,8 @@ class SubassemblyKittingQuarantineTest {
                 serialOperationRepository,
                 quarantineTransferService,
                 handoverService,
-                scheduleRowRepository
+                scheduleRowRepository,
+                cellReceivingService
         );
     }
 

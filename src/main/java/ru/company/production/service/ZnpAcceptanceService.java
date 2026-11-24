@@ -91,8 +91,18 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class ZnpAcceptanceService {
 
-    /** Виды, ведущие приёмку ячеек: набор считается от {@link ZnpKind}. */
-    private static final List<ZnpKind> ACCEPTED_KINDS = ZnpKind.groupKinds();
+    /**
+     * Виды, ведущие приёмку ячеек: набор считается от {@link ZnpKind}.
+     *
+     * Берётся {@link ZnpKind#cellMatrixKinds()}, а не все групповые
+     * виды: приёмка набирает состав матрицей комплектования, то есть
+     * номерами, которые вносит кладовщик. Заказ «на изготовление
+     * подсборок» набирает номера иначе — система резервирует их по
+     * правилу прихода, — и в этот раздел он не входит: его номера
+     * идут стандартным путём партии через БВК и приёмку с БВК.
+     */
+    private static final List<ZnpKind> ACCEPTED_KINDS =
+            ZnpKind.cellMatrixKinds();
 
     /**
      * Тип операции, которой склад принимает состав заказа на склад.

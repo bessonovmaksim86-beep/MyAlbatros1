@@ -190,9 +190,21 @@
                                         кладовщика в пустое поле незачем.
                                         Ссылка ведёт в тот же экран — там
                                         видно внесённые номера.
+
+                                        Заказу V96 («номера генерирует
+                                        система») поле ввода не показывают:
+                                        подсборок на полке нет, и кнопка
+                                        обещает то, что делает экран —
+                                        резервирование ряда и приход.
                                     -->
                                     <a class="btn primary compact"
-                                       th:if="${!order.completed()}"
+                                       th:if="${!order.completed() and order.numberGenerated()}"
+                                       th:href="@{/warehouse/subassembly-kitting/{id}(id=${order.id})}">
+                                        Сгенерировать номера
+                                    </a>
+
+                                    <a class="btn primary compact"
+                                       th:if="${!order.completed() and !order.numberGenerated()}"
                                        th:href="@{/warehouse/subassembly-kitting/{id}(id=${order.id})}">
                                         Внести ячейки
                                     </a>

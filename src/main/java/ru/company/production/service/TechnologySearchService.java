@@ -21,6 +21,7 @@ import ru.company.production.repository.TechProcessSearchView;
 import ru.company.production.repository.WorkPlaceRepository;
 import ru.company.production.repository.WorkPlaceSearchView;
 
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
@@ -56,6 +57,13 @@ public class TechnologySearchService {
      */
     private static final String PASSPORT_CATEGORY = "Паспорта изделий (хронология)";
 
+    private static final String RECEIVING_CATEGORY =
+            "Приходы склада (приходный ордер)";
+
+    /** Дата партии в подписи строки: период задан — дата обязана быть видна. */
+    private static final DateTimeFormatter DATE_LABEL =
+            DateTimeFormatter.ofPattern("dd.MM.yyyy");
+
     private final TechProcessRepository techProcessRepository;
     private final ProductClassifierRepository classifierRepository;
     private final OperationRepository operationRepository;
@@ -65,8 +73,61 @@ public class TechnologySearchService {
     private final ProductSerialRepository productSerialRepository;
     private final CellReceivingBatchRepository receivingBatchRepository;
     private final ProductPassportService passportService;
+    private final ReceivingParamsParser receivingParamsParser;
 
+    /*
+     * Поиск по фразе целиком.
+     *
+     * Фраза сначала разбирается на параметры прихода (см.
+     * {@link ReceivingParamsParser}): оператор называет то, что помнит,
+     * — поставщика, период, номер, и фильтром становится прочитанное.
+     * Назвал поставщика и даты — приходы берутся по ним; назвал только
+     * даты — фильтр строится только по датам; не назвал ничего — фраза
+     * идёт штатному поиску как есть.
+     *
+     * Обычный поиск ведётся по ОСТАТКУ фразы: даты и имя поставщика из
+     * него вырезаны, иначе LIKE искал бы «12.12.2025» в наименованиях
+     * изделий и в номерах заказов, где их быть не может.
+     */
     public List<SearchResultView> search(String term) {
+        ReceivingParamsParser.ReceivingParams params =
+                receivingParamsParser.parse(term);
+
+        return params.hasAny()
+                ? searchByParams(params)
+                : searchByTerm(term);
+    }
+
+    /*
+     * Выдача, когда фраза содержала параметры прихода.
+     *
+     * Приходы идут первыми: запрос про поставщика и период — это запрос
+     * к складу, и прятать его под перечнем техпроцессов значило бы
+     * заставлять человека прокручивать чужие строки. Остаток фразы
+     * опрашивается следом и только если в нём что-то осталось: пустой
+     * остаток дал бы «все подряд», а это не ответ.
+     */
+    private List<SearchResultView> searchByParams(
+            ReceivingParamsParser.ReceivingParams params
+    ) {
+        Pageable pageable = PageRequest.of(0, PER_CATEGORY_LIMIT);
+        List<SearchResultView> results =
+                new ArrayList<>(searchReceivingByParams(params, pageable));
+
+        String rest = params.term();
+
+        if (rest != null && !rest.isBlank()) {
+            results.addAll(searchByTerm(rest));
+        }
+
+        return results;
+    }
+
+    /*
+     * Штатный поиск по тексту: заказы, серийники, приходы по номеру,
+     * справочники. Разбором номера занимается {@link OrderSearch}.
+     */
+    private List<SearchResultView> searchByTerm(String term) {
         Pageable pageable = PageRequest.of(0, PER_CATEGORY_LIMIT);
         List<SearchResultView> results = new ArrayList<>();
 
@@ -341,20 +402,94 @@ public class TechnologySearchService {
         for (CellReceivingBatchRepository.ReceivingSearchView view :
                 receivingBatchRepository.search(term, pageable)) {
 
-            results.add(new SearchResultView(
-                    view.getId(),
-                    "receiving",
-                    "Приходы склада (приходный ордер)",
-                    view.getIncomingOrderNumber(),
-                    signature(
-                            view.getSupplierName(),
-                            receivingCell(view)
-                    ),
-                    summaryUrl("receiving", view.getId())
-            ));
+            results.add(receivingRow(view, false));
         }
 
         return results;
+    }
+
+    /*
+     * Приходы по параметрам, которые назвал оператор.
+     *
+     * Отдельный запрос, а не обычный поиск по терму: поставщик и
+     * период — условия разные, и термом вида «АО ГОЛ 12.12.2025» их не
+     * выразить, LIKE по такой строке не нашёл бы ничего.
+     *
+     * Период ограничивается датой оформления партии — см.
+     * {@link ReceivingParamsParser}: из трёх дат прихода только она
+     * заполнена у любой партии, включая черновик.
+     */
+    private List<SearchResultView> searchReceivingByParams(
+            ReceivingParamsParser.ReceivingParams params,
+            Pageable pageable
+    ) {
+        List<SearchResultView> results = new ArrayList<>();
+
+        for (CellReceivingBatchRepository.ReceivingSearchView view :
+                receivingBatchRepository.searchByParameters(
+                        supplierKey(params.supplierName()),
+                        params.fromStart(),
+                        params.toExclusive(),
+                        pageable)) {
+
+            /*
+             * Дата в подписи обязательна: выдача построена по периоду,
+             * и человек обязан видеть, каким числом партия в него
+             * попала, иначе список выглядит случайным.
+             */
+            results.add(receivingRow(view, true));
+        }
+
+        return results;
+    }
+
+    /**
+     * Строка выдачи прихода.
+     *
+     * Один сборщик для обоих путей поиска: строка, найденная номером, и
+     * строка, найденная поставщиком с периодом, обязаны выглядеть
+     * одинаково, иначе одна и та же партия подавалась бы по-разному.
+     */
+    private SearchResultView receivingRow(
+            CellReceivingBatchRepository.ReceivingSearchView view,
+            boolean withDate
+    ) {
+        String details = signature(
+                view.getSupplierName(),
+                receivingCell(view)
+        );
+
+        return new SearchResultView(
+                view.getId(),
+                "receiving",
+                RECEIVING_CATEGORY,
+                view.getIncomingOrderNumber(),
+                withDate
+                        ? signature(details, receivingDate(view))
+                        : details,
+                summaryUrl("receiving", view.getId())
+        );
+    }
+
+    /** Дата оформления партии — граница периода выдачи. */
+    private String receivingDate(
+            CellReceivingBatchRepository.ReceivingSearchView view
+    ) {
+        return view.getCreatedAt() == null
+                ? null
+                : view.getCreatedAt().format(DATE_LABEL);
+    }
+
+    /*
+     * Ключ поставщика для запроса: колонка сравнивается по нижнему
+     * регистру и без обрамляющих пробелов, поэтому и ключ приводится
+     * так же — «ГОЛ» и «гол » находят одну и ту же партию.
+     */
+    private String supplierKey(String supplierName) {
+        return supplierName == null || supplierName.isBlank()
+                ? null
+                : supplierName.trim().toLowerCase(
+                        Locale.forLanguageTag("ru"));
     }
 
     /* ============================================================

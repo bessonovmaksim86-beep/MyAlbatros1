@@ -12,6 +12,7 @@ import ru.company.production.entity.ProductClassifier;
 import ru.company.production.entity.ProductSerial;
 import ru.company.production.entity.ProductSerialStatus;
 import ru.company.production.entity.ProductType;
+import ru.company.production.entity.ProductionOrder;
 import ru.company.production.entity.WarehouseSupplier;
 import ru.company.production.repository.CellReceivingBatchRepository;
 import ru.company.production.repository.ProductClassifierRepository;
@@ -55,6 +56,20 @@ public class CellReceivingService {
 
     /* Длина полного номера: 4 цифры кода + 5 цифры серии. */
     private static final int FULL_NUMBER_LENGTH = 9;
+
+    /*
+     * Поставщик автосозданной партии заказа «на изготовление
+     * подсборок».
+     *
+     * Подсборки выпускает сам заказ, но оприходование оформляется как
+     * приход от АО «Альбатрос» — так номера попадают в привычный складу
+     * реестр приходов и проходят стандартный путь партии (БВК, приёмка
+     * с БВК). Написание берётся из справочника (V78 переносит его из
+     * legacy-контрагентов); если записи нет, партия всё равно ведётся
+     * со свободной строкой наименования, иначе заказ завис бы без
+     * номеров из-за отсутствия строки в справочнике.
+     */
+    private static final String AUTO_RECEIVING_SUPPLIER = "АО \"Альбатрос\"";
 
     private final CellReceivingBatchRepository batchRepository;
     private final ProductSerialRepository productSerialRepository;
@@ -155,6 +170,141 @@ public class CellReceivingService {
         batch.setCreatedBy(author);
 
         return batchRepository.save(batch);
+    }
+
+    /**
+     * Автоматически создаёт подтверждённую партию под заказ «на
+     * изготовление подсборок» и привязывает номера к заказу.
+     *
+     * От ручного прихода отличается тем, что не ждёт сканирования:
+     * номера рождает сама система по правилу оприходования, и они
+     * заведомо верны, поэтому партия подтверждается сразу (номера
+     * попадают в реестр тем же {@link #writeSerials}, что и обычный
+     * приход, но со связью {@code issued_production_order}).
+     *
+     * Диапазон берётся по {@link #nextSerial} — тот же предел, что у
+     * прихода склада (максимум реестра и зарезервированных диапазонов
+     * плюс единица, с учётом стартового номера ряда), поэтому
+     * автосозданная партия не пересечётся ни с новым приходом, ни с
+     * выпуском.
+     *
+     * Реквизиты фиксированы договорённостью: поставщик АО «Альбатрос»,
+     * ордер — номер заказа (внешнего приходного документа нет, а
+     * отчёт поиска должен видеть источник), дата — сегодня, количество
+     * — из заказа.
+     *
+     * Идемпотентен: если номера этого заказа уже в реестре (второй
+     * клик по комплектованию), повторный диапазон не резервируется —
+     * возвращается партия первых выпущенных номеров.
+     */
+    @Transactional
+    public CellReceivingBatch createAutoForOrder(ProductionOrder order,
+                                                 AppUser author) {
+
+        ProductClassifier orderClassifier = order.getProductClassifier();
+
+        if (orderClassifier == null) {
+            throw new IllegalStateException(
+                    "В заказе «" + order.getNumber()
+                            + "» не задано изделие — номера создать нечем"
+            );
+        }
+
+        ProductClassifier classifier = requireCellClassifier(
+                orderClassifier.getId()
+        );
+
+        /*
+         * Повторная генерация отклоняется выбором существующей партии:
+         * заказ обязан получить ровно один диапазон, иначе второй клик
+         * удвоил бы номера и заказ ушёл в производство с лишними
+         * изделиями.
+         */
+        List<ProductSerial> already = productSerialRepository
+                .findDetailsByProductionOrderId(order.getId());
+
+        if (!already.isEmpty()) {
+            CellReceivingBatch existing = already.get(0).getReceivingBatch();
+
+            if (existing != null) {
+                return existing;
+            }
+        }
+
+        int quantity = SerialNumbering.instancesOf(order.getQuantity());
+
+        int first = nextSerial(classifier);
+        int last = first + quantity - 1;
+
+        if (last > MAX_SERIAL) {
+            throw new IllegalStateException(
+                    "Нумерации классификатора «" + classifier.getCode()
+                            + "» не хватает: после " + format(classifier, last)
+                            + " ряд пятизначных серий закончился"
+            );
+        }
+
+        CellReceivingBatch batch = new CellReceivingBatch();
+
+        WarehouseSupplier supplier = supplierRepository
+                .findByNormalizedName(AUTO_RECEIVING_SUPPLIER)
+                .orElse(null);
+
+        batch.setSupplier(supplier);
+        batch.setSupplierName(
+                supplier != null ? supplier.getName() : AUTO_RECEIVING_SUPPLIER
+        );
+
+        /*
+         * Ордером служит номер заказа: внешнего приходного документа у
+         * автосозданной партии нет, а отчёт поиска по приходам обязан
+         * видеть, ради какого ЗНП выпущены номера.
+         */
+        batch.setIncomingOrderNumber(order.getNumber());
+        batch.setChangeNumber("0");
+        batch.setQuantity(quantity);
+        batch.setCellClassifier(classifier);
+        batch.setFirstSerial(first);
+        batch.setLastSerial(last);
+        batch.setNote("Автоматическое оприходование по заказу «"
+                + order.getNumber() + "»");
+        batch.setCreatedBy(author);
+
+        CellReceivingBatch saved = batchRepository.save(batch);
+
+        saved.setConfirmedAt(LocalDateTime.now());
+        batchRepository.save(saved);
+
+        writeSerials(saved, order);
+
+        /*
+         * Начало пути номера: приход — точка, где подсборка появляется
+         * как изделие. Без неё паспорт начинался бы с первой проверки
+         * или изоляции, а «кем и когда выпущена» осталось бы
+         * неизвестным.
+         */
+        journal.recordReceived(
+                productSerialRepository
+                        .findDetailsByFullNumbers(saved.fullNumbers()),
+                saved,
+                author,
+                saved.getConfirmedAt()
+        );
+
+        return saved;
+    }
+
+    /**
+     * Оприходованы ли номера этого заказа ранее (партия уже создана).
+     *
+     * Нужен разделу комплектования, чтобы второй клик по заказу не
+     * резервировал новый диапазон, а открыл уже сгенерированные номера.
+     */
+    @Transactional(readOnly = true)
+    public boolean isAutoReceived(Long orderId) {
+        return orderId != null
+                && !productSerialRepository
+                        .findDetailsByProductionOrderId(orderId).isEmpty();
     }
 
     /**
@@ -287,7 +437,7 @@ public class CellReceivingService {
             );
         }
 
-        writeSerials(batch);
+        writeSerials(batch, null);
 
         batch.setConfirmedAt(LocalDateTime.now());
         batchRepository.save(batch);
@@ -314,8 +464,15 @@ public class CellReceivingService {
      *
      * Ячейки получают статус «Выпущен»: на складе они лежат, но ни в
      * один выпуск и ни в одну сборку ещё не включены.
+     *
+     * Параметр {@code order} связывает номера с заказом «на изготовление
+     * подсборок»: у обычного прихода склада его нет (null), и номера
+     * остаются бесхозными до комплектования. Для сгенерированных ЗНП
+     * номеров заказ — их хозяин с момента рождения, иначе ни карточка
+     * заказа, ни поиск по нему эти номера не увидят.
      */
-    private void writeSerials(CellReceivingBatch batch) {
+    private void writeSerials(CellReceivingBatch batch,
+                              ProductionOrder order) {
 
         ProductClassifier classifier = batch.getCellClassifier();
         ProductType productType = classifier.getProductType();
@@ -341,6 +498,13 @@ public class CellReceivingService {
             );
 
             item.setReceivingBatch(batch);
+
+            /*
+             * Хозяин-заказ ставится только сгенерированным ЗНП номерам:
+             * обычный приход его не имеет, и setIssuedProductionOrder(
+             * null) для него — норма, а не сброс уже занятого номера.
+             */
+            item.setIssuedProductionOrder(order);
             item.setStatus(ProductSerialStatus.NEW);
             item.setNote("Приход: " + batch.getSupplierName()
                     + ", ордер " + batch.getIncomingOrderNumber()

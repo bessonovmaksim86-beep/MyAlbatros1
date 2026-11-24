@@ -155,14 +155,22 @@ public class OneCComClient {
     }
 
     /**
-     * Запускает powershell.exe и собирает его stdout как UTF-8.
+     * Запускает PowerShell и собирает его stdout как UTF-8.
+     *
+     * Берётся {@link OneCProperties#resolvedPowerShell()}, а не
+     * {@code powershell.exe} из PATH: разрядность процесса обязана
+     * совпадать с разрядностью платформы 1С. Для 32-битной сборки путь
+     * ведут к {@code SysWOW64\WindowsPowerShell\v1.0\powershell.exe};
+     * 64-битный процесс 32-битный COM-объект не увидит и вернёт тот же
+     * {@code Class not registered}, который легко принять за отсутствие
+     * прав или неверное имя базы.
      *
      * Флаг {@code -NoProfile} убирает загрузку пользовательского
      * профиля: он может печатать свои строки и менять кодировку.
      */
     private List<String> runPowerShell(Path script) throws Exception {
         ProcessBuilder builder = new ProcessBuilder(
-                "powershell.exe",
+                oneCProperties.resolvedPowerShell(),
                 "-NoProfile",
                 "-NonInteractive",
                 "-ExecutionPolicy", "Bypass",

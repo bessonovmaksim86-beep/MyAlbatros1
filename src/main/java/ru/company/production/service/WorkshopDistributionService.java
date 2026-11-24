@@ -19,6 +19,7 @@ import ru.company.production.entity.Operation;
 import ru.company.production.entity.OperationTypeCode;
 import ru.company.production.entity.OrderScheduleRow;
 import ru.company.production.entity.ProductionOrder;
+import ru.company.production.entity.ProductionOrderStatus;
 import ru.company.production.entity.ScheduleRowStatus;
 import ru.company.production.entity.ScrappedScheduleInstance;
 import ru.company.production.entity.TechProcess;
@@ -29,6 +30,7 @@ import ru.company.production.repository.EmployeeAbsenceRepository;
 import ru.company.production.repository.ExecutorDayLoadView;
 import ru.company.production.repository.OpenInstanceRowView;
 import ru.company.production.repository.OrderScheduleRowRepository;
+import ru.company.production.repository.ProductionOrderRepository;
 import ru.company.production.repository.ProductionOrderSerialProjection;
 import ru.company.production.repository.ScrappedScheduleInstanceRepository;
 import ru.company.production.repository.TechProcessOperationControlParamRepository;import ru.company.production.repository.TechProcessOperationRepository;
@@ -134,6 +136,20 @@ public class WorkshopDistributionService {
     private final WorkshopStaffService staffService;
     private final WorkshopDistributionSerialService serialService;
     private final TechProcessOperationRepository routeNodeRepo;
+
+    /*
+     * Заказ «на изготовление подсборок» (V96) закрывается передачей в
+     * БВК, а не приёмкой ячеек (этот вид не набирается матрицей
+     * склада), поэтому сервису нужен заказ для перевода в DONE.
+     */
+    private final ProductionOrderRepository productionOrderRepo;
+
+    /*
+     * Забракованные экземпляры (V90): их строки нельзя провести, и
+     * они не должны вечно удерживать заказ открытым после передачи
+     * годных позиций в БВК.
+     */
+    private final ScrappedScheduleInstanceRepository scrappedRepository;
 
     /*
      * Признак «у операции есть контролируемые параметры» нужен панели
@@ -2339,7 +2355,98 @@ public class WorkshopDistributionService {
          */
         if (isTransferType(operationTypeCode(row))) {
             shiftSuccessorDate(row, performer);
+
+            /*
+             * Заказ «на изготовление подсборок» (V96) передачей в БВК
+             * завершается.
+             *
+             * Обычно групповой ЗНП закрывает приёмка состава на склад
+             * (ZnpAcceptanceService), но этот вид в ней не участвует:
+             * его номера не набираются матрицей, а приходят партией,
+             * которую склад оформляет сам при комплектовании. Дальше
+             * партия идёт стандартным путём — контроль БВК и приёмка
+             * партии, и ни то, ни другое к заказу не привязано, так что
+             * закрыть его было бы некому.
+             *
+             * Смысловой конец работы цеха здесь — передаточная операция:
+             * подсборки изготовлены и сданы в БВК. Заказ на этом
+             * закрывается; БВК и приёмка партии идут как обычно и статус
+             * заказа не меняют.
+             */
+            closeSubassemblyOrderAfterTransfer(row);
         }
+    }
+
+    /**
+     * Закрытие заказа «на изготовление подсборок» (V96) передачей в БВК.
+     *
+     * Заказ закрывается, когда цех передал по этой передаточной операции
+     * все годные изделия: незакрытых строк этой операции без учёта
+     * забракованных экземпляров не осталось. Забракованные позиции
+     * (V90) провести нельзя, и они не должны вечно держать заказ
+     * открытым, поэтому вычтены из проверки.
+     *
+     * Проверка держится на самой переданной операции, а не на «всём
+     * маршруте»: в маршруте этого вида за передачей стоят контроль БВК
+     * и приёмка партии на склад, которые ведутся партией (карточкой
+     * БВК, {@code BvkAcceptanceService}), а не строками плана заказа, и
+     * строками плана не проводятся. Ждать их закрытия значило бы никогда
+     * не закрыть заказ, хотя цех свою работу сдал полностью.
+     *
+     * Прочие групповые виды здесь не закрываются: их замыкает приёмка
+     * состава на склад ({@code ZnpAcceptanceService}), а у этого вида
+     * состав партией приходит на склад при комплектовании, и приёмки
+     * состава у него нет.
+     */
+    private void closeSubassemblyOrderAfterTransfer(OrderScheduleRow row) {
+
+        ProductionOrder order = row.getProductionOrder();
+        Operation transfer = row.getOperation();
+
+        if (order == null || order.getId() == null
+                || transfer == null || transfer.getId() == null) {
+            return;
+        }
+
+        if (!order.isNumberGeneratedKind()) {
+            return;
+        }
+
+        /*
+         * Уже закрытый или отменённый заказ не переоткрывается и не
+         * закрывается повторно: повторное проведение другой позиции того
+         * же заказа не должно порождать второе событие закрытия.
+         */
+        ProductionOrderStatus status = order.getStatus();
+
+        if (status == ProductionOrderStatus.DONE
+                || status == ProductionOrderStatus.CANCELLED) {
+            return;
+        }
+
+        Set<Integer> scrappedIndexes = new HashSet<>();
+
+        for (ScrappedScheduleInstance scrapped
+                : scrappedRepository.findByProductionOrderId(order.getId())) {
+            scrappedIndexes.add(scrapped.getInstanceIndex());
+        }
+
+        for (OrderScheduleRow open
+                : scheduleRowRepo.findOpenRowsOfProductionOrder(
+                        order.getId(), transfer.getId())) {
+
+            Integer instance = open.getInstanceIndex();
+
+            if (instance != null && scrappedIndexes.contains(instance)) {
+                continue;
+            }
+
+            /* Ещё есть годное изделие, не переданное в БВК. */
+            return;
+        }
+
+        order.setStatus(ProductionOrderStatus.DONE);
+        productionOrderRepo.save(order);
     }
 
     /**

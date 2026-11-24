@@ -275,7 +275,7 @@
                  ===================================================== -->
             <form method="post"
                   th:action="@{/warehouse/subassembly-kitting/{id}(id=${view.order.id})}"
-                  th:if="${!view.nothingToAdd()}">
+                  th:if="${!view.nothingToAdd() and !view.isNumberGeneratedKind()}">
 
                 <input th:if="${_csrf != null}"
                        type="hidden"
@@ -352,6 +352,90 @@
                             <button type="submit"
                                     class="btn primary">
                                 Внести в заказ
+                            </button>
+
+                        </div>
+
+                    </div>
+                </section>
+            </form>
+
+            <!--
+                 V96: заказ «на изготовление подсборок».
+
+                 Складской полки у этого заказа нет: подсборки выпустит
+                 цех, поэтому набирать номера не откуда. Комплектование
+                 здесь резервирует следующий свободный ряд классификатора
+                 и оформляет приход той же партией, что и обычный приход
+                 склада, — номера появляются в реестре сразу и видны
+                 ниже, в составе заказа: оттуда их печатают этикетками.
+            -->
+            <form method="post"
+                  th:action="@{/warehouse/subassembly-kitting/{id}(id=${view.order.id})}"
+                  th:if="${view.isNumberGeneratedKind() and !view.nothingToAdd()}">
+
+                <input th:if="${_csrf != null}"
+                       type="hidden"
+                       th:name="${_csrf.parameterName}"
+                       th:value="${_csrf.token}">
+
+                <section class="card">
+
+                    <div class="card-head">
+
+                        <div>
+
+                            <h2>Сгенерировать номера подсборок</h2>
+
+                            <small>
+                                Склад не берёт подсборки с полки — их
+                                выпустит цех. Проведение резервирует
+                                следующий свободный ряд классификатора,
+                                оформляет приход партией на заказ и вносит
+                                номера в реестр. Повторное проведение
+                                второй диапазон не выпускает: заказ
+                                получает ровно один ряд номеров.
+                            </small>
+
+                        </div>
+
+                        <span class="warehouse-counter"
+                              th:text="${view.takenCount()} + ' из ' + ${view.requiredCount()} + ' ' + ${view.positionsAbbrev()}">
+                            0 из 5 подсб.
+                        </span>
+                    </div>
+
+                    <div class="card-body">
+
+                        <div class="alert"
+                             style="margin-bottom: 0;">
+
+                            <p>
+                                Будут выпущены номера в количестве заказа
+                                (<span th:text="${view.order.formattedQuantity}">5</span>
+                                шт.), поставщик — АО «Альбатрос», ордер —
+                                номер заказа
+                                <span class="mono"
+                                      th:text="${view.order.number}">
+                                    ЗНП-2026-114
+                                </span>.
+                                После проведения номера появятся в составе
+                                заказа ниже и в приходе склада — там же
+                                их можно распечатать этикетками с QR.
+                            </p>
+
+                        </div>
+
+                        <div class="warehouse-actions">
+
+                            <a class="btn secondary"
+                               th:href="@{/warehouse/subassembly-kitting}">
+                                К списку заказов
+                            </a>
+
+                            <button type="submit"
+                                    class="btn primary">
+                                Сгенерировать номера
                             </button>
 
                         </div>

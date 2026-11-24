@@ -1,99 +1,128 @@
-﻿# Диагностика COM-соединения с 1С (V83.COMConnector).
-# Запускать на машине, где установлена платформа 1С.
+﻿# ----------------------------------------------------------------------
+# Диагностика COM-соединения с 1С.
+#
+# Проверка идёт в 32-битном PowerShell: платформа 1С ставится в каталог
+# 1cv8_x86, то есть сборка 32-битная, а 32-битный COM-класс из
+# 64-битного процесса не создаётся.
+#
+# ВАЖНО. Каждый шаг проверяется отдельно, и успех печатается ТОЛЬКО
+# после того, как соответствующая операция реально выполнена. Предыдущая
+# версия скрипта печатала OK через точку с запятой, и OK появлялся даже
+# когда New-Object падал с Class not registered.
+# ----------------------------------------------------------------------
 
-$ErrorActionPreference = 'Continue'
+$ErrorActionPreference = 'Stop'
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 
-$server = if ($env:ONEC_SERVER) { $env:ONEC_SERVER } else { 'app1' }
-$database = if ($env:ONEC_DATABASE) { $env:ONEC_DATABASE } else { 'albatros' }
+$server = 'app1'
+$database = 'albatros'
+
+if ($env:ONEC_SERVER) { $server = $env:ONEC_SERVER }
+if ($env:ONEC_DATABASE) { $database = $env:ONEC_DATABASE }
 
 Write-Host "Сервер: $server  База: $database"
+Write-Host "Разрядность этого процесса: $([Environment].Is64BitProcess)"
 Write-Host ""
 
-# --- Шаг 1. Зарегистрирован ли COM-коннектор ---
-$registered = $false
-try {
-    $connector = New-Object -ComObject V83.COMConnector
-    $registered = $true
-    Write-Host "[OK] V83.COMConnector зарегистрирован"
-} catch {
-    Write-Host "[FAIL] V83.COMConnector не зарегистрирован"
-}
-
-# --- Шаг 2. Ищем comcntr.dll на диске ---
-Write-Host ""
-Write-Host "Поиск comcntr.dll..."
+# --- Шаг 1. Ищем comcntr.dll -----------------------------------------
+Write-Host "Шаг 1. Поиск comcntr.dll"
 
 $roots = @(
+    "$env:LOCALAPPDATA\Programs\1cv8_x86",
+    "$env:LOCALAPPDATA\Programs\1cv8",
     'C:\Program Files\1C',
     'C:\Program Files (x86)\1C',
     'C:\Program Files\1cv8',
     'C:\Program Files (x86)\1cv8'
 )
 
-$found = @()
+$dlls = @()
 foreach ($root in $roots) {
     if (Test-Path $root) {
-        $found += Get-ChildItem -Path $root -Filter 'comcntr.dll' -Recurse -ErrorAction SilentlyContinue |
-                  Select-Object -ExpandProperty FullName
+        $dlls += Get-ChildItem -Path $root -Filter 'comcntr.dll' -Recurse -ErrorAction SilentlyContinue
     }
 }
 
-if ($found.Count -eq 0) {
-    Write-Host "[FAIL] comcntr.dll не найдена ни в одном типовом каталоге."
-    Write-Host "       Вероятно, установлена только тонкая клиентская часть -"
-    Write-Host "       COM-обмен с этой машины невозможен."
+if ($dlls.Count -eq 0) {
+    Write-Host "  [FAIL] comcntr.dll не найдена. Платформа 1С не установлена."
+    Write-Host "         COM-обмен с этой машины невозможен."
     exit 1
 }
 
-Write-Host "Найдено копий: $($found.Count)"
-foreach ($dll in $found) { Write-Host "  $dll" }
+foreach ($d in $dlls) { Write-Host "  найдена: $($d.FullName)" }
 
-# --- Шаг 3. Готовая команда регистрации с учётом разрядности ---
-$is64 = [Environment]::Is64BitProcess
-$psBit = if ($is64) { '64-бит' } else { '32-бит' }
+# Разрядность dll определяется по каталогу установки, а не по тому,
+# откуда запущен скрипт: bin\64 - 64-битная сборка, всё остальное - 32.
+$dll = $dlls[0]
+$dllIs64 = $dll.FullName -match '\bin\64'
+Write-Host "  разрядность dll: $(if ($dllIs64) { '64-бит' } else { '32-бит' })"
 
+# --- Шаг 2. Зарегистрирован ли класс ----------------------------------
 Write-Host ""
-Write-Host "Этот PowerShell: $psBit"
-Write-Host "Нужна comcntr.dll той же разрядности, иначе регистрация пройдёт"
-Write-Host "без ошибки, но класс так и останется незарегистрированным."
+Write-Host "Шаг 2. Проверка регистрации V83.COMConnector"
 
-foreach ($dll in $found) {
-    $bit = if ($dll -match '\bin\64') { '64' } elseif ($dll -match '\bin\') { '32' } else { '?' }
-    $reg = if ($is64) { 'C:\Windows\System32\regsvr32.exe' } else { 'C:\Windows\SysWOW64\regsvr32.exe' }
-    Write-Host ""
-    Write-Host "  [$bit-битная] $dll"
-    Write-Host "  Команда: `"$reg`" `"$dll`""
+$registered = $false
+try {
+    $connector = New-Object -ComObject V83.COMConnector
+    $registered = $true
+    Write-Host "  [OK] класс доступен"
+} catch {
+    Write-Host "  [FAIL] класс недоступен: $($_.Exception.Message)"
 }
 
 if (-not $registered) {
+    # Каталог regsvr32 выбирается по разрядности dll. В Windows имена
+    # перепутаны исторически: SysWOW64 содержит 32-битные компоненты,
+    # System32 - 64-битные.
+    $regTool = if ($dllIs64) { "$env:SystemRoot\System32\regsvr32.exe" } else { "$env:SystemRoot\SysWOW64\regsvr32.exe" }
+
     Write-Host ""
-    Write-Host "Запустите PowerShell ОТ ИМЕНИ АДМИНИСТРАТОРА и выполните"
-    Write-Host "команду regsvr32 для 64-битной comcntr.dll, затем повторите"
-    Write-Host "этот скрипт."
+    Write-Host "  Нужно зарегистрировать dll. Выполните в PowerShell"
+    Write-Host "  ОТ ИМЕНИ АДМИНИСТРАТОРА:"
+    Write-Host ""
+    Write-Host "    & '$regTool' '$($dll.FullName)'"
+    Write-Host ""
+    Write-Host "  Дождитесь окна 'Успешно', затем повторите этот скрипт."
     exit 2
 }
 
-# --- Шаг 4. Проверка соединения и запроса ---
+# --- Шаг 3. Соединение с базой ---------------------------------------
+Write-Host ""
+Write-Host "Шаг 3. Соединение с базой (вход под текущим пользователем Windows)"
+
+$connectString = 'Srvr="' + $server + '";Ref="' + $database + '";'
+Write-Host "  $connectString"
+
 try {
-    $connection = $connector.Connect('Srvr="' + $server + '";Ref="' + $database + '";')
-    Write-Host ""
-    Write-Host "[OK] Соединение с базой установлено"
+    $connection = $connector.Connect($connectString)
+    Write-Host "  [OK] соединение установлено"
 } catch {
-    Write-Host "[FAIL] Не удалось подключиться: $($_.Exception.Message)"
+    Write-Host "  [FAIL] $($_.Exception.Message)"
     exit 3
 }
+
+# --- Шаг 4. Запрос ----------------------------------------------------
+Write-Host ""
+Write-Host "Шаг 4. Выполнение запроса через канал"
 
 try {
     $query = $connection.NewObject('Query', 'ВЫБРАТЬ 1 КАК Number')
     $selection = $query.Execute().Select()
+
     if ($selection.Next()) {
-        Write-Host "[OK] Запрос выполнен: $($selection.Value('Number'))"
+        Write-Host "  [OK] запрос выполнен, Number = $($selection.Value('Number'))"
+    } else {
+        Write-Host "  [FAIL] запрос не вернул строк"
+        exit 4
     }
 } catch {
-    Write-Host "[FAIL] Запрос не выполнен: $($_.Exception.Message)"
+    Write-Host "  [FAIL] $($_.Exception.Message)"
     exit 4
 }
 
 Write-Host ""
-Write-Host "COM-канал работает. Включайте обмен: ONEC_ENABLED=true"
+Write-Host "ВСЁ РАБОТАЕТ. Для приложения задайте:"
+Write-Host "  `$env:ONEC_ENABLED = 'true'"
+if (-not $dllIs64) {
+    Write-Host "  `$env:ONEC_POWERSHELL_PATH = 'C:\Windows\SysWOW64\WindowsPowerShell\v1.0\powershell.exe'"
+}

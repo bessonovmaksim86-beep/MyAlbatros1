@@ -1613,10 +1613,24 @@ body {
     .dispatcher-sidebar,
     .department-brand__logo,
     .department-brand__system,
-    .department-brand__department,
-    .dispatcher-navigation__item,
+    .department-brand__department,       
+    .dispatcher-navigation__item,        
     .dispatcher-navigation__text,
     .dispatcher-navigation__counter {
         transition: none !important;
     }
+}
+
+/* ============================================================
+   Баннер источника импорта
+   ============================================================ */
+
+.alert.info {
+    background: #eef4fb;
+    border: 1px solid #b8d4f0;
+    color: #1a5276;
+    border-radius: 9px;
+    padding: 10px 16px;
+    margin-bottom: 16px;
+    font-size: 13px;
 }

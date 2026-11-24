@@ -84,7 +84,7 @@ public class SubassemblyKittingController {
     @PostMapping("/{id}")
     public String attach(
             @PathVariable Long id,
-            @RequestParam String cellNumbers,
+            @RequestParam(required = false) String cellNumbers,
             Authentication authentication,
             RedirectAttributes redirectAttributes
     ) {

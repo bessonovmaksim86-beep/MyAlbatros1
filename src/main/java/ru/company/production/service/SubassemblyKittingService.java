@@ -10,6 +10,7 @@ import ru.company.production.entity.AppUser;
 import ru.company.production.entity.Operation;
 import ru.company.production.entity.OrderScheduleRow;
 import ru.company.production.entity.ProductClassifier;
+import ru.company.production.entity.CellReceivingBatch;
 import ru.company.production.entity.ProductSerial;
 import ru.company.production.entity.ProductSerialOperation;
 import ru.company.production.entity.ProductSerialOperationStatus;
@@ -19,6 +20,7 @@ import ru.company.production.entity.ScheduleRowStatus;
 import ru.company.production.entity.SerialProductionOrder;
 import ru.company.production.entity.TechProcess;
 import ru.company.production.entity.TechProcessOperation;
+import ru.company.production.entity.ZnpKind;
 import ru.company.production.repository.CellReceivingBatchRepository;
 import ru.company.production.repository.OrderScheduleRowRepository;
 import ru.company.production.repository.ProductSerialOperationRepository;
@@ -117,6 +119,15 @@ public class SubassemblyKittingService {
      */
     private final OrderScheduleRowRepository scheduleRowRepository;
 
+    /*
+     * Генерация номеров по правилу прихода (новый вид GROUP_SUBASSEMBLY):
+     * склад не набирает подсборки с полки, а резервирует следующий ряд
+     * классификатора и оформляет приход той же партией, что и обычный
+     * складской приход, — иначе два экрана разошлись бы в том, чей это
+     * заказ и откуда в нём взялись номера.
+     */
+    private final CellReceivingService cellReceivingService;
+
     /**
      * ЗНП с операцией приёмки на склад полуфабрикатов — список раздела.
      *
@@ -188,7 +199,15 @@ public class SubassemblyKittingService {
 
             List<SubassemblyKittingCellRow> free;
 
-            if (order.isSubassemblyKitting()) {
+            /*
+             * Развилка V96: заказу, генерирующему номера самому,
+             * складской остаток не показывается — подсборок на полке
+             * ещё нет, их выпустит цех. Внесённый состав (матрица)
+             * ниже строки и есть сгенерированные номера.
+             */
+            if (order.isNumberGeneratedKind()) {
+                free = List.of();
+            } else if (order.isSubassemblyKitting()) {
                 if (unacceptedRows == null) {
                     unacceptedRows = unacceptedStockRows();
                 }
@@ -217,7 +236,8 @@ public class SubassemblyKittingService {
                     order.getNote(),
                     order.getQuantity(),
                     free,
-                    attachedByOrder.getOrDefault(order.getId(), List.of())
+                    attachedByOrder.getOrDefault(order.getId(), List.of()),
+                    order.isNumberGeneratedKind()
             ));
         }
 
@@ -242,14 +262,26 @@ public class SubassemblyKittingService {
         ProductionOrder order = requireKittingOrder(orderId);
 
         /*
-         * Режим V72: свободный перечень — непринятые подсборки, а не
-         * принятые ячейки. Отбор по изделию заказа общий для обоих
-         * перечней, поэтому тот же freeCells.
+         * Развилка V96: заказ, генерирующий номера сам.
+         *
+         * Складского остатка нет — номера ещё не выпущены. Свободный
+         * перечень пуст, а внесённый состав читается из матрицы —
+         * там же кладовщик найдёт сгенерированные номера для печати.
          */
-        List<SubassemblyKittingCellRow> free =
-                order.isSubassemblyKitting()
-                        ? freeCells(order, unacceptedStockRows())
-                        : freeCells(order, stockRows());
+        List<SubassemblyKittingCellRow> free;
+
+        if (order.isNumberGeneratedKind()) {
+            free = List.of();
+        } else {
+            /*
+             * Режим V72: свободный перечень — непринятые подсборки, а не
+             * принятые ячейки. Отбор по изделию заказа общий для обоих
+             * перечней, поэтому тот же freeCells.
+             */
+            free = order.isSubassemblyKitting()
+                    ? freeCells(order, unacceptedStockRows())
+                    : freeCells(order, stockRows());
+        }
 
         return new SubassemblyKittingView(
                 order,
@@ -556,6 +588,18 @@ public class SubassemblyKittingService {
 
         ProductionOrder order = requireKittingOrder(orderId);
 
+        /*
+         * Развилка V96: заказ, генерирующий номера сам.
+         *
+         * Склад не набирает подсборки с полки — их выпустит цех.
+         * Комплектование здесь означает «резервирование диапазона и
+         * оформление прихода»: номера создаются, пишутся в матрицу
+         * и сразу проводят строки плана, чтобы цех увидел работу.
+         */
+        if (order.isNumberGeneratedKind()) {
+            return attachGeneratedCells(order, executor);
+        }
+
         List<String> chosen = parseNumbers(cellNumbersText);
 
         if (chosen.isEmpty()) {
@@ -745,6 +789,102 @@ public class SubassemblyKittingService {
                         + (already > 0
                                 ? "; ранее вошло " + already + " яч."
                                 : "")
+        );
+    }
+
+    /**
+     * Комплектование заказа, который генерирует номера сам (V96).
+     *
+     * Заказ «на изготовление подсборок» склад набрать с полки не может:
+     * подсборок ещё нет, их выпустит цех. Поэтому комплектование здесь
+     * означает не «взять с полки», а «зарезервировать ряд и оформить
+     * приход»: {@link CellReceivingService#createAutoForOrder} берёт
+     * следующий свободный диапазон классификатора, заводит партию с
+     * поставщиком АО «Альбатрос» и ордером — номером заказа, сразу её
+     * подтверждает и вносит номера в реестр.
+     *
+     * Состав заказа заводится матрицей ({@link SerialProductionOrder}) —
+     * той же связью, что и у остальных групповых видов: иначе разделы,
+     * которые читают состав матрицей (распределение работ цеха, счётчики
+     * «взято X из Y»), не увидели бы ни одной позиции заказа.
+     *
+     * Операция и строки плана проводятся за каждую позицию: без этого
+     * «Монтаж подсборок» остался бы запертым зависимостью маршрута, и
+     * цех не получил бы работу, ради которой заказ заводили.
+     *
+     * Идемпотентность держат два сервиса: повторный клик не резервирует
+     * второй диапазон (партия возвращается существующая) и не заводит
+     * вторую строку матрицы на номер.
+     */
+    private KittingResult attachGeneratedCells(ProductionOrder order,
+                                               AppUser executor) {
+
+        Operation operation = findKittingOperation(order);
+
+        if (operation == null) {
+            throw new IllegalStateException(
+                    "В заказе «" + order.getNumber()
+                            + "» не задана операция комплектования"
+                            + " подсборок — сгенерировать номера нечем"
+            );
+        }
+
+        CellReceivingBatch batch =
+                cellReceivingService.createAutoForOrder(order, executor);
+
+        List<ProductSerial> serials = serialRepository
+                .findDetailsByReceivingBatchId(batch.getId());
+
+        List<ProductSerial> attached = new ArrayList<>(serials.size());
+
+        for (ProductSerial serial : serials) {
+
+            if (serial.getId() == null
+                    || linkRepository.existsBySerial_IdAndProductionOrder_Id(
+                            serial.getId(), order.getId())) {
+                continue;
+            }
+
+            SerialProductionOrder link = new SerialProductionOrder();
+
+            link.setSerial(serial);
+            link.setProductionOrder(order);
+            link.setOperation(operation);
+            link.setCreatedBy(executor);
+            link.setNote("Комплектование подсборок: номера сгенерированы"
+                    + " по правилу прихода");
+
+            linkRepository.save(link);
+
+            performSerialOperation(serial, order, operation, executor);
+            completeScheduleRow(order, operation, executor);
+
+            attached.add(serial);
+        }
+
+        /*
+         * Новый состав — только при первой генерации. Повторный клик
+         * обязан остаться успешным и ничего не добавить: номера у
+         * заказа уже есть, и второй диапазон удвоил бы состав.
+         */
+        if (!attached.isEmpty()) {
+            journal.recordInProduction(attached, order, executor);
+
+            /*
+             * Подсборки появились на складе и едут в цех — передача
+             * (V81) оформляется тем же шагом, что и вкладывание в заказ,
+             * иначе в реестре остались бы позиции, которые цех уже увёз.
+             */
+            handoverService.openForOrder(attached, order, operation, executor);
+        }
+
+        return KittingResult.accepted(
+                "Для заказа «" + order.getNumber() + "» сгенерированы"
+                        + " номера " + batch.fullNumbers().get(0) + " — "
+                        + batch.fullNumbers().get(batch.getQuantity() - 1)
+                        + " (" + batch.getQuantity() + " шт., поставщик «"
+                        + batch.getSupplierName() + "»). Откройте приход"
+                        + " склада, чтобы распечатать этикетки с QR."
         );
     }
 
@@ -1149,7 +1289,8 @@ public class SubassemblyKittingService {
                         "Заказ на производство не найден"
                 ));
 
-        if (!order.isComponent() && !order.isSubassemblyKitting()) {
+        if (!order.isComponent() && !order.isSubassemblyKitting()
+                && !order.isNumberGeneratedKind()) {
             throw new IllegalStateException(
                     "Комплектование подсборок проходит по заказу-"
                             + "комплектующему либо по групповому ЗНП с типом "
@@ -1556,9 +1697,25 @@ public class SubassemblyKittingService {
          * изделиями, которые ещё не приняты ячейками, и заголовок
          * блока свободных позиций обязан говорить «подсборки», иначе
          * кладовщик не поймёт, какие номера вводить.
+         *
+         * Заказу V96 термин нужен по той же причине: резервируемые
+         * номера — подсборки, которые выпустит цех, а не готовые
+         * ячейки с полки.
          */
         public boolean showSubassemblyLabel() {
-            return order != null && order.isSubassemblyKitting();
+            return order != null
+                    && (order.isSubassemblyKitting()
+                        || order.isNumberGeneratedKind());
+        }
+
+        /**
+         * Генерирует ли заказ номера сам (V96).
+         *
+         * Для этого вида склад не набирает с полки — вместо поля ввода
+         * показывается кнопка «Сгенерировать номера».
+         */
+        public boolean isNumberGeneratedKind() {
+            return order != null && order.isNumberGeneratedKind();
         }
 
         /*

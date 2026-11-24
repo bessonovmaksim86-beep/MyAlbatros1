@@ -102,3 +102,17 @@ application:
     query1c: ${ONEC_ZP_QUERY:}
     max-rows: ${ONEC_MAX_ROWS:500}
     timeout-seconds: ${ONEC_TIMEOUT:60}
+
+    # Путь к powershell.exe, которым выполняется запрос к 1С.
+    #
+    # Разрядность процесса обязана совпадать с разрядностью платформы
+    # 1С. Платформа 8.3.24.1548 ставится в каталог 1cv8_x86 - это
+    # 32-битная сборка, и 32-битные системные утилиты Windows лежат в
+    # SysWOW64 (несмотря на "64" в имени каталога).
+    #
+    #   ONEC_POWERSHELL_PATH=C:\Windows\SysWOW64\WindowsPowerShell\v1.0\powershell.exe
+    #
+    # Пустое значение - powershell.exe из PATH, подходит для 64-битной
+    # платформы. С 32-битной сборкой такой запуск даёт "Class not
+    # registered", что выглядит как отсутствие прав, хотя права в порядке.
+    power-shell-path: ${ONEC_POWERSHELL_PATH:}

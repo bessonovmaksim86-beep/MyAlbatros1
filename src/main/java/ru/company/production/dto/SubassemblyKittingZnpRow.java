@@ -42,7 +42,8 @@ public record SubassemblyKittingZnpRow(
         String note,
         BigDecimal requiredQuantity,
         List<SubassemblyKittingCellRow> cells,
-        List<SubassemblyKittingCellRow> attached
+        List<SubassemblyKittingCellRow> attached,
+        boolean numberGenerated
 ) {
 
     /**

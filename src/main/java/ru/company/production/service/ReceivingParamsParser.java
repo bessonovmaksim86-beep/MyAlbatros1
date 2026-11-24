@@ -187,11 +187,27 @@ public class ReceivingParamsParser {
             to = from;
         }
 
+        /*
+         * Кандидат на имя принимается или отвергается одним вызовом, и
+         * его судьба обязана быть одинаковой в двух местах: если имя не
+         * принято (в нём цифры номера, оно слишком короткое), оно НЕ
+         * становится фильтром и обязано ОСТАТЬСЯ в остатке фразы — иначе
+         * слова запроса пропали бы даром, не найдя ни приходов, ни
+         * справочников.
+         */
+        String supplierName = supplier == null
+                ? null
+                : clean(supplier.text(lower));
+
         return new ReceivingParams(
-                supplier == null ? null : clean(supplier.text(lower)),
+                supplierName,
                 from,
                 to,
-                residual(lower, dates, supplier)
+                residual(
+                        lower,
+                        dates,
+                        supplierName == null ? null : supplier
+                )
         );
     }
 
@@ -330,8 +346,12 @@ public class ReceivingParamsParser {
         Matcher boundary = PERIOD_BEFORE_DATE.matcher(lower);
 
         if (boundary.find(from)) {
-            /* Имя кончается на предлоге, но сам предлог в него не входит. */
-            end = from + boundary.start() + leadingSpaces(boundary.group());
+            /*
+             * start() уже абсолютная позиция: matcher построен по всей
+             * фразе, find(from) лишь задаёт точку поиска. Имя
+             * кончается на предлоге, но сам предлог в имя не входит.
+             */
+            end = Math.min(end, boundary.start());
         }
 
         for (Span date : dates) {
@@ -373,17 +393,6 @@ public class ReceivingParamsParser {
 
         return open.find() ? position - (tail.length() - open.start())
                 : position;
-    }
-
-    private int leadingSpaces(String value) {
-        int index = 0;
-
-        while (index < value.length()
-                && Character.isWhitespace(value.charAt(index))) {
-            index++;
-        }
-
-        return index;
     }
 
     /*
@@ -443,6 +452,18 @@ public class ReceivingParamsParser {
 
         if (supplier != null) {
             cuts.add(supplier);
+
+            /*
+             * Слово «поставщик» в span имени не лежит: span начинается
+             * за ним. Вырезать его нужно отдельным шагом, иначе остаток
+             * фразы донёс бы «поставщика» до LIKE и поиск по справочникам
+             * искал бы это слово в наименованиях изделий.
+             */
+            Matcher keyword = SUPPLIER_KEYWORD.matcher(lower);
+
+            if (keyword.find() && keyword.start() < supplier.start()) {
+                cuts.add(new Span(keyword.start(), keyword.end(), null));
+            }
         }
 
         StringBuilder rest = new StringBuilder(lower);

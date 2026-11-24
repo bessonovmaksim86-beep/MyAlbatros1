@@ -714,6 +714,92 @@
     }
 
     /*
+     * Почему голосовой ввод недоступен — или null, если доступен.
+     *
+     * Проверка обязана быть ОТДЕЛЬНОЙ от наличия конструктора: браузер
+     * отдаёт webkitSpeechRecognition и на незащищённом адресе, но сам
+     * микрофон там блокирует, и тогда кнопка есть, нажатие есть, а
+     * реакции нет — ровно то, что видит человек без подсказки.
+     * Наличие конструктора значит лишь то, что API реализован.
+     */
+    function unavailableReason() {
+        /*
+         * Защищённый источник: https или localhost (он считается
+         * безопасным всегда). Вне него браузер не даёт доступ к
+         * микрофону, и SpeechRecognition молча не распознаёт ничего.
+         */
+        if (window.isSecureContext === false) {
+            return 'Голосовой ввод работает только по https или с localhost';
+        }
+
+        return null;
+    }
+
+    /*
+     * Человекочитаемая причина отказа распознавателя.
+     *
+     * Браузер отдаёт машинный код, и по нему непонятно, что делать:
+     * «not-allowed» — это и отказ в разрешении, и блокировка по
+     * незащищённому адресу, и политика организации.
+     */
+    function errorText(code) {
+        switch (code) {
+            case 'not-allowed':
+            case 'service-not-allowed':
+                return 'Браузер не дал доступ к микрофону: '
+                    + 'разрешите его в настройках сайта';
+            case 'audio-capture':
+                return 'Микрофон не найден';
+            case 'no-speech':
+                return 'Речь не распознана — продиктуйте ещё раз';
+            case 'network':
+                return 'Нет связи с распознаванием речи';
+            case 'aborted':
+                return null;
+            case 'language-not-supported':
+                return 'Русское распознавание недоступно в этом браузере';
+            default:
+                return 'Распознавание не удалось: ' + code;
+        }
+    }
+
+    /*
+     * Подсказка о состоянии — рядом с кнопкой.
+     *
+     * Скрипт показывает её сам, а не через штатные уведомления: те
+     * адресные (ссылка на дело), и вешать на них сбой микрофона
+     * означало бы увести человека из поиска по клику.
+     */
+    function showStatus(button, message) {
+        const host = button.closest('.gs, .search-page__form')
+            || button.parentElement;
+
+        if (!host) {
+            return;
+        }
+
+        let note = host.querySelector('.vs__note');
+
+        if (!note) {
+            note = document.createElement('span');
+            note.className = 'vs__note';
+            note.setAttribute('role', 'status');
+            host.appendChild(note);
+        }
+
+        note.textContent = message;
+        note.classList.add('is-shown');
+
+        if (showStatus.timer) {
+            window.clearTimeout(showStatus.timer);
+        }
+
+        showStatus.timer = window.setTimeout(() => {
+            note.classList.remove('is-shown');
+        }, 4500);
+    }
+
+    /*
      * Поле, в которое кладём распознанное.
      *
      * Кнопка лежит рядом со своим полем, поэтому поле ищется по
@@ -738,6 +824,19 @@
         const Recognition = recognitionConstructor();
 
         if (!Recognition) {
+            return;
+        }
+
+        /*
+         * Конструктор есть, но контекст незащищён (например, запуск
+         * по IP-адресу, а не localhost). Браузер выдаст SpeechRecognition,
+         * но микрофон заблокирует — и пользователь увидит кнопку, нажмёт,
+         * и тишина. Проверка здесь предотвращает этот сценарий.
+         */
+        const reason = unavailableReason();
+
+        if (reason) {
+            showStatus(button, reason);
             return;
         }
 
@@ -823,12 +922,30 @@
             }
         };
 
-        recognition.onerror = () => {
+        recognition.onerror = (event) => {
             button.disabled = false;
             button.classList.remove('is-listening');
+
+            const text = errorText(event.error);
+
+            if (text) {
+                showStatus(button, text);
+            }
         };
 
-        recognition.start();
+        try {
+            recognition.start();
+        } catch (error) {
+            button.disabled = false;
+            button.classList.remove('is-listening');
+
+            if (error.name === 'InvalidStateError') {
+                showStatus(button, 'Распознавание уже запущено');
+                return;
+            }
+
+            showStatus(button, 'Не удалось запустить распознавание');
+        }
     }
 
     /* ============================================================

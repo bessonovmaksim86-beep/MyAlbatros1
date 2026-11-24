@@ -25,6 +25,7 @@ import ru.company.production.dto.ProductionOrderForm;
 import ru.company.production.dto.TypeCardView;
 import ru.company.production.dto.TypeCards;
 import ru.company.production.entity.AppUser;
+import ru.company.production.entity.Customer;
 import ru.company.production.entity.CustomerOrder;
 import ru.company.production.entity.CustomerOrderItem;
 import ru.company.production.entity.CustomerOrderStatus;
@@ -56,7 +57,9 @@ import ru.company.production.service.SerialKittingService;
 import ru.company.production.service.OrderSchedulingService;
 import org.springframework.web.multipart.MultipartFile;
 import jakarta.servlet.http.HttpSession;
+import ru.company.production.service.checklist.B24TableParser;
 import ru.company.production.service.checklist.ChecklistParser;
+import ru.company.production.service.checklist.SystemSheetMatcher;
 
 import java.beans.PropertyEditorSupport;
 import java.math.BigDecimal;
@@ -92,6 +95,18 @@ public class DispatcherController {
     private final ProductionOrderService productionOrderService;
     private final OrderSchedulingService orderSchedulingService;
     private final ChecklistParser checklistParser;
+
+    /*
+     * Разбор содержимого Б24-таблицы, вставленного из буфера.
+     *
+     * Отдельный парсер, а не расширение ChecklistParser: файл чек-листа
+     * и вставка из таблицы различаются источником данных (Excel-ячейки
+     * против TSV-текста), а позиции отдаются одним типом, поэтому форма
+     * заказа заполняется из обоих одинаково.
+     */
+    private final B24TableParser b24TableParser;
+    private final ru.company.production.service.checklist.SystemSheetMatcher
+            systemSheetMatcher;
 
     /*
      * Колонка «Где позиции» списка групповых ЗНП: сводка по незакрытым
@@ -262,13 +277,40 @@ public class DispatcherController {
     public String createPage(Model model, HttpSession session) {
 
         if (!model.containsAttribute("customerOrderForm")) {
-            Object preview = session.getAttribute("checklistPreview");
-            if (preview instanceof ChecklistParser.ParsedChecklist parsed) {
-                model.addAttribute("customerOrderForm", importOrderForm(parsed));
-                model.addAttribute("importedFrom", parsed.fileName());
-                session.removeAttribute("checklistPreview");
+
+            Object table = session.getAttribute("b24TablePreview");
+
+            if (table instanceof B24TableParser.ParsedTable parsed) {
+
+                Long customerId = null;
+                Object sid = session.getAttribute("b24CustomerId");
+                if (sid instanceof Integer i) {
+                    customerId = i.longValue();
+                } else if (sid instanceof Long l) {
+                    customerId = l;
+                }
+
+                model.addAttribute(
+                        "customerOrderForm",
+                        importOrderForm(parsed,
+                                (String) session.getAttribute("b24TableUrl"),
+                                customerId)
+                );
+                model.addAttribute("importedFrom", "чек-лист Б24");
+
+                session.removeAttribute("b24TablePreview");
+                session.removeAttribute("b24TableUrl");
+                session.removeAttribute("b24CustomerId");
             } else {
-                model.addAttribute("customerOrderForm", newOrderForm());
+                Object preview = session.getAttribute("checklistPreview");
+                if (preview instanceof ChecklistParser.ParsedChecklist parsed) {
+                    model.addAttribute(
+                            "customerOrderForm", importOrderForm(parsed));
+                    model.addAttribute("importedFrom", parsed.fileName());
+                    session.removeAttribute("checklistPreview");
+                } else {
+                    model.addAttribute("customerOrderForm", newOrderForm());
+                }
             }
         }
 
@@ -300,6 +342,100 @@ public class DispatcherController {
         } catch (IllegalArgumentException e) {
             redirectAttributes.addFlashAttribute("errorMessage", e.getMessage());
             return "redirect:/dispatcher/customer-order/create";
+        }
+
+        return "redirect:/dispatcher/customer-order/create";
+    }
+
+    /**
+     * Страница «Создать из чек-листа Б24».
+     *
+     * Отдельная страница, а не сразу форма заказа, потому что у
+     * источника два способа попасть в программу: ссылка на таблицу
+     * (сохраняется в карточку для сверки) и содержимое, вставленное из
+     * буфера обмена (собственно данные). Ссылка сама по себе ничего не
+     * читает: Битрикс24 отдаёт её только авторизованному пользователю,
+     * а публичных методов для объекта «Таблицы» у портала нет, — и
+     * объяснять это приходится до разбора, а не после неудачи.
+     */
+    @GetMapping("/customer-order/import-b24")
+    public String importB24Page(Model model) {
+
+        model.addAttribute("activePage", "customerOrder");
+
+        return "dispatcher/order/b24-import";
+    }
+
+    /**
+     * Разбор содержимого Б24-таблицы, вставленного в форму.
+     *
+     * Парсер кладётся в сессию под отдельным признаком, а не в
+     * «checklistPreview» файла: у таблицы есть реквизиты шапки
+     * (заказчик, срок, номер заказа 1С), которых в файле чек-листа нет,
+     * и форма создания обязана различать два источника.
+     *
+     * Ссылка на таблицу сохраняется вместе с разбором: если диспетчер
+     * её вставил, она принадлежит именно этому заказу.
+     */
+    @PostMapping("/customer-order/import-b24")
+    public String importChecklistFromTable(
+            @RequestParam("tsv") String tsv,
+            @RequestParam(value = "b24ChecklistUrl", required = false)
+            String checklistUrl,
+            HttpSession session,
+            RedirectAttributes redirectAttributes
+    ) {
+        B24TableParser.ParsedTable parsed;
+
+        try {
+            parsed = b24TableParser.parse(tsv);
+        } catch (IllegalArgumentException e) {
+            redirectAttributes.addFlashAttribute("errorMessage", e.getMessage());
+
+            return "redirect:/dispatcher/customer-order/import-b24";
+        }
+
+        /*
+         * Иерархия листа проверяется до создания заказа: строки
+         * состава («1.1») без строки изделия («1») потерялись бы, а
+         * состав, которого нет в классификаторе системы, не собрался
+         * бы при выпуске — диспетчер узнал об этом уже в цеху.
+         * Пока лист не разобран в форму, ошибку исправить дешевле.
+         */
+        String compositionProblem =
+                systemSheetMatcher.compositionProblem(parsed.rows());
+
+        if (compositionProblem != null) {
+            redirectAttributes.addFlashAttribute("errorMessage",
+                    compositionProblem);
+
+            return "redirect:/dispatcher/customer-order/import-b24";
+        }
+
+        /*
+         * Заказчик из чек-листа заводится сразу здесь, а не при
+         * открытии формы: страница создания — GET-запрос, и создавать
+         * справочник в нём нельзя (повторная загрузка или закладка
+         * породили бы дубли). Раз POST — место для записи, и к моменту
+         * рендера формы заказчик уже в справочнике и попал в селектор.
+         */
+        if (parsed.customerName() != null && !parsed.customerName().isBlank()) {
+            try {
+                Customer customer =
+                        customerService.findOrCreateByNameLoose(parsed.customerName());
+                if (customer != null) {
+                    session.setAttribute("b24CustomerId", customer.getId());
+                }
+            } catch (IllegalArgumentException e) {
+                redirectAttributes.addFlashAttribute("errorMessage", e.getMessage());
+                return "redirect:/dispatcher/customer-order/import-b24";
+            }
+        }
+
+        session.setAttribute("b24TablePreview", parsed);
+
+        if (checklistUrl != null && !checklistUrl.isBlank()) {
+            session.setAttribute("b24TableUrl", checklistUrl.trim());
         }
 
         return "redirect:/dispatcher/customer-order/create";
@@ -1380,20 +1516,213 @@ public class DispatcherController {
         form.getItems().clear();
 
         for (ChecklistParser.ParsedRow row : parsed.rows()) {
-            CustomerOrderForm.CustomerOrderItemForm item =
-                    new CustomerOrderForm.CustomerOrderItemForm();
-
-            item.setProductType(ProductType.SENSOR);
-            item.setFullName(row.name());
-            item.setQuantity(row.qty());
-            item.setUnit(toUnitName(row.unit()));
-            item.setTechProcessType(TechProcessType.BASIC);
-            item.setNote(row.note().isBlank() ? null : row.note());
-
-            form.getItems().add(item);
+            form.getItems().add(importedItem(row, ProductType.SENSOR));
         }
 
         return form;
+    }
+
+    /**
+     * Форма создания из Б24-таблицы.
+     *
+     * Отличается от разбора файла тем, что у таблицы есть шапка с
+     * реквизитами заказа, и они переносятся в карточку целиком:
+     *
+     *   * заказчик — уже найденный или созданный в POST-обработчике
+     *     /import-b24 (CustomerService.findOrCreateByNameLoose): его id
+     *     приходит параметром. Заведение заказчика оставлено на POST,
+     *     потому что эта сборка формы вызывается из GET и повторная
+     *     загрузка страницы не должна создавать в справочнике дубли.
+     *     Если наименование оказалось неоднозначным, id равен null и
+     *     диспетчер выбирает покупателя сам;
+     *   * срок исполнения — из строки «Дата отгрузки:»; без него заказ
+     *     в план не ставится, поэтому значение обязательно проверяется;
+     *   * ссылка на таблицу — сохраняется в карточку как источник;
+     *   * род изделий — из заголовка листа: «Чек-лист приборов» даёт
+     *     позиции типом «прибор», иначе они остались бы датчиками и
+     *     сохранение отклонилось бы на подборе изделия;
+     *   * иерархия листа — строка со составом («1», а ниже «1.1»,
+     *     «1.2») становится одной позицией типа «система»: состав —
+     *     это не отдельные изделия заказа, а то, из чего система
+     *     собирается. Строки состава отдельными позициями не
+     *     становятся, иначе заказ удвоился бы, а выпуск считал бы
+     *     датчик и прибор самостоятельными изделиями. Наименование
+     *     системы подбирается по классификатору; если подобрать не
+     *     удалось, позиция остаётся системой с не выбранным
+     *     изделием — диспетчер укажет его сам.
+     *
+     * Номер заказа программа оставляет свой (ЗП-ГГГГ-NNN): по нему
+     * ищутся заказы в списках и печатных документах. Заказ 1С при
+     * этом записывается в поле «Номер договора» — оно для внешнего
+     * номера и предназначено («№ 472 от 23.11.2026»), — и дублируется
+     * в примечании вместе с наименованием заказчика из листа: карточка
+     * должна показывать источник целиком, даже если покупатель был
+     * подобран по другому написанию.
+     */
+    private CustomerOrderForm importOrderForm(
+            B24TableParser.ParsedTable parsed,
+            String checklistUrl,
+            Long customerId
+    ) {
+        CustomerOrderForm form = newOrderForm();
+        form.getItems().clear();
+
+        ProductType kind = parsed.deviceSheet()
+                ? ProductType.DEVICE
+                : ProductType.SENSOR;
+
+        /*
+         * Номера строк, под которыми есть состав («1.1» → «1»):
+         * такие строки — системы, а их строки состава в позициях
+         * не повторяются.
+         */
+        Set<String> parents = systemSheetMatcher
+                .componentsByParent(parsed.rows()).keySet();
+
+        for (ChecklistParser.ParsedRow row : parsed.rows()) {
+
+            if (row.isComponent()) {
+                continue;
+            }
+
+            if (row.number() != null && parents.contains(row.number())) {
+                form.getItems().add(systemItem(row));
+            } else {
+                form.getItems().add(importedItem(row, kind));
+            }
+        }
+
+        if (customerId != null) {
+            form.setCustomerId(customerId);
+        }
+
+        if (parsed.dueDate() != null) {
+            form.setDueDate(parsed.dueDate());
+        }
+
+        if (checklistUrl != null && !checklistUrl.isBlank()) {
+            form.setB24ChecklistUrl(checklistUrl);
+        }
+
+        if (!parsed.sourceOrderLabel().isBlank()) {
+            form.setContractNumber(parsed.sourceOrderLabel());
+        }
+
+        String note = "";
+
+        if (!parsed.sourceOrderLabel().isBlank()) {
+            note = "Заказ покупателя в 1С " + parsed.sourceOrderLabel();
+        }
+
+        if (parsed.customerName() != null && customerId == null) {
+            /*
+             * Заказчик не определён: наименование из листа записывается
+             * в примечание, иначе диспетчер не узнает, кого он должен
+             * выбрать сам.
+             */
+            note = (note.isEmpty() ? "" : note + "; ")
+                    + "заказчик в листе: " + parsed.customerName();
+        }
+
+        if (!note.isEmpty()) {
+            form.setNote(note);
+        }
+
+        return form;
+    }
+
+    /**
+     * Строка листа → позиция формы.
+     *
+     * Для датчика полное обозначение из листа достаточно: род и
+     * исполнение разберёт SensorClassifierMatcher, поэтому изделие
+     * подберётся при сохранении. Прибору и ячейке такой подбор нечестен
+     * — обозначение в чек-листе содержит и модель, и исполнения
+     * кабельных вводов, и таблички, а классификатор хранит изделие
+     * одним наименованием. Программа оставляет тип верным, а изделие —
+     * не выбранным: диспетчер укажет его в форме сам, и ошибка
+     * «выберите изделие» будет подсказкой, а не искажением данных.
+     */
+    private CustomerOrderForm.CustomerOrderItemForm importedItem(
+            ChecklistParser.ParsedRow row,
+            ProductType productType
+    ) {
+        CustomerOrderForm.CustomerOrderItemForm item =
+                new CustomerOrderForm.CustomerOrderItemForm();
+
+        item.setProductType(productType);
+        item.setQuantity(row.qty());
+        item.setUnit(toUnitName(row.unit()));
+        item.setTechProcessType(TechProcessType.BASIC);
+
+        String note = row.note() == null || row.note().isBlank()
+                ? null
+                : row.note();
+
+        if (productType == ProductType.SENSOR) {
+            item.setFullName(row.name());
+            item.setNote(note);
+        } else {
+            /*
+             * Полное обозначение сохраняется только у датчика (V18),
+             * поэтому наименованию прибора остаётся примечание позиции:
+             * без него диспетчер выбирал бы изделие из классификатора,
+             * не видя, что именно заказано в чек-листе.
+             */
+            item.setNote(note == null || note.isBlank()
+                    ? row.name()
+                    : row.name() + " — " + note);
+        }
+
+        return item;
+    }
+
+    /**
+     * Строка изделия со составом → позиция типа «система».
+     *
+     * Изделие подбирается по классификатору по наименованию из листа;
+     * подбор оставлен за сервисом SystemSheetMatcher, потому что
+     * написания различаются («Уровнемер многоканальный ДУУ10
+     * исполнение 2-» против «Система ДУУ10 исп 2»), а угадать
+     * неверную систему хуже, чем оставить поле пустым: неверная
+     * система означает неверный состав и неверный техпроцесс.
+     *
+     * Наименование из листа и строки состава записываются в
+     * примечание позиции: полное обозначение хранится только у
+     * датчика (V18), а диспетчер обязан видеть в карточке, что именно
+     * заказано и из чего система состоит по листу.
+     */
+    private CustomerOrderForm.CustomerOrderItemForm systemItem(
+            ChecklistParser.ParsedRow row
+    ) {
+        CustomerOrderForm.CustomerOrderItemForm item =
+                new CustomerOrderForm.CustomerOrderItemForm();
+
+        item.setProductType(ProductType.SYSTEM);
+        item.setQuantity(row.qty());
+        item.setUnit(toUnitName(row.unit()));
+        item.setTechProcessType(TechProcessType.BASIC);
+
+        ProductClassifier system = systemSheetMatcher.findSystem(row.name());
+
+        if (system != null) {
+            item.setProductClassifierId(system.getId());
+        }
+
+        StringBuilder note = new StringBuilder(row.name());
+
+        if (row.note() != null && !row.note().isBlank()) {
+            note.append(" — ").append(row.note());
+        }
+
+        if (system == null) {
+            note.append(". Система не найдена в классификаторе —"
+                    + " выберите изделие вручную");
+        }
+
+        item.setNote(note.toString());
+
+        return item;
     }
 
     /**

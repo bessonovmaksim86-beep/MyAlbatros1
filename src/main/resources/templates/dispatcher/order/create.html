@@ -108,6 +108,16 @@
                 <input type="hidden" th:field="*{id}">
                 <input type="hidden" th:field="*{version}">
 
+                <div class="alert info"
+                     th:if="${importedFrom != null and !editing}">
+
+                    <p>
+                        Заказ заполнен из
+                        <strong th:text="${importedFrom}">источника</strong>
+                    </p>
+
+                </div>
+
                 <div class="alert danger"
                      th:if="${#fields.hasGlobalErrors()}">
 

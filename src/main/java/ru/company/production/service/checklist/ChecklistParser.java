@@ -268,6 +268,36 @@ public class ChecklistParser {
 
     public record ParsedChecklist(String fileName, List<ParsedRow> rows) { }
 
+    /**
+     * Строка чек-листа.
+     *
+     * number — значение колонки «№ п/п» («1», «5.1»). Оно несёт
+     * иерархию листа: строка с целым номером — изделие, строка
+     * «1.1» — состав изделия «1». У строк, где колонки номера нет
+     * (файловый чек-лист без неё), значение null.
+     */
     public record ParsedRow(int lineNo, String name, BigDecimal qty,
-                            String unit, String note) { }
+                            String unit, String note, String number) {
+
+        public ParsedRow(int lineNo, String name, BigDecimal qty,
+                         String unit, String note) {
+            this(lineNo, name, qty, unit, note, null);
+        }
+
+        /** Номер вида «1.2»: есть точка — строка входит в состав. */
+        public boolean isComponent() {
+            return number != null && number.contains(".");
+        }
+
+        /** Целая часть номера: «12.3» → «12»; нет номера → null. */
+        public String parentNumber() {
+            if (number == null) {
+                return null;
+            }
+
+            int dot = number.indexOf('.');
+
+            return dot < 0 ? number : number.substring(0, dot);
+        }
+    }
 }

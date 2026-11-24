@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="ru"
+      xmlns:th="http://www.thymeleaf.org">
+
+<head>
+    <meta charset="UTF-8">
+
+    <meta name="viewport"
+          content="width=device-width, initial-scale=1">
+
+    <title>Создать заказ из чек-листа Б24</title>
+
+    <link rel="stylesheet"
+          th:href="@{/technology/css/technology.css}">
+
+    <link rel="stylesheet"
+          th:href="@{/technology/css/common.css}">
+
+    <link rel="stylesheet"
+          th:href="@{/dispatcher/css/dispatcher.css}">
+
+    <style>
+        .b24-help {
+            margin: 0 0 16px;
+            padding: 14px 18px;
+            border-left: 4px solid #2b6cb0;
+            background: #eef4fb;
+            border-radius: 8px;
+            line-height: 1.6;
+        }
+
+        .b24-help ol {
+            margin: 8px 0 0;
+            padding-left: 22px;
+        }
+
+        .b24-help code {
+            background: #dbe7f5;
+            padding: 1px 6px;
+            border-radius: 4px;
+            font-size: 0.92em;
+        }
+
+        .b24-form-card {
+            display: grid;
+            gap: 18px;
+        }
+
+        .b24-form-card .field label {
+            display: block;
+            margin-bottom: 6px;
+            font-weight: 600;
+        }
+
+        .b24-form-card .field textarea {
+            width: 100%;
+            min-height: 220px;
+            padding: 10px 12px;
+            font-family: Consolas, "Courier New", monospace;
+            font-size: 13px;
+            line-height: 1.4;
+            border: 1px solid #cbd5e0;
+            border-radius: 8px;
+            resize: vertical;
+            box-sizing: border-box;
+        }
+
+        .b24-form-card .field input[type="text"] {
+            width: 100%;
+            padding: 9px 12px;
+            border: 1px solid #cbd5e0;
+            border-radius: 8px;
+            box-sizing: border-box;
+        }
+
+        .b24-hint {
+            display: block;
+            margin-top: 6px;
+            font-size: 12px;
+            color: #718096;
+            line-height: 1.5;
+        }
+
+        .b24-actions {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        /*
+         * Кнопка вставки появляется только там, где браузер разрешает
+         * читать буфер обмена; без разрешения она остаётся скрытой,
+         * и ручной Ctrl+C продолжает работать.
+         */
+        .b24-paste.is-hidden {
+            display: none;
+        }
+    </style>
+</head>
+
+<body>
+
+<div class="app-shell">
+
+    <aside th:replace="~{dispatcher/fragments/layout
+            :: sidebar('customerOrder')}">
+    </aside>
+
+    <main class="main">
+
+        <header th:replace="~{dispatcher/fragments/layout
+                :: topbar}">
+        </header>
+
+        <div class="page-content dispatcher-page">
+
+            <div class="page-head">
+
+                <div class="page-title">
+
+                    <h1>Создать заказ из чек-листа Б24</h1>
+
+                    <p>
+                        Таблица Битрикс24 копируется в программу из
+                        буфера обмена: позиции, заказчик и срок
+                        заполняются сами
+                    </p>
+
+                </div>
+
+                <div class="page-head-actions">
+
+                    <a class="btn secondary"
+                       th:href="@{/dispatcher/customer-order}">
+                        К списку заказов
+                    </a>
+
+                </div>
+            </div>
+
+            <div class="alert danger"
+                 th:if="${errorMessage}"
+                 th:text="${errorMessage}">
+            </div>
+
+            <section class="card">
+
+                <div class="card-head">
+
+                    <div>
+
+                        <h2>Как перенести чек-лист</h2>
+
+                        <small>
+                            Три действия, занимает меньше минуты
+                        </small>
+
+                    </div>
+
+                </div>
+
+                <div class="card-body">
+
+                    <div class="b24-help">
+
+                        <strong>Откройте таблицу в Битрикс24</strong> и
+                        скопируйте её содержимое в буфер обмена:
+
+                        <ol>
+                            <li>Выделите в таблице все строки — вместе
+                                со строкой заголовков («№ п/п»,
+                                «Наименование», «Сер. №» …).<br>
+                                Кликните по первой ячейке, затем
+                                <code>Shift</code> + клик по последней,
+                                либо <code>Ctrl+A</code> в таблице.</li>
+                            <li>Нажмите <code>Ctrl+C</code>.</li>
+                            <li>Вставьте ниже кнопкой
+                                <strong>«Вставить из буфера»</strong> или
+                                <code>Ctrl+V</code> в поле.</li>
+                        </ol>
+
+                        <!--
+                            Про ссылку объясняется здесь, а не в виде
+                            ошибки после неудачи: адрес таблицы требует
+                            авторизации на портале, а публичных методов
+                            для объекта «Таблицы» у Битрикс24 нет.
+                        -->
+                        <p>
+                            Ссылку на таблицу можно вставить в поле ниже
+                            — она сохранится в карточку заказа, чтобы
+                            потом открыть источник. По одной ссылке
+                            программа таблицу не читает: Битрикс24
+                            выдаёт её только вошедшему на портал
+                            сотруднику.
+                        </p>
+
+                    </div>
+
+                    <form method="post"
+                          th:action="@{/dispatcher/customer-order/import-b24}"
+                          class="b24-form-card">
+
+                        <input th:if="${_csrf != null}"
+                               type="hidden"
+                               th:name="${_csrf.parameterName}"
+                               th:value="${_csrf.token}">
+
+                        <div class="field">
+
+                            <label for="b24ChecklistUrl">
+                                Ссылка на чек-лист Б24
+                            </label>
+
+                            <input id="b24ChecklistUrl"
+                                   type="text"
+                                   name="b24ChecklistUrl"
+                                   maxlength="500"
+                                   placeholder="https://b24-iq3ggy.bitrix24.ru/sheet/zGE5xChR71GuvvAyJpUy">
+
+                            <span class="b24-hint">
+                                Необязательно: сохранится в карточку
+                                как адрес источника
+                            </span>
+
+                        </div>
+
+                        <div class="field">
+
+                            <label for="tsv">
+                                Содержимое таблицы
+                            </label>
+
+                            <textarea id="tsv"
+                                      name="tsv"
+                                      required
+                                      placeholder="Вставьте сюда скопированные строки таблицы…"></textarea>
+
+                            <span class="b24-hint">
+                                Программа сама найдёт колонку
+                                «Наименование»: строки заголовков и
+                                пустые строки можно вставлять вместе с
+                                данными, они пропускаются
+                            </span>
+
+                        </div>
+
+                        <div class="b24-actions">
+
+                            <button type="button"
+                                    class="btn secondary b24-paste is-hidden"
+                                    id="b24PasteBtn">
+                                Вставить из буфера
+                            </button>
+
+                            <button type="submit"
+                                    class="btn primary">
+                                Заполнить заказ
+                            </button>
+
+                        </div>
+
+                    </form>
+
+                </div>
+
+            </section>
+
+        </div>
+
+    </main>
+
+</div>
+
+<script th:inline="javascript">
+    (function () {
+        'use strict';
+
+        var paste = document.getElementById('b24PasteBtn');
+        var area = document.getElementById('tsv');
+
+        if (!paste || !area) {
+            return;
+        }
+
+        /*
+         * navigator.clipboard.readText() доступен только в защищённом
+         * контексте и по разрешению пользователя. Если разрешения нет,
+         * кнопка скрывается: Ctrl+V в поле работает всегда и без
+         * каких-либо прав.
+         */
+        if (navigator.clipboard && navigator.clipboard.readText) {
+            paste.classList.remove('is-hidden');
+
+            paste.addEventListener('click', function () {
+                navigator.clipboard.readText().then(function (text) {
+                    area.value = text;
+                    area.focus();
+                }).catch(function () {
+                    area.focus();
+                });
+            });
+        }
+    })();
+</script>
+
+</body>
+
+</html>

@@ -290,11 +290,17 @@ public interface CellReceivingBatchRepository
     /**
      * Приходы по параметрам, которые назвал оператор.
      *
-     * Все четыре условия необязательны: null означает «по этому
-     * признаку не фильтровать», и запрос превращается ровно в тот
-     * перечень, который человек сумел произнести. Так «поставщик ГОЛ
-     * с 12.12.2025 по 14.12.2025» даёт две границы и поставщика, а
-     * «с 12.12.2025» — только начало периода.
+     * Оба условия необязательны: null означает «по этому признаку не
+     * фильтровать», и запрос превращается ровно в тот перечень, который
+     * человек сумел произнести. Так «поставщик ГОЛ с 12.12.2025
+     * по 14.12.2025» даёт две границы и поставщика, а «с 12.12.2025» —
+     * только начало периода.
+     *
+     * Номера приходного ордера здесь сознательно НЕТ: он приходит не
+     * параметром, а остатком фразы, и повязать его этим же AND значило
+     * бы обнулить выдачу по поставщику. Остаток фразы отрабатывает
+     * штатный поиск — {@code search} ниже, — и номер ордера находит там
+     * же, где и всегда.
      *
      * Период считается по {@code createdAt} — дате оформления партии.
      * Из трёх дат прихода она первая по смыслу и единственная, которая
@@ -322,11 +328,6 @@ public interface CellReceivingBatchRepository
             join batch.cellClassifier classifier
             left join classifier.sensorCatalog sensor
             where batch.deleted = false
-              and (:term is null
-                       or lower(batch.incomingOrderNumber)
-                           like lower(concat('%', :term, '%'))
-                       or lower(batch.supplierName)
-                           like lower(concat('%', :term, '%')))
               and (:supplierKey is null
                        or lower(trim(batch.supplierName))
                            like lower(concat('%', :supplierKey, '%')))
@@ -337,7 +338,6 @@ public interface CellReceivingBatchRepository
             order by batch.createdAt desc, batch.id desc
             """)
     List<ReceivingSearchView> searchByParameters(
-            @Param("term") String term,
             @Param("supplierKey") String supplierKey,
             @Param("dateFrom") LocalDateTime dateFrom,
             @Param("dateTo") LocalDateTime dateTo,

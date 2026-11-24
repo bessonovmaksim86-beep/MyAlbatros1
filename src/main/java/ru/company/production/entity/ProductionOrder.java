@@ -497,11 +497,17 @@ public class ProductionOrder {
 
     /*
      * Тип заказанного изделия в терминах склада: «Подсборка» для
-     * заказа V72, иначе — обычный тип классификатора.
+     * заказа V72 и для заказа V96 («номера генерирует система»), иначе
+     * — обычный тип классификатора.
+     *
+     * Заказу V96 термин нужен по той же причине, что и V72: резервируемые
+     * номера — подсборки, которые выпустит цех, а не готовые ячейки с
+     * полки. Без этого экран подписывал бы клетку «Тип подсборок»
+     * значением «Ячейка».
      */
     @Transient
     public String getStockProductTypeName() {
-        return isSubassemblyKitting()
+        return isSubassemblyKitting() || isNumberGeneratedKind()
                 ? "Подсборка"
                 : getProductTypeName();
     }
@@ -554,6 +560,19 @@ public class ProductionOrder {
     @Transient
     public boolean isSubassemblyKitting() {
         return kittingType == KittingType.SUBASSEMBLY;
+    }
+
+    /*
+     * Генерирует ли заказ номера сам — по правилу прихода.
+     *
+     * Признак, по которому групповой ЗНП попадает в раздел «Комплектование
+     * подсборок» без ввода номеров с полки: цех выпускает подсборки, и
+     * следующий свободный ряд классификатора резервируется в момент
+     * комплектования заказа (см. CellReceivingService#createAutoForOrder).
+     */
+    @Transient
+    public boolean isNumberGeneratedKind() {
+        return znpKind != null && znpKind.isNumberGenerated();
     }
 
     /*
