@@ -8,7 +8,9 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import ru.company.production.entity.ProductClassifier;
 import ru.company.production.entity.ProductType;
+import ru.company.production.entity.SensorCatalog;
 import ru.company.production.repository.ProductClassifierRepository;
+import ru.company.production.repository.SensorCatalogRepository;
 import ru.company.production.repository.SystemComponentProjection;
 import ru.company.production.service.checklist.ChecklistParser.ParsedRow;
 
@@ -16,6 +18,7 @@ import java.math.BigDecimal;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -37,6 +40,9 @@ class SystemSheetMatcherTest {
     @Mock
     private ProductClassifierRepository classifierRepository;
 
+    @Mock
+    private SensorCatalogRepository sensorCatalogRepository;
+
     @InjectMocks
     private SystemSheetMatcher matcher;
 
@@ -51,6 +57,27 @@ class SystemSheetMatcherTest {
         classifier.setName(name);
 
         return classifier;
+    }
+
+    private static ProductClassifier device(long id, String name) {
+
+        ProductClassifier classifier = new ProductClassifier();
+
+        classifier.setId(id);
+        classifier.setCode((int) id);
+        classifier.setProductType(ProductType.DEVICE);
+        classifier.setName(name);
+
+        return classifier;
+    }
+
+    private static SensorCatalog sensorClass(String name) {
+
+        SensorCatalog catalog = new SensorCatalog();
+
+        catalog.setName(name);
+
+        return catalog;
     }
 
     private static ParsedRow row(String number, String name) {
@@ -129,6 +156,91 @@ class SystemSheetMatcherTest {
          * выбор диспетчеру — иначе заказ ушёл бы на чужую систему.
          */
         assertNull(matcher.findSystem("Уровнемер многоканальный ДУУ10"));
+    }
+
+    @Test
+    @DisplayName("Латинская «H» в листе равна кириллической «Н»")
+    void latinHMatchesCyrillicN() {
+
+        ProductClassifier sys = system(12, 3018, "Система ДУУ10 исп 2");
+
+        when(classifierRepository.findAllByOrderByCodeAsc())
+                .thenReturn(List.of(sys));
+        when(classifierRepository.findSystemComponents(12L))
+                .thenReturn(List.of(
+                        component("Уровнемер поплавковый ДУУ10"),
+                        component("Блок сопряжения с датчиками БСД5Н")
+                ));
+
+        /*
+         * Диспетчер вводит обозначение на латинской раскладке:
+         * «БСД5H» вместо «БСД5Н». Ошибка при этом не настоящая —
+         * изделие в классификаторе есть, и порядок, при котором
+         * латинские аналоги сводятся к кириллице, обязывает считать
+         * состав найденным.
+         */
+        assertNull(matcher.compositionProblem(List.of(
+                row("1", "Уровнемер многоканальный ДУУ10 исполнение 2-, 1 шт"),
+                row("1.1", "Уровнемер поплавковый ДУУ10-02-0-3,55-0-0-10-1-0-1-1-000-1-I, 1 шт"),
+                row("1.2", "Блок сопряжения с датчиками БСД5H, 1 шт")
+        )));
+    }
+
+    @Test
+    @DisplayName("Прибор состава находится по классификатору")
+    void findsDeviceComponent() {
+
+        when(classifierRepository.findAllByOrderByCodeAsc())
+                .thenReturn(List.of(
+                        device(2008, "Блок сопряжения с датчиками БСД5Н"),
+                        device(2009, "Блок сопряжения с датчиками БСД5А")
+                ));
+
+        ProductClassifier found = matcher.findDevice(
+                "Блок сопряжения с датчиками БСД5H, 1 шт");
+
+        /*
+         * В листе прибор написан с латинской «H», в классификаторе —
+         * с кириллической «Н»: сравнение обязано это выдержать, иначе
+         * позиция состава осталась бы без изделия.
+         */
+        assertNotNull(found);
+        assertEquals(2008, found.getId());
+    }
+
+    @Test
+    @DisplayName("Датчик состава отличается от прибора по роду")
+    void recognisesSensorRowByCatalog() {
+
+        when(sensorCatalogRepository.findAll())
+                .thenReturn(List.of(sensorClass("Уровнемер поплавковый ДУУ10")));
+
+        assertTrue(matcher.sensorRow(
+                "Уровнемер поплавковый ДУУ10-02-0-3,55-0-0-10-1-0-1-1-000-1-I"
+                        + " (с фторопластовым покрытием ЧЭ), 1 шт"));
+
+        assertFalse(matcher.sensorRow(
+                "Блок сопряжения с датчиками БСД5H, 1 шт"));
+    }
+
+    @Test
+    @DisplayName("Род датчика читается до границы слова")
+    void sensorKindNeedsWordBoundary() {
+
+        when(sensorCatalogRepository.findAll())
+                .thenReturn(List.of(
+                        sensorClass("Датчик положения уровня ДПУ5")
+                ));
+
+        /*
+         * «ДПУ5» — подстрока «ДПУ5А»: без границы слова датчик ДПУ5А
+         * был бы принят за род ДПУ5, и подбор исполнения ушёл бы не
+         * туда.
+         */
+        assertFalse(matcher.sensorRow(
+                "Датчик положения уровня ДПУ5А-1,47-10,0-ОМ1,5**-1, 1 шт"));
+        assertTrue(matcher.sensorRow(
+                "Датчик положения уровня ДПУ5-1,47-10,0, 1 шт"));
     }
 
     @Test

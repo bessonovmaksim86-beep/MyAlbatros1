@@ -830,6 +830,16 @@ body {
     display: block;
 }
 
+/*
+ * Прибор и ячейка тип техпроцесса не выбирают: они выпускаются
+ * заранее по группам ЗНП и привязываются к системе в производстве.
+ * Ячейка сохраняется (visibility, а не display), иначе колонка
+ * поехала бы в таблице, где рядом стоят датчики со своим типом ТП.
+ */
+.co-items .co-item-row.no-tech-process .co-tech-process {
+    visibility: hidden;
+}
+
 .co-items .co-pick {
     margin-top: 4px;
     padding: 0;

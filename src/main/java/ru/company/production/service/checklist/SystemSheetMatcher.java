@@ -5,7 +5,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import ru.company.production.entity.ProductClassifier;
 import ru.company.production.entity.ProductType;
+import ru.company.production.entity.SensorCatalog;
 import ru.company.production.repository.ProductClassifierRepository;
+import ru.company.production.repository.SensorCatalogRepository;
 import ru.company.production.repository.SystemComponentProjection;
 import ru.company.production.service.checklist.ChecklistParser.ParsedRow;
 
@@ -35,6 +37,7 @@ import java.util.Map;
 public class SystemSheetMatcher {
 
     private final ProductClassifierRepository classifierRepository;
+    private final SensorCatalogRepository sensorCatalogRepository;
 
     /**
      * Разбор строк листа на изделия и их состав.
@@ -55,6 +58,113 @@ public class SystemSheetMatcher {
         }
 
         return grouped;
+    }
+
+    /**
+     * Прибор из классификатора по наименованию строки состава.
+     *
+     * Состав системы в листе называется так же, как изделие в
+     * классификаторе («Блок сопряжения с датчиками БСД5Н»), поэтому
+     * подбор даёт готовое изделие и диспетчеру не приходится искать
+     * его в списке вручную. Сравнение — по нормализованным
+     * наименованиям, где латинская «H» равна кириллической «Н».
+     *
+     * Наименование в листе может быть длиннее (с параметрами
+     * исполнения), поэтому после точного совпадения допускается
+     * вхождение: наименованию классификатора обязано начинаться
+     * строка листа. Одно и то же окончание у нескольких приборов
+     * («БСД5Н» и «БСД5Н-01») выбор не определяет — возвращается
+     * null, и диспетчер выбирает изделие сам.
+     */
+    @Transactional(readOnly = true)
+    public ProductClassifier findDevice(String sheetName) {
+
+        String needle = normalize(stripQuantity(sheetName));
+
+        if (needle.isEmpty()) {
+            return null;
+        }
+
+        ProductClassifier contained = null;
+        boolean ambiguous = false;
+
+        for (ProductClassifier candidate
+                : classifierRepository.findAllByOrderByCodeAsc()) {
+
+            if (candidate.getProductType() != ProductType.DEVICE) {
+                continue;
+            }
+
+            String name = normalize(candidate.getName());
+
+            if (name.isEmpty()) {
+                continue;
+            }
+
+            if (name.equals(needle)) {
+                return candidate;
+            }
+
+            /*
+             * Наименование классификатора — начало строки листа:
+             * «Блок сопряжения с датчиками БСД5Н» находится в
+             * «Блок сопряжения с датчиками БСД5Н исп. 1». Обратное
+             * вхождение (строка листа внутри наименования) не
+             * допускается: оно нашло бы не тот прибор.
+             */
+            if (needle.startsWith(name + " ") || needle.startsWith(name)) {
+                if (contained != null) {
+                    ambiguous = true;
+                }
+                contained = candidate;
+            }
+        }
+
+        return ambiguous ? null : contained;
+    }
+
+    /**
+     * Строка листа называет датчик: её начало совпадает с
+     * наименованием рода из справочника датчиков.
+     *
+     * Знак, по которому позиция получает тип «Датчик»: только у
+     * датчика изделие не выбирается из списка, а классификатор
+     * подбирается по полному обозначению при сохранении. Ошибиться в
+     * типе дороже, чем оставить подбор не сделанным: прибор,
+     * принятый за датчик, сохранился бы без изделия, а датчик,
+     * принятый за прибор, потребовал бы выбора из списка там, где
+     * список не нужен.
+     */
+    @Transactional(readOnly = true)
+    public boolean sensorRow(String sheetName) {
+
+        String needle = normalize(stripQuantity(sheetName));
+
+        if (needle.isEmpty()) {
+            return false;
+        }
+
+        for (SensorCatalog catalog : sensorCatalogRepository.findAll()) {
+
+            String name = normalize(catalog.getName());
+
+            if (name.isEmpty()) {
+                continue;
+            }
+
+            /*
+             * Род обязан заканчиваться на границе слова, иначе
+             * «Датчик положения уровня ДПУ5» подошёл бы к строке про
+             * «…ДПУ5А».
+             */
+            if (needle.equals(name)
+                    || needle.startsWith(name + " ")
+                    || needle.startsWith(name + "-")) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**
@@ -226,8 +336,8 @@ public class SystemSheetMatcher {
 
             if (!missing.isEmpty()) {
                 StringBuilder message = new StringBuilder(
-                        "Система «" + system.getName()
-                                + "»: в её классификаторе нет состава из листа — "
+                        "В классификаторе системы «" + system.getName()
+                                + "» нет состава из листа — "
                 );
                 for (int i = 0; i < missing.size(); i++) {
                     if (i > 0) {
@@ -256,12 +366,18 @@ public class SystemSheetMatcher {
             return "";
         }
 
-        return name
+        String result = name
                 .replaceAll(",?\\s*\\d+(?:[.,]\\d+)?\\s*"
                         + "(шт\\.?|компл\\.?|комплект|ком\\.?|кг|г|м|мм|мл|л)"
                         + "\\s*$", "")
                 .replaceAll("[\\s,;\\-.]+$", "")
                 .trim();
+
+        /*
+         * Латинские буквы в обозначениях: «БСД5H» → «БСД5Н»,
+         * «ДУУ10» → «ДУУ1О» — нормализация нужна и здесь.
+         */
+        return normalizeCyrillic(result);
     }
 
     private static String shorten(String value) {
@@ -281,14 +397,42 @@ public class SystemSheetMatcher {
         String normalized = value
                 .replace('\u00A0', ' ')
                 .toLowerCase(Locale.ROOT)
-                .replace('ё', 'е')
-                .replaceAll("[«»\"'`.,;:]", " ")
-                .replace("исполнение", "исп");
+                .replace('ё', 'е');
+
+        /*
+         * В чек-листе буквы вводятся латиницей: «БСД5H» вместо
+         * «БСД5Н», «ДУУ10» — с латинским «О». Сопоставляем по
+         * визуальным аналогам, иначе система не найдётся.
+         */
+        normalized = normalizeCyrillic(normalized);
+
+        normalized = normalized.replaceAll("[«»\"'`.,;:]", " ");
+        normalized = normalized.replace("исполнение", "исп");
 
         normalized = normalized.replaceAll("(^|\\s)система(\\s|$)", " ");
         normalized = normalized.replaceAll("\\s+", " ").trim();
         normalized = normalized.replaceAll("^-+|-+$", "");
 
         return normalized.trim();
+    }
+
+    /**
+     * Латиница → кириллица по визуальной схожести.
+     *
+     * В чек-листе диспетчер вводит обозначения на латинской раскладке:
+     * «БСД5H» вместо «БСД5Н», «ДУУ10» — с латинским «О». Это не
+     * опечатка, а особенность ввода, и программа обязана это понять.
+     */
+    private static String normalizeCyrillic(String value) {
+
+        return value
+                .replace('h', 'н')
+                .replace('e', 'е')
+                .replace('a', 'а')
+                .replace('o', 'о')
+                .replace('p', 'р')
+                .replace('c', 'с')
+                .replace('y', 'у')
+                .replace('x', 'х');
     }
 }

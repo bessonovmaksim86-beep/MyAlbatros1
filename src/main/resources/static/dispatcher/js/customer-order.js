@@ -106,6 +106,21 @@
         }
 
         /*
+         * Прибор и ячейка не выбирают тип техпроцесса: они делаются
+         * заранее по группам ЗНП и привязываются к системе в процессе
+         * производства, поэтому в заказе у них остаются только
+         * количество и примечание. Класс снимает колонку со строки,
+         * сервер для этих типов наличие техпроцесса не требует.
+         */
+        function syncTechProcessMode(row) {
+            const typeSelect = row.querySelector('.co-product-type');
+            const type = typeSelect ? typeSelect.value : '';
+
+            row.classList.toggle('no-tech-process',
+                type === 'DEVICE' || type === 'CELL');
+        }
+
+        /*
          * Оставляет в списке изделий только опции выбранного типа.
          * Если тип не выбран — показываются все изделия.
          */
@@ -299,6 +314,7 @@
              */
             filterClassifierOptions(row);
             syncSensorMode(row);
+            syncTechProcessMode(row);
             renameRows();
         }
 
@@ -357,6 +373,7 @@
 
             if (event.target.classList.contains('co-product-type')) {
                 syncSensorMode(row);
+                syncTechProcessMode(row);
                 filterClassifierOptions(row);
                 syncSystemBlock(row);
             } else if (event.target.classList.contains('co-classifier')) {
@@ -372,6 +389,7 @@
         body.querySelectorAll('.co-item-row').forEach((row) => {
             syncTypeFromClassifier(row);
             syncSensorMode(row);
+            syncTechProcessMode(row);
             filterClassifierOptions(row);
             syncSystemBlock(row);
         });

@@ -297,9 +297,15 @@ public class CustomerOrderService {
              * на отсутствующий маршрут, поэтому при его отсутствии
              * заказ не сохраняется и пользователь получает понятную
              * ошибку с кодом изделия.
+             *
+             * Прибор и ячейка из этого правила исключены: они
+             * выпускаются заранее по группам ЗНП и привязываются к
+             * системе в процессе производства, поэтому собственного
+             * техпроцесса в заказе у них нет — там остаются только
+             * количество и примечание. Требовать маршрут значило бы
+             * не дать диспетчеру завести заказ с составом системы.
              */
-            if (orderType == CustomerOrderType.PRODUCTION
-                    && techProcessType == TechProcessType.BASIC
+            if (requiresTechProcess(classifier, orderType, techProcessType)
                     && techProcessRepository.countActiveForClassifier(
                             classifier.getId()) == 0) {
                 throw new IllegalArgumentException(
@@ -453,8 +459,7 @@ public class CustomerOrderService {
                             itemForm.getTechProcessType()
                     );
 
-            if (orderType == CustomerOrderType.PRODUCTION
-                    && techProcessType == TechProcessType.BASIC
+            if (requiresTechProcess(classifier, orderType, techProcessType)
                     && techProcessRepository.countActiveForClassifier(
                             classifier.getId()) == 0) {
                 throw new IllegalArgumentException(
@@ -815,9 +820,36 @@ public class CustomerOrderService {
     }
 
     /**
+     * Позиция обязана иметь действующий техпроцесс изделия.
+     *
+     * Требование касается только производственного заказа с
+     * «базовым» типом: другой тип указывает на иной маршрут, а
+     * несвязанный заказ (например, склада) техпроцесса не ждёт.
+     *
+     * Прибор и ячейка исключены: они выпускаются заранее по группам
+     * ЗНП и привязываются к системе в процессе производства, поэтому
+     * собственного техпроцесса в заказе у них нет и быть не может.
+     */
+    private boolean requiresTechProcess(
+            ProductClassifier classifier,
+            CustomerOrderType orderType,
+            TechProcessType techProcessType
+    ) {
+
+        if (orderType != CustomerOrderType.PRODUCTION
+                || techProcessType != TechProcessType.BASIC) {
+            return false;
+        }
+
+        return classifier.getProductType() != ProductType.DEVICE
+                && classifier.getProductType() != ProductType.CELL;
+    }
+
+    /**
      * Единица измерения позиции: пустое значение — «шт.».
      */
     private MeasurementUnit parseUnit(String unit) {
+
         if (unit == null || unit.isBlank()) {
             return MeasurementUnit.PCS;
         }

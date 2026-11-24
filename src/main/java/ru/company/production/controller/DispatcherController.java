@@ -1573,8 +1573,8 @@ public class DispatcherController {
 
         /*
          * Номера строк, под которыми есть состав («1.1» → «1»):
-         * такие строки — системы, а их строки состава в позициях
-         * не повторяются.
+         * такая строка — система, и её изделие подбирается по
+         * классификатору.
          */
         Set<String> parents = systemSheetMatcher
                 .componentsByParent(parsed.rows()).keySet();
@@ -1582,10 +1582,16 @@ public class DispatcherController {
         for (ChecklistParser.ParsedRow row : parsed.rows()) {
 
             if (row.isComponent()) {
-                continue;
-            }
-
-            if (row.number() != null && parents.contains(row.number())) {
+                /*
+                 * Строка состава — отдельная позиция заказа: прибор
+                 * или датчик, из которых собирается система. Заказу
+                 * они нужны именно позициями, потому что по ним
+                 * выпускаются изделия и выдаются серийные номера, а
+                 * блок «Состав системы» под строкой системы — только
+                 * справка из классификатора.
+                 */
+                form.getItems().add(componentItem(row));
+            } else if (row.number() != null && parents.contains(row.number())) {
                 form.getItems().add(systemItem(row));
             } else {
                 form.getItems().add(importedItem(row, kind));
@@ -1672,6 +1678,51 @@ public class DispatcherController {
             item.setNote(note == null || note.isBlank()
                     ? row.name()
                     : row.name() + " — " + note);
+        }
+
+        return item;
+    }
+
+    /**
+     * Строка состава системы → позиция заказа.
+     *
+     * Состав в листе называет изделия, из которых система собирается,
+     * и каждое из них выпускётся отдельным изделием с собственным
+     * номером, поэтому позиция обязана быть самостоятельной, а не
+     * справкой под строкой системы.
+     *
+     * Род позиции определяется наименованием: строка, начинающаяся с
+     * рода датчиков из справочника, — датчик (полное обозначение
+     * пишется в поле, классификатор подберёт сервис при сохранении);
+     * иначе — прибор, и его изделие подбирается по классификатору.
+     * Так лист задаёт и тип, и изделие там, где их можно узнать
+     * достоверно, и оставляет выбор там, где программа обязана
+     * угадывать.
+     */
+    private CustomerOrderForm.CustomerOrderItemForm componentItem(
+            ChecklistParser.ParsedRow row
+    ) {
+        if (systemSheetMatcher.sensorRow(row.name())) {
+            return importedItem(row, ProductType.SENSOR);
+        }
+
+        CustomerOrderForm.CustomerOrderItemForm item =
+                importedItem(row, ProductType.DEVICE);
+
+        ProductClassifier device = systemSheetMatcher.findDevice(row.name());
+
+        if (device != null) {
+            item.setProductClassifierId(device.getId());
+            /*
+             * Наименование из листа остаётся в примечании: изделие
+             * классификатора называется коротко, а в чек-листе — с
+             * параметрами исполнения, и диспетчер обязан видеть в
+             * карточке, что именно заказано. Примечание колонки
+             * «Прим.» при этом не теряется.
+             */
+            item.setNote(row.note() == null || row.note().isBlank()
+                    ? row.name()
+                    : row.name() + " — " + row.note());
         }
 
         return item;

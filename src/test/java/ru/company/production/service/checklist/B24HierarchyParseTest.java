@@ -64,7 +64,7 @@ class B24HierarchyParseTest {
     @DisplayName("Состав группируется по своему изделию")
     void groupsComponentsByParent() {
 
-        SystemSheetMatcher matcher = new SystemSheetMatcher(null);
+        SystemSheetMatcher matcher = new SystemSheetMatcher(null, null);
 
         var byParent = matcher.componentsByParent(parser.parse(SHEET).rows());
 
