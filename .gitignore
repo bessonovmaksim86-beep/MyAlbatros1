@@ -71,3 +71,6 @@ check_serials.sql
 ### Видеозаписи презентации:太重 для Git, их место в Releases ###
 presentation.mp4
 *.mp4
+
+### Журнал агента печати на рабочем месте ###
+print-agent/print-agent.log

@@ -60,6 +60,38 @@ public class LabelPrintProperties {
     private int timeoutSeconds = 60;
 
     /**
+     * Адрес агента печати на рабочем месте, например
+     * {@code http://127.0.0.1:7788}.
+     *
+     * Агент нужен там, где приложение работает на сервере, а BarTender
+     * и принтер этикеток стоят на компьютере кладовщика: сервер не
+     * может запустить программу на чужой машине. Пусто — печать идёт
+     * серверным BarTender, как раньше.
+     */
+    private String agentUrl = "";
+
+    /** Токен агента; пусто — агент не проверяет заголовок X-Print-Token. */
+    private String agentToken = "";
+
+    /** true — печать выполняет агент на рабочем месте, а не сервер. */
+    public boolean hasAgent() {
+        return agentUrl != null && !agentUrl.isBlank();
+    }
+
+    /** Адрес агента без завершающей косой черты. */
+    public String agentBaseUrl() {
+        if (!hasAgent()) {
+            return "";
+        }
+
+        String trimmed = agentUrl.trim();
+
+        return trimmed.endsWith("/")
+                ? trimmed.substring(0, trimmed.length() - 1)
+                : trimmed;
+    }
+
+    /**
      * Разделитель полей в виде символа файла данных.
      *
      * Значение обязано совпадать с разделителем, настроенным в

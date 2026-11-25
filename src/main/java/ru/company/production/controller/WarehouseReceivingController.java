@@ -18,6 +18,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.ResponseBody;
 import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 import org.springframework.web.util.UriUtils;
 import ru.company.production.dto.CellReceivingForm;
@@ -155,6 +156,33 @@ public class WarehouseReceivingController {
                 && batch.getCellClassifier().isPrintNumberOverQr();
         model.addAttribute("printNumberOverQr", showNumber);
 
+        /*
+         * Агент печати на рабочем месте. Приложение работает на
+         * сервере, а BarTender и принтер стоят у кладовщика: сервер
+         * не может запустить программу на его компьютере. Заданный
+         * адрес агента означает, что печатает браузер кладовщика —
+         * локально, через 127.0.0.1.
+         *
+         * Данные задания собираются здесь, а не в разметке: состав
+         * этикетки (классификатор, наименование, приход) должен
+         * совпадать с серверной печатью, и дублировать это в шаблоне
+         * значило бы разойтись при первой же правке.
+         */
+        model.addAttribute("agentUrl", labelPrintService.agentUrl());
+        model.addAttribute("agentToken", labelPrintService.agentToken());
+        model.addAttribute("agentConfigured", labelPrintService.isAgentConfigured());
+        model.addAttribute("labelCopies", labelPrintService.copies());
+
+        if (batch.getCellClassifier() != null) {
+            model.addAttribute("labelClassifier",
+                    String.valueOf(batch.getCellClassifier().getCode()));
+            model.addAttribute("labelName",
+                    batch.getCellClassifier().getDisplayName());
+        } else {
+            model.addAttribute("labelClassifier", "");
+            model.addAttribute("labelName", "");
+        }
+
         return "warehouse/receiving/qr";
     }
 
@@ -252,6 +280,34 @@ public class WarehouseReceivingController {
             );
 
             return ResponseEntity.internalServerError().build();
+        }
+    }
+
+    /**
+     * Отмечает партию напечатанной после печати агентом.
+     *
+     * Печать через агента идёт мимо сервера: браузер кладовщика
+     * обращается к его же компьютеру напрямую. Поэтому сервер не знает,
+     * состоялась ли печать, и узнаёт об этом от страницы — но только
+     * после ответа «ок» от агента. Пока этикетки не вышли, партия
+     * остаётся непечатанной: иначе оператор перешёл бы к сканированию
+     * по этикеткам, которых нет.
+     */
+    @PostMapping("/{id}/qr/agent-printed")
+    @ResponseBody
+    public ResponseEntity<?> markPrintedByAgent(@PathVariable Long id) {
+
+        try {
+            receivingService.markQrPrinted(id);
+
+            return ResponseEntity.ok(java.util.Map.of("ok", true));
+        } catch (EntityNotFoundException exception) {
+            return ResponseEntity.status(404).body(java.util.Map.of(
+                    "ok", false,
+                    "message", exception.getMessage() == null
+                            ? "Партия не найдена"
+                            : exception.getMessage()
+            ));
         }
     }
 

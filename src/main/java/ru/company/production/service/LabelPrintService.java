@@ -1,5 +1,6 @@
 package ru.company.production.service;
 
+import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -61,6 +62,27 @@ public class LabelPrintService {
     private final LabelPrintProperties properties;
 
     /**
+     * Печатает фактические настройки печати при старте.
+     *
+     * Готовность кнопки зависит не только от yml: переменные окружения
+     * перекрывают файл, а собранный jar несёт конфигурацию на момент
+     * сборки. Поэтому «я проверил путь, а кнопка неактивна» без записи
+     * прочитанного значения разбирается только перебором вариантов.
+     * Одна строка в логе при старте снимает этот вопрос.
+     */
+    @PostConstruct
+    void logConfiguration() {
+        String problem = configurationProblem();
+
+        log.info("Печать этикеток: enabled={}, bartender-path={}, "
+                        + "template-path={}, готовность={}",
+                properties.isEnabled(),
+                describe(properties.getBartenderPath()),
+                describe(properties.getTemplatePath()),
+                problem == null ? "настроена" : "нет: " + problem);
+    }
+
+    /**
      * Печатает этикетки партии.
      *
      * Ошибки не бросаются наружу: страница шага QR должна остаться
@@ -69,6 +91,19 @@ public class LabelPrintService {
      * именно не так — путь до принтера оператор не найдёт сам.
      */
     public LabelPrintResult printBatch(CellReceivingBatch batch) {
+
+        /*
+         * При настроенном агенте печать идёт с рабочего места: серверный
+         * BarTender здесь ни при чём, и запускать его нельзя — этикетки
+         * вышли бы на другом принтере. Страница в этом случае печатает
+         * через агента сама.
+         */
+        if (properties.hasAgent()) {
+            return LabelPrintResult.failed(
+                    "Печать выполняется агентом на рабочем месте — "
+                            + "обновите страницу и повторите"
+            );
+        }
 
         List<String> numbers = batch.fullNumbers();
 
@@ -131,8 +166,24 @@ public class LabelPrintService {
      * Текст возвращает не «ошибка конфигурации», а конкретную настройку:
      * кладовщик не найдёт путь к bartend.exe сам, и подсказка обязана
      * называть параметр, который администратору править в yml.
+     *
+     * Помимо названия параметра печатают фактически прочитанное
+     * значение: yml может быть правлен, а приложение читать переменную
+     * окружения, значение из собранного jar или строку с кавычками.
+     * Без показанного пути такие случаи разбираются только по логам.
      */
     public String configurationProblem() {
+
+        /*
+         * При настроенном агенте серверный BarTender не нужен: печать
+         * выполняет компьютер кладовщика. Доступность агента проверяет
+         * страница из браузера — сервер до 127.0.0.1 рабочего места
+         * не достанет, поэтому проверять её здесь бессмысленно.
+         */
+        if (properties.hasAgent()) {
+            return null;
+        }
+
         if (!properties.isEnabled()) {
             return "Печать через BarTender не включена на этом рабочем месте "
                     + "(application.label-printing.enabled = false). "
@@ -141,20 +192,64 @@ public class LabelPrintService {
 
         if (!properties.isBartenderConfigured()) {
             return "BarTender не найден: проверьте путь в "
-                    + "application.label-printing.bartender-path";
+                    + "application.label-printing.bartender-path. "
+                    + "Приложение читает " + describe(properties.getBartenderPath())
+                    + " — переменная окружения LABEL_PRINT_BARTENDER_PATH "
+                    + "перекрывает значение из файла.";
         }
 
         if (!properties.isTemplateConfigured()) {
             return "Шаблон этикетки не найден: проверьте путь в "
-                    + "application.label-printing.template-path";
+                    + "application.label-printing.template-path. "
+                    + "Приложение читает " + describe(properties.getTemplatePath())
+                    + " — переменная окружения LABEL_PRINT_TEMPLATE_PATH "
+                    + "перекрывает значение из файла.";
         }
 
         return null;
     }
 
+    /**
+     * Значение настройки для текста ошибки.
+     *
+     * Пустое значение показывают отдельно: оно означает, что ни yml, ни
+     * переменная окружения путь не задали, и правку искать негде.
+     * Кавычки внутри значения видны: путь «"...exe"» с кавычками в
+     * переменной окружения файл не находит, хотя выглядит верным.
+     */
+    private static String describe(String value) {
+        if (value == null || value.isBlank()) {
+            return "пустое значение (путь не задан)";
+        }
+
+        return "«" + value + "»";
+    }
+
     /** Каталог печати доступен — проверка для подсказки на странице. */
     public boolean isReady() {
         return configurationProblem() == null;
+    }
+
+    /** true — печать выполняет агент на рабочем месте кладовщика. */
+    public boolean isAgentConfigured() {
+        return properties.hasAgent();
+    }
+
+    /** Адрес агента для страницы; пусто — агент не настроен. */
+    public String agentUrl() {
+        return properties.agentBaseUrl();
+    }
+
+    /** Токен агента для страницы; пусто — агент токен не проверяет. */
+    public String agentToken() {
+        return properties.getAgentToken() == null
+                ? ""
+                : properties.getAgentToken().trim();
+    }
+
+    /** Этикеток на один номер — передаётся агенту вместе с заданием. */
+    public int copies() {
+        return Math.max(1, properties.getCopies());
     }
 
     /**

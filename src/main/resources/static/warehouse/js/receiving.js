@@ -57,6 +57,150 @@
         }
 
         /*
+         * Печать QR через агента на рабочем месте.
+         *
+         * Приложение работает на сервере, а BarTender и принтер — на
+         * компьютере кладовщика. Кнопка передаёт номера агенту по
+         * 127.0.0.1, а агент запускает локальный bartend.exe. После
+         * подтверждения агента страница отмечает партию напечатанной
+         * на сервере и перезагружает страницу.
+         *
+         * Если агент не запущен — fetch упадёт, и оператор получит
+         * понятную подсказку с предложением запустить run-agent.bat.
+         */
+        const agentButton = document.getElementById('printViaAgent');
+
+        if (agentButton && numbers.length) {
+
+            /*
+             * Готовность агента проверяется сразу при открытии шага.
+             *
+             * Кнопка остаётся активной, чтобы оператор мог повторить
+             * попытку после запуска агента без перезагрузки страницы,
+             * но причину он видит заранее: «агент не запущен» или
+             * «не задан путь к bartend.exe» — разные действия.
+             */
+            const healthUrl = agentButton.dataset.agentUrl + '/health';
+
+            fetch(healthUrl, { method: 'GET' })
+                .then((response) => response.json())
+                .then((health) => {
+                    if (!health.ready) {
+                        showStatus('Агент печати не готов: '
+                            + (health.message || 'проверьте agent.properties'));
+                    }
+                })
+                .catch(() => {
+                    showStatus('Агент печати не запущен на этом компьютере — '
+                        + 'запустите run-agent.bat');
+                });
+
+            agentButton.addEventListener('click', async () => {
+                const agentUrl = agentButton.dataset.agentUrl;
+                const token = agentButton.dataset.agentToken || '';
+                const markUrl = agentButton.dataset.markUrl;
+                const classifier = agentButton.dataset.classifier || '';
+                const name = agentButton.dataset.name || '';
+                const order = agentButton.dataset.order || '';
+                const showText = agentButton.dataset.showText === 'true' ? '1' : '0';
+                const copies = agentButton.dataset.copies || '1';
+
+                agentButton.disabled = true;
+                showStatus('Печать этикеток...');
+
+                const body = [
+                    ...numbers.map((number) => 'number=' + number),
+                    'classifier=' + classifier,
+                    'name=' + name,
+                    'order=' + order,
+                    'showText=' + showText,
+                    'copies=' + copies
+                ].join('\n');
+
+                const headers = { 'Content-Type': 'text/plain; charset=UTF-8' };
+
+                if (token) {
+                    headers['X-Print-Token'] = token;
+                }
+
+                let printResult;
+
+                try {
+                    printResult = await fetch(agentUrl + '/print', {
+                        method: 'POST',
+                        headers: headers,
+                        body: body
+                    });
+                } catch (error) {
+                    showStatus('Агент печати не запущен на этом компьютере — '
+                        + 'запустите run-agent.bat');
+                    agentButton.disabled = false;
+                    return;
+                }
+
+                let result;
+
+                try {
+                    result = await printResult.json();
+                } catch (error) {
+                    showStatus('Неожиданный ответ агента — '
+                        + 'проверьте консоль и файл print-agent.log');
+                    agentButton.disabled = false;
+                    return;
+                }
+
+                if (!result.ok) {
+                    showStatus(result.message || 'Печать не выполнена');
+                    agentButton.disabled = false;
+                    return;
+                }
+
+                showStatus('Отметка на сервере...');
+
+                /*
+                 * Помечаем партию напечатанной на сервере.
+                 * Берём токен из meta, которые ставит серверная
+                 * разметка — они одинаковы для всех запросов.
+                 */
+                const csrfMeta = document.querySelector('meta[name="_csrf"]');
+                const csrfHeaderMeta = document.querySelector('meta[name="_csrf_header"]');
+                const csrfToken = csrfMeta ? csrfMeta.content : '';
+                const csrfHeader = csrfHeaderMeta ? csrfHeaderMeta.content : '_csrf';
+
+                let markResult;
+
+                try {
+                    const markHeaders = {};
+                    if (csrfToken) {
+                        markHeaders[csrfHeader] = csrfToken;
+                    }
+
+                    markHeaders['Content-Type'] = 'application/json';
+
+                    markResult = await fetch(markUrl, {
+                        method: 'POST',
+                        headers: markHeaders,
+                        body: JSON.stringify({})
+                    });
+                } catch (error) {
+                    showStatus('Этикетки напечатаны, но отметка не '
+                        + 'сохранилась — обновите страницу');
+                    agentButton.disabled = false;
+                    return;
+                }
+
+                if (!markResult.ok) {
+                    showStatus('Этикетки напечатаны, но отметка не '
+                        + 'сохранилась — обновите страницу');
+                    agentButton.disabled = false;
+                    return;
+                }
+
+                window.location.reload();
+            });
+        }
+
+        /*
          * Кнопка «Печать QR» — обычная POST-форма: задание уходит на
          * сервер, и только там видно, настроен ли BarTender на этом
          * рабочем месте. Обработка клика здесь означала бы, что печать

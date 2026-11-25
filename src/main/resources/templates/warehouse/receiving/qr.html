@@ -8,6 +8,19 @@
     <meta name="viewport"
           content="width=device-width, initial-scale=1">
 
+    <!--
+        Токен CSRF для печати через агента: кнопка работает из
+        JavaScript, а не отправляет форму, и без заголовка сервер
+        отклонил бы отметку о печати.
+    -->
+    <meta name="_csrf"
+          th:if="${_csrf != null}"
+          th:content="${_csrf.token}">
+
+    <meta name="_csrf_header"
+          th:if="${_csrf != null}"
+          th:content="${_csrf.parameterName}">
+
     <title>Номера ячеек и печать QR</title>
 
     <link rel="stylesheet"
@@ -129,7 +142,7 @@
                 <div class="card-body">
 
                     <div class="warehouse-print-note"
-                         th:if="${printReady}">
+                         th:if="${printReady and not agentConfigured}">
 
                         <strong>Печать этикеток — через BarTender</strong>
 
@@ -138,6 +151,23 @@
                         Шаблон, принтер и число копий заданы в настройках
                         рабочего места; партия станет напечатанной только
                         после того, как задание уйдёт на принтер.
+
+                    </div>
+
+                    <!-- Печать с рабочего места: BarTender и принтер
+                         стоят на компьютере кладовщика, а приложение —
+                         на сервере. Агент на этом компьютере запускает
+                         локальный BarTender по кнопке. -->
+                    <div class="warehouse-print-note"
+                         th:if="${agentConfigured}">
+
+                        <strong>Печать этикеток — на этом компьютере</strong>
+
+                        Кнопка «Печать QR» передаёт номера агенту печати
+                        на этом рабочем месте, а он запускает локальный
+                        BarTender. Партия станет напечатанной только
+                        после того, как агент подтвердит отправку задания
+                        на принтер.
 
                     </div>
 
@@ -212,8 +242,34 @@
                                 Скачать пробный PDF
                             </a>
 
+                            <!--
+                                Два способа печати существуют потому, что
+                                BarTender стоит либо на сервере, либо на
+                                рабочем месте. Агент на рабочем месте
+                                проверяется из браузера: сервер до его
+                                127.0.0.1 не достанется, поэтому кнопка
+                                остаётся доступной, а о незапущенном
+                                агенте оператор узнаёт по нажатию.
+                            -->
+                            <button type="button"
+                                    class="btn secondary"
+                                    id="printViaAgent"
+                                    th:if="${agentConfigured}"
+                                    th:attr="data-agent-url=${agentUrl},
+                                             data-agent-token=${agentToken},
+                                             data-batch-id=${batch.id},
+                                             data-mark-url=@{/warehouse/receiving/{id}/qr/agent-printed(id=${batch.id})},
+                                             data-classifier=${labelClassifier},
+                                             data-name=${labelName},
+                                             data-order=${batch.incomingOrderNumber},
+                                             data-show-text=${printNumberOverQr},
+                                             data-copies=${labelCopies}">
+                                Печать QR
+                            </button>
+
                             <form method="post"
-                                  th:action="@{/warehouse/receiving/{id}/qr/print(id=${batch.id})}">
+                                  th:action="@{/warehouse/receiving/{id}/qr/print(id=${batch.id})}"
+                                  th:unless="${agentConfigured}">
 
                                 <input th:if="${_csrf != null}"
                                        type="hidden"
