@@ -954,6 +954,20 @@ body {
     font-size: 12px;
 }
 
+.warehouse-print-note--probe {
+    color: #1d4ed8;
+    background: #eff6ff;
+    border-color: #bfdbfe;
+    border-left-color: #2563eb;
+}
+
+.warehouse-print-note--caption {
+    color: #14532d;
+    background: #f0fdf4;
+    border-color: #bbf7d0;
+    border-left-color: #16a34a;
+}
+
 .warehouse-counter {
     display: inline-flex;
     align-items: center;

@@ -55,10 +55,12 @@ import ru.company.production.service.GroupZnpPositionsService;
 import ru.company.production.service.ProductionOrderService;
 import ru.company.production.service.SerialKittingService;
 import ru.company.production.service.OrderSchedulingService;
+import ru.company.production.service.SensorClassifierMatcher;
 import org.springframework.web.multipart.MultipartFile;
 import jakarta.servlet.http.HttpSession;
 import ru.company.production.service.checklist.B24TableParser;
 import ru.company.production.service.checklist.ChecklistParser;
+import ru.company.production.service.checklist.ChecklistNoteUtils;
 import ru.company.production.service.checklist.SystemSheetMatcher;
 
 import java.beans.PropertyEditorSupport;
@@ -107,6 +109,13 @@ public class DispatcherController {
     private final B24TableParser b24TableParser;
     private final ru.company.production.service.checklist.SystemSheetMatcher
             systemSheetMatcher;
+
+    /*
+     * Подбор классификатора датчика по обозначению из листа: позиция
+     * датчика обязана показывать найденное изделие сразу в форме,
+     * иначе диспетчер не понимает, узнано ли вписанное наименование.
+     */
+    private final SensorClassifierMatcher sensorClassifierMatcher;
 
     /*
      * Колонка «Где позиции» списка групповых ЗНП: сводка по незакрытым
@@ -1661,26 +1670,50 @@ public class DispatcherController {
         item.setUnit(toUnitName(row.unit()));
         item.setTechProcessType(TechProcessType.BASIC);
 
-        String note = row.note() == null || row.note().isBlank()
-                ? null
-                : row.note();
-
         if (productType == ProductType.SENSOR) {
             item.setFullName(row.name());
-            item.setNote(note);
+            /*
+             * Особенности исполнения датчика в примечание не переносятся:
+             * полное обозначение из листа целиком лежит в поле наименования
+             * и диспетчер читает их там, повтор в примечании только дублирует
+             * текст. В примечании остаётся колонка «Прим.» — если в ней не
+             * дата и не код партии.
+             */
+            item.setNote(ChecklistNoteUtils.cleanColumnNote(row.note()));
+            /*
+             * Классификатор подбирается сразу в форме: диспетчер обязан
+             * видеть, что обозначение из листа узнано изделием, а не
+             * гадать об этом после сохранения. Не удалось подобрать —
+             * изделие остаётся не выбранным, и строка покажет
+             * наименование без кода.
+             */
+            item.setProductClassifierId(sheetSensorClassifierId(row.name()));
         } else {
             /*
              * Полное обозначение сохраняется только у датчика (V18),
              * поэтому наименованию прибора остаётся примечание позиции:
              * без него диспетчер выбирал бы изделие из классификатора,
-             * не видя, что именно заказано в чек-листе.
+             * не видя, что именно заказано в чек-листе. Особенности
+             * исполнения отдельно не дублируются — они уже внутри
+             * наименования.
              */
-            item.setNote(note == null || note.isBlank()
-                    ? row.name()
-                    : row.name() + " — " + note);
+            item.setNote(row.name()
+                    + (row.note() == null || row.note().isBlank()
+                        ? ""
+                        : " — " + row.note().trim()));
         }
 
         return item;
+    }
+
+    /**
+     * Примечание позиции листа: колонка «Прим.», а если она пуста —
+     * особенности исполнения из обозначения. Наименование изделия при
+     * этом не дублируется (см. ChecklistNoteUtils).
+     */
+    private String checklistNote(ChecklistParser.ParsedRow row) {
+
+        return ChecklistNoteUtils.resolveNote(row.note(), row.name());
     }
 
     /**
@@ -1714,15 +1747,12 @@ public class DispatcherController {
         if (device != null) {
             item.setProductClassifierId(device.getId());
             /*
-             * Наименование из листа остаётся в примечании: изделие
-             * классификатора называется коротко, а в чек-листе — с
-             * параметрами исполнения, и диспетчер обязан видеть в
-             * карточке, что именно заказано. Примечание колонки
-             * «Прим.» при этом не теряется.
+             * Наименование из листа в примечании не нужно: оно
+             * повторяет то, что уже видно в подобранном изделии, и
+             * только засоряет карточку. Особенности исполнения
+             * остаются — их в выбранном изделии не видно.
              */
-            item.setNote(row.note() == null || row.note().isBlank()
-                    ? row.name()
-                    : row.name() + " — " + row.note());
+            item.setNote(checklistNote(row));
         }
 
         return item;
@@ -1738,10 +1768,12 @@ public class DispatcherController {
      * неверную систему хуже, чем оставить поле пустым: неверная
      * система означает неверный состав и неверный техпроцесс.
      *
-     * Наименование из листа и строки состава записываются в
-     * примечание позиции: полное обозначение хранится только у
-     * датчика (V18), а диспетчер обязан видеть в карточке, что именно
-     * заказано и из чего система состоит по листу.
+     * Подобранное изделие в примечание не переносится: строки листа и
+     * состава уже видны отдельными позициями группы, и повтор
+     * наименования только засоряет карточку. Наименование остаётся в
+     * примечании лишь когда система не найдена — тогда это единственная
+     * подсказка о том, что заказано и что диспетчер обязан выбрать
+     * изделие сам.
      */
     private CustomerOrderForm.CustomerOrderItemForm systemItem(
             ChecklistParser.ParsedRow row
@@ -1758,22 +1790,50 @@ public class DispatcherController {
 
         if (system != null) {
             item.setProductClassifierId(system.getId());
+            item.setNote(checklistNote(row));
+            return item;
         }
 
         StringBuilder note = new StringBuilder(row.name());
-
-        if (row.note() != null && !row.note().isBlank()) {
-            note.append(" — ").append(row.note());
+        String noteText = checklistNote(row);
+        if (noteText != null && !noteText.isBlank()) {
+            note.append(" — ").append(noteText);
         }
 
-        if (system == null) {
-            note.append(". Система не найдена в классификаторе —"
-                    + " выберите изделие вручную");
-        }
+        note.append(". Система не найдена в классификаторе —"
+                + " выберите изделие вручную");
 
         item.setNote(note.toString());
 
         return item;
+    }
+
+    /**
+     * Классификатор датчика по обозначению из листа, либо {@code null}.
+     *
+     * Разбор SensorClassifierMatcher бросает ошибку на любом шаге:
+     * род не узнан, параметры исполнения не совпали, изделие
+     * неоднозначно. В предпросмотре листа это не ошибка импорта, а
+     * обычный неподобранный случай: диспетчер либо выберет изделие из
+     * списка, либо сохранит позицию как есть — тогда проверку выполнит
+     * сервис при создании заказа и назовёт причину прямо в форме.
+     */
+    private Long sheetSensorClassifierId(String fullName) {
+
+        if (fullName == null || fullName.isBlank()) {
+            return null;
+        }
+
+        try {
+            SensorClassifierMatcher.Match match =
+                    sensorClassifierMatcher.match(fullName);
+
+            return match.classifier() == null
+                    ? null
+                    : match.classifier().getId();
+        } catch (IllegalArgumentException exception) {
+            return null;
+        }
     }
 
     /**
@@ -2614,6 +2674,66 @@ public class DispatcherController {
         }
 
         return components;
+    }
+
+    /**
+     * Подбор классификатора датчика по вписанному обозначению.
+     *
+     * Вызывается из формы заказа при вводе наименования: диспетчер
+     * обязан видеть найденное изделие сразу, а не после отклонённого
+     * сохранения. Работает тем же SensorClassifierMatcher, что и
+     * сервис при создании заказа, — предпросмотр не имеет права
+     * расходиться с сохранением.
+     *
+     * Несовпадение возвращается телом, а не кодом ответа: неподобранное
+     * обозначение — штатный результат строки таблицы, и на каждую такую
+     * строку fetch бросался бы исключением.
+     */
+    @GetMapping("/customer-order/sensor-match")
+    @ResponseBody
+    public Map<String, Object> sensorMatch(
+            @RequestParam(required = false) String fullName
+    ) {
+        Map<String, Object> result = new LinkedHashMap<>();
+
+        if (fullName == null || fullName.isBlank()) {
+            result.put("matched", false);
+            result.put("problem", null);
+
+            return result;
+        }
+
+        try {
+            SensorClassifierMatcher.Match match =
+                    sensorClassifierMatcher.match(fullName);
+            ProductClassifier classifier = match.classifier();
+
+            result.put("matched", true);
+            result.put("classifierId", classifier.getId());
+            result.put("code", classifier.getCode());
+
+            /*
+             * Наименование собирается из уже загруженных строк: поле
+             * sensorCatalog у классификатора — ленивая ссылка, и вне
+             * транзакции подбора её не прочитать.
+             */
+            result.put("label", classifier.getCode()
+                    + " · "
+                    + ProductType.SENSOR.getDisplayName()
+                    + " · "
+                    + match.sensorClass().getName().trim()
+                    + (classifier.getName() == null
+                        || classifier.getName().isBlank()
+                        || match.sensorClass().getName().contains(
+                                classifier.getName().trim())
+                        ? ""
+                        : " " + classifier.getName().trim()));
+        } catch (IllegalArgumentException exception) {
+            result.put("matched", false);
+            result.put("problem", exception.getMessage());
+        }
+
+        return result;
     }
 
     /**

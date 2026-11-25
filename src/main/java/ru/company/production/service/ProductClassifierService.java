@@ -61,6 +61,7 @@ public class ProductClassifierService {
         form.setName(classifier.getName());
         form.setNote(classifier.getNote());
         form.setVersion(classifier.getVersion());
+        form.setPrintNumberOverQr(classifier.isPrintNumberOverQr());
         if (classifier.getSensorCatalog() != null) {
             form.setSensorCatalogId(classifier.getSensorCatalog().getId());
         }
@@ -146,6 +147,7 @@ public class ProductClassifierService {
         classifier.setCode(form.getCode());
         classifier.setProductType(form.getProductType());
         classifier.setNote(trim(form.getNote()));
+        classifier.setPrintNumberOverQr(form.isPrintNumberOverQr());
 
         /*
          * Наименование пишут изделия всех типов: у датчика это не повтор

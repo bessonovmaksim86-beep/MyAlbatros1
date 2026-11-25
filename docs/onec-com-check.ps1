@@ -16,9 +16,13 @@ $ErrorActionPreference = 'Stop'
 
 $server = 'app1'
 $database = 'albatros'
+$username = ''
+$password = ''
 
 if ($env:ONEC_SERVER) { $server = $env:ONEC_SERVER }
 if ($env:ONEC_DATABASE) { $database = $env:ONEC_DATABASE }
+if ($env:ONEC_USERNAME) { $username = $env:ONEC_USERNAME }
+if ($env:ONEC_PASSWORD) { $password = $env:ONEC_PASSWORD }
 
 Write-Host "Сервер: $server  База: $database"
 Write-Host "Разрядность этого процесса: $([Environment].Is64BitProcess)"
@@ -35,6 +39,18 @@ $roots = @(
     'C:\Program Files\1cv8',
     'C:\Program Files (x86)\1cv8'
 )
+
+# Локальная установка 1С кладёт dll в AppData того пользователя, под
+# которым платформа ставилась. Если диагностику запустили «от имени
+# администратора», $env:LOCALAPPDATA указывает на профиль админа и dll в
+# рабочем профиле не находится - скрипт отвечает «платформа не
+# установлена» на полностью исправной машине. Поэтому перебираем AppData
+# всех профилей. Дубликаты корней безвредны: Test-Path просто повторно
+# проверяет тот же каталог.
+foreach ($userProfile in Get-ChildItem 'C:\Users' -Directory -ErrorAction SilentlyContinue) {
+    $roots += "$($userProfile.FullName)\AppData\Local\Programs\1cv8_x86"
+    $roots += "$($userProfile.FullName)\AppData\Local\Programs\1cv8"
+}
 
 $dlls = @()
 foreach ($root in $roots) {
@@ -87,11 +103,19 @@ if (-not $registered) {
 }
 
 # --- Шаг 3. Соединение с базой ---------------------------------------
-Write-Host ""
-Write-Host "Шаг 3. Соединение с базой (вход под текущим пользователем Windows)"
-
-$connectString = 'Srvr="' + $server + '";Ref="' + $database + '";'
-Write-Host "  $connectString"
+if ($username -ne '') {
+    Write-Host ""
+    Write-Host "Шаг 3. Соединение с базой (пользователь 1С: $username)"
+    $connectString = 'Srvr="' + $server + '";Ref="' + $database + '";Usr="' + $username + '";Pwd="' + $password + '";'
+} else {
+    Write-Host ""
+    Write-Host "Шаг 3. Соединение с базой (вход под текущим пользователем Windows)"
+    $connectString = 'Srvr="' + $server + '";Ref="' + $database + '";'
+}
+# Пароль в консоль не печатается: строка соединения остаётся в истории
+# окна и в перенаправленном выводе.
+$shown = $connectString -replace 'Pwd="[^"]*"', 'Pwd="***"'
+Write-Host "  $shown"
 
 try {
     $connection = $connector.Connect($connectString)

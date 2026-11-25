@@ -83,8 +83,18 @@ public class ProductClassifier {
     @Max(99999)
     private Integer startSerial;
 
-    @Column(length = 2000)
+    @Column(name = "note", length = 2000)
     private String note;
+
+    /**
+     * Печатать номер текстом над QR-кодом.
+     *
+     * Для некоторых видов ячеек требуется числовой номер
+     * над QR-кодом. Флаг включается в форме классификатора
+     * и автоматически передаётся при печати.
+     */
+    @Column(name = "print_number_over_qr", nullable = false)
+    private boolean printNumberOverQr = false;
 
     /*
      * Изделия, входящие в этот классификатор.

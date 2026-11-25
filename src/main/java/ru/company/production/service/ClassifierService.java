@@ -61,6 +61,7 @@ public class ClassifierService {
         form.setProductType(classifier.getProductType());
         form.setName(classifier.getName());
         form.setNote(classifier.getNote());
+        form.setPrintNumberOverQr(classifier.isPrintNumberOverQr());
         form.setVersion(classifier.getVersion());
         if (classifier.getSensorCatalog() != null) {
             form.setSensorCatalogId(classifier.getSensorCatalog().getId());
@@ -146,6 +147,7 @@ public class ClassifierService {
         classifier.setCode(form.getCode());
         classifier.setProductType(form.getProductType());
         classifier.setNote(normalize(form.getNote()));
+        classifier.setPrintNumberOverQr(form.isPrintNumberOverQr());
         if (form.getProductType() == ProductType.SENSOR) {
             SensorCatalog sensor = sensorCatalogRepository.findById(form.getSensorCatalogId())
                     .orElseThrow(() -> new EntityNotFoundException("Выбранный датчик отсутствует в справочнике"));

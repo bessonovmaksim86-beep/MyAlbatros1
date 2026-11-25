@@ -35,6 +35,9 @@ public class ClassifierForm {
     @Size(max = 2000, message = "Не более 2000 символов")
     private String note;
 
+    /** Печатать номер текстом над QR-кодом. */
+    private boolean printNumberOverQr;
+
     @Valid
     private List<ClassifierInclusionForm> inclusions = new ArrayList<>();
 

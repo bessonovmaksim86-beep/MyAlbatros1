@@ -37,16 +37,22 @@
         {name: 'note', suffix: 'note', css: '.co-note'}
     ];
 
-    function scriptData() {
+    function scriptUrls() {
         const script = document.getElementById('coOrderScript')
-            || document.querySelector('script[data-system-components-url]');
+            || document.querySelector('script[data-sensor-match-url]');
 
-        return script
-            ? script.getAttribute('data-system-components-url')
-            : null;
+        if (!script) {
+            return { sensorMatch: null };
+        }
+
+        return {
+            sensorMatch: script.getAttribute('data-sensor-match-url')
+        };
     }
 
-    function initializeItems(systemComponentsUrl) {
+    function initializeItems(urls) {
+        const sensorMatchUrl = urls.sensorMatch;
+
         const body = document.getElementById('coItemsBody');
         const template = document.getElementById('coItemTemplate');
         const addButton = document.getElementById('coAddItem');
@@ -54,6 +60,14 @@
         if (!body || !template || !addButton) {
             return;
         }
+
+        /*
+         * Очередь подборов датчиков: таймер на строку и метка ответа.
+         * WeakMap не держит удалённые строки, метка отбрасывает ответы
+         * запросов, запущенных по уже стёртому обозначению.
+         */
+        const matchTimers = new WeakMap();
+        let matchSequence = 0;
 
         /*
          * Индексы в именах полей всегда плотные (0..n-1): при
@@ -64,12 +78,6 @@
             const rows = body.querySelectorAll('.co-item-row');
 
             rows.forEach((row, index) => {
-                const position = row.querySelector('.co-item-position');
-
-                if (position) {
-                    position.textContent = index + 1;
-                }
-
                 itemFields.forEach((field) => {
                     const control = row.querySelector(field.css);
 
@@ -81,6 +89,294 @@
                     control.id = 'items_' + index + '_' + field.suffix;
                 });
             });
+
+            syncGroups(rows);
+        }
+
+        /*
+         * Позиции состава группируются со своей системой.
+         *
+         * Строки, идущие сразу после строки «Система», — её состав
+         * (лист разбирает «1», «1.1», «1.2» именно так): они получают
+         * вложенный номер вида «1.1» и класс группировки, а строка
+         * состава подтягивается стилями по соседству. Индексы в
+         * именах полей это не затрагивает — сервер по-прежнему видит
+         * плотный список позиций, меняется только то, что видит
+         * диспетчер.
+         *
+         * Номер верхнего уровня считается по позициям-изделиям, а не по
+         * строкам таблицы: состав своей системы собственным номером не
+         * владеет. Иначе вторая система листа получила бы номер «4»
+         * (две строки её состава сдвинули бы нумерацию), а лист называет
+         * её «2» — и диспетчер терял бы соответствие позиции строке
+         * чек-листа.
+         */
+        function syncGroups(rows) {
+            let topLevel = 0;
+            let systemNumber = null;
+            let partNumber = 0;
+
+            rows.forEach((row) => {
+                const typeSelect = row.querySelector('.co-product-type');
+                const type = typeSelect ? typeSelect.value : '';
+                const position = row.querySelector('.co-item-position');    
+                const isSystem = type === 'SYSTEM';
+                const isPart = !isSystem
+                    && type !== ''
+                    && systemNumber !== null;
+
+                row.classList.toggle('is-system-group', isSystem || isPart);
+                row.classList.toggle('is-system-part', isPart);
+
+                let label;
+                let isGroupStart;
+
+                if (isPart) {
+                    partNumber += 1;
+                    label = systemNumber + '.' + partNumber;
+                    isGroupStart = false;
+                } else {
+                    topLevel += 1;
+                    label = String(topLevel);
+                    isGroupStart = true;
+
+                    systemNumber = isSystem ? topLevel : null;
+                    partNumber = 0;
+                }
+
+                /*
+                 * Разделитель рисуется по началу группы, а не по её
+                 * концу: группа может быть последней в списке, и тогда
+                 * нижняя граница повисла бы в пустоте.
+                 */
+                row.classList.toggle('is-group-start', isGroupStart);
+
+                if (position) {
+                    position.textContent = label;
+                }
+            });
+        }
+
+        /*
+         * Классификатор датчика в строке: код подобранного изделия
+         * впереди наименования и подпись с причиной, когда изделия нет.
+         *
+         * Подобранное изделие живёт в списке, который при датчике
+         * скрыт, поэтому без кода строка выглядит как непривязанное
+         * обозначение: непонятно, нашёлся ли классификатор. Код
+         * показывается, пока не открыт сам список (там изделие видно).
+         *
+         * Подпись «не найден» имеет право появляться только после
+         * выполненного подбора (см. requestSensorMatch): до него строка
+         * ничего не знает о результате, а прежняя версия показывала её
+         * на каждом вводе — и на обозначениях, для которых сервер
+         * спокойно подбирает изделие при сохранении. Пока подбор идёт
+         * или не запущен, подпись скрыта; пустое обозначение её не
+         * вызывает вовсе.
+         */
+        function syncClassifierTag(row) {
+            const tag = row.querySelector('.co-classifier-tag');
+            const hint = row.querySelector('.co-classifier-missing');
+            const classifier = row.querySelector('.co-classifier');
+            const field = row.querySelector('.co-fullname');
+
+            if (!tag) {
+                return;
+            }
+
+            if (hint && !hint.dataset.defaultText) {
+                hint.dataset.defaultText = hint.textContent.trim();
+            }
+
+            const sensor = row.classList.contains('is-sensor');
+            const selected = sensor && classifier && classifier.value
+                ? classifier.options[classifier.selectedIndex]
+                : null;
+            const checking = row.classList.contains('classifier-checking');
+
+            /*
+             * Подпись имеет право существовать только после ответа
+             * «не подобрано» (unmatched). Ошибку запроса показывать
+             * как «классификатор не найден» нельзя: причина проверки
+             * неизвестна, и утверждение снова стало бы ложью.
+             */
+            const unmatched = row.dataset.checkState === 'unmatched';
+
+            const label = selected
+                ? selected.textContent.trim()
+                : (row.dataset.matchedLabel || '');
+
+            const visible = sensor
+                && !!label
+                && !row.classList.contains('show-classifier');
+
+            tag.textContent = visible ? label : '';
+            tag.hidden = !visible;
+
+            const missing = sensor
+                && !selected
+                && !label
+                && !checking
+                && unmatched
+                && !!(field && field.value.trim());
+
+            row.classList.toggle('classifier-missing', missing);
+
+            if (hint) {
+                hint.hidden = !missing;
+
+                if (missing) {
+                    hint.textContent = row.dataset.problem
+                        || hint.dataset.defaultText;
+                }
+            }
+        }
+
+        /*
+         * Подбор классификатора по вписанному обозначению — серверным
+         * же матчером, что и при сохранении заказа.
+         *
+         * Без него форма либо молчала о найденном изделии (оно скрыто в
+         * списке), либо врала о ненайденном. Ответ сверяется по метке
+         * строки: пока диспетчер печатает, прежний запрос обязан быть
+         * отброшен, иначе код изделия перескочит на другое обозначение.
+         */
+        function requestSensorMatch(row) {
+            const typeSelect = row.querySelector('.co-product-type');
+            const field = row.querySelector('.co-fullname');
+            const value = field ? field.value.trim() : '';
+            const token = String(++matchSequence);
+
+            row.dataset.matchToken = token;
+
+            if (!sensorMatchUrl
+                || !typeSelect
+                || typeSelect.value !== 'SENSOR'
+                || !value) {
+                clearSensorMatch(row);
+                return;
+            }
+
+            fetch(sensorMatchUrl + '?fullName=' + encodeURIComponent(value), {
+                headers: {'Accept': 'application/json'}
+            })
+                .then((response) => response.ok ? response.json() : null)
+                .then((data) => {
+                    if (row.dataset.matchToken !== token) {
+                        return;
+                    }
+
+                    applySensorMatch(row, data);
+                })
+                .catch(() => {
+                    if (row.dataset.matchToken === token) {
+                        row.dataset.checkState = 'error';
+                        syncClassifierTag(row);
+                    }
+                });
+        }
+
+        function applySensorMatch(row, data) {
+            const classifier = row.querySelector('.co-classifier');
+
+            row.classList.remove('classifier-checking');
+
+            if (!data) {
+                /*
+                 * Ответ не получен (ошибка сервера или сети): причина
+                 * подбора неизвестна, поэтому подпись не показывается.
+                 */
+                row.dataset.checkState = 'error';
+                delete row.dataset.problem;
+                syncClassifierTag(row);
+
+                return;
+            }
+
+            if (!data.matched) {
+                if (classifier) {
+                    classifier.value = '';
+                }
+
+                row.dataset.problem = data.problem ? data.problem : '';
+                row.dataset.checkState = 'unmatched';
+                delete row.dataset.matchedLabel;
+
+                syncClassifierTag(row);
+
+                return;
+            }
+
+            /*
+             * Значение устанавливается только если изделие есть в
+             * списке строки: список фильтруется по типу, и чужую опцию
+             * селектор не примет. Вне списка изделие остаётся виден
+             * подписью из ответа, а сохранение подберёт его сервер.
+             */
+            const option = classifier
+                ? Array.from(classifier.options).find((candidate) =>
+                    String(candidate.value) === String(data.classifierId))
+                : null;
+
+            if (classifier) {
+                classifier.value = option && !option.hidden ? option.value : '';
+            }
+
+            if (!option) {
+                row.dataset.matchedLabel = data.label
+                    ? String(data.label)
+                    : '';
+            } else {
+                delete row.dataset.matchedLabel;
+            }
+
+            delete row.dataset.problem;
+            row.dataset.checkState = 'matched';
+
+            syncClassifierTag(row);
+        }
+
+        function clearSensorMatch(row) {
+            clearTimeout(matchTimers.get(row));
+            matchTimers.delete(row);
+
+            row.classList.remove('classifier-checking');
+            delete row.dataset.problem;
+            delete row.dataset.matchedLabel;
+            delete row.dataset.matchToken;
+            delete row.dataset.checkState;
+
+            syncClassifierTag(row);
+        }
+
+        /*
+         * Подбор запускается с задержкой: иначе запрос уходит на каждый
+         * символ печатаемого обозначения. На время задержки строка
+         * помечается как проверяемая, чтобы за это время не мелькнуло
+         * «классификатор не найден».
+         */
+        function scheduleSensorMatch(row) {
+            const field = row.querySelector('.co-fullname');
+            const typeSelect = row.querySelector('.co-product-type');
+
+            if (!sensorMatchUrl
+                || !typeSelect
+                || typeSelect.value !== 'SENSOR'
+                || !field
+                || !field.value.trim()) {
+                clearSensorMatch(row);
+                return;
+            }
+
+            row.classList.add('classifier-checking');
+            row.dataset.checkState = 'checking';
+            syncClassifierTag(row);
+
+            clearTimeout(matchTimers.get(row));
+            matchTimers.set(row, setTimeout(() => {
+                matchTimers.delete(row);
+                requestSensorMatch(row);
+            }, 350));
         }
 
         /*
@@ -99,10 +395,13 @@
             if (!sensor) {
                 row.classList.remove('show-classifier');
             }
+
+            syncClassifierTag(row);
         }
 
         function toggleClassifier(row) {
             row.classList.toggle('show-classifier');
+            syncClassifierTag(row);
         }
 
         /*
@@ -160,121 +459,12 @@
         }
 
         /*
-         * Строка состава системы сразу после строки позиции.
-         * Создаётся один раз и переиспользуется.
+         * Состав системы отдельной справочной строкой под позицией не
+         * показывается: изделия состава уже идут самостоятельными
+         * строками «1.1», «1.2» своей группы, и повторять их списком
+         * под строкой системы смысла нет — блок только разъедал
+         * таблицу на две части.
          */
-        function systemRow(row) {
-            const next = row.nextElementSibling;
-
-            if (next && next.classList.contains('co-system-row')) {
-                return next;
-            }
-
-            const created = document.createElement('tr');
-
-            created.className = 'co-system-row';
-
-            const columns = row.cells.length;
-
-            const cell = document.createElement('td');
-
-            cell.colSpan = columns;
-            created.appendChild(cell);
-
-            row.insertAdjacentElement('afterend', created);
-
-            return created;
-        }
-
-        function removeSystemRow(row) {
-            const next = row.nextElementSibling;
-
-            if (next && next.classList.contains('co-system-row')) {
-                next.remove();
-            }
-        }
-
-        function renderComponents(row, components) {
-            const sysRow = systemRow(row);
-            const cell = sysRow.querySelector('td');
-
-            if (!components.length) {
-                cell.innerHTML =
-                    '<div class="co-system-empty">'
-                    + 'Состав системы не задан в классификаторе.'
-                    + '</div>';
-
-                return;
-            }
-
-            const list = document.createElement('div');
-
-            list.className = 'co-system-components';
-
-            const title = document.createElement('div');
-
-            title.className = 'co-system-components__title';
-            title.textContent = 'Состав системы (датчики и приборы)';
-            list.appendChild(title);
-
-            components.forEach((component) => {
-                const entry = document.createElement('div');
-
-                entry.className = 'co-system-component';
-
-                const isSensor = component.sensorCatalogId != null;
-                const kind = isSensor ? 'Датчик' : 'Прибор';
-                const label = isSensor
-                    ? component.sensorCatalogName
-                    : (component.componentCode
-                        + ' · '
-                        + (component.componentName || ''));
-
-                entry.textContent = kind + ': ' + (label || '—');
-                list.appendChild(entry);
-            });
-
-            cell.innerHTML = '';
-            cell.appendChild(list);
-        }
-
-        function loadSystemComponents(row, classifierId) {
-            if (!systemComponentsUrl || !classifierId) {
-                return;
-            }
-
-            const url = systemComponentsUrl
-                + '?systemId='
-                + encodeURIComponent(classifierId);
-
-            fetch(url, {
-                headers: {'Accept': 'application/json'}
-            })
-                .then((response) =>
-                    response.ok ? response.json() : [])
-                .then((components) => renderComponents(row, components))
-                .catch(() => removeSystemRow(row));
-        }
-
-        /*
-         * Показывает или скрывает состав системы в зависимости от
-         * выбранного типа и изделия строки.
-         */
-        function syncSystemBlock(row) {
-            const typeSelect = row.querySelector('.co-product-type');
-            const classifier = row.querySelector('.co-classifier');
-
-            const isSystem = typeSelect
-                && typeSelect.value === 'SYSTEM'
-                && classifier
-                && classifier.value;
-
-            if (isSystem) {
-                loadSystemComponents(row, classifier.value);
-            } else {
-                removeSystemRow(row);
-            }
-        }
 
         /*
          * Тип изделия выводится из уже выбранного изделия — это нужно
@@ -338,7 +528,7 @@
             const row = button.closest('.co-item-row');
 
             if (row) {
-                removeSystemRow(row);
+                clearSensorMatch(row);
                 row.remove();
                 renameRows();
             }
@@ -351,16 +541,25 @@
          * изделие у только что набранного обозначения.
          */
         body.addEventListener('input', (event) => {
-            if (!event.target.classList.contains('co-fullname')) {
+            const row = event.target.closest('.co-item-row');
+            if (!row) {
                 return;
             }
 
-            const row = event.target.closest('.co-item-row');
-            const classifier = row && row.querySelector('.co-classifier');
+            if (event.target.classList.contains('co-fullname')) {
+                const classifier = row.querySelector('.co-classifier');
 
-            if (classifier && event.target.value.trim()) {
-                classifier.value = '';
-                row.classList.remove('show-classifier');
+                if (classifier && event.target.value.trim()) {
+                    classifier.value = '';
+                    row.classList.remove('show-classifier');
+                }
+
+                /*
+                 * Вписанное обозначение проверяется серверным
+                 * подбором: строка обязана показать найденное изделие
+                 * или его причину, а не молчать до сохранения.
+                 */
+                scheduleSensorMatch(row);
             }
         });
 
@@ -372,26 +571,56 @@
             }
 
             if (event.target.classList.contains('co-product-type')) {
+                /*
+                 * Список фильтруется до вида строки: смена типа могла
+                 * сбросить выбранное изделие, и код классификатора
+                 * обязан показывать уже итоговый выбор.
+                 */
+                filterClassifierOptions(row);
                 syncSensorMode(row);
                 syncTechProcessMode(row);
-                filterClassifierOptions(row);
-                syncSystemBlock(row);
+                syncGroups(body.querySelectorAll('.co-item-row'));
+                scheduleSensorMatch(row);
             } else if (event.target.classList.contains('co-classifier')) {
-                syncSystemBlock(row);
+                /*
+                 * Выбор из списка — сознательный: подбор по
+                 * обозначению отменяется, иначе ответ сервера вернул бы
+                 * в строку то изделие, от которого диспетчер только
+                 * что отказался.
+                 */
+                clearSensorMatch(row);
+                syncGroups(body.querySelectorAll('.co-item-row'));
             }
         });
 
         /*
          * Первичная инициализация уже отрисованных сервером строк:
-         * восстановить тип по изделию, включить нужный вид строки,
-         * отфильтровать опции и, если это система, подгрузить её состав.
+         * восстановить тип по изделию, включить нужный вид строки и
+         * отфильтровать опции.
+         *
+         * Строки датчика с вписанным обозначением и без выбранного
+         * изделия проверяются подбором сразу: иначе открытая после
+         * неудачного сохранения форма осталась бы без объяснения, а
+         * строкам с уже выбранным изделием (заполнен импорт) проверка
+         * не нужна — сервер подобрал его до отрисовки.
          */
         body.querySelectorAll('.co-item-row').forEach((row) => {
             syncTypeFromClassifier(row);
             syncSensorMode(row);
             syncTechProcessMode(row);
             filterClassifierOptions(row);
-            syncSystemBlock(row);
+
+            const classifier = row.querySelector('.co-classifier');
+            const field = row.querySelector('.co-fullname');
+            const typeSelect = row.querySelector('.co-product-type');
+
+            if (typeSelect
+                && typeSelect.value === 'SENSOR'
+                && field
+                && field.value.trim()
+                && !(classifier && classifier.value)) {
+                scheduleSensorMatch(row);
+            }
         });
 
         renameRows();
@@ -465,7 +694,7 @@
     }
 
     function start() {
-        initializeItems(scriptData());
+        initializeItems(scriptUrls());
         initializeChecklistLink();
         initializeImportForm();
     }

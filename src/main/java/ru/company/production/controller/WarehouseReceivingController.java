@@ -3,6 +3,11 @@ package ru.company.production.controller;
 import jakarta.persistence.EntityNotFoundException;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.core.io.ByteArrayResource;
+import org.springframework.core.io.Resource;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
@@ -14,6 +19,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.servlet.mvc.support.RedirectAttributes;
+import org.springframework.web.util.UriUtils;
 import ru.company.production.dto.CellReceivingForm;
 import ru.company.production.dto.CellScanningResult;
 import ru.company.production.dto.LabelPrintResult;
@@ -22,8 +28,11 @@ import ru.company.production.entity.CellReceivingBatch;
 import ru.company.production.repository.UserRepository;
 import ru.company.production.service.CellReceivingService;
 import ru.company.production.service.LabelPrintService;
+import ru.company.production.service.QrPdfGenerator;
 import ru.company.production.service.WarehouseSupplierService;
 
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 
 /**
@@ -49,6 +58,7 @@ public class WarehouseReceivingController {
     private final WarehouseSupplierService supplierService;
     private final UserRepository userRepository;
     private final LabelPrintService labelPrintService;
+    private final QrPdfGenerator qrPdfGenerator;
 
     /** Форма прихода и журнал партий. */
     @GetMapping({"", "/"})
@@ -136,6 +146,15 @@ public class WarehouseReceivingController {
         model.addAttribute("printReady", problem == null);
         model.addAttribute("printProblem", problem);
 
+        /*
+         * Флаг «номер над QR» доступен из классификатора: если включён,
+         * в пробном PDF и в боевой печати (SHOWTEXT) номер будет
+         * напечатан текстом над QR-кодом.
+         */
+        boolean showNumber = batch.getCellClassifier() != null
+                && batch.getCellClassifier().isPrintNumberOverQr();
+        model.addAttribute("printNumberOverQr", showNumber);
+
         return "warehouse/receiving/qr";
     }
 
@@ -181,6 +200,59 @@ public class WarehouseReceivingController {
         redirectAttributes.addFlashAttribute("successMessage", result.message());
 
         return "redirect:/warehouse/receiving/" + id + "/qr";
+    }
+
+    /**
+     * Пробный PDF с QR-кодами.
+     *
+     * Работает без BarTender и без принтера: приложение само строит
+     * QR-код из номера и собирает PDF, близкий к боевой этикетке.
+     * Нужен, чтобы проверить содержимое (номера, состав, вёрстку)
+     * до похода к принтеру этикеток.
+     *
+     * Пробный PDF не помечает партию как напечатанную и не влияет
+     * на ход процесса: оператор скачивает файл, проверяет и решает,
+     * использовать ли BarTender или передать номера вручную.
+     */
+    @GetMapping("/{id}/qr/probe")
+    public ResponseEntity<Resource> qrProbe(
+            @PathVariable Long id,
+            RedirectAttributes redirectAttributes
+    ) {
+        CellReceivingBatch batch;
+
+        try {
+            batch = receivingService.get(id);
+        } catch (EntityNotFoundException exception) {
+            redirectAttributes.addFlashAttribute(
+                    "errorMessage",
+                    exception.getMessage()
+            );
+
+            return ResponseEntity.notFound().build();
+        }
+
+        try {
+            byte[] pdf = qrPdfGenerator.generate(batch);
+            String name = qrPdfGenerator.fileName(batch);
+
+            ByteArrayResource resource = new ByteArrayResource(pdf);
+
+            return ResponseEntity.ok()
+                    .contentType(MediaType.APPLICATION_PDF)
+                    .header(HttpHeaders.CONTENT_DISPOSITION,
+                            "attachment; filename*=UTF-8''"
+                                    + UriUtils.encode(name, StandardCharsets.UTF_8))
+                    .body(resource);
+        } catch (IOException exception) {
+            redirectAttributes.addFlashAttribute(
+                    "errorMessage",
+                    "Не удалось сформировать пробный PDF: "
+                            + exception.getMessage()
+            );
+
+            return ResponseEntity.internalServerError().build();
+        }
     }
 
     /**

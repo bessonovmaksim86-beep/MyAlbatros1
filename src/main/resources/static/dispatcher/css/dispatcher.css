@@ -833,11 +833,13 @@ body {
 /*
  * Прибор и ячейка тип техпроцесса не выбирают: они выпускаются
  * заранее по группам ЗНП и привязываются к системе в производстве.
- * Ячейка сохраняется (visibility, а не display), иначе колонка
- * поехала бы в таблице, где рядом стоят датчики со своим типом ТП.
+ * Скрывается сам селект, а не ячейка: колонка остаётся на своём
+ * месте и строки с типом ТП и без него не разъезжаются, но пустой
+ * рамки селекта диспетчер не видит. Значение при этом остаётся в
+ * форме и уходит на сервер как обычно.
  */
 .co-items .co-item-row.no-tech-process .co-tech-process {
-    visibility: hidden;
+    display: none;
 }
 
 .co-items .co-pick {
@@ -853,52 +855,77 @@ body {
 }
 
 /*
- * Строка состава системы: раскрывается под строкой позиции, когда
- * выбран тип «Система». Показывает роды датчиков и приборы системы.
+ * Позиции состава системы: строки, идущие сразу после строки
+ * «Система», — её состав («1», «1.1», «1.2» из листа). Класс
+ * группировки навешивает скрипт вместе с вложенным номером;
+ * имена полей при этом не меняются — меняется только то, что
+ * видит диспетчер.
  */
-.co-system-row > td {
-    padding: 0 10px 12px;
-
-    background: #f7fafc;
-    border-top: 0;
+.co-items .is-system-group > td:first-child {
+    border-left: 3px solid #2c6da7;
 }
 
-.co-system-components {
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-
-    box-sizing: border-box;
-    width: 100%;
-    padding: 12px 14px;
-
-    background: #eef4fa;
-    border: 1px solid var(--line, #dce4eb);
-    border-radius: 9px;
+.co-items .is-system-group > td {
+    background: #f6fafd;
 }
 
-.co-system-components__title {
+/*
+ * Граница начала группы отделяет одну позицию заказа от другой:
+ * строки системы и её состава тонированы одинаково, и без границы
+ * соседние позиции сливались в сплошную таблицу — сверить позицию
+ * со строкой чек-листа было нельзя. Класс навешивает скрипт на
+ * первую строку группы (саму систему или позицию вне группы).
+ */
+.co-items tbody > tr.is-group-start:not(:first-child) > td {
+    border-top: 2px solid #a8c6e0;
+}
+
+/*
+ * Код классификатора под наименованием датчика.
+ *
+ * Подобранное изделие спрятано в списке (класс is-sensor), поэтому
+ * без кода строка выглядит непривязанной: непонятно, нашёлся ли
+ * классификатор. Бейдж скрыт атрибутом hidden, пока скрипт не
+ * увидит выбранное изделие, и намеренно меньше поля: над вводом он
+ * сдвигал бы его ниже соседних колонок строки.
+ */
+.co-items .co-classifier-tag:not([hidden]) {
+    display: inline-block;
+
+    margin-top: 3px;
+    padding: 1px 6px;
+
     color: var(--navy, #073e75);
+    font-size: 10px;
+    font-weight: 700;
+    line-height: 1.5;
+
+    background: #e6f0fa;
+    border: 1px solid #bcd4ee;
+    border-radius: 999px;
+}
+
+/*
+ * Классификатор датчика не подобран: подпись под полем обозначения.
+ *
+ * Список изделий при датчике скрыт, поэтому пустой выбор в нём не
+ * виден и строка выглядела бы заполненной. Подпись говорит, что
+ * позицию надо дозаполнить, а класс classifier-missing возвращает
+ * на строку кнопку «Выбрать из списка».
+ */
+.co-items .co-classifier-missing:not([hidden]) {
+    display: block;
+
+    margin-top: 6px;
+
+    color: #a12d35;
     font-size: 11px;
-    font-weight: 800;
+    font-weight: 700;
+    line-height: 1.4;
 }
 
-.co-system-component {
-    color: var(--text, #27394d);
-    font-size: 12px;
-}
-
-.co-system-empty {
-    box-sizing: border-box;
-    width: 100%;
-    padding: 12px 14px;
-
-    color: var(--muted, #6c7b89);
-    font-size: 12px;
-
-    background: #f2f4f6;
-    border: 1px dashed var(--line, #dce4eb);
-    border-radius: 9px;
+.co-items .co-item-row.is-sensor.classifier-missing .co-pick {
+    display: inline-block;
 }
 
 

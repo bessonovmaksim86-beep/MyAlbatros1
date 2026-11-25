@@ -155,6 +155,29 @@
 
                     </div>
 
+                    <div class="warehouse-print-note warehouse-print-note--probe"
+                         th:unless="${printReady}">
+
+                        <strong>Пробный PDF</strong>
+
+                        Пока BarTender не настроен, скачайте пробный PDF —
+                        он содержит QR-коды из номеров партии. Откройте
+                        файл на телефоне или распечатайте на обычном
+                        принтере, затем отсканируйте и продолжите.
+
+                    </div>
+
+                    <div class="warehouse-print-note warehouse-print-note--caption"
+                         th:if="${printNumberOverQr}">
+
+                        <strong>Номер над QR</strong>
+
+                        Для данного вида ячеек включён вывод числового номера
+                        текстом над QR-кодом — он будет напечатан как в
+                        пробном PDF, так и через BarTender.
+
+                    </div>
+
                     <ul class="warehouse-numbers">
 
                         <li class="warehouse-numbers__item"
@@ -183,6 +206,11 @@
                                     data-numbers-path="numbers">
                                 Скопировать номера
                             </button>
+
+                            <a class="btn secondary"
+                               th:href="@{/warehouse/receiving/{id}/qr/probe(id=${batch.id})}">
+                                Скачать пробный PDF
+                            </a>
 
                             <form method="post"
                                   th:action="@{/warehouse/receiving/{id}/qr/print(id=${batch.id})}">

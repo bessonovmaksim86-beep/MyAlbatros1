@@ -516,13 +516,19 @@
 
                                     </td>
 
-                                    <td>
+                                    <td class="co-item-product">
 <!--
     Для датчика изделие вносится вручную: полное обозначение из КД,
     по которому сервис подбирает классификатор (род + значимые
     параметры). Список остаётся для остальных типов и как запасной
     выбор, если подбор не удался. Переключает вид строки скрипт
     (класс is-sensor), стартовое состояние задаётся типом позиции.
+
+    Код классификатора (co-classifier-tag) ставится под
+    наименованием: у датчика поле обозначения видно, а подобранное
+    изделие скрыто в списке, и без кода непонятно, что обозначение
+    из КД вообще узнано классификатором. Над полем бейдж сдвигал
+    ввод вниз и строка разъезжалась с соседними колонками.
 -->
                                         <input type="text"
                                                class="co-fullname"
@@ -535,6 +541,10 @@
                                                th:value="${item.fullName}"
                                                maxlength="500"
                                                placeholder="Датчик уровня ультразвуковой ДУУ2М-12-1-15,00-…">
+
+                                        <span class="co-classifier-tag"
+                                              hidden>
+                                        </span>
 
                                         <span class="field-error"
                                               th:if="${
@@ -586,6 +596,20 @@
                                             </option>
 
                                         </select>
+
+                                        <!--
+                                            Подпись появляется, когда тип
+                                            «Датчик», а изделие не подобрано:
+                                            список при датчике скрыт, и без
+                                            подписи строка выглядела бы
+                                            заполненной. Скрыта атрибутом
+                                            hidden, включает её скрипт.
+                                        -->
+                                        <span class="co-classifier-missing"
+                                              hidden>
+                                            Классификатор не найден по
+                                            обозначению из КД
+                                        </span>
 
                                         <button class="co-pick"
                                                 type="button"
@@ -659,7 +683,7 @@
 
                                     </td>
 
-                                    <td>
+                                    <td class="co-note-cell">
 
                                         <input type="text"
                                                class="co-note"
@@ -753,11 +777,13 @@
             </select>
         </td>
 
-        <td>
+        <td class="co-item-product">
             <input type="text"
                    class="co-fullname"
                    maxlength="500"
                    placeholder="Датчик уровня ультразвуковой ДУУ2М-12-1-15,00-…">
+
+            <span class="co-classifier-tag" hidden></span>
 
             <select class="co-classifier">
                 <option value="">— выберите изделие —</option>
@@ -779,6 +805,10 @@
                     Изделие
                 </option>
             </select>
+
+            <span class="co-classifier-missing" hidden>
+                Классификатор не найден по обозначению из КД
+            </span>
 
             <button class="co-pick"
                     type="button"
@@ -805,7 +835,7 @@
             </select>
         </td>
 
-        <td>
+        <td class="co-note-cell">
             <input type="text"
                    class="co-note"
                    maxlength="2000"
@@ -828,7 +858,7 @@
 </th:block>
 
 <script th:src="@{/dispatcher/js/customer-order.js}"
-        th:attr="data-system-components-url=@{/dispatcher/customer-order/system-components}"></script>
+        th:attr="data-sensor-match-url=@{/dispatcher/customer-order/sensor-match}"></script>
 
 </body>
 </html>

@@ -34,6 +34,10 @@
   </div>
   <template id="systemRowTemplate"><div class="inclusion-row"><div class="form-group inclusion-target-field"><label>Компонент системы</label><select class="form-control system-component-target"><option value="">Выберите компонент</option><optgroup label="Роды датчиков"><option th:each="s:${sensorCatalogOptions}" th:value="'S'+${s.id}" th:text="${s.name}"></option></optgroup><optgroup label="Приборы"><option th:each="d:${deviceOptions}" th:value="'D'+${d.id}" th:text="${d.code+' — '+(d.name!=null and !#strings.isEmpty(d.name)?d.name:d.displayName)}"></option></optgroup></select></div><div class="form-group inclusion-mode-field" hidden><label>Режим включения</label><select class="form-control system-mode" disabled><option value="">Выберите режим</option><option th:each="m:${inclusionModes}" th:value="${m.name()}" th:text="${m.displayName}"></option></select></div><div class="form-group inclusion-max-field" hidden><label>Макс. в системе</label><input type="number" class="form-control system-max" min="0" step="0.001" placeholder="не ограничено" disabled></div><input type="hidden" class="system-sensor-id"><input type="hidden" class="system-classifier-id"><input type="hidden" class="system-quantity" value="1" disabled><input type="hidden" class="system-unit" value="PCS" disabled><button type="button" class="btn remove-system-component" hidden>Удалить</button></div></template>
  </section>
- <div class="form-group classifier-note-field"><label for="note">Примечание</label><textarea id="note" th:field="*{note}" class="form-control" rows="4" maxlength="2000" placeholder="Дополнительная информация"></textarea><div class="field-error" th:if="${#fields.hasErrors('note')}" th:errors="*{note}"></div></div>
+ <div class="form-group"><label for="note">Примечание</label><textarea id="note" th:field="*{note}" class="form-control" rows="4" maxlength="2000" placeholder="Дополнительная информация"></textarea><div class="field-error" th:if="${#fields.hasErrors('note')}" th:errors="*{note}"></div></div>
+ <div class="form-group classifier-qr-caption">
+  <label class="classifier-check"><input type="checkbox" th:field="*{printNumberOverQr}"><span>Печатать номер текстом над QR</span></label>
+  <small>Числовой номер будет напечатан над QR-кодом. Необходимо для некоторых видов ячеек.</small>
+ </div>
 </div>
 </th:block></html>

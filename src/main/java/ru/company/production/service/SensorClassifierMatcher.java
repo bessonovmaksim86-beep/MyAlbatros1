@@ -13,6 +13,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * Подбор классификатора датчика по полному обозначению,
@@ -55,6 +57,13 @@ public class SensorClassifierMatcher {
 
     private final SensorCatalogRepository sensorCatalogRepository;
     private final ProductClassifierRepository productClassifierRepository;
+
+    /*
+     * Диапазон в шаблоне классификатора: «(1-4)» — допустимые значения
+     * от первой границы до второй включительно.
+     */
+    private static final Pattern RANGE =
+            Pattern.compile("\\((\\d+)\\s*-\\s*(\\d+)\\)");
 
     /**
      * Результат подбора: найденный классификатор и разбор,
@@ -144,6 +153,15 @@ public class SensorClassifierMatcher {
     /**
      * Элементы исполнения: остаток после наименования рода
      * до первого пробела, разбитый по дефису.
+     *
+     * Разбиение скобочное (см. {@link #tokenizeParameters}): у
+     * длинных обозначений вроде ДУУ10 параметр сам содержит дефис
+     * внутри скобок — «(1-4)», — и обычный split по дефису разрезал
+     * бы его на два элемента, сдвинув все последующие позиции.
+     * Значимые параметры рода (search_parameters) задаются именно по
+     * целым параметрам, поэтому и здесь обязан считаться целый
+     * параметр: без этого обозначение «…ДУУ10-02-0-3,55-…-I» дало бы
+     * маску не «02-10-1-I», а сдвинутую, и классификатор не нашёлся бы.
      */
     private List<String> parseElements(String normalized, SensorCatalog sensorClass) {
 
@@ -165,13 +183,7 @@ public class SensorClassifierMatcher {
             );
         }
 
-        List<String> elements = new ArrayList<>();
-
-        for (String element : rest.split("-")) {
-            elements.add(element.trim());
-        }
-
-        return elements;
+        return tokenizeParameters(rest);
     }
 
     /**
@@ -332,7 +344,8 @@ public class SensorClassifierMatcher {
                             + "рода «" + sensorClass.getName().trim()
                             + "» с параметрами «" + mask + "»: "
                             + codes(found)
-                            + ". Уточните параметры исполнения."
+                            + ". Уточните параметры исполнения "
+                            + "или выберите изделие в справочнике вручную."
             );
         }
 
@@ -343,6 +356,11 @@ public class SensorClassifierMatcher {
      * Совпадение значимых позиций: сегмент product_name на номере
      * из search_parameters должен равняться соответствующему элементу
      * обозначения.
+     *
+     * product_name разбирается тем же скобочным разбором, что и
+     * обозначение (см. {@link #tokenizeParameters}): иначе «(1-4)»
+     * сдвинул бы позиции и значимый параметр сравнивался бы не со
+     * своим сегментом.
      */
     private boolean matchesPositions(
             String productName,
@@ -356,17 +374,17 @@ public class SensorClassifierMatcher {
             return false;
         }
 
-        String[] parts = normalized.split("-");
+        List<String> parts = tokenizeParameters(normalized);
 
         for (Integer position : positions) {
 
-            if (position > parts.length) {
+            if (position > parts.size()) {
                 return false;
             }
 
-            String expected = elements.get(position - 1);
-
-            if (!parts[position - 1].equalsIgnoreCase(expected)) {
+            if (!parameterMatches(
+                    parts.get(position - 1),
+                    elements.get(position - 1))) {
                 return false;
             }
         }
@@ -374,27 +392,212 @@ public class SensorClassifierMatcher {
         return true;
     }
 
+    /**
+     * Совпадает ли обозначение с описанием изделия в классификаторе.
+     *
+     * Классификатор описывает изделие шаблоном, а не конкретным
+     * обозначением: там, где номинал не влияет на выбор изделия,
+     * стоит заглушка «X» («XXX» — для параметра переменной длины),
+     * а там, где допустимы несколько значений — диапазон «(1-4)».
+     * Сравнение по точному равенству такую строку не принимало бы
+     * никогда, и род ДУУ10 с полностью шаблонными product_name не
+     * подбирался бы вовсе.
+     *
+     * Заглушка принимает любое непустое значение; диапазон — только
+     * число из указанного отрезка (границы включительно). Конкретный
+     * сегмент, как и раньше, обязан совпасть с обозначением.
+     */
+    private boolean parameterMatches(String template, String value) {
+
+        String element = value == null ? "" : value.trim();
+
+        if (element.isEmpty()) {
+            return false;
+        }
+
+        if (isPlaceholder(template)) {
+            return true;
+        }
+
+        Matcher range = RANGE.matcher(template.trim());
+
+        if (range.matches()) {
+            try {
+                int number = Integer.parseInt(element);
+
+                return number >= Integer.parseInt(range.group(1))
+                        && number <= Integer.parseInt(range.group(2));
+            } catch (NumberFormatException exception) {
+                return false;
+            }
+        }
+
+        return template.equalsIgnoreCase(element);
+    }
+
+    /**
+     * Заглушка шаблона: параметр, заданный не номиналом, а знаком
+     * «любой» — «X», «XX», «XXX».
+     *
+     * Проверяются оба алфавита: normalize приводит латинскую «X»
+     * к кириллической «Х», и в разобранный product_name заглушка
+     * приходит уже кириллицей, даже если в базе она набрана латиницей.
+     */
+    private boolean isPlaceholder(String template) {
+
+        String trimmed = template == null ? "" : template.trim();
+
+        return !trimmed.isEmpty()
+                && trimmed.chars().allMatch(SensorClassifierMatcher::isWildcardLetter);
+    }
+
+    private static boolean isWildcardLetter(int symbol) {
+
+        return symbol == 'X'
+                || symbol == 'x'
+                || symbol == '\u0425'   // кириллическая «Х»
+                || symbol == '\u0445';  // кириллическая «х»
+    }
+
+    /**
+     * Разбиение строки исполнения на параметры.
+     *
+     * Разделитель — дефис вне скобок. Скобочная часть («(1-4)» у
+     * ДУУ10) принадлежит одному параметру: в обозначении КД и в
+     * шаблоне классификатора она пишется одинаково, и только так
+     * номера позиций из search_parameters соответствуют одним и тем
+     * же параметрам с обеих сторон.
+     */
+    private List<String> tokenizeParameters(String value) {
+
+        List<String> parts = new ArrayList<>();
+
+        StringBuilder current = new StringBuilder();
+
+        int depth = 0;
+
+        for (int index = 0; index < value.length(); index++) {
+
+            char symbol = value.charAt(index);
+
+            if (symbol == '(') {
+                depth++;
+                current.append(symbol);
+            } else if (symbol == ')') {
+                if (depth > 0) {
+                    depth--;
+                }
+                current.append(symbol);
+            } else if (symbol == '-' && depth == 0) {
+                parts.add(current.toString().trim());
+                current.setLength(0);
+            } else {
+                current.append(symbol);
+            }
+        }
+
+        parts.add(current.toString().trim());
+
+        return parts;
+    }
+
+    /**
+     * Перечисление кодов для текста ошибки. Числа значений search_parameters
+     * у части родов задают слишком общий признак (у ДТМ-3 позиции 1 и 6
+     * оставляют 72 изделия с одинаковым product_name), поэтому список
+     * ограничивается первыми кодами: иначе сообщение растягивается на
+     * десятки позиций и в интерфейсе становится бесполезным.
+     */
+    private static final int MAX_LISTED_CODES = 5;
+
     private String codes(List<ProductClassifier> classifiers) {
-        return classifiers.stream()
+
+        List<String> listed = classifiers.stream()
+                .limit(MAX_LISTED_CODES)
                 .map(classifier -> "код " + classifier.getCode())
-                .reduce((left, right) -> left + ", " + right)
-                .orElse("");
+                .toList();
+
+        String text = String.join(", ", listed);
+
+        int rest = classifiers.size() - listed.size();
+
+        return rest > 0 ? text + " и ещё " + rest : text;
     }
 
     /**
      * Приведение строки к виду, пригодному для разбора:
      * неразрывные пробелы и переносы становятся обычными,
-     * повторные пробелы схлопываются.
+     * повторные пробелы схлопываются, латинские буквы, визуально
+     * совпадающие с кириллицей, приводятся к кириллице.
+     *
+     * Латиницу приводит и SystemSheetMatcher для систем и приборов
+     * (normalizeCyrillic): обозначения переписываются из КД на
+     * латинской раскладке («01A-0» вместо «01А-0»), и это не опечатка,
+     * а особенность ввода. Для датчиков такая путаница раньше роняла
+     * подбор на точном сравнении маски: «01A-0» (латиница) не равен
+     * «01А-0» (кириллица) даже через equalsIgnoreCase — это разные
+     * алфавиты, а не разный регистр. Приведение симметрично для обеих
+     * сравниваемых сторон (обозначение и product_name/наименование
+     * рода), поэтому корректный кириллический ввод оно не меняет.
      */
     private String normalize(String value) {
         if (value == null) {
             return "";
         }
 
-        return value
-                .replace('\u00A0', ' ')
-                .replaceAll("\\s+", " ")
-                .trim();
+        return normalizeCyrillic(
+                value
+                        .replace('\u00A0', ' ')
+                        .replaceAll("\\s+", " ")
+                        .trim()
+        );
+    }
+
+    /**
+     * Латиница → кириллица по визуальной схожести, с сохранением
+     * регистра: замена посимвольная, длина строки не меняется,
+     * поэтому повторная нормализация идемпотентна.
+     */
+    private String normalizeCyrillic(String value) {
+
+        StringBuilder normalized = new StringBuilder(value.length());
+
+        for (int i = 0; i < value.length(); i++) {
+            normalized.append(cyrillicLookalike(value.charAt(i)));
+        }
+
+        return normalized.toString();
+    }
+
+    private char cyrillicLookalike(char symbol) {
+
+        return switch (symbol) {
+            case 'A' -> '\u0410';
+            case 'a' -> '\u0430';
+            case 'B' -> '\u0412';
+            case 'b' -> '\u0432';
+            case 'C' -> '\u0421';
+            case 'c' -> '\u0441';
+            case 'E' -> '\u0415';
+            case 'e' -> '\u0435';
+            case 'H' -> '\u041D';
+            case 'h' -> '\u043D';
+            case 'K' -> '\u041A';
+            case 'k' -> '\u043A';
+            case 'M' -> '\u041C';
+            case 'm' -> '\u043C';
+            case 'O' -> '\u041E';
+            case 'o' -> '\u043E';
+            case 'P' -> '\u0420';
+            case 'p' -> '\u0440';
+            case 'T' -> '\u0422';
+            case 't' -> '\u0442';
+            case 'X' -> '\u0425';
+            case 'x' -> '\u0445';
+            case 'Y' -> '\u0423';
+            case 'y' -> '\u0443';
+            default -> symbol;
+        };
     }
 
     private boolean startsWithIgnoreCase(String text, String prefix) {

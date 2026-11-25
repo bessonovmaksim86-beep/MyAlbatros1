@@ -54,6 +54,7 @@ public class LabelPrintService {
     private static final String FIELD_CLASSIFIER = "CLASSIFIER";
     private static final String FIELD_NAME = "NAME";
     private static final String FIELD_ORDER = "ORDER";
+    private static final String FIELD_SHOW_TEXT = "SHOWTEXT";
 
     private static final Charset UTF_16LE = StandardCharsets.UTF_16LE;
 
@@ -186,6 +187,14 @@ public class LabelPrintService {
                 ? ""
                 : safe(batch.getCellClassifier().getDisplayName());
 
+        /*
+         * Флаг: печатать номер текстом над QR-кодом.
+         * Передаётся в шаблон .btw (SHOWTEXT) и используется
+         * пробным PDF-генератором.
+         */
+        boolean showText = batch.getCellClassifier() != null
+                && batch.getCellClassifier().isPrintNumberOverQr();
+
         try (BufferedWriter writer = Files.newBufferedWriter(file, charset)) {
 
             if (properties.isHeader()) {
@@ -195,7 +204,8 @@ public class LabelPrintService {
                         FIELD_INDEX,
                         FIELD_CLASSIFIER,
                         FIELD_NAME,
-                        FIELD_ORDER
+                        FIELD_ORDER,
+                        FIELD_SHOW_TEXT
                 ));
                 writer.write("\r\n");
             }
@@ -209,7 +219,8 @@ public class LabelPrintService {
                         String.valueOf(index++),
                         classifier,
                         name,
-                        safe(batch.getIncomingOrderNumber())
+                        safe(batch.getIncomingOrderNumber()),
+                        showText ? "1" : "0"
                 ));
                 /* BarTender читает переводы строки только Windows-стиля. */
                 writer.write("\r\n");

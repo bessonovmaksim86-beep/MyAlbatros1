@@ -5,7 +5,6 @@ spring:
     password: ${DB_PASSWORD:12345}
 
   jpa:
-    open-in-view: false
     hibernate:
       ddl-auto: validate
     properties:
@@ -58,7 +57,7 @@ application:
   # PATH» нельзя — оператор получил бы ошибку вместо этикеток. На
   # машине кладовщика включают переменными окружения без правки файла.
   label-printing:
-    enabled: ${LABEL_PRINT_ENABLED:false}
+    enabled: ${LABEL_PRINT_ENABLED:true}
     bartender-path: ${LABEL_PRINT_BARTENDER_PATH:}
     template-path: ${LABEL_PRINT_TEMPLATE_PATH:}
     printer: ${LABEL_PRINT_PRINTER:}
