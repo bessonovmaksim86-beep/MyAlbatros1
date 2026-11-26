@@ -1,0 +1,418 @@
+<!DOCTYPE html>
+<html lang="ru"
+      xmlns:th="http://www.thymeleaf.org">
+
+<head>
+    <meta charset="UTF-8">
+
+    <meta name="viewport"
+          content="width=device-width, initial-scale=1">
+
+    <title>Плановый расчёт выполнения</title>
+
+    <link rel="stylesheet"
+          th:href="@{/technology/css/technology.css}">
+
+    <link rel="stylesheet"
+          th:href="@{/technology/css/common.css}">
+
+    <link rel="stylesheet"
+          th:href="@{/dispatcher/css/dispatcher.css}">
+
+    <link rel="stylesheet"
+          th:href="@{/dispatcher/css/capacity-forecast.css}">
+</head>
+
+<body>
+
+<div class="app-shell">
+
+    <aside th:replace="~{dispatcher/fragments/layout
+            :: sidebar('capacityForecast')}">
+    </aside>
+
+    <main class="main">
+
+        <header th:replace="~{dispatcher/fragments/layout
+                :: topbar}">
+        </header>
+
+        <div class="page-content dispatcher-page forecast-page">
+
+            <div class="page-head">
+
+                <div class="page-title">
+
+                    <h1>Плановый расчёт выполнения</h1>
+
+                    <p>
+                        Выберите изделие и количество — система
+                        рассчитает возможность изготовления по мощностям
+                        цехов и покажет дату завершения с лимитирующими
+                        стадиями.
+                    </p>
+                </div>
+            </div>
+
+            <!-- =================================================
+                 ФОРМА
+                 ================================================= -->
+            <section class="card forecast-form-card">
+
+                <div class="card-body">
+
+                    <form th:action="@{/dispatcher/capacity/forecast}"
+                          method="post"
+                          class="forecast-form">
+
+                        <input th:if="${_csrf != null}"
+                               type="hidden"
+                               th:name="${_csrf.parameterName}"
+                               th:value="${_csrf.token}">
+
+                        <div class="forecast-form__row">
+
+                            <label class="forecast-form__field forecast-form__field--wide">
+                                <span>Изделие</span>
+
+                                <select name="classifierId" required>
+                                    <option value="">— выберите изделие —</option>
+
+                                    <option th:each="c : ${classifiers}"
+                                            th:value="${c.id}"
+                                            th:selected="${form != null and form.classifierId() == c.id}"
+                                            th:text="${(c.code != null ? c.code + ' — ' : '') + c.fullDisplayName}">
+                                        1212 — Датчик ДУУ2М
+                                    </option>
+                                </select>
+                            </label>
+
+                            <label class="forecast-form__field">
+                                <span>Количество, шт.</span>
+
+                                <input type="number"
+                                       name="quantity"
+                                       min="1"
+                                       max="100000"
+                                       required
+                                       th:value="${form != null ? form.quantity() : 1}">
+                            </label>
+
+                            <label class="forecast-form__field">
+                                <span>Дата начала</span>
+
+                                <input type="date"
+                                       name="startDate"
+                                       th:value="${form != null and form.startDate() != null
+                                               ? form.startDate()
+                                               : today}">
+                            </label>
+
+                            <label class="forecast-form__check">
+                                <input type="checkbox"
+                                       name="ignoreLoad"
+                                       value="true"
+                                       th:checked="${ignoreLoad}">
+
+                                <span>Без учёта текущей загруженности</span>
+                            </label>
+
+                            <button type="submit"
+                                    class="btn primary forecast-form__submit">
+                                Рассчитать
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </section>
+
+            <!-- =================================================
+                 РЕЗУЛЬТАТ
+                 ================================================= -->
+            <th:block th:if="${result != null}">
+
+                <!-- Ошибки / предупреждения -->
+                <div class="forecast-alert"
+                     th:each="w : ${result.warnings()}"
+                     th:text="${w}">
+                    Для изделия не задан техпроцесс.
+                </div>
+
+                <!-- Сводка -->
+                <div class="forecast-summary"
+                     th:classappend="${result.feasible()} ? ' is-feasible' : ' is-infeasible'">
+
+                    <div class="forecast-summary__main">
+
+                        <div class="forecast-summary__date">
+
+                            <small>Заказ будет выполнен до</small>
+
+                            <strong th:text="${result.summary().finishDate() != null
+                                    ? #temporals.format(result.summary().finishDate(), 'dd.MM.yyyy')
+                                    : '—'}">
+                                01.12.2026
+                            </strong>
+                        </div>
+
+                        <div class="forecast-summary__info">
+
+                            <div>
+                                <small>Изделие</small>
+
+                                <strong th:text="${(result.summary().classifierCode() != null
+                                        ? result.summary().classifierCode() + ' — '
+                                        : '')
+                                        + result.summary().classifierName()}">
+                                    1212 — Датчик
+                                </strong>
+                            </div>
+
+                            <div>
+                                <small>Количество</small>
+
+                                <strong th:text="${result.summary().quantity() + ' шт.'}">
+                                    10 шт.
+                                </strong>
+                            </div>
+
+                            <div>
+                                <small>Срок изготовления</small>
+
+                                <strong th:text="${result.summary().totalWorkingDays() + ' дн.'}">
+                                    15 дн.
+                                </strong>
+                            </div>
+
+                            <div>
+                                <small>Трудоёмкость</small>
+
+                                <strong th:text="${#numbers.formatDecimal(result.summary().totalLaborHours(), 1, 0) + ' ч'}">
+                                    120 ч
+                                </strong>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="forecast-summary__limiting"
+                         th:if="${result.summary().limitingOperation() != null
+                                 and result.summary().limitingOperation() != '—'}">
+
+                        <small>Лимитирующая стадия</small>
+
+                        <strong th:text="${result.summary().limitingOperation()}">
+                            Пайка
+                        </strong>
+
+                        <span th:text="${#numbers.formatDecimal(result.summary().limitingHours(), 1, 0) + ' ч'}">
+                            24 ч
+                        </span>
+                    </div>
+                </div>
+
+                <!-- План по неделям -->
+                <section class="card"
+                         th:if="${not #lists.isEmpty(result.weeklyPlan())}">
+
+                    <div class="card-head">
+
+                        <div>
+                            <h2>План по неделям</h2>
+
+                            <small>
+                                Распределение трудоёмкости заказа
+                                по неделям с учётом мощностей.
+                            </small>
+                        </div>
+                    </div>
+
+                    <div class="card-body">
+
+                        <div class="forecast-weeks">
+
+                            <div th:each="week : ${result.weeklyPlan()}"
+                                 class="forecast-week">
+
+                                <div class="forecast-week__label">
+
+                                    <strong th:text="${'Нед. ' + week.weekNumber()}">
+                                        Нед. 44
+                                    </strong>
+
+                                    <small th:text="${#temporals.format(week.weekFrom(), 'dd.MM')
+                                            + '–' + #temporals.format(week.weekTo(), 'dd.MM')}">
+                                        03.11–07.11
+                                    </small>
+                                </div>
+
+                                <div class="forecast-week__bar">
+
+                                    <span th:style="${'width: ' + week.barPercent() + '%'}">
+                                    </span>
+                                </div>
+
+                                <span class="forecast-week__hours"
+                                      th:text="${#numbers.formatDecimal(week.laborHours(), 1, 0) + ' ч'}">
+                                    12 ч
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Операции -->
+                <section class="card">
+
+                    <div class="card-head">
+
+                        <div>
+                            <h2>Маршрут операций</h2>
+
+                            <small>
+                                Даты начала и окончания по каждой операции.
+                                Красным выделены лимитирующие стадии.
+                            </small>
+                        </div>
+                    </div>
+
+                    <div class="card-body">
+
+                        <div class="table-wrap"
+                             th:if="${not #lists.isEmpty(result.operations())}">
+
+                            <table class="data-table forecast-table">
+
+                                <thead>
+                                <tr>
+                                    <th>№</th>
+                                    <th>Операция</th>
+                                    <th>Цех</th>
+                                    <th>Норма, ч</th>
+                                    <th>На заказ, ч</th>
+                                    <th>Мощность, ч/дн.</th>
+                                    <th>Начало</th>
+                                    <th>Окончание</th>
+                                    <th>Загрузка</th>
+                                </tr>
+                                </thead>
+
+                                <tbody>
+
+                                <tr th:each="op : ${result.operations()}"
+                                    th:classappend="${op.limiting()} ? ' is-bottleneck'">
+
+                                    <td th:text="${op.position()}">1</td>
+
+                                    <td>
+                                        <strong th:text="${op.operationName()}">
+                                            Пайка
+                                        </strong>
+
+                                        <small th:text="${op.operationTypeName()}">
+                                            Сборка
+                                        </small>
+                                    </td>
+
+                                    <td th:text="${op.unitName()}">
+                                        Цех сборки
+                                    </td>
+
+                                    <td th:text="${#numbers.formatDecimal(op.laborHours(), 1, 2)}">
+                                        0,50
+                                    </td>
+
+                                    <td th:text="${#numbers.formatDecimal(op.hoursForQty(), 1, 1)}">
+                                        5,0
+                                    </td>
+
+                                    <td th:text="${op.capacityEmployees() > 0
+                                            ? #numbers.formatDecimal(op.dailyCapacityHours(), 1, 0)
+                                            : '—'}">
+                                        8
+                                    </td>
+
+                                    <td th:text="${op.start() != null
+                                            ? #temporals.format(op.start(), 'dd.MM.yyyy')
+                                            : '—'}">
+                                        01.11.2026
+                                    </td>
+
+                                    <td th:text="${op.finish() != null
+                                            ? #temporals.format(op.finish(), 'dd.MM.yyyy')
+                                            : '—'}">
+                                        05.11.2026
+                                    </td>
+
+                                    <td>
+                                        <span class="capacity-chip"
+                                              th:classappend="${op.loadPercent() > 100}
+                                                      ? ' capacity-chip--danger'
+                                                      : (${op.loadPercent() >= 85}
+                                                          ? ' capacity-chip--warn'
+                                                          : ' capacity-chip--ok')"
+                                              th:text="${#numbers.formatDecimal(op.loadPercent(), 1, 0)} + '%'">
+                                            75%
+                                        </span>
+                                    </td>
+                                </tr>
+
+                                </tbody>
+                            </table>
+                        </div>
+
+                        <p class="capacity-empty"
+                           th:if="${#lists.isEmpty(result.operations())}">
+                            Маршрут не содержит операций.
+                        </p>
+                    </div>
+                </section>
+
+                <!-- Итог -->
+                <div class="forecast-verdict"
+                     th:classappend="${result.feasible()} ? ' is-ok' : ' is-bad'">
+
+                    <strong th:if="${result.feasible()}">
+                        ✓ Заказ выполним в рассчитанный срок
+                    </strong>
+
+                    <strong th:if="${!result.feasible()}">
+                        ✗ Заказ не выполним в пределах года
+                    </strong>
+
+                    <span th:text="${'Дата завершения: '
+                            + (result.summary().finishDate() != null
+                                ? #temporals.format(result.summary().finishDate(), 'dd.MM.yyyy')
+                                : '—')
+                            + '. Лимитирующая стадия: '
+                            + result.summary().limitingOperation()}">
+                        Дата завершения: 01.12.2026
+                    </span>
+                </div>
+
+            </th:block>
+
+            <!-- Начальное состояние -->
+            <div class="forecast-placeholder"
+                 th:if="${result == null}">
+
+                <div class="forecast-placeholder__icon">📊</div>
+
+                <h2>Выберите изделие и количество</h2>
+
+                <p>
+                    Система построит маршрут операций, распределит
+                    трудоёмкость по мощностям цехов и покажет,
+                    к какому сроку заказ будет выполнен.
+                </p>
+            </div>
+
+        </div>
+    </main>
+</div>
+
+<th:block th:replace="~{dispatcher/fragments/layout
+        :: commonScripts}">
+</th:block>
+
+</body>
+</html>

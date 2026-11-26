@@ -176,6 +176,78 @@
                 </span>
             </a>
 
+            <!-- =================================================
+                 ГРУППА «МОЩНОСТИ»
+                 ================================================= -->
+            <div class="dispatcher-navigation__group">
+
+                <span class="dispatcher-navigation__group-label">
+                    <span class="dispatcher-navigation__group-icon">
+                        <svg viewBox="0 0 24 24" aria-hidden="true">
+                            <path d="M3 3h18v18H3V3Zm2 2v14h4V5H5Zm6 0v14h4V5h-4Zm6 0v14h2V5h-2ZM5 13h4m6 0h4"/>
+                        </svg>
+                    </span>
+
+                    <span class="dispatcher-navigation__group-title">
+                        Мощности
+                    </span>
+                </span>
+
+                <div class="dispatcher-navigation__subnav">
+
+                    <a class="dispatcher-navigation__item"
+                       th:classappend="${activePage == 'capacity'} ? ' is-active' : ''"
+                       th:href="@{/dispatcher/capacity}"
+                       title="Анализ производственных мощностей"
+                       data-help="Анализ производственных мощностей: загрузка цехов по неделям, свободные мощности, операции без назначения и рекомендации.&#10;Как пользоваться:&#10;1) KPI-блок сверху — сводка по всем подразделениям за выбранный период.&#10;2) Столбчатая диаграмма — загрузка каждого цеха по неделям (цвет: зелёный &lt;85%, жёлтый 85–100%, красный &gt;100%).&#10;3) Тепловая карта — детализация по неделям, цифры — % загрузки.&#10;4) «Требует внимания» — критичные и предупреждения: перегрузки, нет исполнителей, свободные мощности.&#10;5) «Не назначено» — операции без цеха или без людей.&#10;6) Изменение периода — кнопками 4 / 8 / 12 / 16 недель.">
+
+                        <span class="dispatcher-navigation__icon">
+                            <svg viewBox="0 0 24 24" aria-hidden="true">
+                                <path d="M3 3h18v18H3V3Zm2 2v14h4V5H5Zm6 0v14h4V5h-4Zm6 0v14h2V5h-2ZM5 13h4m6 0h4"/>
+                            </svg>
+                        </span>
+
+                        <span class="dispatcher-navigation__text">
+                            Анализ мощностей
+                        </span>
+                    </a>
+
+                    <a class="dispatcher-navigation__item"
+                       th:classappend="${activePage == 'actualPerformance'} ? ' is-active' : ''"
+                       th:href="@{/dispatcher/capacity/actual}"
+                       title="Фактическая производительность"
+                       data-help="Фактическая выработка цехов: сколько операций выполнено за период, выпуск готовых изделий по типам, тренды по неделям и отклонения от плана.&#10;Как пользоваться:&#10;1) KPI-блок — итоги за период.&#10;2) Таблица «Операции по цехам» — количество выполненных операций и изделий, отклонение от плана.&#10;3) Тренд по неделям — столбчатая диаграмма: план (синий) и факт (зелёный).&#10;4) Выпуск изделий — сколько готовых ячеек вышло по типам.&#10;5) Отклонение от плана — операции, которые сделали позже плана.">
+
+                        <span class="dispatcher-navigation__icon">
+                            <svg viewBox="0 0 24 24" aria-hidden="true">
+                                <path d="M16 6l2.29 2.29-4.88 4.88-4-4L2 16.59 3.41 18l6-6 4 4 6.3-6.29L22 12V6h-6Z"/>
+                            </svg>
+                        </span>
+
+                        <span class="dispatcher-navigation__text">
+                            Фактическая производительность
+                        </span>
+                    </a>
+
+                    <a class="dispatcher-navigation__item"
+                       th:classappend="${activePage == 'capacityForecast'} ? ' is-active' : ''"
+                       th:href="@{/dispatcher/capacity/forecast}"
+                       title="Плановый расчёт выполнения"
+                       data-help="Расчёт возможности изготовления заказа по мощностям цехов. Выберите изделие, количество и дату начала — система покажет дату завершения, лимитирующие стадии и детальную таблицу операций.&#10;Как пользоваться:&#10;1) Выберите изделие из справочника — автоматически найдётся техпроцесс.&#10;2) Укажите количество и дату начала.&#10;3) Нажмите «Рассчитать» — увидите дату завершения, лимитирующие операции и план по неделям.&#10;4) «Рассчитать без учёта загруженности» — оптимистичная оценка, сколько займёт, если цех свободен.">
+
+                        <span class="dispatcher-navigation__icon">
+                            <svg viewBox="0 0 24 24" aria-hidden="true">
+                                <path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2Zm0 16H5V5h14v14ZM7 10h2v7H7v-7Zm4-3h2v10h-2V7Zm4 5h2v5h-2v-5Z"/>
+                            </svg>
+                        </span>
+
+                        <span class="dispatcher-navigation__text">
+                            Плановый расчёт
+                        </span>
+                    </a>
+                </div>
+            </div>
+
         </nav>
 
         <div class="dispatcher-sidebar__footer">

@@ -1418,4 +1418,67 @@ public interface ProductSerialRepository
             order by classifier.code asc
             """)
     List<WarehouseStockClassifierOption> findSerialClassifierOptions();
+
+    /* ============================================================
+       ФАКТИЧЕСКАЯ ПРОИЗВОДИТЕЛЬНОСТЬ (раздел «Мощности»)
+
+       Готовность ячейки — момент cell_ready_at (V75), а не статус:
+       статус принадлежит производству, а момент ставит склад или
+       комплектование. Границы периода — LocalDateTime, нижняя
+       включительно, верхняя исключительно: так сутки не считаются
+       дважды на стыках периодов.
+       ============================================================ */
+
+    /** Ячеек, ставших готовыми за период. */
+    @Query("""
+            select count(serial)
+            from ProductSerial serial
+            where serial.cellReadyAt is not null
+              and serial.cellReadyAt >= :from
+              and serial.cellReadyAt < :to
+            """)
+    long countCellReadyBetween(
+            @Param("from") java.time.LocalDateTime from,
+            @Param("to") java.time.LocalDateTime to
+    );
+
+    /** Выпуск ячеек по классификаторам за период. */
+    @Query("""
+            select classifier.id          as classifierId,
+                   classifier.code        as code,
+                   classifier.productType as productType,
+                   classifier.name        as name,
+                   sensor.name            as sensorName,
+                   count(serial)          as produced
+            from ProductSerial serial
+            join serial.productClassifier classifier
+            left join classifier.sensorCatalog sensor
+            where serial.cellReadyAt is not null
+              and serial.cellReadyAt >= :from
+              and serial.cellReadyAt < :to
+            group by classifier.id, classifier.code,
+                     classifier.productType, classifier.name,
+                     sensor.name
+            order by count(serial) desc
+            """)
+    List<SerialOutputRow> countCellReadyByClassifier(
+            @Param("from") java.time.LocalDateTime from,
+            @Param("to") java.time.LocalDateTime to
+    );
+
+    /** «Классификатор → выпуск за период». */
+    interface SerialOutputRow {
+
+        Long getClassifierId();
+
+        Integer getCode();
+
+        ProductType getProductType();
+
+        String getName();
+
+        String getSensorName();
+
+        Long getProduced();
+    }
 }

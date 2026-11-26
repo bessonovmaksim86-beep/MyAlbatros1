@@ -8,6 +8,7 @@ import org.springframework.stereotype.Repository;
 import ru.company.production.entity.ProductSerialOperation;
 import ru.company.production.entity.ProductSerialOperationStatus;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
@@ -452,5 +453,323 @@ public interface ProductSerialOperationRepository
             """)
     long countBySerialIdIn(
             @Param("serialIds") java.util.Collection<Long> serialIds
+    );
+
+    /* ============================================================
+       ФАКТИЧЕСКАЯ ПРОИЗВОДИТЕЛЬНОСТЬ (раздел «Мощности»)
+
+       Источник — закрытые фактом строки маршрута (actual_date +
+       статус DONE). Трудоёмкость в этих строках не хранится:
+       норма живёт в tech_process_operations и привязана к паре
+       «маршрут + операция», а не к факту цеха. Поэтому часы
+       считаются через среднюю норму операции по всем маршрутам —
+       это оценка выработки в нормо-часах, а не бухгалтерский учёт.
+
+       Join с tech_process_operations в агрегатах запрещён
+       осознанно: одна операция входит в несколько маршрутов, и
+       join размножил бы строку факта столько раз, в скольких
+       маршрутах она участвует, завысив все счётчики.
+       ============================================================ */
+
+    /** Закрытых фактом операций за период. */
+    @Query("""
+            select count(op)
+            from ProductSerialOperation op
+            where op.actualDate between :from and :to
+              and op.status
+                  = ru.company.production.entity
+                      .ProductSerialOperationStatus.DONE
+            """)
+    long countDoneBetween(
+            @Param("from") LocalDate from,
+            @Param("to") LocalDate to
+    );
+
+    /** Уникальных изделий, прошедших через цеха за период. */
+    @Query("""
+            select count(distinct op.serial.id)
+            from ProductSerialOperation op
+            where op.actualDate between :from and :to
+              and op.status
+                  = ru.company.production.entity
+                      .ProductSerialOperationStatus.DONE
+            """)
+    long countUniqueSerialsBetween(
+            @Param("from") LocalDate from,
+            @Param("to") LocalDate to
+    );
+
+    /** Операций, закрытых позже плановой даты. */
+    @Query("""
+            select count(op)
+            from ProductSerialOperation op
+            where op.actualDate between :from and :to
+              and op.plannedDate is not null
+              and op.actualDate > op.plannedDate
+              and op.status
+                  = ru.company.production.entity
+                      .ProductSerialOperationStatus.DONE
+            """)
+    long countLateBetween(
+            @Param("from") LocalDate from,
+            @Param("to") LocalDate to
+    );
+
+    /** Повторных попыток (переделок) за период. */
+    @Query("""
+            select count(op)
+            from ProductSerialOperation op
+            where op.actualDate between :from and :to
+              and op.attempt > 1
+              and op.status
+                  = ru.company.production.entity
+                      .ProductSerialOperationStatus.DONE
+            """)
+    long countReworkBetween(
+            @Param("from") LocalDate from,
+            @Param("to") LocalDate to
+    );
+
+    /*
+     * Выработка в нормо-часах: сумма средних норм закрытых операций.
+     *
+     * JPQL не поддерживает sum(select avg(...)), поэтому расчёт
+     * выполняется в два шага в сервисе:
+     *   1. findDistinctOperationIdsBetween — уникальные operation.id
+     *   2. avgLaborHoursByOperationIds — среднее по всем маршрутам
+     */
+
+    /**
+     * Факт по подразделениям: количество операций, изделий,
+     * просрочек и переделок.
+     *
+     * Подразделение берётся от операции (left join): операции без
+     * цеха не должны теряться из отчёта — их показывают отдельной
+     * строкой с пустым названием.
+     */
+    @Query("""
+            select unit.id                    as unitId,
+                   unit.name                  as unitName,
+                   service.code               as serviceCode,
+                   service.name               as serviceName,
+                   count(op)                  as doneOperations,
+                   count(distinct op.serial.id) as uniqueSerials,
+                   sum(case when op.plannedDate is not null
+                             and op.actualDate > op.plannedDate
+                            then 1 else 0 end) as lateOperations,
+                   sum(case when op.attempt > 1
+                            then 1 else 0 end) as reworkOperations
+            from ProductSerialOperation op
+            join op.operation operation
+            left join operation.organizationUnit unit
+            left join unit.service service
+            where op.actualDate between :from and :to
+              and op.status
+                  = ru.company.production.entity
+                      .ProductSerialOperationStatus.DONE
+            group by unit.id, unit.name, service.code, service.name
+            order by count(op) desc
+            """)
+    List<UnitActualRow> aggregateByUnit(
+            @Param("from") LocalDate from,
+            @Param("to") LocalDate to
+    );
+
+    /** «Подразделение → факт за период». */
+    interface UnitActualRow {
+
+        Long getUnitId();
+
+        String getUnitName();
+
+        String getServiceCode();
+
+        String getServiceName();
+
+        Long getDoneOperations();
+
+        Long getUniqueSerials();
+
+        Long getLateOperations();
+
+        Long getReworkOperations();
+    }
+
+    /** Факт по дням — источник недельного тренда. */
+    @Query("""
+            select op.actualDate as day, count(op) as done
+            from ProductSerialOperation op
+            where op.actualDate between :from and :to
+              and op.status
+                  = ru.company.production.entity
+                      .ProductSerialOperationStatus.DONE
+            group by op.actualDate
+            order by op.actualDate asc
+            """)
+    List<DayCountRow> actualCountByDay(
+            @Param("from") LocalDate from,
+            @Param("to") LocalDate to
+    );
+
+    /** План по дням — знаменатель для «факт к плану». */
+    @Query("""
+            select op.plannedDate as day, count(op) as planned
+            from ProductSerialOperation op
+            where op.plannedDate between :from and :to
+            group by op.plannedDate
+            order by op.plannedDate asc
+            """)
+    List<DayCountRow> plannedCountByDay(
+            @Param("from") LocalDate from,
+            @Param("to") LocalDate to
+    );
+
+    /** «День → количество». */
+    interface DayCountRow {
+
+        LocalDate getDay();
+
+        Long getDone();
+    }
+
+    /** Выработка исполнителей, упорядоченная по количеству. */
+    @Query("""
+            select op.performedBy.id          as executorId,
+                   u.fullName                 as executorName,
+                   count(op)                  as doneOperations,
+                   sum(case when op.plannedDate is not null
+                             and op.actualDate > op.plannedDate
+                            then 1 else 0 end) as lateOperations,
+                   sum(case when op.attempt > 1
+                            then 1 else 0 end) as reworkOperations
+            from ProductSerialOperation op
+            join op.performedBy u
+            where op.actualDate between :from and :to
+              and op.status
+                  = ru.company.production.entity
+                      .ProductSerialOperationStatus.DONE
+            group by op.performedBy.id, u.fullName
+            order by count(op) desc
+            """)
+    List<ExecutorRow> executorRanking(
+            @Param("from") LocalDate from,
+            @Param("to") LocalDate to
+    );
+
+    /** «Исполнитель → выработка». */
+    interface ExecutorRow {
+
+        Long getExecutorId();
+
+        String getExecutorName();
+
+        Long getDoneOperations();
+
+        Long getLateOperations();
+
+        Long getReworkOperations();
+    }
+
+    /**
+     * Отставшие от плана операции.
+     *
+     * Разницу в днях считает сервис: вычитать даты в JPQL надёжнее
+     * вне запроса, чем полагаться на cast, который диалект MySQL
+     * переносит по-разному.
+     */
+    @Query("""
+            select classifier.code            as classifierCode,
+                   serial.serial              as serialNumber,
+                   operationName.name         as operationName,
+                   unit.name                  as unitName,
+                   u.fullName                 as executorName,
+                   op.plannedDate             as plannedDate,
+                   op.actualDate              as actualDate
+            from ProductSerialOperation op
+            join op.serial serial
+            left join serial.productClassifier classifier
+            join op.operation operation
+            join operation.operationName operationName
+            left join operation.organizationUnit unit
+            left join op.performedBy u
+            where op.actualDate between :from and :to
+              and op.plannedDate is not null
+              and op.actualDate > op.plannedDate
+              and op.status
+                  = ru.company.production.entity
+                      .ProductSerialOperationStatus.DONE
+            order by op.actualDate - op.plannedDate desc
+            """)
+    List<LateOperationRowView> findLateOperations(
+            @Param("from") LocalDate from,
+            @Param("to") LocalDate to
+    );
+
+    /** «Отставшая операция». */
+    interface LateOperationRowView {
+
+        Integer getClassifierCode();
+
+        Integer getSerialNumber();
+
+        String getOperationName();
+
+        String getUnitName();
+
+        String getExecutorName();
+
+        LocalDate getPlannedDate();
+
+        LocalDate getActualDate();
+    }
+
+    /*
+     * ============================================================
+       ФАКТИЧЕСКАЯ ПРОИЗВОДИТЕЛЬНОСТЬ (раздел «Мощности»
+
+       Источник — закрытые фактом строки маршрута (actual_date +
+       статус DONE). Трудоёмкость в этих строках не хранится:
+       норма живёт в tech_process_operations и привязана к паре
+       «маршрут + операция», а не к факту цеха. Поэтому часы
+       считаются через среднюю норму операции по всем маршрутам —
+       это оценка выработки в нормо-часах, а не бухгалтерский учёт.
+
+       Join с tech_process_operations в агрегатах запрещён
+       осознанно: одна операция входит в несколько маршрутов, и
+       join размножил бы строку факта столько раз, в скольких
+       маршрутах она участвует, завышая все счётчики.
+
+       Для расчёта суммы средних норм используется двухшаговый
+       подход в сервисе:
+         1. findDistinctOperationIdsBetween — уникальные operation.id
+         2. avgLaborHoursByOperationIds — среднее по всем маршрутам
+    */
+
+    /** Уникальные operation.id, участвовавшие в факте за период. */
+    @Query("""
+            select distinct op.operation.id
+            from ProductSerialOperation op
+            where op.actualDate between :from and :to
+              and op.status
+                  = ru.company.production.entity
+                      .ProductSerialOperationStatus.DONE
+            """)
+    List<Long> findDistinctOperationIdsBetween(
+            @Param("from") LocalDate from,
+            @Param("to") LocalDate to
+    );
+
+    /**
+     * Средняя норма laborHours по всем маршрутам для заданных
+     * operationIds. Используется сервисом для расчёта выработки
+     * в нормо-часах (сумма средних = countDone * avgNorm).
+     */
+    @Query("""
+            select coalesce(avg(tpo.laborHours), 0)
+            from TechProcessOperation tpo
+            where tpo.operation.id in :operationIds
+            """)
+    BigDecimal avgLaborHoursByOperationIds(
+            @Param("operationIds") List<Long> operationIds
     );
 }

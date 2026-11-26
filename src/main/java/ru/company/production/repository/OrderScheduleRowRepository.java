@@ -10,6 +10,7 @@ import ru.company.production.entity.OrderScheduleRow;
 import ru.company.production.entity.ScheduleRowStatus;
 import ru.company.production.entity.ZnpKind;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.Collection;
 import java.util.List;
@@ -334,7 +335,106 @@ public interface OrderScheduleRowRepository
             @Param("orderIds") Collection<Long> orderIds
     );
 
-    /** «Основание плана → дата его окончания». */
+    /*
+     * Строки графика для анализа мощностей: CONFIRMED и DRAFT
+     * в диапазоне дат. CONFIRMED — внесённый план, он занимает
+     * людей; DRAFT — предварительный расчёт, показывается отдельно.
+     *
+     * Подразделение взято явным left join: у строки плана адреса
+     * может не быть (план построен до назначения цеха), и такая
+     * строка обязана попасть в выборку — анализ как раз и показывает
+     * загрузку, которую некуда отнести. Неявный join по имени
+     * подразделения отбросил бы эти строки inner join'ом.
+     */
+    @Query("""
+            select row.plannedDate              as plannedDate,
+                   row.laborHours               as laborHours,
+                   unit.id                      as unitId,
+                   unit.name                    as unitName,
+                   op.id                        as operationId,
+                   operationName.name           as operationName,
+                   row.status                   as status
+            from OrderScheduleRow row
+            left join row.organizationUnit unit
+            join row.operation op
+            join op.operationName operationName
+            where row.plannedDate between :from and :to
+              and row.status in :statuses
+              and (
+                  exists (select 1 from CustomerOrder co
+                          where co.id = row.customerOrder.id
+                            and co.active = true)
+                  or exists (select 1 from ProductionOrder po
+                             where po.id = row.productionOrder.id
+                               and po.active = true)
+              )
+            """)
+    List<CapacityRowView> findRowsForCapacityAnalysis(
+            @Param("from") LocalDate from,
+            @Param("to") LocalDate to,
+            @Param("statuses") List<ScheduleRowStatus> statuses
+    );
+
+    /** «Строка плана для анализа мощностей». */
+    interface CapacityRowView {
+
+        LocalDate getPlannedDate();
+
+        BigDecimal getLaborHours();
+
+        /** Подразделение-адрес строки; пусто, если адрес не назначен. */
+        Long getUnitId();
+
+        String getUnitName();
+
+        Long getOperationId();
+
+        String getOperationName();
+
+        ScheduleRowStatus getStatus();
+    }
+
+    /*
+     * План по подразделениям: сумма labor_hours по CONFIRMED строкам
+     * графика, сгруппированная по цехам. Нужна для расчёта
+     * utilizationPercent в UnitOperationStats — отношение факта к плану.
+     */
+    @Query("""
+            select unit.id                      as unitId,
+                   unit.name                    as unitName,
+                   coalesce(sum(row.laborHours), 0) as totalLaborHours
+            from OrderScheduleRow row
+            left join row.organizationUnit unit
+            where row.plannedDate between :from and :to
+              and row.status
+                  = ru.company.production.entity.ScheduleRowStatus.CONFIRMED
+              and (
+                  exists (select 1 from CustomerOrder co
+                          where co.id = row.customerOrder.id
+                            and co.active = true)
+                  or exists (select 1 from ProductionOrder po
+                             where po.id = row.productionOrder.id
+                               and po.active = true)
+              )
+            group by unit.id, unit.name
+            order by sum(row.laborHours) desc
+            """)
+    List<UnitPlannedRow> aggregatePlannedByUnit(
+            @Param("from") LocalDate from,
+            @Param("to") LocalDate to
+    );
+
+    /** «Подразделение → плановые часы». */
+    interface UnitPlannedRow {
+
+        Long getUnitId();
+
+        String getUnitName();
+
+        BigDecimal getTotalLaborHours();
+    }
+
+    /** «Основа плана → дата его окончания». */
     interface PlanEndDateView {
 
         Long getOrderId();

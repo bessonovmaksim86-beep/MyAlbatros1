@@ -1671,3 +1671,146 @@ body {
     margin-bottom: 16px;
     font-size: 13px;
 }
+
+/* ============================================================
+   ГРУППА ПУНКТОВ МЕНЮ (например «Мощности»)
+
+   Заголовок группы — некликабельная подпись с иконкой; подпункты
+   визуально привязаны к ней вертикальной линией. В свёрнутом
+   сайдбаре заголовок превращается в разделитель, а подпункты
+   остаются иконками — иначе активный раздел пропал бы из вида.
+   ============================================================ */
+
+.dispatcher-navigation__group {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+
+    margin-top: 6px;
+    padding-top: 6px;
+
+    border-top: 1px solid var(--dispatcher-sidebar-border);
+}
+
+.dispatcher-navigation__group-label {
+    display: flex;
+    align-items: center;
+
+    box-sizing: border-box;
+    width: 266px;
+    min-height: 34px;
+    padding: 8px 13px 4px;
+
+    overflow: hidden;
+}
+
+.dispatcher-navigation__group-icon {
+    display: inline-flex;
+    flex: 0 0 24px;
+    align-items: center;
+    justify-content: center;
+
+    width: 24px;
+    height: 24px;
+    margin-right: 15px;
+
+    color: var(--dispatcher-accent);
+}
+
+.dispatcher-navigation__group-icon svg {
+    display: block;
+    width: 19px;
+    height: 19px;
+    fill: currentColor;
+}
+
+.dispatcher-navigation__group-title {
+    min-width: 0;
+    overflow: hidden;
+
+    color: var(--dispatcher-sidebar-muted);
+    font-size: 10px;
+    font-weight: 800;
+    text-overflow: ellipsis;
+    text-transform: uppercase;
+    letter-spacing: 0.09em;
+    white-space: nowrap;
+
+    opacity: 0;
+    transform: translateX(-6px);
+
+    transition:
+        opacity 130ms ease,
+        transform 130ms ease;
+}
+
+.dispatcher-sidebar:hover .dispatcher-navigation__group-title,
+.dispatcher-sidebar:focus-within .dispatcher-navigation__group-title {
+    opacity: 1;
+    transform: translateX(0);
+}
+
+/* Подпункты: сдвинуты вправо и соединены линией с заголовком. */
+.dispatcher-navigation__subnav {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+
+    margin-left: 25px;
+    padding-left: 8px;
+
+    border-left: 1px solid var(--dispatcher-sidebar-border);
+}
+
+.dispatcher-navigation__subnav .dispatcher-navigation__item {
+    min-height: 42px;
+    padding: 8px 12px;
+
+    font-size: 13px;
+}
+
+.dispatcher-navigation__subnav .dispatcher-navigation__icon {
+    margin-right: 12px;
+}
+
+.dispatcher-navigation__subnav .dispatcher-navigation__icon svg {
+    width: 18px;
+    height: 18px;
+}
+
+/*
+ * Свёрнутый сайдбар: линия связи и отступ не нужны, иначе иконки
+ * подпунктов вылезут за ширину 72px. Заголовок остаётся только
+ * иконкой, подпись скрыта общим правилом для текста меню.
+ */
+.dispatcher-sidebar:not(:hover):not(:focus-within)
+.dispatcher-navigation__subnav {
+    margin-left: 0;
+    padding-left: 0;
+
+    border-left: none;
+}
+
+.dispatcher-sidebar:not(:hover):not(:focus-within)
+.dispatcher-navigation__subnav .dispatcher-navigation__item {
+    justify-content: center;
+
+    padding: 8px 0;
+}
+
+.dispatcher-sidebar:not(:hover):not(:focus-within)
+.dispatcher-navigation__subnav .dispatcher-navigation__icon {
+    margin-right: 0;
+}
+
+.dispatcher-sidebar:not(:hover):not(:focus-within)
+.dispatcher-navigation__group-label {
+    justify-content: center;
+
+    padding: 6px 0 2px;
+}
+
+.dispatcher-sidebar:not(:hover):not(:focus-within)
+.dispatcher-navigation__group-icon {
+    margin-right: 0;
+}

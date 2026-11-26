@@ -1,0 +1,456 @@
+/* ============================================================
+   ПЛАНОВЫЙ РАСЧЁТ ВЫПОЛНЕНИЯ (диспетчер)
+
+   Форма выбора изделия и количества, сводка прогноза,
+   недельный план и таблица операций.
+   ============================================================ */
+
+.forecast-page {
+    --forecast-ok: #2e7d32;
+    --forecast-warn: #e59a00;
+    --forecast-danger: #c62828;
+    --forecast-ok-bg: rgba(46, 125, 50, 0.10);
+    --forecast-warn-bg: rgba(229, 154, 0, 0.14);
+    --forecast-danger-bg: rgba(198, 40, 40, 0.10);
+}
+
+/* ------------------------------------------------------------
+   Форма
+   ------------------------------------------------------------ */
+
+.forecast-form-card {
+    margin-bottom: 22px;
+}
+
+.forecast-form__row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    gap: 14px;
+}
+
+.forecast-form__field {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+
+    min-width: 150px;
+}
+
+.forecast-form__field--wide {
+    flex: 1 1 320px;
+    min-width: 240px;
+}
+
+.forecast-form__field span {
+    color: var(--muted, #6c7b89);
+    font-size: 11px;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.forecast-form__field select,
+.forecast-form__field input {
+    box-sizing: border-box;
+
+    width: 100%;
+    height: 42px;
+    padding: 8px 12px;
+
+    color: var(--text, #27394d);
+    font: inherit;
+    font-size: 13px;
+
+    background: #fff;
+    border: 1px solid var(--line, #dce4eb);
+    border-radius: 9px;
+    outline: none;
+}
+
+.forecast-form__field select:focus,
+.forecast-form__field input:focus {
+    border-color: #2c6da7;
+    box-shadow: 0 0 0 3px rgba(44, 109, 167, 0.12);
+}
+
+.forecast-form__check {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+
+    padding-bottom: 10px;
+
+    color: var(--text, #27394d);
+    font-size: 12px;
+    font-weight: 600;
+
+    cursor: pointer;
+    user-select: none;
+}
+
+.forecast-form__check input {
+    width: 17px;
+    height: 17px;
+
+    accent-color: var(--navy, #073e75);
+}
+
+.forecast-form__submit {
+    height: 42px;
+    padding: 0 24px;
+
+    font-size: 13px;
+    font-weight: 800;
+}
+
+/* ------------------------------------------------------------
+   Предупреждения
+   ------------------------------------------------------------ */
+
+.forecast-alert {
+    margin-bottom: 14px;
+    padding: 11px 16px;
+
+    color: #7a5100;
+    font-size: 12px;
+    font-weight: 600;
+
+    background: var(--forecast-warn-bg);
+    border: 1px solid rgba(229, 154, 0, 0.40);
+    border-left: 4px solid var(--forecast-warn);
+    border-radius: 9px;
+}
+
+/* ------------------------------------------------------------
+   Сводка
+   ------------------------------------------------------------ */
+
+.forecast-summary {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: stretch;
+    justify-content: space-between;
+    gap: 18px;
+
+    margin-bottom: 22px;
+    padding: 22px 24px;
+
+    background: #fff;
+    border: 1px solid var(--line, #dce4eb);
+    border-radius: 16px;
+    box-shadow: 0 14px 34px rgba(16, 47, 75, 0.10);
+}
+
+.forecast-summary.is-feasible {
+    border-left: 5px solid var(--forecast-ok);
+}
+
+.forecast-summary.is-infeasible {
+    border-left: 5px solid var(--forecast-danger);
+}
+
+.forecast-summary__main {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 28px;
+}
+
+.forecast-summary__date {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+
+    padding-right: 28px;
+
+    border-right: 1px solid var(--line, #dce4eb);
+}
+
+.forecast-summary__date small {
+    color: var(--muted, #6c7b89);
+    font-size: 11px;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.forecast-summary__date strong {
+    color: var(--navy, #073e75);
+    font-size: 34px;
+    font-weight: 800;
+    line-height: 1.1;
+}
+
+.forecast-summary.is-infeasible .forecast-summary__date strong {
+    color: var(--forecast-danger);
+}
+
+.forecast-summary__info {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(120px, 1fr));
+    gap: 12px 26px;
+}
+
+.forecast-summary__info div {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+}
+
+.forecast-summary__info small {
+    color: var(--muted, #6c7b89);
+    font-size: 10px;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.forecast-summary__info strong {
+    color: var(--text, #27394d);
+    font-size: 13px;
+    font-weight: 700;
+}
+
+.forecast-summary__limiting {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 3px;
+
+    min-width: 190px;
+    padding: 12px 18px;
+
+    background: var(--forecast-danger-bg);
+    border: 1px solid rgba(198, 40, 40, 0.25);
+    border-radius: 12px;
+}
+
+.forecast-summary__limiting small {
+    color: var(--forecast-danger);
+    font-size: 10px;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.forecast-summary__limiting strong {
+    color: var(--navy, #073e75);
+    font-size: 15px;
+    font-weight: 800;
+}
+
+.forecast-summary__limiting span {
+    color: var(--muted, #6c7b89);
+    font-size: 11px;
+    font-weight: 600;
+}
+
+/* ------------------------------------------------------------
+   План по неделям
+   ------------------------------------------------------------ */
+
+.forecast-weeks {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.forecast-week {
+    display: grid;
+    grid-template-columns: 130px 1fr 70px;
+    align-items: center;
+    gap: 14px;
+
+    padding: 8px 12px;
+
+    background: #fbfcfe;
+    border: 1px solid var(--line, #e3eaf1);
+    border-radius: 10px;
+}
+
+.forecast-week__label {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+}
+
+.forecast-week__label strong {
+    color: var(--navy, #073e75);
+    font-size: 12px;
+    font-weight: 800;
+}
+
+.forecast-week__label small {
+    color: var(--muted, #6c7b89);
+    font-size: 10px;
+}
+
+.forecast-week__bar {
+    position: relative;
+    overflow: hidden;
+
+    height: 14px;
+
+    background: #e4ebf2;
+    border-radius: 7px;
+}
+
+.forecast-week__bar span {
+    display: block;
+
+    height: 100%;
+
+    background: linear-gradient(90deg, #2b6fae 0%, #1f5f9e 100%);
+    border-radius: 7px;
+
+    transition: width 260ms ease;
+}
+
+.forecast-week__hours {
+    color: var(--navy, #073e75);
+    font-size: 12px;
+    font-weight: 800;
+    text-align: right;
+}
+
+/* ------------------------------------------------------------
+   Таблица операций
+   ------------------------------------------------------------ */
+
+.forecast-table td small {
+    display: block;
+
+    margin-top: 1px;
+
+    color: var(--muted, #6c7b89);
+    font-size: 10px;
+}
+
+.forecast-table td strong {
+    color: var(--navy, #073e75);
+    font-weight: 700;
+}
+
+.forecast-table tr.is-bottleneck {
+    background: linear-gradient(90deg, var(--forecast-danger-bg), transparent 55%);
+}
+
+.forecast-table tr.is-bottleneck td:first-child {
+    box-shadow: inset 3px 0 0 var(--forecast-danger);
+}
+
+/* ------------------------------------------------------------
+   Вердикт
+   ------------------------------------------------------------ */
+
+.forecast-verdict {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 10px;
+
+    padding: 16px 20px;
+
+    border-radius: 12px;
+}
+
+.forecast-verdict.is-ok {
+    background: var(--forecast-ok-bg);
+    border: 1px solid rgba(46, 125, 50, 0.30);
+}
+
+.forecast-verdict.is-bad {
+    background: var(--forecast-danger-bg);
+    border: 1px solid rgba(198, 40, 40, 0.30);
+}
+
+.forecast-verdict strong {
+    color: var(--navy, #073e75);
+    font-size: 14px;
+    font-weight: 800;
+}
+
+.forecast-verdict.is-ok strong {
+    color: var(--forecast-ok);
+}
+
+.forecast-verdict.is-bad strong {
+    color: var(--forecast-danger);
+}
+
+.forecast-verdict span {
+    color: var(--text, #27394d);
+    font-size: 12px;
+}
+
+/* ------------------------------------------------------------
+   Начальное состояние
+   ------------------------------------------------------------ */
+
+.forecast-placeholder {
+    padding: 52px 24px;
+
+    text-align: center;
+
+    background: #fff;
+    border: 1px dashed var(--line, #dce4eb);
+    border-radius: 16px;
+}
+
+.forecast-placeholder__icon {
+    margin-bottom: 12px;
+
+    font-size: 42px;
+    line-height: 1;
+}
+
+.forecast-placeholder h2 {
+    margin: 0 0 8px;
+
+    color: var(--navy, #073e75);
+    font-size: 17px;
+    font-weight: 800;
+}
+
+.forecast-placeholder p {
+    max-width: 480px;
+    margin: 0 auto;
+
+    color: var(--muted, #6c7b89);
+    font-size: 13px;
+    line-height: 1.55;
+}
+
+/* ------------------------------------------------------------
+   Узкие экраны
+   ------------------------------------------------------------ */
+
+@media (max-width: 900px) {
+
+    .forecast-summary__date {
+        padding-right: 0;
+
+        border-right: none;
+    }
+
+    .forecast-week {
+        grid-template-columns: 1fr;
+        gap: 6px;
+    }
+
+    .forecast-week__hours {
+        text-align: left;
+    }
+}
+
+@media (max-width: 560px) {
+
+    .forecast-form__field {
+        min-width: 100%;
+    }
+
+    .forecast-form__submit {
+        width: 100%;
+    }
+}

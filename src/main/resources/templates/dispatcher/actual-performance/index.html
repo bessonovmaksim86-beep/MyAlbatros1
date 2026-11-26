@@ -1,0 +1,584 @@
+<!DOCTYPE html>
+<html lang="ru"
+      xmlns:th="http://www.thymeleaf.org">
+
+<head>
+    <meta charset="UTF-8">
+
+    <meta name="viewport"
+          content="width=device-width, initial-scale=1">
+
+    <title>Фактическая производительность</title>
+
+    <link rel="stylesheet"
+          th:href="@{/technology/css/technology.css}">
+
+    <link rel="stylesheet"
+          th:href="@{/technology/css/common.css}">
+
+    <link rel="stylesheet"
+          th:href="@{/dispatcher/css/dispatcher.css}">
+
+    <link rel="stylesheet"
+          th:href="@{/dispatcher/css/actual-performance.css}">
+</head>
+
+<body>
+
+<div class="app-shell">
+
+    <aside th:replace="~{dispatcher/fragments/layout
+            :: sidebar('actualPerformance')}">
+    </aside>
+
+    <main class="main">
+
+        <header th:replace="~{dispatcher/fragments/layout
+                :: topbar}">
+        </header>
+
+        <div class="page-content dispatcher-page actual-page">
+
+            <div class="page-head">
+
+                <div class="page-title">
+
+                    <h1>Фактическая производительность</h1>
+
+                    <p>
+                        Выполнение операций, выпуск изделий, тренды и
+                        отклонения за период:
+                        <strong th:text="${#temporals.format(dateFrom, 'dd.MM.yyyy')}">
+                            01.01.2026
+                        </strong>
+                        —
+                        <strong th:text="${#temporals.format(dateTo, 'dd.MM.yyyy')}">
+                            31.12.2026
+                        </strong>
+                    </p>
+                </div>
+
+                <div class="page-head-actions capacity-period">
+
+                    <span class="capacity-period__label">Период:</span>
+
+                    <a th:each="option : ${periodOptions}"
+                       class="capacity-period__item"
+                       th:classappend="${weeks == option} ? ' is-active' : ''"
+                       th:href="@{/dispatcher/capacity/actual(weeks=${option})}"
+                       th:text="${option} + ' нед.'">
+                        8 нед.
+                    </a>
+                </div>
+            </div>
+
+            <!-- =================================================
+                 KPI
+                 ================================================= -->
+            <div class="capacity-kpi">
+
+                <div class="capacity-kpi-card">
+                    <small>Выполнено операций</small>
+
+                    <strong th:text="${kpi.totalOperations()}">
+                        0
+                    </strong>
+
+                    <span>за период</span>
+                </div>
+
+                <div class="capacity-kpi-card capacity-kpi-card--free">
+                    <small>Выпущено ячеек</small>
+
+                    <strong th:text="${kpi.totalUnitsProduced()}">
+                        0
+                    </strong>
+
+                    <span>готовых изделий</span>
+                </div>
+
+                <div class="capacity-kpi-card capacity-kpi-card--load"
+                     th:if="${kpi.totalLaborHours() != null}">
+                    <small>Плановых часов</small>
+
+                    <strong th:text="${#numbers.formatDecimal(kpi.totalLaborHours(), 1, 0)} + ' ч'">
+                        0 ч
+                    </strong>
+
+                    <span>по нормам</span>
+                </div>
+
+                <div class="capacity-kpi-card capacity-kpi-card--critical"
+                     th:if="${kpi.lateOperations() > 0}">
+
+                    <small>Просрочено</small>
+
+                    <strong th:text="${kpi.lateOperations()}">
+                        0
+                    </strong>
+
+                    <span>операций позже плана</span>
+                </div>
+
+                <div class="capacity-kpi-card capacity-kpi-card--warning"
+                     th:if="${kpi.reworkOperations() > 0}">
+
+                    <small>Переделок</small>
+
+                    <strong th:text="${kpi.reworkOperations()}">
+                        0
+                    </strong>
+
+                    <span>повторных выполнений</span>
+                </div>
+
+                <div class="capacity-kpi-card capacity-kpi-card--unassigned">
+                    <small>Уникальных изделий</small>
+
+                    <strong th:text="${kpi.totalSerials()}">
+                        0
+                    </strong>
+
+                    <span>прошли через цеха</span>
+                </div>
+            </div>
+
+            <!-- =================================================
+                 ОПЕРАЦИИ ПО ЦЕХАМ
+                 ================================================= -->
+            <section class="card">
+
+                <div class="card-head">
+
+                    <div>
+                        <h2>Операции по цехам</h2>
+
+                        <small>
+                            Выполненные операции, уникальные изделия,
+                            просрочки и переделки за период.
+                        </small>
+                    </div>
+                </div>
+
+                <div class="card-body">
+
+                    <div class="table-wrap"
+                         th:if="${not #lists.isEmpty(unitStats)}">
+
+                        <table class="data-table">
+
+                            <thead>
+                            <tr>
+                                <th>Цех / отдел</th>
+                                <th>Операций</th>
+                                <th>Изделий</th>
+                                <th>Опер/день</th>
+                                <th>Просрочено</th>
+                                <th>Переделок</th>
+                                <th>План/день</th>
+                                <th>Нагрузка</th>
+                            </tr>
+                            </thead>
+
+                            <tbody>
+
+                            <tr th:each="stat : ${unitStats}">
+
+                                <td>
+                                    <strong th:text="${stat.unitName()}">
+                                        Цех сборки
+                                    </strong>
+
+                                    <small th:if="${stat.serviceName() != null}"
+                                           th:text="${stat.serviceName()}">
+                                        СДП
+                                    </small>
+                                </td>
+
+                                <td th:text="${stat.doneOperations()}">
+                                    0
+                                </td>
+
+                                <td th:text="${stat.uniqueSerials()}">
+                                    0
+                                </td>
+
+                                <td th:text="${stat.donePerDay()}">
+                                    0
+                                </td>
+
+                                <td>
+                                    <span class="status danger"
+                                          th:if="${stat.lateOperations() > 0}"
+                                          th:text="${stat.lateOperations()}">
+                                        3
+                                    </span>
+
+                                    <span class="status"
+                                          th:if="${stat.lateOperations() == 0}">
+                                        0
+                                    </span>
+                                </td>
+
+                                <td>
+                                    <span class="status"
+                                          th:text="${stat.reworkOperations()}">
+                                        0
+                                    </span>
+                                </td>
+
+                                <td th:text="${stat.plannedHoursPerDay() != null
+                                        ? #numbers.formatDecimal(stat.plannedHoursPerDay(), 1, 1)
+                                        : '—'}">
+                                    0,0
+                                </td>
+
+                                <td>
+                                    <span class="capacity-chip"
+                                          th:classappend="${stat.utilizationPercent() == null}
+                                                  ? ' capacity-chip--ok'
+                                                  : (${stat.utilizationPercent() > 1.2}
+                                                      ? ' capacity-chip--danger'
+                                                      : (${stat.utilizationPercent() >= 1.0}
+                                                          ? ' capacity-chip--warn'
+                                                          : ' capacity-chip--ok'))"
+                                          th:text="${stat.utilizationPercent() != null
+                                                  ? #numbers.formatDecimal(stat.utilizationPercent(), 1, 1) + '×'
+                                                  : '—'}">
+                                        1,0×
+                                    </span>
+                                </td>
+                            </tr>
+
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <p class="capacity-empty"
+                       th:if="${#lists.isEmpty(unitStats)}">
+                        За период не выполнено ни одной операции.
+                    </p>
+                </div>
+            </section>
+
+            <!-- =================================================
+                 ТРЕНД ПО НЕДЕЛЯМ
+                 ================================================= -->
+            <section class="card">
+
+                <div class="card-head">
+
+                    <div>
+                        <h2>Тренд по неделям</h2>
+
+                        <small>
+                            План (запланированные операции) и факт
+                            (выполненные) по неделям.
+                        </small>
+                    </div>
+
+                    <div class="capacity-legend">
+
+                        <span class="capacity-legend__item">
+                            <i class="capacity-legend__swatch capacity-legend__swatch--confirmed"></i>
+                            План
+                        </span>
+
+                        <span class="capacity-legend__item">
+                            <i class="capacity-legend__swatch capacity-legend__swatch--draft"></i>
+                            Факт
+                        </span>
+                    </div>
+                </div>
+
+                <div class="card-body">
+
+                    <div class="capacity-bars"
+                         th:if="${not #lists.isEmpty(weeklyTrend)}">
+
+                        <div th:each="week : ${weeklyTrend}"
+                             class="capacity-bar-row">
+
+                            <div class="capacity-bar-row__head">
+
+                                <div class="capacity-bar-row__title">
+
+                                    <strong>Неделя
+                                        <span th:text="${week.weekNumber()}">
+                                            44
+                                        </span>
+                                    </strong>
+
+                                    <small th:text="${week.plannedCount() + ' план · ' + week.actualCount() + ' факт'}">
+                                        10 план · 8 факт
+                                    </small>
+                                </div>
+                            </div>
+
+                            <div class="capacity-bar"
+                                 th:title="${'Тренд: '
+                                         + (week.actualCount() > 0
+                                             && week.plannedCount() > 0
+                                             ? #numbers.formatDecimal(
+                                                   week.actualCount()
+                                                   * 100.0 / week.plannedCount(),
+                                                   1, 0) + '%'
+                                             : '—')}">
+
+                                <span class="capacity-bar__confirmed"
+                                      th:style="${'width: '
+                                          + week.plannedBarPercent() + '%'}">
+                                </span>
+
+                                <span class="capacity-bar__draft"
+                                      th:style="${'width: '
+                                          + week.actualBarPercent() + '%'}">
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <p class="capacity-empty"
+                       th:if="${#lists.isEmpty(weeklyTrend)}">
+                        Нет данных для тренда.
+                    </p>
+                </div>
+            </section>
+
+            <!-- =================================================
+                 ВЫПУСК ИЗДЕЛИЙ
+                 ================================================= -->
+            <section class="card">
+
+                <div class="card-head">
+
+                    <div>
+                        <h2>Выпуск готовых ячеек</h2>
+
+                        <small>
+                            Количество готовых ячеек, ставших готовыми
+                            по типам изделий за период.
+                        </small>
+                    </div>
+                </div>
+
+                <div class="card-body">
+
+                    <div class="table-wrap"
+                         th:if="${not #lists.isEmpty(productionOutput)}">
+
+                        <table class="data-table">
+
+                            <thead>
+                            <tr>
+                                <th>Изделие</th>
+                                <th>Тип</th>
+                                <th>Код</th>
+                                <th>Выпущено</th>
+                            </tr>
+                            </thead>
+
+                            <tbody>
+
+                            <tr th:each="row : ${productionOutput}">
+
+                                <td>
+                                    <strong th:text="${row.displayName()}">
+                                        Датчик ДУУ2М
+                                    </strong>
+                                </td>
+
+                                <td th:text="${row.productTypeName()}">
+                                    Датчик
+                                </td>
+
+                                <td th:text="${row.classifierCode()}">
+                                    1212
+                                </td>
+
+                                <td th:text="${row.totalProduced()}">
+                                    0
+                                </td>
+                            </tr>
+
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <p class="capacity-empty"
+                       th:if="${#lists.isEmpty(productionOutput)}">
+                        За период готовых ячеек не выпущено.
+                    </p>
+                </div>
+            </section>
+
+            <!-- =================================================
+                 РЕЙТИНГ ИСПОЛНИТЕЛЕЙ
+                 ================================================= -->
+            <section class="card">
+
+                <div class="card-head">
+
+                    <div>
+                        <h2>Рейтинг исполнителей</h2>
+
+                        <small>
+                            Топ-10 исполнителей по количеству закрытых
+                            операций за период.
+                        </small>
+                    </div>
+                </div>
+
+                <div class="card-body">
+
+                    <div class="table-wrap"
+                         th:if="${not #lists.isEmpty(executorRanking)}">
+
+                        <table class="data-table">
+
+                            <thead>
+                            <tr>
+                                <th>#</th>
+                                <th>Исполнитель</th>
+                                <th>Выполнено</th>
+                                <th>Просрочено</th>
+                                <th>Переделок</th>
+                            </tr>
+                            </thead>
+
+                            <tbody>
+
+                            <tr th:each="exec, iter : ${executorRanking}"
+                                th:if="${iter.index < 10}">
+
+                                <td th:text="${iter.count}">1</td>
+
+                                <td>
+                                    <strong th:text="${exec.executorName()}">
+                                        Петров И.С.
+                                    </strong>
+                                </td>
+
+                                <td th:text="${exec.doneOperations()}">0</td>
+
+                                <td>
+                                    <span class="status"
+                                          th:classappend="${exec.lateOperations() > 0} ? 'danger'"
+                                          th:text="${exec.lateOperations()}">
+                                        0
+                                    </span>
+                                </td>
+
+                                <td>
+                                    <span class="status"
+                                          th:text="${exec.reworkOperations()}">
+                                        0
+                                    </span>
+                                </td>
+                            </tr>
+
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <p class="capacity-empty"
+                       th:if="${#lists.isEmpty(executorRanking)}">
+                        Нет данных по исполнителям.
+                    </p>
+                </div>
+            </section>
+
+            <!-- =================================================
+                 ПРОСРОЧКИ
+                 ================================================= -->
+            <section class="card">
+
+                <div class="card-head">
+
+                    <div>
+                        <h2>Просроченные операции</h2>
+
+                        <small>
+                            Операции, выполненные позже запланированной даты.
+                            Показаны последние 50 за период.
+                        </small>
+                    </div>
+                </div>
+
+                <div class="card-body">
+
+                    <div class="table-wrap"
+                         th:if="${not #lists.isEmpty(lateOperations)}">
+
+                        <table class="data-table">
+
+                            <thead>
+                            <tr>
+                                <th>Изделие</th>
+                                <th>Операция</th>
+                                <th>Цех</th>
+                                <th>План</th>
+                                <th>Факт</th>
+                                <th>Просрочка</th>
+                            </tr>
+                            </thead>
+
+                            <tbody>
+
+                            <tr th:each="op : ${lateOperations}">
+
+                                <td>
+                                    <strong th:text="${op.serialNumber()}">
+                                        121200022
+                                    </strong>
+                                </td>
+
+                                <td th:text="${op.operationName()}">
+                                    Пайка
+                                </td>
+
+                                <td th:text="${op.unitName() != null ? op.unitName() : '—'}">
+                                    —
+                                </td>
+
+                                <td th:text="${op.plannedDate() != null
+                                        ? #temporals.format(op.plannedDate(), 'dd.MM.yyyy')
+                                        : '—'}">
+                                    —
+                                </td>
+
+                                <td th:text="${op.actualDate() != null
+                                        ? #temporals.format(op.actualDate(), 'dd.MM.yyyy')
+                                        : '—'}">
+                                    —
+                                </td>
+
+                                <td>
+                                    <span class="status danger"
+                                          th:text="${op.lateDays() + ' дн.'}">
+                                        3 дн.
+                                    </span>
+                                </td>
+                            </tr>
+
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <p class="capacity-empty"
+                       th:if="${#lists.isEmpty(lateOperations)}">
+                        Просрочек нет — все операции выполнены в срок.
+                    </p>
+                </div>
+            </section>
+
+        </div>
+    </main>
+</div>
+
+<th:block th:replace="~{dispatcher/fragments/layout
+        :: commonScripts}">
+</th:block>
+
+</body>
+</html>

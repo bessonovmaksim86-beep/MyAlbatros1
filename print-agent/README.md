@@ -14,7 +14,7 @@ bartend.exe с нужными параметрами.
 
 ## Требования
 
-- Java JRE 11+ (в PATH или JAVA_HOME)
+- Java 17 или новее (JRE достаточно). Проверка: `java -version`
 - BarTender Suite 2022 (или совместимая версия)
 - Шаблон этикетки `.btw` с полями:
   `NUMBER, INDEX, CLASSIFIER, NAME, ORDER, SHOWTEXT`

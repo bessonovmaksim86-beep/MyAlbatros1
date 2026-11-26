@@ -1,0 +1,517 @@
+<!DOCTYPE html>
+<html lang="ru"
+      xmlns:th="http://www.thymeleaf.org">
+
+<head>
+    <meta charset="UTF-8">
+
+    <meta name="viewport"
+          content="width=device-width, initial-scale=1">
+
+    <title>Анализ мощностей</title>
+
+    <link rel="stylesheet"
+          th:href="@{/technology/css/technology.css}">
+
+    <link rel="stylesheet"
+          th:href="@{/technology/css/common.css}">
+
+    <link rel="stylesheet"
+          th:href="@{/dispatcher/css/dispatcher.css}">
+
+    <link rel="stylesheet"
+          th:href="@{/dispatcher/css/capacity.css}">
+</head>
+
+<body>
+
+<div class="app-shell">
+
+    <aside th:replace="~{dispatcher/fragments/layout
+            :: sidebar('capacity')}">
+    </aside>
+
+    <main class="main">
+
+        <header th:replace="~{dispatcher/fragments/layout
+                :: topbar}">
+        </header>
+
+        <div class="page-content dispatcher-page capacity-page">
+
+            <div class="page-head">
+
+                <div class="page-title">
+
+                    <h1>Анализ мощностей</h1>
+
+                    <p>
+                        Загрузка цехов и отделов, свободные мощности,
+                        операции без назначения и рекомендации.
+                        Период:
+                        <strong th:text="${#temporals.format(dateFrom, 'dd.MM.yyyy')}">
+                            01.01.2026
+                        </strong>
+                        —
+                        <strong th:text="${#temporals.format(dateTo, 'dd.MM.yyyy')}">
+                            31.12.2026
+                        </strong>
+                    </p>
+                </div>
+
+                <div class="page-head-actions capacity-period">
+
+                    <span class="capacity-period__label">Период:</span>
+
+                    <a th:each="option : ${periodOptions}"
+                       class="capacity-period__item"
+                       th:classappend="${weeks == option} ? ' is-active' : ''"
+                       th:href="@{/dispatcher/capacity(weeks=${option})}"
+                       th:text="${option} + ' нед.'">
+                        8 нед.
+                    </a>
+                </div>
+            </div>
+
+            <!-- =================================================
+                 KPI
+                 ================================================= -->
+            <div class="capacity-kpi">
+
+                <div class="capacity-kpi-card">
+                    <small>Общая мощность</small>
+
+                    <strong th:text="${#numbers.formatDecimal(kpi.totalCapacityHours(), 1, 0)}
+                            + ' ч'">
+                        0 ч
+                    </strong>
+
+                    <span>за выбранный период</span>
+                </div>
+
+                <div class="capacity-kpi-card capacity-kpi-card--load"
+                     th:classappend="${kpi.totalLoadPercent() > 100
+                            ? ' is-critical'
+                            : (kpi.totalLoadPercent() >= 85 ? ' is-warning' : '')}">
+
+                    <small>Загрузка</small>
+
+                    <strong th:text="${#numbers.formatDecimal(kpi.totalLoadPercent(), 1, 0)}
+                            + ' %'">
+                        0 %
+                    </strong>
+
+                    <span>план + черновики</span>
+                </div>
+
+                <div class="capacity-kpi-card capacity-kpi-card--free">
+                    <small>Свободно</small>
+
+                    <strong th:text="${#numbers.formatDecimal(kpi.freeHours(), 1, 0)}
+                            + ' ч'">
+                        0 ч
+                    </strong>
+
+                    <span>не занято планом</span>
+                </div>
+
+                <div class="capacity-kpi-card capacity-kpi-card--critical"
+                     th:if="${kpi.criticalWeeks() > 0}">
+
+                    <small>Критичных недель</small>
+
+                    <strong th:text="${kpi.criticalWeeks()}">
+                        0
+                    </strong>
+
+                    <span>загрузка свыше 100 %</span>
+                </div>
+
+                <div class="capacity-kpi-card capacity-kpi-card--warning"
+                     th:if="${kpi.warningWeeks() > 0}">
+
+                    <small>Недель в зоне риска</small>
+
+                    <strong th:text="${kpi.warningWeeks()}">
+                        0
+                    </strong>
+
+                    <span>загрузка 85–100 %</span>
+                </div>
+
+                <div class="capacity-kpi-card capacity-kpi-card--unassigned"
+                     th:if="${kpi.totalUnassigned() > 0}">
+
+                    <small>Не назначено</small>
+
+                    <strong th:text="${kpi.totalUnassigned()}">
+                        0
+                    </strong>
+
+                    <span>операций требуют внимания</span>
+                </div>
+            </div>
+
+            <!-- =================================================
+                 ЗАГРУЗКА ЦЕХОВ
+                 ================================================= -->
+            <section class="card capacity-card">
+
+                <div class="card-head">
+
+                    <div>
+                        <h2>Загрузка цехов и отделов</h2>
+
+                        <small>
+                            План — внесённый в заказ график.
+                            Черновик — предварительный расчёт,
+                            в занятость не входит.
+                        </small>
+                    </div>
+
+                    <div class="capacity-legend">
+
+                        <span class="capacity-legend__item">
+                            <i class="capacity-legend__swatch capacity-legend__swatch--confirmed"></i>
+                            План
+                        </span>
+
+                        <span class="capacity-legend__item">
+                            <i class="capacity-legend__swatch capacity-legend__swatch--draft"></i>
+                            Черновик
+                        </span>
+
+                        <span class="capacity-legend__item">
+                            <i class="capacity-legend__swatch capacity-legend__swatch--free"></i>
+                            Свободно
+                        </span>
+                    </div>
+                </div>
+
+                <div class="card-body">
+
+                    <div class="capacity-bars"
+                         th:if="${not #lists.isEmpty(units)}">
+
+                        <div th:each="unit : ${units}"
+                             class="capacity-bar-row"
+                             th:classappend="${unit.isCritical()
+                                    ? ' is-critical'
+                                    : (unit.isWarning() ? ' is-warning' : '')}">
+
+                            <div class="capacity-bar-row__head">
+
+                                <div class="capacity-bar-row__title">
+
+                                    <strong th:text="${unit.unitName()}">
+                                        Цех сборки
+                                    </strong>
+
+                                    <small th:text="${unit.serviceName() != null
+                                            ? unit.serviceName() : 'Служба не указана'}">
+                                        Служба директора по производству
+                                    </small>
+                                </div>
+
+                                <div class="capacity-bar-row__numbers">
+
+                                    <span class="capacity-value"
+                                          th:text="${#numbers.formatDecimal(unit.loadPercent(), 1, 0)}
+                                                  + ' %'">
+                                        0 %
+                                    </span>
+
+                                    <span class="capacity-value-sub"
+                                          th:text="${'план ' + #numbers.formatDecimal(unit.confirmedHours(), 1, 0)
+                                                  + ' ч · черновик ' + #numbers.formatDecimal(unit.draftHours(), 1, 0)
+                                                  + ' ч · свободно ' + #numbers.formatDecimal(unit.freeHours(), 1, 0) + ' ч'}">
+                                        план 0 ч
+                                    </span>
+                                </div>
+                            </div>
+
+                            <div class="capacity-bar"
+                                 th:title="${'Мощность ' + #numbers.formatDecimal(unit.totalCapacityHours(), 1, 0)
+                                         + ' ч, план ' + #numbers.formatDecimal(unit.confirmedHours(), 1, 0)
+                                         + ' ч, черновик ' + #numbers.formatDecimal(unit.draftHours(), 1, 0)
+                                         + ' ч'}">
+
+                                <span class="capacity-bar__confirmed"
+                                      th:style="${'width: ' + unit.confirmedBarPercent() + '%;'}">
+                                </span>
+
+                                <span class="capacity-bar__draft"
+                                      th:style="${'width: ' + unit.draftBarPercent() + '%;'}">
+                                </span>
+                            </div>
+
+                            <div class="capacity-bar-row__foot">
+
+                                <span th:if="${unit.deficitDays() > 0}"
+                                      class="capacity-chip capacity-chip--danger"
+                                      th:text="${unit.deficitDays() + ' дн. с дефицитом'}">
+                                    3 дн. с дефицитом
+                                </span>
+
+                                <span th:if="${unit.criticalCount() > 0}"
+                                      class="capacity-chip capacity-chip--danger"
+                                      th:text="${unit.criticalCount() + ' нед. перегруза'}">
+                                    1 нед. перегруза
+                                </span>
+
+                                <span th:if="${unit.criticalCount() == 0 and unit.warningCount() > 0}"
+                                      class="capacity-chip capacity-chip--warn"
+                                      th:text="${unit.warningCount() + ' нед. в зоне риска'}">
+                                    2 нед. в зоне риска
+                                </span>
+
+                                <span th:if="${unit.totalCapacityHours() <= 0}"
+                                      class="capacity-chip capacity-chip--danger">
+                                    Нет мощности — нет сотрудников
+                                </span>
+
+                                <span th:if="${unit.criticalCount() == 0
+                                        and unit.warningCount() == 0
+                                        and unit.totalCapacityHours() > 0}"
+                                      class="capacity-chip capacity-chip--ok">
+                                    В норме
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <p class="capacity-empty"
+                       th:if="${#lists.isEmpty(units)}">
+                        Действующих подразделений нет.
+                    </p>
+                </div>
+            </section>
+
+            <!-- =================================================
+                 ТЕПЛОВАЯ КАРТА
+                 ================================================= -->
+            <section class="card capacity-card"
+                     th:if="${not #lists.isEmpty(units)}">
+
+                <div class="card-head">
+
+                    <div>
+                        <h2>Тепловая карта по неделям</h2>
+
+                        <small>
+                            Процент загрузки (план + черновики).
+                            Наведите на ячейку — детализация по дням.
+                        </small>
+                    </div>
+                </div>
+
+                <div class="card-body">
+
+                    <div class="table-wrap capacity-heatmap-wrap">
+
+                        <table class="capacity-heatmap">
+
+                            <thead>
+                            <tr>
+                                <th class="capacity-heatmap__unit">
+                                    Цех / отдел
+                                </th>
+
+                                <th th:each="week : ${weekHeaders}"
+                                    th:text="${'Нед. ' + week.weekNumber()}">
+                                    Нед. 44
+                                </th>
+                            </tr>
+                            </thead>
+
+                            <tbody>
+
+                            <tr th:each="unit : ${units}">
+
+                                <th class="capacity-heatmap__unit"
+                                    th:text="${unit.unitName()}">
+                                    Цех сборки
+                                </th>
+
+                                <td th:each="week : ${unit.weeks()}"
+                                    class="capacity-heatmap__cell"
+                                    th:classappend="${week.isCritical()
+                                            ? ' is-critical'
+                                            : (week.isWarning() ? ' is-warning' : ' is-ok')}"
+                                    th:title="${'Мощность ' + #numbers.formatDecimal(week.capacityHours(), 1, 0)
+                                            + ' ч · план ' + #numbers.formatDecimal(week.confirmedHours(), 1, 0)
+                                            + ' ч · черновик ' + #numbers.formatDecimal(week.draftHours(), 1, 0)
+                                            + ' ч' + (week.dayTooltip() != '' ? '\n' + week.dayTooltip() : '')}">
+
+                                    <span th:text="${#numbers.formatDecimal(week.loadPercent(), 1, 0)}">
+                                        0
+                                    </span>
+
+                                    <i th:if="${week.draftHours() != null
+                                            and week.draftHours().signum() > 0}"
+                                       class="capacity-heatmap__draft"
+                                       title="Есть предварительный расчёт">
+                                    </i>
+                                </td>
+                            </tr>
+
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+
+            <!-- =================================================
+                 ТРЕБУЕТ ВНИМАНИЯ
+                 ================================================= -->
+            <section class="card capacity-card">
+
+                <div class="card-head">
+
+                    <div>
+                        <h2>Требует внимания</h2>
+
+                        <small>
+                            Автоматические выводы: перегрузки, операции
+                            без исполнителей и свободные мощности.
+                        </small>
+                    </div>
+                </div>
+
+                <div class="card-body">
+
+                    <div class="capacity-recs"
+                         th:if="${not #lists.isEmpty(recommendations)}">
+
+                        <div th:each="rec : ${recommendations}"
+                             class="capacity-rec"
+                             th:classappend="${' capacity-rec--'
+                                    + #strings.toLowerCase(rec.severity().name())}">
+
+                            <span class="capacity-rec__icon"
+                                  th:switch="${rec.severity().name()}">
+
+                                <th:block th:case="'CRITICAL'">!</th:block>
+                                <th:block th:case="'WARNING'">▲</th:block>
+                                <th:block th:case="*">✓</th:block>
+                            </span>
+
+                            <div class="capacity-rec__body">
+
+                                <strong th:text="${rec.unitName()}">
+                                    Цех сборки
+                                </strong>
+
+                                <span th:text="${rec.message()}">
+                                    Перегрузка 112 %
+                                </span>
+
+                                <small th:text="${rec.actionHint()}">
+                                    Добавить исполнителей
+                                </small>
+                            </div>
+                        </div>
+                    </div>
+
+                    <p class="capacity-empty"
+                       th:if="${#lists.isEmpty(recommendations)}">
+                        Замечаний нет: все подразделения в пределах
+                        рабочей загрузки.
+                    </p>
+                </div>
+            </section>
+
+            <!-- =================================================
+                 НЕ НАЗНАЧЕНО
+                 ================================================= -->
+            <section class="card capacity-card">
+
+                <div class="card-head">
+
+                    <div>
+                        <h2>Не назначено</h2>
+
+                        <small>
+                            Операции без подразделения или без
+                            закреплённых исполнителей. Такие этапы
+                            не видны мастеру, а их мощность нулевая.
+                        </small>
+                    </div>
+
+                    <span class="capacity-counter"
+                          th:if="${not #lists.isEmpty(unassigned)}"
+                          th:text="${#lists.size(unassigned) + ' операций'}">
+                        4 операции
+                    </span>
+                </div>
+
+                <div class="card-body">
+
+                    <div class="table-wrap"
+                         th:if="${not #lists.isEmpty(unassigned)}">
+
+                        <table class="data-table capacity-unassigned">
+
+                            <thead>
+                            <tr>
+                                <th>Операция</th>
+                                <th>Тип</th>
+                                <th>Служба</th>
+                                <th>Часы в плане</th>
+                                <th>Проблема</th>
+                            </tr>
+                            </thead>
+
+                            <tbody>
+
+                            <tr th:each="op : ${unassigned}">
+
+                                <td>
+                                    <strong th:text="${op.operationName()}">
+                                        Пайка
+                                    </strong>
+                                </td>
+
+                                <td th:text="${op.operationTypeName()}">
+                                    Сборка
+                                </td>
+
+                                <td th:text="${op.serviceName() != null
+                                        ? op.serviceName() : '—'}">
+                                    —
+                                </td>
+
+                                <td th:text="${op.plannedHours()} + ' ч'">
+                                    0 ч
+                                </td>
+
+                                <td>
+                                    <span class="capacity-chip capacity-chip--danger"
+                                          th:text="${op.hint()}">
+                                        Нет исполнителей
+                                    </span>
+                                </td>
+                            </tr>
+
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <p class="capacity-empty"
+                       th:if="${#lists.isEmpty(unassigned)}">
+                        Все операции привязаны к подразделениям
+                        и имеют исполнителей.
+                    </p>
+                </div>
+            </section>
+
+        </div>
+    </main>
+</div>
+
+<th:block th:replace="~{dispatcher/fragments/layout
+        :: commonScripts}">
+</th:block>
+
+</body>
+</html>

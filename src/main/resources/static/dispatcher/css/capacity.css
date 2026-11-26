@@ -1,0 +1,644 @@
+/* ============================================================
+   АНАЛИЗ МОЩНОСТЕЙ (диспетчер)
+
+   Страница опирается на базовые классы dispatcher.css:
+   .card, .card-head, .card-body, .page-head, .data-table.
+   Здесь только то, что относится к визуализации загрузки:
+   KPI-карточки, полосы загрузки, тепловая карта и рекомендации.
+   ============================================================ */
+
+.capacity-page {
+    --capacity-ok: #2e7d32;
+    --capacity-warn: #e59a00;
+    --capacity-danger: #c62828;
+    --capacity-ok-bg: rgba(46, 125, 50, 0.10);
+    --capacity-warn-bg: rgba(229, 154, 0, 0.14);
+    --capacity-danger-bg: rgba(198, 40, 40, 0.10);
+    --capacity-confirmed: #1f5f9e;
+    --capacity-draft: #ed9b3f;
+    --capacity-free: #e4ebf2;
+}
+
+/* ------------------------------------------------------------
+   Выбор периода
+   ------------------------------------------------------------ */
+
+.capacity-period {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+
+    padding: 5px;
+
+    background: #fff;
+    border: 1px solid var(--line, #dce4eb);
+    border-radius: 11px;
+    box-shadow: 0 6px 16px rgba(16, 47, 75, 0.06);
+}
+
+.capacity-period__label {
+    padding: 0 6px;
+
+    color: var(--muted, #6c7b89);
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.capacity-period__item {
+    padding: 8px 12px;
+
+    color: var(--navy, #073e75);
+    font-size: 12px;
+    font-weight: 700;
+    text-decoration: none;
+
+    border-radius: 8px;
+
+    transition: background-color 140ms ease, color 140ms ease;
+}
+
+.capacity-period__item:hover {
+    background: rgba(7, 62, 117, 0.08);
+}
+
+.capacity-period__item.is-active {
+    color: #fff;
+    background: var(--navy, #073e75);
+}
+
+/* ------------------------------------------------------------
+   KPI-карточки
+   ------------------------------------------------------------ */
+
+.capacity-kpi {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+    gap: 14px;
+
+    margin-bottom: 22px;
+}
+
+.capacity-kpi-card {
+    position: relative;
+    overflow: hidden;
+
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+
+    padding: 16px 18px;
+
+    background: #fff;
+    border: 1px solid var(--line, #dce4eb);
+    border-radius: 14px;
+    box-shadow: 0 10px 28px rgba(16, 47, 75, 0.08);
+}
+
+.capacity-kpi-card::before {
+    content: "";
+
+    position: absolute;
+    inset: 0 auto 0 0;
+
+    width: 4px;
+
+    background: var(--capacity-confirmed);
+}
+
+.capacity-kpi-card small {
+    color: var(--muted, #6c7b89);
+    font-size: 11px;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.capacity-kpi-card strong {
+    color: var(--navy, #073e75);
+    font-size: 28px;
+    font-weight: 800;
+    line-height: 1.15;
+}
+
+.capacity-kpi-card span {
+    color: var(--muted, #6c7b89);
+    font-size: 11px;
+}
+
+.capacity-kpi-card--load::before {
+    background: var(--capacity-warn);
+}
+
+.capacity-kpi-card--free::before {
+    background: var(--capacity-ok);
+}
+
+.capacity-kpi-card--critical::before {
+    background: var(--capacity-danger);
+}
+
+.capacity-kpi-card--critical strong {
+    color: var(--capacity-danger);
+}
+
+.capacity-kpi-card--warning::before {
+    background: var(--capacity-warn);
+}
+
+.capacity-kpi-card--warning strong {
+    color: #b47400;
+}
+
+.capacity-kpi-card--unassigned::before {
+    background: #7b1fa2;
+}
+
+.capacity-kpi-card--unassigned strong {
+    color: #7b1fa2;
+}
+
+.capacity-kpi-card.is-critical {
+    border-color: rgba(198, 40, 40, 0.35);
+    background: linear-gradient(180deg, #fff 0%, var(--capacity-danger-bg) 100%);
+}
+
+.capacity-kpi-card.is-critical strong {
+    color: var(--capacity-danger);
+}
+
+.capacity-kpi-card.is-warning {
+    border-color: rgba(229, 154, 0, 0.40);
+    background: linear-gradient(180deg, #fff 0%, var(--capacity-warn-bg) 100%);
+}
+
+.capacity-kpi-card.is-warning strong {
+    color: #b47400;
+}
+
+/* ------------------------------------------------------------
+   Полосы загрузки подразделений
+   ------------------------------------------------------------ */
+
+.capacity-card {
+    margin-bottom: 22px;
+}
+
+.capacity-bars {
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+}
+
+.capacity-bar-row {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+
+    padding: 14px 16px;
+
+    background: #fbfcfe;
+    border: 1px solid var(--line, #e3eaf1);
+    border-radius: 12px;
+}
+
+.capacity-bar-row.is-critical {
+    border-color: rgba(198, 40, 40, 0.30);
+    background: linear-gradient(90deg, var(--capacity-danger-bg), #fbfcfe 55%);
+}
+
+.capacity-bar-row.is-warning {
+    border-color: rgba(229, 154, 0, 0.35);
+    background: linear-gradient(90deg, var(--capacity-warn-bg), #fbfcfe 55%);
+}
+
+.capacity-bar-row__head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 16px;
+}
+
+.capacity-bar-row__title {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.capacity-bar-row__title strong {
+    color: var(--navy, #073e75);
+    font-size: 14px;
+    font-weight: 800;
+}
+
+.capacity-bar-row__title small {
+    color: var(--muted, #6c7b89);
+    font-size: 11px;
+}
+
+.capacity-bar-row__numbers {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 2px;
+
+    text-align: right;
+}
+
+.capacity-value {
+    color: var(--navy, #073e75);
+    font-size: 18px;
+    font-weight: 800;
+    line-height: 1;
+}
+
+.capacity-bar-row.is-critical .capacity-value {
+    color: var(--capacity-danger);
+}
+
+.capacity-bar-row.is-warning .capacity-value {
+    color: #b47400;
+}
+
+.capacity-value-sub {
+    color: var(--muted, #6c7b89);
+    font-size: 11px;
+}
+
+/*
+ * Полоса: серый фон — свободная мощность, синий — план,
+ * оранжевая штриховка — черновик. Ширины сегментов задаёт шаблон.
+ */
+.capacity-bar {
+    position: relative;
+    overflow: hidden;
+
+    display: flex;
+
+    width: 100%;
+    height: 18px;
+
+    background: var(--capacity-free);
+    border-radius: 9px;
+}
+
+.capacity-bar__confirmed {
+    height: 100%;
+
+    background: linear-gradient(90deg, #2b6fae 0%, var(--capacity-confirmed) 100%);
+
+    transition: width 260ms ease;
+}
+
+.capacity-bar__draft {
+    height: 100%;
+
+    background: repeating-linear-gradient(
+            135deg,
+            var(--capacity-draft) 0 7px,
+            #f3c07f 7px 14px
+    );
+
+    transition: width 260ms ease;
+}
+
+.capacity-bar-row__foot {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.capacity-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+
+    padding: 3px 9px;
+
+    font-size: 10px;
+    font-weight: 700;
+    white-space: nowrap;
+
+    border-radius: 999px;
+}
+
+.capacity-chip--danger {
+    color: var(--capacity-danger);
+    background: var(--capacity-danger-bg);
+}
+
+.capacity-chip--warn {
+    color: #8a5a00;
+    background: var(--capacity-warn-bg);
+}
+
+.capacity-chip--ok {
+    color: var(--capacity-ok);
+    background: var(--capacity-ok-bg);
+}
+
+/* ------------------------------------------------------------
+   Легенда
+   ------------------------------------------------------------ */
+
+.capacity-legend {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 14px;
+}
+
+.capacity-legend__item {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+
+    color: var(--muted, #6c7b89);
+    font-size: 11px;
+    font-weight: 700;
+}
+
+.capacity-legend__swatch {
+    display: inline-block;
+
+    width: 14px;
+    height: 10px;
+
+    border-radius: 3px;
+}
+
+.capacity-legend__swatch--confirmed {
+    background: var(--capacity-confirmed);
+}
+
+.capacity-legend__swatch--draft {
+    background: repeating-linear-gradient(
+            135deg,
+            var(--capacity-draft) 0 4px,
+            #f3c07f 4px 8px
+    );
+}
+
+.capacity-legend__swatch--free {
+    background: var(--capacity-free);
+    border: 1px solid var(--line, #dce4eb);
+}
+
+/* ------------------------------------------------------------
+   Тепловая карта
+   ------------------------------------------------------------ */
+
+.capacity-heatmap-wrap {
+    overflow-x: auto;
+}
+
+.capacity-heatmap {
+    width: 100%;
+    min-width: 680px;
+
+    border-collapse: separate;
+    border-spacing: 4px;
+}
+
+.capacity-heatmap thead th {
+    padding: 6px 8px;
+
+    color: var(--muted, #6c7b89);
+    font-size: 10px;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    white-space: nowrap;
+}
+
+.capacity-heatmap__unit {
+    min-width: 190px;
+
+    color: var(--navy, #073e75);
+    font-size: 12px;
+    font-weight: 700;
+    text-align: left;
+}
+
+.capacity-heatmap tbody th {
+    padding: 6px 8px;
+}
+
+.capacity-heatmap__cell {
+    position: relative;
+
+    padding: 8px 6px;
+
+    color: var(--navy, #073e75);
+    font-size: 12px;
+    font-weight: 800;
+    text-align: center;
+
+    border-radius: 7px;
+
+    cursor: default;
+
+    transition: transform 120ms ease, box-shadow 120ms ease;
+}
+
+.capacity-heatmap__cell:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(16, 47, 75, 0.14);
+}
+
+.capacity-heatmap__cell.is-ok {
+    background: var(--capacity-ok-bg);
+}
+
+.capacity-heatmap__cell.is-warning {
+    color: #7a5100;
+    background: var(--capacity-warn-bg);
+}
+
+.capacity-heatmap__cell.is-critical {
+    color: #fff;
+    background: linear-gradient(135deg, #d84343 0%, var(--capacity-danger) 100%);
+}
+
+/* Точка «есть черновик» в углу ячейки. */
+.capacity-heatmap__draft {
+    position: absolute;
+    top: 3px;
+    right: 3px;
+
+    width: 6px;
+    height: 6px;
+
+    background: var(--capacity-draft);
+    border-radius: 50%;
+}
+
+.capacity-heatmap__cell.is-critical .capacity-heatmap__draft {
+    background: #ffd08a;
+}
+
+/* ------------------------------------------------------------
+   Рекомендации
+   ------------------------------------------------------------ */
+
+.capacity-recs {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.capacity-rec {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+
+    padding: 12px 14px;
+
+    background: #fbfcfe;
+    border: 1px solid var(--line, #e3eaf1);
+    border-left: 4px solid var(--capacity-confirmed);
+    border-radius: 10px;
+}
+
+.capacity-rec--critical {
+    border-left-color: var(--capacity-danger);
+    background: linear-gradient(90deg, var(--capacity-danger-bg), #fbfcfe 40%);
+}
+
+.capacity-rec--warning {
+    border-left-color: var(--capacity-warn);
+    background: linear-gradient(90deg, var(--capacity-warn-bg), #fbfcfe 40%);
+}
+
+.capacity-rec--opportunity {
+    border-left-color: var(--capacity-ok);
+    background: linear-gradient(90deg, var(--capacity-ok-bg), #fbfcfe 40%);
+}
+
+.capacity-rec__icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+
+    flex: 0 0 auto;
+
+    width: 26px;
+    height: 26px;
+
+    color: #fff;
+    font-size: 13px;
+    font-weight: 800;
+
+    background: var(--capacity-confirmed);
+    border-radius: 50%;
+}
+
+.capacity-rec--critical .capacity-rec__icon {
+    background: var(--capacity-danger);
+}
+
+.capacity-rec--warning .capacity-rec__icon {
+    background: var(--capacity-warn);
+}
+
+.capacity-rec--opportunity .capacity-rec__icon {
+    background: var(--capacity-ok);
+}
+
+.capacity-rec__body {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.capacity-rec__body strong {
+    color: var(--navy, #073e75);
+    font-size: 12px;
+    font-weight: 800;
+}
+
+.capacity-rec__body span {
+    color: var(--text, #27394d);
+    font-size: 13px;
+}
+
+.capacity-rec__body small {
+    color: var(--muted, #6c7b89);
+    font-size: 11px;
+}
+
+/* ------------------------------------------------------------
+   Таблица «Не назначено»
+   ------------------------------------------------------------ */
+
+.capacity-counter {
+    padding: 5px 11px;
+
+    color: #7b1fa2;
+    font-size: 11px;
+    font-weight: 800;
+
+    background: rgba(123, 31, 162, 0.10);
+    border-radius: 999px;
+}
+
+.capacity-unassigned td strong {
+    color: var(--navy, #073e75);
+    font-weight: 700;
+}
+
+.capacity-unassigned .capacity-chip {
+    white-space: normal;
+    line-height: 1.35;
+    text-align: left;
+}
+
+/* ------------------------------------------------------------
+   Пустое состояние
+   ------------------------------------------------------------ */
+
+.capacity-empty {
+    margin: 0;
+    padding: 18px;
+
+    color: var(--muted, #6c7b89);
+    font-size: 13px;
+    text-align: center;
+
+    background: #f7fafc;
+    border: 1px dashed var(--line, #dce4eb);
+    border-radius: 10px;
+}
+
+/* ------------------------------------------------------------
+   Узкие экраны
+   ------------------------------------------------------------ */
+
+@media (max-width: 900px) {
+
+    .capacity-bar-row__head {
+        flex-direction: column;
+        gap: 6px;
+    }
+
+    .capacity-bar-row__numbers {
+        align-items: flex-start;
+        text-align: left;
+    }
+
+    .capacity-kpi {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
+@media (max-width: 560px) {
+
+    .capacity-kpi {
+        grid-template-columns: 1fr;
+    }
+
+    .capacity-period {
+        flex-wrap: wrap;
+    }
+}

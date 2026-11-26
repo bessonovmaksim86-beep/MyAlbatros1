@@ -1,0 +1,72 @@
+/* ============================================================
+   ФАКТИЧЕСКАЯ ПРОИЗВОДИТЕЛЬНОСТЬ (диспетчер)
+
+   Переиспользует стили capacity.css: .capacity-kpi, .capacity-bar,
+   .capacity-period, .capacity-chip, .capacity-legend, .capacity-empty.
+   Здесь только уникальные элементы.
+   ============================================================ */
+
+.actual-page {
+    --trend-ok: #2e7d32;
+    --trend-warn: #e59a00;
+    --trend-danger: #c62828;
+}
+
+/* ============================================================
+   ТРЕНД — дополнительные стили для столбчатой диаграммы
+   ============================================================ */
+
+.capacity-bar-row.is-over {
+    border-left: 3px solid var(--trend-danger);
+}
+
+.capacity-bar-row.is-under {
+    border-left: 3px solid var(--trend-ok);
+}
+
+.capacity-bar-row__trend {
+    font-size: 11px;
+    font-weight: 700;
+    margin-top: 2px;
+}
+
+.capacity-bar-row__trend.positive {
+    color: var(--trend-ok);
+}
+
+.capacity-bar-row__trend.negative {
+    color: var(--trend-danger);
+}
+
+/* ============================================================
+   ВЫПУСК — стили таблицы
+   ============================================================ */
+
+.data-table td strong {
+    color: var(--navy, #073e75);
+    font-weight: 700;
+}
+
+.data-table td small {
+    color: var(--muted, #6c7b89);
+    font-size: 11px;
+}
+
+/* ============================================================
+   Утилиты — статусы для просрочек
+   ============================================================ */
+
+.status.danger {
+    color: #fff;
+    background: var(--capacity-danger, #c62828);
+    padding: 3px 10px;
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 700;
+}
+
+.status {
+    color: var(--muted, #6c7b89);
+    font-size: 12px;
+    font-weight: 700;
+}
