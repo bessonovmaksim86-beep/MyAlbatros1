@@ -460,7 +460,13 @@ public class CapacityForecastService {
             LocalDate earliest,
             Map<Long, Map<LocalDate, BigDecimal>> occupied
     ) {
-        LocalDate start = nextWorkingDay(earliest.minusDays(1));
+        /*
+         * Операция не может начаться раньше earliest. Если earliest
+         * попадает на выходной, сдвигаем вперёд до рабочего дня;
+         * вычитать день нельзя — рабочий earliest тогда терялся,
+         * и операция начиналась на день раньше даты старта.
+         */
+        LocalDate start = nextWorkingDay(earliest);
 
         if (hours.signum() <= 0) {
             return new Placement(start, start, 0.0);

@@ -20,6 +20,9 @@
           th:href="@{/dispatcher/css/dispatcher.css}">
 
     <link rel="stylesheet"
+          th:href="@{/dispatcher/css/capacity.css}">
+
+    <link rel="stylesheet"
           th:href="@{/dispatcher/css/capacity-forecast.css}">
 </head>
 
@@ -46,10 +49,10 @@
                     <h1>Плановый расчёт выполнения</h1>
 
                     <p>
-                        Выберите изделие и количество — система
+                        Добавьте позиции — изделие и количество — система
                         рассчитает возможность изготовления по мощностям
                         цехов и покажет дату завершения с лимитирующими
-                        стадиями.
+                        стадиями по каждой позиции и по заказу целиком.
                     </p>
                 </div>
             </div>
@@ -63,6 +66,7 @@
 
                     <form th:action="@{/dispatcher/capacity/forecast}"
                           method="post"
+                          id="forecast-form"
                           class="forecast-form">
 
                         <input th:if="${_csrf != null}"
@@ -70,42 +74,63 @@
                                th:name="${_csrf.parameterName}"
                                th:value="${_csrf.token}">
 
-                        <div class="forecast-form__row">
+                        <!-- Позиции расчёта -->
+                        <div class="forecast-items"
+                             id="forecast-items">
 
-                            <label class="forecast-form__field forecast-form__field--wide">
-                                <span>Изделие</span>
+                            <div class="forecast-item"
+                                 th:each="item : ${items}">
 
-                                <select name="classifierId" required>
-                                    <option value="">— выберите изделие —</option>
+                                <label class="forecast-form__field forecast-form__field--wide">
+                                    <span>Изделие</span>
 
-                                    <option th:each="c : ${classifiers}"
-                                            th:value="${c.id}"
-                                            th:selected="${form != null and form.classifierId() == c.id}"
-                                            th:text="${(c.code != null ? c.code + ' — ' : '') + c.fullDisplayName}">
-                                        1212 — Датчик ДУУ2М
-                                    </option>
-                                </select>
-                            </label>
+                                    <select name="classifierIds">
+                                        <option value="">— выберите изделие —</option>
 
-                            <label class="forecast-form__field">
-                                <span>Количество, шт.</span>
+                                        <option th:each="c : ${classifiers}"
+                                                th:value="${c.id}"
+                                                th:selected="${item.classifierId() != null
+                                                        and item.classifierId() == c.id}"
+                                                th:text="${(c.code != null ? c.code + ' — ' : '') + c.fullDisplayName}">
+                                            1212 — Датчик ДУУ2М
+                                        </option>
+                                    </select>
+                                </label>
 
-                                <input type="number"
-                                       name="quantity"
-                                       min="1"
-                                       max="100000"
-                                       required
-                                       th:value="${form != null ? form.quantity() : 1}">
-                            </label>
+                                <label class="forecast-form__field forecast-form__field--qty">
+                                    <span>Количество, шт.</span>
+
+                                    <input type="number"
+                                           name="quantities"
+                                           min="1"
+                                           max="100000"
+                                           th:value="${item.quantity() > 0
+                                                   ? item.quantity() : 1}">
+                                </label>
+
+                                <button type="button"
+                                        class="forecast-item__remove"
+                                        title="Удалить позицию"
+                                        aria-label="Удалить позицию">&times;</button>
+                            </div>
+                        </div>
+
+                        <button type="button"
+                                class="btn secondary forecast-items__add"
+                                id="forecast-item-add">
+                            + Добавить позицию
+                        </button>
+
+                        <!-- Общий низ формы: дата, режим, расчёт -->
+                        <div class="forecast-form__bottom">
 
                             <label class="forecast-form__field">
                                 <span>Дата начала</span>
 
                                 <input type="date"
                                        name="startDate"
-                                       th:value="${form != null and form.startDate() != null
-                                               ? form.startDate()
-                                               : today}">
+                                       th:value="${startDate != null
+                                               ? startDate : today}">
                             </label>
 
                             <label class="forecast-form__check">
@@ -126,21 +151,53 @@
                 </div>
             </section>
 
+            <!--
+                Blueprint новой позиции: клонируется скриптом,
+                в отправку формы не попадает (template инертен).
+            -->
+            <template id="forecast-item-template">
+                <div class="forecast-item">
+
+                    <label class="forecast-form__field forecast-form__field--wide">
+                        <span>Изделие</span>
+
+                        <select name="classifierIds">
+                            <option value="">— выберите изделие —</option>
+
+                            <option th:each="c : ${classifiers}"
+                                    th:value="${c.id}"
+                                    th:text="${(c.code != null ? c.code + ' — ' : '') + c.fullDisplayName}">
+                                1212 — Датчик ДУУ2М
+                            </option>
+                        </select>
+                    </label>
+
+                    <label class="forecast-form__field forecast-form__field--qty">
+                        <span>Количество, шт.</span>
+
+                        <input type="number"
+                               name="quantities"
+                               min="1"
+                               max="100000"
+                               value="1">
+                    </label>
+
+                    <button type="button"
+                            class="forecast-item__remove"
+                            title="Удалить позицию"
+                            aria-label="Удалить позицию">&times;</button>
+                </div>
+            </template>
+
             <!-- =================================================
                  РЕЗУЛЬТАТ
                  ================================================= -->
-            <th:block th:if="${result != null}">
+            <th:block th:if="${aggregated != null}">
 
-                <!-- Ошибки / предупреждения -->
-                <div class="forecast-alert"
-                     th:each="w : ${result.warnings()}"
-                     th:text="${w}">
-                    Для изделия не задан техпроцесс.
-                </div>
-
-                <!-- Сводка -->
+                <!-- Сводка по заказу целиком -->
                 <div class="forecast-summary"
-                     th:classappend="${result.feasible()} ? ' is-feasible' : ' is-infeasible'">
+                     th:classappend="${aggregated.feasible()}
+                             ? ' is-feasible' : ' is-infeasible'">
 
                     <div class="forecast-summary__main">
 
@@ -148,8 +205,8 @@
 
                             <small>Заказ будет выполнен до</small>
 
-                            <strong th:text="${result.summary().finishDate() != null
-                                    ? #temporals.format(result.summary().finishDate(), 'dd.MM.yyyy')
+                            <strong th:text="${aggregated.finishDate() != null
+                                    ? #temporals.format(aggregated.finishDate(), 'dd.MM.yyyy')
                                     : '—'}">
                                 01.12.2026
                             </strong>
@@ -157,21 +214,29 @@
 
                         <div class="forecast-summary__info">
 
-                            <div>
+                            <div th:if="${#lists.size(results) == 1}">
                                 <small>Изделие</small>
 
-                                <strong th:text="${(result.summary().classifierCode() != null
-                                        ? result.summary().classifierCode() + ' — '
+                                <strong th:text="${(results[0].summary().classifierCode() != null
+                                        ? results[0].summary().classifierCode() + ' — '
                                         : '')
-                                        + result.summary().classifierName()}">
+                                        + results[0].summary().classifierName()}">
                                     1212 — Датчик
                                 </strong>
                             </div>
 
-                            <div>
-                                <small>Количество</small>
+                            <div th:if="${#lists.size(results) > 1}">
+                                <small>Позиций в расчёте</small>
 
-                                <strong th:text="${result.summary().quantity() + ' шт.'}">
+                                <strong th:text="${#lists.size(results)}">
+                                    2
+                                </strong>
+                            </div>
+
+                            <div>
+                                <small>Всего изделий</small>
+
+                                <strong th:text="${aggregated.totalQty() + ' шт.'}">
                                     10 шт.
                                 </strong>
                             </div>
@@ -179,7 +244,7 @@
                             <div>
                                 <small>Срок изготовления</small>
 
-                                <strong th:text="${result.summary().totalWorkingDays() + ' дн.'}">
+                                <strong th:text="${aggregated.totalWorkingDays() + ' дн.'}">
                                     15 дн.
                                 </strong>
                             </div>
@@ -187,7 +252,7 @@
                             <div>
                                 <small>Трудоёмкость</small>
 
-                                <strong th:text="${#numbers.formatDecimal(result.summary().totalLaborHours(), 1, 0) + ' ч'}">
+                                <strong th:text="${#numbers.formatDecimal(aggregated.totalLaborHours(), 1, 0) + ' ч'}">
                                     120 ч
                                 </strong>
                             </div>
@@ -195,163 +260,107 @@
                     </div>
 
                     <div class="forecast-summary__limiting"
-                         th:if="${result.summary().limitingOperation() != null
-                                 and result.summary().limitingOperation() != '—'}">
+                         th:if="${aggregated.limitingOperation() != null
+                                 and aggregated.limitingOperation() != '—'}">
 
                         <small>Лимитирующая стадия</small>
 
-                        <strong th:text="${result.summary().limitingOperation()}">
+                        <strong th:text="${aggregated.limitingOperation()}">
                             Пайка
                         </strong>
 
-                        <span th:text="${#numbers.formatDecimal(result.summary().limitingHours(), 1, 0) + ' ч'}">
+                        <span th:if="${#lists.size(results) > 1}"
+                              th:text="${aggregated.limitingClassifierName()}">
+                            Датчик
+                        </span>
+
+                        <span th:if="${#lists.size(results) == 1}"
+                              th:text="${#numbers.formatDecimal(aggregated.limitingHours(), 1, 0) + ' ч'}">
                             24 ч
                         </span>
                     </div>
                 </div>
 
-                <!-- План по неделям -->
+                <!-- Позиции расчёта -->
                 <section class="card"
-                         th:if="${not #lists.isEmpty(result.weeklyPlan())}">
+                         th:if="${#lists.size(results) > 1}">
 
                     <div class="card-head">
 
                         <div>
-                            <h2>План по неделям</h2>
+                            <h2>Позиции расчёта</h2>
 
                             <small>
-                                Распределение трудоёмкости заказа
-                                по неделям с учётом мощностей.
+                                Каждая позиция рассчитана по своим
+                                мощностям; общий срок — по самой долгой.
                             </small>
                         </div>
                     </div>
 
                     <div class="card-body">
 
-                        <div class="forecast-weeks">
-
-                            <div th:each="week : ${result.weeklyPlan()}"
-                                 class="forecast-week">
-
-                                <div class="forecast-week__label">
-
-                                    <strong th:text="${'Нед. ' + week.weekNumber()}">
-                                        Нед. 44
-                                    </strong>
-
-                                    <small th:text="${#temporals.format(week.weekFrom(), 'dd.MM')
-                                            + '–' + #temporals.format(week.weekTo(), 'dd.MM')}">
-                                        03.11–07.11
-                                    </small>
-                                </div>
-
-                                <div class="forecast-week__bar">
-
-                                    <span th:style="${'width: ' + week.barPercent() + '%'}">
-                                    </span>
-                                </div>
-
-                                <span class="forecast-week__hours"
-                                      th:text="${#numbers.formatDecimal(week.laborHours(), 1, 0) + ' ч'}">
-                                    12 ч
-                                </span>
-                            </div>
-                        </div>
-                    </div>
-                </section>
-
-                <!-- Операции -->
-                <section class="card">
-
-                    <div class="card-head">
-
-                        <div>
-                            <h2>Маршрут операций</h2>
-
-                            <small>
-                                Даты начала и окончания по каждой операции.
-                                Красным выделены лимитирующие стадии.
-                            </small>
-                        </div>
-                    </div>
-
-                    <div class="card-body">
-
-                        <div class="table-wrap"
-                             th:if="${not #lists.isEmpty(result.operations())}">
+                        <div class="table-wrap">
 
                             <table class="data-table forecast-table">
 
                                 <thead>
                                 <tr>
                                     <th>№</th>
-                                    <th>Операция</th>
-                                    <th>Цех</th>
-                                    <th>Норма, ч</th>
-                                    <th>На заказ, ч</th>
-                                    <th>Мощность, ч/дн.</th>
-                                    <th>Начало</th>
-                                    <th>Окончание</th>
-                                    <th>Загрузка</th>
+                                    <th>Изделие</th>
+                                    <th>Количество</th>
+                                    <th>Трудоёмкость</th>
+                                    <th>Завершение</th>
+                                    <th>Лимитирующая стадия</th>
+                                    <th>Статус</th>
                                 </tr>
                                 </thead>
 
                                 <tbody>
 
-                                <tr th:each="op : ${result.operations()}"
-                                    th:classappend="${op.limiting()} ? ' is-bottleneck'">
+                                <tr th:each="r, st : ${results}">
 
-                                    <td th:text="${op.position()}">1</td>
+                                    <td th:text="${st.count}">1</td>
 
                                     <td>
-                                        <strong th:text="${op.operationName()}">
-                                            Пайка
+                                        <strong th:text="${(r.summary().classifierCode() != null
+                                                ? r.summary().classifierCode() + ' — '
+                                                : '')
+                                                + r.summary().classifierName()}">
+                                            1212 — Датчик
                                         </strong>
 
-                                        <small th:text="${op.operationTypeName()}">
-                                            Сборка
+                                        <small th:text="${r.summary().productTypeName()}">
+                                            Датчик
                                         </small>
                                     </td>
 
-                                    <td th:text="${op.unitName()}">
-                                        Цех сборки
+                                    <td th:text="${r.summary().quantity() + ' шт.'}">
+                                        10 шт.
                                     </td>
 
-                                    <td th:text="${#numbers.formatDecimal(op.laborHours(), 1, 2)}">
-                                        0,50
+                                    <td th:text="${#numbers.formatDecimal(r.summary().totalLaborHours(), 1, 0) + ' ч'}">
+                                        120 ч
                                     </td>
 
-                                    <td th:text="${#numbers.formatDecimal(op.hoursForQty(), 1, 1)}">
-                                        5,0
-                                    </td>
-
-                                    <td th:text="${op.capacityEmployees() > 0
-                                            ? #numbers.formatDecimal(op.dailyCapacityHours(), 1, 0)
+                                    <td th:text="${r.summary().finishDate() != null
+                                            ? #temporals.format(r.summary().finishDate(), 'dd.MM.yyyy')
                                             : '—'}">
-                                        8
+                                        01.12.2026
                                     </td>
 
-                                    <td th:text="${op.start() != null
-                                            ? #temporals.format(op.start(), 'dd.MM.yyyy')
-                                            : '—'}">
-                                        01.11.2026
-                                    </td>
-
-                                    <td th:text="${op.finish() != null
-                                            ? #temporals.format(op.finish(), 'dd.MM.yyyy')
-                                            : '—'}">
-                                        05.11.2026
+                                    <td th:text="${r.summary().limitingOperation()}">
+                                        Пайка
                                     </td>
 
                                     <td>
                                         <span class="capacity-chip"
-                                              th:classappend="${op.loadPercent() > 100}
-                                                      ? ' capacity-chip--danger'
-                                                      : (${op.loadPercent() >= 85}
-                                                          ? ' capacity-chip--warn'
-                                                          : ' capacity-chip--ok')"
-                                              th:text="${#numbers.formatDecimal(op.loadPercent(), 1, 0)} + '%'">
-                                            75%
+                                              th:classappend="${r.feasible()}
+                                                      ? ' capacity-chip--ok'
+                                                      : ' capacity-chip--danger'"
+                                              th:text="${r.feasible()}
+                                                      ? 'Выполнимо'
+                                                      : 'Не выполнимо'">
+                                            Выполнимо
                                         </span>
                                     </td>
                                 </tr>
@@ -359,45 +368,235 @@
                                 </tbody>
                             </table>
                         </div>
-
-                        <p class="capacity-empty"
-                           th:if="${#lists.isEmpty(result.operations())}">
-                            Маршрут не содержит операций.
-                        </p>
                     </div>
                 </section>
 
-                <!-- Итог -->
-                <div class="forecast-verdict"
-                     th:classappend="${result.feasible()} ? ' is-ok' : ' is-bad'">
+                <!-- Детализация по каждой позиции -->
+                <details class="forecast-details"
+                         th:each="r : ${results}"
+                         th:attr="open=${#lists.size(results) == 1
+                                 ? 'open' : null}">
 
-                    <strong th:if="${result.feasible()}">
-                        ✓ Заказ выполним в рассчитанный срок
-                    </strong>
+                    <summary>
+                        <span class="forecast-details__title"
+                              th:text="${(r.summary().classifierCode() != null
+                                      ? r.summary().classifierCode() + ' — '
+                                      : '')
+                                      + r.summary().classifierName()}">
+                            1212 — Датчик ДУУ2М
+                        </span>
 
-                    <strong th:if="${!result.feasible()}">
-                        ✗ Заказ не выполним в пределах года
-                    </strong>
+                        <small th:text="${r.summary().quantity() + ' шт. · '
+                                + #numbers.formatDecimal(r.summary().totalLaborHours(), 1, 0) + ' ч · до '
+                                + (r.summary().finishDate() != null
+                                    ? #temporals.format(r.summary().finishDate(), 'dd.MM.yyyy')
+                                    : '—')}">
+                            10 шт. · 120 ч · до 01.12.2026
+                        </small>
+                    </summary>
 
-                    <span th:text="${'Дата завершения: '
-                            + (result.summary().finishDate() != null
-                                ? #temporals.format(result.summary().finishDate(), 'dd.MM.yyyy')
-                                : '—')
-                            + '. Лимитирующая стадия: '
-                            + result.summary().limitingOperation()}">
-                        Дата завершения: 01.12.2026
-                    </span>
-                </div>
+                    <div class="forecast-details__body">
+
+                        <!-- Ошибки / предупреждения позиции -->
+                        <div class="forecast-alert"
+                             th:each="w : ${r.warnings()}"
+                             th:text="${w}">
+                            Для изделия не задан техпроцесс.
+                        </div>
+
+                        <!-- План по неделям -->
+                        <section class="card"
+                                 th:if="${not #lists.isEmpty(r.weeklyPlan())}">
+
+                            <div class="card-head">
+
+                                <div>
+                                    <h2>План по неделям</h2>
+
+                                    <small>
+                                        Распределение трудоёмкости позиции
+                                        по неделям с учётом мощностей.
+                                    </small>
+                                </div>
+                            </div>
+
+                            <div class="card-body">
+
+                                <div class="forecast-weeks">
+
+                                    <div th:each="week : ${r.weeklyPlan()}"
+                                         class="forecast-week">
+
+                                        <div class="forecast-week__label">
+
+                                            <strong th:text="${'Нед. ' + week.weekNumber()}">
+                                                Нед. 44
+                                            </strong>
+
+                                            <small th:text="${#temporals.format(week.weekFrom(), 'dd.MM')
+                                                    + '–' + #temporals.format(week.weekTo(), 'dd.MM')}">
+                                                03.11–07.11
+                                            </small>
+                                        </div>
+
+                                        <div class="forecast-week__bar">
+
+                                            <span th:style="${'width: ' + week.barPercent() + '%'}">
+                                            </span>
+                                        </div>
+
+                                        <span class="forecast-week__hours"
+                                              th:text="${#numbers.formatDecimal(week.laborHours(), 1, 0) + ' ч'}">
+                                            12 ч
+                                        </span>
+                                    </div>
+                                </div>
+                            </div>
+                        </section>
+
+                        <!-- Операции -->
+                        <section class="card">
+
+                            <div class="card-head">
+
+                                <div>
+                                    <h2>Маршрут операций</h2>
+
+                                    <small>
+                                        Даты начала и окончания по каждой
+                                        операции. Красным выделены
+                                        лимитирующие стадии.
+                                    </small>
+                                </div>
+                            </div>
+
+                            <div class="card-body">
+
+                                <div class="table-wrap"
+                                     th:if="${not #lists.isEmpty(r.operations())}">
+
+                                    <table class="data-table forecast-table">
+
+                                        <thead>
+                                        <tr>
+                                            <th>№</th>
+                                            <th>Операция</th>
+                                            <th>Цех</th>
+                                            <th>Норма, ч</th>
+                                            <th>На заказ, ч</th>
+                                            <th>Мощность, ч/дн.</th>
+                                            <th>Начало</th>
+                                            <th>Окончание</th>
+                                            <th>Загрузка</th>
+                                        </tr>
+                                        </thead>
+
+                                        <tbody>
+
+                                        <tr th:each="op : ${r.operations()}"
+                                            th:classappend="${op.limiting()}
+                                                    ? ' is-bottleneck'">
+
+                                            <td th:text="${op.position()}">1</td>
+
+                                            <td>
+                                                <strong th:text="${op.operationName()}">
+                                                    Пайка
+                                                </strong>
+
+                                                <small th:text="${op.operationTypeName()}">
+                                                    Сборка
+                                                </small>
+                                            </td>
+
+                                            <td th:text="${op.unitName()}">
+                                                Цех сборки
+                                            </td>
+
+                                            <td th:text="${#numbers.formatDecimal(op.laborHours(), 1, 2)}">
+                                                0,50
+                                            </td>
+
+                                            <td th:text="${#numbers.formatDecimal(op.hoursForQty(), 1, 1)}">
+                                                5,0
+                                            </td>
+
+                                            <td th:text="${op.capacityEmployees() > 0
+                                                    ? #numbers.formatDecimal(op.dailyCapacityHours(), 1, 0)
+                                                    : '—'}">
+                                                8
+                                            </td>
+
+                                            <td th:text="${op.start() != null
+                                                    ? #temporals.format(op.start(), 'dd.MM.yyyy')
+                                                    : '—'}">
+                                                01.11.2026
+                                            </td>
+
+                                            <td th:text="${op.finish() != null
+                                                    ? #temporals.format(op.finish(), 'dd.MM.yyyy')
+                                                    : '—'}">
+                                                05.11.2026
+                                            </td>
+
+                                            <td>
+                                                <span class="capacity-chip"
+                                                      th:classappend="${op.loadPercent() > 100}
+                                                              ? ' capacity-chip--danger'
+                                                              : (${op.loadPercent() >= 85}
+                                                                  ? ' capacity-chip--warn'
+                                                                  : ' capacity-chip--ok')"
+                                                      th:text="${#numbers.formatDecimal(op.loadPercent(), 1, 0)} + '%'">
+                                                    75%
+                                                </span>
+                                            </td>
+                                        </tr>
+
+                                        </tbody>
+                                    </table>
+                                </div>
+
+                                <p class="capacity-empty"
+                                   th:if="${#lists.isEmpty(r.operations())}">
+                                    Маршрут не содержит операций.
+                                </p>
+                            </div>
+                        </section>
+
+                        <!-- Вердикт позиции -->
+                        <div class="forecast-verdict"
+                             th:classappend="${r.feasible()}
+                                     ? ' is-ok' : ' is-bad'">
+
+                            <strong th:if="${r.feasible()}">
+                                ✓ Заказ выполним в рассчитанный срок
+                            </strong>
+
+                            <strong th:if="${!r.feasible()}">
+                                ✗ Заказ не выполним в пределах года
+                            </strong>
+
+                            <span th:text="${'Дата завершения: '
+                                    + (r.summary().finishDate() != null
+                                        ? #temporals.format(r.summary().finishDate(), 'dd.MM.yyyy')
+                                        : '—')
+                                    + '. Лимитирующая стадия: '
+                                    + r.summary().limitingOperation()}">
+                                Дата завершения: 01.12.2026
+                            </span>
+                        </div>
+                    </div>
+                </details>
 
             </th:block>
 
             <!-- Начальное состояние -->
             <div class="forecast-placeholder"
-                 th:if="${result == null}">
+                 th:if="${aggregated == null}">
 
                 <div class="forecast-placeholder__icon">📊</div>
 
-                <h2>Выберите изделие и количество</h2>
+                <h2>Выберите изделия и количество</h2>
 
                 <p>
                     Система построит маршрут операций, распределит
@@ -413,6 +612,8 @@
 <th:block th:replace="~{dispatcher/fragments/layout
         :: commonScripts}">
 </th:block>
+
+<script th:src="@{/dispatcher/js/capacity-forecast.js}"></script>
 
 </body>
 </html>

@@ -85,6 +85,14 @@ public class CustomerOrderService {
     private static final Pattern NUMBERED =
             Pattern.compile("^ЗП-(\\d{4})-(\\d+)$");
 
+    /*
+     * Первое число подписи заказа 1С («№ 478 от 24.11.2026» → «478»):
+     * дата подписи цифрами богаче самого номера, поэтому берётся
+     * первое вхождение, а не все цифры строки.
+     */
+    private static final Pattern FIRST_NUMBER =
+            Pattern.compile("\\d+");
+
     /**
      * Действующие покупатели для выпадающего списка формы.
      */
@@ -192,6 +200,49 @@ public class CustomerOrderService {
 
         return NUMBER_PREFIX + year + "-"
                 + String.format("%0" + Math.max(3, String.valueOf(max + 1).length()) + "d", max + 1);
+    }
+
+    /**
+     * Номер заказа по номеру заказа покупателя в 1С.
+     *
+     * Импорт чек-листа Б24 заполняет карточку из внешнего документа,
+     * и диспетчер ищет заказ именно номером 1С: «ЗП-2026-478»
+     * опознаётся сразу, а порядковый «ЗП-2026-035» приходится
+     * сверять по примечанию. Поэтому номер договора 1С становится
+     * номером заказа, если он числовой.
+     *
+     * Год берётся текущий — тот же, что у nextNumber: нумерация
+     * ведётся по годам создания. Если номер уже занят (тот же заказ
+     * импортируют повторно или автономер до него дошёл), возвращается
+     * ближайший свободный номер: сохранение не должно падать на дубле,
+     * а примечание и «Номер договора» всё равно показывают источник.
+     */
+    public String numberForSourceOrder(String sourceOrderNumber) {
+        /*
+         * Номер — первое число подписи: «№ 478 от 24.11.2026» даёт
+         * «478», а не склейку «47824112026». Подпись без числа
+         * (пустая или из одних слов) оставляет автономер.
+         */
+        Matcher matcher = sourceOrderNumber == null
+                ? null
+                : FIRST_NUMBER.matcher(sourceOrderNumber);
+
+        if (matcher == null || !matcher.find()) {
+            return nextNumber();
+        }
+
+        String digits = matcher.group();
+
+        if (digits.length() > 6) {
+            return nextNumber();
+        }
+
+        String candidate = NUMBER_PREFIX + LocalDate.now().getYear()
+                + "-" + digits;
+
+        return customerOrderRepository.existsByNumber(candidate)
+                ? nextNumber()
+                : candidate;
     }
 
     /**

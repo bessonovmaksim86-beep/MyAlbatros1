@@ -12,6 +12,18 @@
     --forecast-ok-bg: rgba(46, 125, 50, 0.10);
     --forecast-warn-bg: rgba(229, 154, 0, 0.14);
     --forecast-danger-bg: rgba(198, 40, 40, 0.10);
+
+    /*
+     * Плашки .capacity-chip берут цвета из capacity.css;
+     * на этой странице .capacity-page нет, поэтому дублируем
+     * переменные здесь.
+     */
+    --capacity-ok: #2e7d32;
+    --capacity-warn: #e59a00;
+    --capacity-danger: #c62828;
+    --capacity-ok-bg: rgba(46, 125, 50, 0.10);
+    --capacity-warn-bg: rgba(229, 154, 0, 0.14);
+    --capacity-danger-bg: rgba(198, 40, 40, 0.10);
 }
 
 /* ------------------------------------------------------------
@@ -22,11 +34,82 @@
     margin-bottom: 22px;
 }
 
-.forecast-form__row {
+.forecast-items {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.forecast-item {
     display: flex;
     flex-wrap: wrap;
     align-items: flex-end;
     gap: 14px;
+
+    padding: 12px;
+
+    background: #fbfcfe;
+    border: 1px solid var(--line, #e3eaf1);
+    border-radius: 12px;
+}
+
+.forecast-item .forecast-form__field--wide {
+    flex: 1 1 320px;
+}
+
+.forecast-form__field--qty {
+    flex: 0 0 150px;
+}
+
+.forecast-item__remove {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+
+    width: 42px;
+    height: 42px;
+
+    color: var(--forecast-danger);
+    font-size: 22px;
+    font-weight: 700;
+    line-height: 1;
+
+    background: #fff;
+    border: 1px solid rgba(198, 40, 40, 0.30);
+    border-radius: 9px;
+    cursor: pointer;
+
+    transition: background 160ms ease, border-color 160ms ease;
+}
+
+.forecast-item__remove:hover {
+    background: var(--forecast-danger-bg);
+    border-color: var(--forecast-danger);
+}
+
+.forecast-items__add {
+    margin-top: 12px;
+    height: 38px;
+    padding: 0 18px;
+
+    font-size: 12px;
+    font-weight: 800;
+}
+
+.forecast-form__bottom {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    gap: 14px;
+
+    margin-top: 18px;
+    padding-top: 16px;
+
+    border-top: 1px dashed var(--line, #dce4eb);
+}
+
+.forecast-form__bottom .forecast-form__submit {
+    margin-left: auto;
 }
 
 .forecast-form__field {
@@ -385,6 +468,72 @@
 }
 
 /* ------------------------------------------------------------
+   Детализация по позициям
+   ------------------------------------------------------------ */
+
+.forecast-details {
+    margin-bottom: 16px;
+
+    background: #fff;
+    border: 1px solid var(--line, #dce4eb);
+    border-radius: 14px;
+    box-shadow: 0 10px 26px rgba(16, 47, 75, 0.07);
+    overflow: hidden;
+}
+
+.forecast-details > summary {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 10px;
+
+    padding: 16px 20px;
+
+    color: var(--navy, #073e75);
+    font-size: 14px;
+    font-weight: 800;
+
+    cursor: pointer;
+    list-style: none;
+    user-select: none;
+}
+
+.forecast-details > summary::-webkit-details-marker {
+    display: none;
+}
+
+.forecast-details > summary::before {
+    content: '▸';
+
+    color: var(--muted, #6c7b89);
+    font-size: 12px;
+
+    transition: transform 160ms ease;
+}
+
+.forecast-details[open] > summary::before {
+    transform: rotate(90deg);
+}
+
+.forecast-details > summary small {
+    color: var(--muted, #6c7b89);
+    font-size: 11px;
+    font-weight: 600;
+}
+
+.forecast-details__body {
+    padding: 0 20px 20px;
+}
+
+.forecast-details__body .card {
+    margin-bottom: 16px;
+}
+
+.forecast-details__body .forecast-verdict {
+    margin-top: 16px;
+}
+
+/* ------------------------------------------------------------
    Начальное состояние
    ------------------------------------------------------------ */
 
@@ -450,7 +599,23 @@
         min-width: 100%;
     }
 
+    .forecast-form__field--qty {
+        flex: 1 1 100%;
+    }
+
+    .forecast-item__remove {
+        width: 100%;
+    }
+
     .forecast-form__submit {
         width: 100%;
+    }
+
+    .forecast-details > summary {
+        padding: 14px 16px;
+    }
+
+    .forecast-details__body {
+        padding: 0 16px 16px;
     }
 }
