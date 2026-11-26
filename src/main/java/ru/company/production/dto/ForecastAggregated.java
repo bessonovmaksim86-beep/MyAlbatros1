@@ -8,13 +8,18 @@ import java.time.LocalDate;
  *
  * @param totalQty               суммарное количество
  * @param finishDate             расчётная дата завершения
- *                             (по последней позиции)
+ *                             (по последней позиции); null — срок
+ *                             определить нельзя
  * @param totalLaborHours        суммарная трудоёмкость, нормо-ч
  * @param limitingClassifierName изделие, которое лимитирует срок
  * @param limitingOperation      лимитирующая операция
  * @param limitingHours          трудоёмкость лимитирующей операции
  * @param totalWorkingDays       рабочих дней до завершения
  * @param feasible               выполним ли в пределах горизонта
+ * @param priorityName           название приоритета расчёта
+ * @param priorityBadgeClass     CSS-класс бейджа приоритета
+ * @param missingCapacityOperations позиций без мощности — срок
+ *                               недостоверен
  */
 public record ForecastAggregated(
         int totalQty,
@@ -24,6 +29,9 @@ public record ForecastAggregated(
         String limitingOperation,
         BigDecimal limitingHours,
         int totalWorkingDays,
-        boolean feasible
+        boolean feasible,
+        String priorityName,
+        String priorityBadgeClass,
+        int missingCapacityOperations
 ) {
 }

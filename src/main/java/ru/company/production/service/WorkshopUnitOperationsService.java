@@ -10,6 +10,7 @@ import ru.company.production.entity.AppUser;
 import ru.company.production.entity.Operation;
 import ru.company.production.entity.OrganizationUnit;
 import ru.company.production.entity.ProductType;
+import ru.company.production.entity.Role;
 import ru.company.production.entity.WorkPlace;
 import ru.company.production.repository.OrganizationUnitRepository;
 import ru.company.production.repository.RouteOperationProbe;
@@ -46,6 +47,65 @@ public class WorkshopUnitOperationsService {
     private final OrganizationUnitRepository organizationUnitRepository;
     private final TechProcessOperationRepository routeOperationRepo;
     private final WorkshopStaffBindingRepository bindingRepo;
+
+    /*
+     * Роли, которым нужно предупреждение о неприсвоенных операциях.
+     *
+     * Это руководители тех подразделений, где работу закрепляют за
+     * конкретным человеком: цеха, бюро технического контроля, отдел
+     * метрологии и склад готовой продукции. Операция маршрута без
+     * исполнителя для них — дыра в плане: работу никто не возьмёт, и
+     * она простоит в очереди до срыва срока.
+     *
+     * Руководителей складов полуфабрикатов и комплектации и бюро
+     * входного контроля в перечень не включали: в бюро строку берут из
+     * общего перечня подразделения, а не закрепляют за человеком
+     * (см. AccessRoles#DISTRIBUTION_MANAGERS), и «операция без
+     * исполнителя» для них обычное состояние, а не нарушение.
+     */
+    private static final Set<Role> UNASSIGNED_WARNING_ROLES = Set.of(
+            Role.SDP_SPP_MASTER,
+            Role.SDP_SA_MASTER,
+            Role.SDP_SC_MASTER,
+            Role.SDP_ST_MASTER,
+            Role.BTK_MASTER,
+            Role.SGM_MASTER,
+            Role.SGP_MASTER
+    );
+
+    /**
+     * Нужно ли предупреждение о неприсвоенных операциях роли
+     * руководителя.
+     *
+     * Признак публичный: его читают {@code WorkshopViewAdvice} (баннер
+     * в шапке модуля) и {@code GlobalNotificationService} (всплывающее
+     * уведомление), чтобы перечень ролей жил в одном месте, а не
+     * дублировался в двух признаках, которые обязано совпадать.
+     */
+    public static boolean warnsOnUnassigned(Role role) {
+        return role != null && UNASSIGNED_WARNING_ROLES.contains(role);
+    }
+
+    /**
+     * Сколько операций маршрутов подразделения закреплено ни за одним
+     * сотрудником — число для баннера и уведомления.
+     *
+     * В отличие от {@link #findUnassignedOperations(AppUser)} не
+     * требует заполненной карточки подразделения: счётчик читается на
+     * каждом экране модуля, и страница ради цифры не должна падать с
+     * «обратитесь к администратору» — пустая граница и есть ответ
+     * «предупреждать не о чем».
+     */
+    @Transactional(readOnly = true)
+    public long countUnassignedOperations(AppUser supervisor) {
+        List<Long> scope = staffService.unitScope(supervisor);
+
+        if (scope.isEmpty()) {
+            return 0L;
+        }
+
+        return routeOperationRepo.countUnassignedForUnits(scope);
+    }
 
     /**
      * Операции подразделения — список раздела

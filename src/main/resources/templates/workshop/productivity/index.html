@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="ru"
+      xmlns:th="http://www.thymeleaf.org">
+
+<head>
+    <meta charset="UTF-8">
+
+    <meta name="viewport"
+          content="width=device-width, initial-scale=1">
+
+    <title>Статистика производительности</title>
+
+    <link rel="stylesheet"
+          th:href="@{/technology/css/technology.css}">
+
+    <link rel="stylesheet"
+          th:href="@{/technology/css/common.css}">
+
+    <link rel="stylesheet"
+          th:href="@{/workshop/css/workshop.css}">
+</head>
+
+<body>
+
+<div class="app-shell">
+
+    <aside th:replace="${isSKGeneral}
+            ? ~{quality/fragments/layout :: sidebar(${activePage})}
+            : ~{workshop/fragments/layout :: sidebar('productivity')}">
+    </aside>
+
+    <main class="main">
+
+        <header th:replace="${isSKGeneral}
+                ? ~{quality/fragments/layout :: topbar}
+                : ~{workshop/fragments/layout :: topbar}">
+        </header>
+
+        <div class="page-content workshop-page">
+
+            <div class="page-head">
+
+                <div class="page-title">
+
+                    <h1>Статистика производительности</h1>
+
+                    <p th:text="${
+                        workshopName != null
+                            ? workshopName + ': закрытые часы к отработанному времени'
+                            : 'Закрытые часы к отработанному времени'
+                    }">
+                        Цех подготовки производства: закрытые часы к отработанному времени
+                    </p>
+
+                </div>
+
+                <div class="page-head-actions">
+
+                    <a class="btn secondary"
+                       th:href="@{/workshop/without-plan}">
+                        Работа без плана
+                    </a>
+
+                </div>
+
+            </div>
+
+            <div class="alert success"
+                 th:if="${successMessage}"
+                 th:text="${successMessage}">
+            </div>
+
+            <div class="alert danger"
+                 th:if="${errorMessage}"
+                 th:text="${errorMessage}">
+            </div>
+
+            <!--
+                ============================================================
+                ПЕРИОД
+                ============================================================
+            -->
+            <section class="card">
+
+                <div class="card-body">
+
+                    <form method="get"
+                          th:action="@{/workshop/productivity}"
+                          class="workshop-filter">
+
+                        <label class="workshop-filter__field">
+                            Месяц
+                            <select name="month">
+                                <option value="">— текущий —</option>
+                                <option th:each="opt : ${monthOptions}"
+                                        th:value="${opt.value}"
+                                        th:text="${opt.label}"
+                                        th:selected="${opt.value == selectedMonth}">
+                                </option>
+                            </select>
+                        </label>
+
+                        <label class="workshop-filter__field">
+                            Начало промежутка
+                            <input type="date"
+                                   name="from"
+                                   th:value="${from}">
+                        </label>
+
+                        <span class="workshop-filter__dash">—</span>
+
+                        <label class="workshop-filter__field">
+                            Конец промежутка
+                            <input type="date"
+                                   name="to"
+                                   th:value="${to}">
+                        </label>
+
+                        <button type="submit" class="btn primary">
+                            Показать
+                        </button>
+
+                        <a class="btn secondary"
+                           th:href="@{/workshop/productivity}">
+                            Сбросить
+                        </a>
+
+                    </form>
+
+                </div>
+
+            </section>
+
+            <!--
+                ============================================================
+                ПРОИЗВОДИТЕЛЬНОСТЬ СОТРУДНИКОВ
+                ============================================================
+            -->
+            <section class="card">
+
+                <div class="card-head">
+
+                    <div>
+
+                        <h2>Производительность сотрудников</h2>
+
+                        <p th:text="${
+                            'Период: ' + #temporals.format(from, 'dd.MM.yyyy')
+                            + ' — ' + #temporals.format(to, 'dd.MM.yyyy')
+                            + '; норма 8 часов за рабочий день'
+                        }">
+                            Период: 01.11.2026 — 30.11.2026; норма 8 часов за рабочий день
+                        </p>
+
+                    </div>
+
+                </div>
+
+                <div class="card-body">
+
+                    <div class="table-wrap">
+
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>№</th>
+                                    <th>Сотрудник</th>
+                                    <th>Назначено, ч</th>
+                                    <th>Закрыто, ч</th>
+                                    <th>Без плана, ч</th>
+                                    <th>Рабочих дней</th>
+                                    <th>Производительность</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr th:each="row, iterStat : ${productivityRows}">
+                                    <td th:text="${iterStat.count}">1</td>
+                                    <td th:text="${row.fullName()}">Иванов И. И.</td>
+                                    <td class="workshop-num"
+                                        th:text="${
+                                            row.plannedHours() != null
+                                                ? #numbers.formatDecimal(
+                                                      row.plannedHours(), 1, 2)
+                                                : '—'
+                                        }">0.00</td>
+                                    <td class="workshop-num"
+                                        th:text="${
+                                            row.factHours() != null
+                                                ? #numbers.formatDecimal(
+                                                      row.factHours(), 1, 2)
+                                                : '—'
+                                        }">0.00</td>
+                                    <td class="workshop-num"
+                                        th:text="${
+                                            row.unassignedHours() != null
+                                                ? #numbers.formatDecimal(
+                                                      row.unassignedHours(), 1, 2)
+                                                : '—'
+                                        }">0.00</td>
+                                    <td class="workshop-num"
+                                        th:text="${
+                                            row.workedDays() != null
+                                                ? #numbers.formatDecimal(
+                                                      row.workedDays(), 1, 0)
+                                                : '—'
+                                        }">0</td>
+                                    <td class="workshop-num"
+                                        th:classappend="${
+                                            row.productivity() != null
+                                            and row.productivity() >= 100
+                                        } ? 'is-success' : (${
+                                            row.productivity() != null
+                                            and row.productivity() < 80
+                                        } ? 'is-danger' : '')"
+                                        th:text="${
+                                            row.productivity() != null
+                                                ? #numbers.formatDecimal(
+                                                      row.productivity(), 1, 1) + '%'
+                                                : '—'
+                                        }">0.0%</td>
+                                </tr>
+                                <tr th:if="${#lists.isEmpty(productivityRows)}">
+                                    <td colspan="7" class="empty">
+                                        Нет данных за выбранный период
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+
+                    </div>
+
+                </div>
+
+            </section>
+
+            <!--
+                ============================================================
+                РАЗРЕЗ «СОТРУДНИК — ОПЕРАЦИЯ»
+                ============================================================
+            -->
+            <section class="card">
+
+                <div class="card-head">
+
+                    <div>
+
+                        <h2>Сотрудники и операции</h2>
+
+                        <p>
+                            Закрытые операции сотрудника за тот же период,
+                            от больших к меньшим
+                        </p>
+
+                    </div>
+
+                </div>
+
+                <div class="card-body">
+
+                    <div class="table-wrap">
+
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Сотрудник</th>
+                                    <th>Операция</th>
+                                    <th>Количество</th>
+                                    <th>Часы</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr th:each="row : ${operationRows}">
+                                    <td th:text="${row.employeeName()}">Иванов И. И.</td>
+                                    <td th:text="${row.operationName()}">Сборка</td>
+                                    <td class="workshop-num"
+                                        th:text="${row.completedCount()}">5</td>
+                                    <td class="workshop-num"
+                                        th:text="${
+                                            row.totalHours() != null
+                                                ? #numbers.formatDecimal(
+                                                      row.totalHours(), 1, 2)
+                                                : '—'
+                                        }">0.00</td>
+                                </tr>
+                                <tr th:if="${#lists.isEmpty(operationRows)}">
+                                    <td colspan="4" class="empty">
+                                        Нет данных за выбранный период
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+
+                    </div>
+
+                </div>
+
+            </section>
+
+        </div>
+
+    </main>
+
+</div>
+
+<th:block th:replace="${isSKGeneral}
+        ? ~{quality/fragments/layout :: commonScripts}
+        : ~{workshop/fragments/layout :: commonScripts}">
+</th:block>
+
+</body>
+</html>

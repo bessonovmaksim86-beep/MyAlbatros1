@@ -110,6 +110,26 @@ public class SecurityConfig {
                         .requestMatchers("/workshop", "/workshop/**")
                         .hasAnyRole(AccessRoles.UNIT_MANAGERS)
                         /*
+                         * Статистика производительности и работа без плана
+                         * — подразделение цехового модуля.
+                         */
+                        .requestMatchers(
+                                HttpMethod.GET,
+                                "/workshop/productivity",
+                                "/workshop/productivity/**",
+                                "/workshop/without-plan",
+                                "/workshop/without-plan/**"
+                        )
+                        .hasAnyRole(AccessRoles.UNIT_MANAGERS)
+                        .requestMatchers(
+                                HttpMethod.POST,
+                                "/workshop/productivity",
+                                "/workshop/productivity/**",
+                                "/workshop/without-plan",
+                                "/workshop/without-plan/**"
+                        )
+                        .hasAnyRole(AccessRoles.UNIT_MANAGERS)
+                        /*
                          * Склад: раздел 7.
                          */
                         .requestMatchers("/warehouse", "/warehouse/**")

@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="ru"
+      xmlns:th="http://www.thymeleaf.org">
+
+<head>
+    <meta charset="UTF-8">
+
+    <meta name="viewport"
+          content="width=device-width, initial-scale=1">
+
+    <title>Работа без плана</title>
+
+    <link rel="stylesheet"
+          th:href="@{/technology/css/technology.css}">
+
+    <link rel="stylesheet"
+          th:href="@{/technology/css/common.css}">
+
+    <link rel="stylesheet"
+          th:href="@{/workshop/css/workshop.css}">
+</head>
+
+<body>
+
+<div class="app-shell">
+
+    <aside th:replace="${isSKGeneral}
+            ? ~{quality/fragments/layout :: sidebar(${activePage})}
+            : ~{workshop/fragments/layout :: sidebar('withoutPlan')}">
+    </aside>
+
+    <main class="main">
+
+        <header th:replace="${isSKGeneral}
+                ? ~{quality/fragments/layout :: topbar}
+                : ~{workshop/fragments/layout :: topbar}">
+        </header>
+
+        <div class="page-content workshop-page">
+
+            <div class="page-head">
+
+                <div class="page-title">
+
+                    <h1>Работа без плана</h1>
+
+                    <p>
+                        Выработка за операции, которых не было в
+                        производственном плане
+                    </p>
+
+                </div>
+
+                <div class="page-head-actions">
+
+                    <a class="btn secondary"
+                       th:href="@{/workshop/productivity}">
+                        Статистика производительности
+                    </a>
+
+                </div>
+
+            </div>
+
+            <div class="alert success"
+                 th:if="${successMessage}"
+                 th:text="${successMessage}">
+            </div>
+
+            <div class="alert danger"
+                 th:if="${errorMessage}"
+                 th:text="${errorMessage}">
+            </div>
+
+            <!--
+                ============================================================
+                НОВАЯ ЗАПИСЬ
+                ============================================================
+            -->
+            <section class="card">
+
+                <div class="card-head">
+
+                    <div>
+
+                        <h2>Новая запись</h2>
+
+                        <p>
+                            Запись учитывается только в статистике
+                            производительности и не меняет план, задания
+                            или маршрутные листы
+                        </p>
+
+                    </div>
+
+                </div>
+
+                <div class="card-body">
+
+                    <form method="post"
+                          th:action="@{/workshop/without-plan}"
+                          th:object="${form}">
+
+                        <input th:if="${_csrf != null}"
+                               type="hidden"
+                               th:name="${_csrf.parameterName}"
+                               th:value="${_csrf.token}">
+
+                        <div class="form-grid">
+
+                            <div class="field">
+
+                                <label for="employeeId">Сотрудник</label>
+
+                                <select id="employeeId"
+                                        th:field="*{employeeId}"
+                                        required>
+
+                                    <option value="">— выберите —</option>
+
+                                    <option th:each="member : ${employees}"
+                                            th:value="${member.id}"
+                                            th:text="${
+                                                member.fullName
+                                                + (member.specialty != null
+                                                   and !#strings.isEmpty(member.specialty)
+                                                       ? ' — ' + member.specialty
+                                                       : '')
+                                            }">
+                                        Иванов И. И.
+                                    </option>
+
+                                </select>
+
+                            </div>
+
+                            <div class="field">
+
+                                <label for="workDate">Дата работы</label>
+
+                                <input type="date"
+                                       id="workDate"
+                                       th:field="*{workDate}"
+                                       th:max="${
+                                           #temporals.format(
+                                               today, 'yyyy-MM-dd')
+                                       }"
+                                       required>
+
+                            </div>
+
+                            <div class="field span-2">
+
+                                <label for="operationName">
+                                    Наименование операции
+                                </label>
+
+                                <input type="text"
+                                       id="operationName"
+                                       th:field="*{operationName}"
+                                       placeholder="Например: доработка жгута по эскизу"
+                                       maxlength="255"
+                                       required>
+
+                                <small class="field-hint">
+                                    Свободный текст: операцию не нужно
+                                    заранее заводить в справочнике
+                                </small>
+
+                            </div>
+
+                            <div class="field">
+
+                                <label for="normHours">Норма, часов</label>
+
+                                <input type="number"
+                                       id="normHours"
+                                       th:field="*{normHours}"
+                                       step="0.001"
+                                       min="0.001"
+                                       placeholder="0.5"
+                                       required>
+
+                                <small class="field-hint">
+                                    Десятичная доля часа на одну штуку:
+                                    0.5 — это полчаса
+                                </small>
+
+                            </div>
+
+                            <div class="field">
+
+                                <label for="quantity">Количество</label>
+
+                                <input type="number"
+                                       id="quantity"
+                                       th:field="*{quantity}"
+                                       min="1"
+                                       step="1"
+                                       placeholder="1"
+                                       required>
+
+                                <small class="field-hint">
+                                    Норма и количество не должны превышать
+                                    остаток рабочего дня сотрудника
+                                </small>
+
+                            </div>
+
+                        </div>
+
+                        <div class="form-actions">
+
+                            <a class="btn secondary"
+                               th:href="@{/workshop/without-plan}">
+                                Очистить
+                            </a>
+
+                            <button type="submit" class="btn primary">
+                                Записать
+                            </button>
+
+                        </div>
+
+                    </form>
+
+                </div>
+
+            </section>
+
+        </div>
+
+    </main>
+
+</div>
+
+<th:block th:replace="${isSKGeneral}
+        ? ~{quality/fragments/layout :: commonScripts}
+        : ~{workshop/fragments/layout :: commonScripts}">
+</th:block>
+
+</body>
+</html>

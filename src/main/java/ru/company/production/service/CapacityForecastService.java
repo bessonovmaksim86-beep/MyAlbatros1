@@ -9,12 +9,16 @@ import ru.company.production.dto.ForecastOperationRow;
 import ru.company.production.dto.ForecastSummary;
 import ru.company.production.dto.ForecastWeekRow;
 import ru.company.production.entity.AppUser;
+import ru.company.production.entity.HolidayDay;
 import ru.company.production.entity.Operation;
+import ru.company.production.entity.OrderPriority;
 import ru.company.production.entity.ProductClassifier;
 import ru.company.production.entity.ScheduleRowStatus;
 import ru.company.production.entity.TechProcess;
 import ru.company.production.entity.TechProcessClassifier;
 import ru.company.production.entity.TechProcessOperation;
+import ru.company.production.repository.HolidayDayRepository;
+import ru.company.production.repository.OrderPriorityRepository;
 import ru.company.production.repository.OrderScheduleRowRepository;
 import ru.company.production.repository.ProductClassifierRepository;
 import ru.company.production.repository.TechProcessClassifierRepository;
@@ -25,29 +29,43 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.DayOfWeek;
 import java.time.LocalDate;
-import java.time.temporal.ChronoUnit;
 import java.time.temporal.WeekFields;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Deque;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * Плановый расчёт выполнения — калькулятор возможностей цехов.
  *
- * Диспетчер выбирает изделие, количество и дату начала, а сервис
- * прогоняет маршрут операций по мощностям: для каждой операции берёт
- * цех-хозяина, считает мощность (сотрудники × 8 ч) и свободное время
+ * Диспетчер выбирает изделие, количество, дату начала и приоритет,
+ * а сервис прогоняет маршрут операций по мощностям: для каждой
+ * операции берёт цех-хозяина, считает мощность (сотрудники × 8 ч,
+ * ограниченную допустимой загрузкой приоритета) и свободное время
  * с учётом уже внесённого плана (CONFIRMED строки графика), затем
- * размещает часы по рабочим дням. Результат — дата завершения и
- * лимитирующая стадия.
+ * размещает часы по рабочим дням.
  *
- * Расчёт намеренно повторяет формулу мощности планировщика
- * ({@link OrderSchedulingService}): люди × 8 часов, чтобы прогноз
- * диспетчера и даты плана заказа не расходились.
+ * ПРИОРИТЕТ. Параметры берутся из справочника order_priorities —
+ * того же, что использует планировщик заказов (OrderSchedulingService):
+ *
+ *   start_days             — запуск: через сколько рабочих дней после
+ *                            выбранной даты начинать первые операции;
+ *   transition_days        — межоперационные переходы: пауза между
+ *                            окончанием операции и началом следующей;
+ *   max_load_percent       — допустимая загрузка цеха: доля мощности,
+ *                            которую можно занять работой;
+ *   max_manufacturing_days — отсечка изготовления: если расчётный срок
+ *                            превышает её, заказ не укладывается в срок.
+ *
+ * ДОСТОВЕРНОСТЬ СРОКА. Если операция не привязана к цеху или в цехе
+ * нет сотрудников, срок определить нельзя: такая операция не получает
+ * дату, а сводка возвращает finishDate = null. Иначе диспетчер прочитал
+ * бы «заказ будет выполнен сегодня» там, где мощность нулевая.
  *
  * ОГРАНИЧЕНИЯ. Прогноз не учитывает отсутствия сотрудников по
  * календарю (отпуска, больничные) — это оценка «сверху», а не
@@ -68,18 +86,23 @@ public class CapacityForecastService {
     /** Сколько недель показывать в недельном плане. */
     private static final int MAX_PLAN_WEEKS = 26;
 
+    /** Приоритет по умолчанию, если диспетчер не выбрал другой. */
+    private static final String DEFAULT_PRIORITY_CODE = "ORDINARY";
+
     private final TechProcessRepository techProcessRepository;
     private final TechProcessClassifierRepository
             techProcessClassifierRepository;
     private final ProductClassifierRepository
             productClassifierRepository;
     private final OrderScheduleRowRepository scheduleRowRepository;
+    private final OrderPriorityRepository orderPriorityRepository;
+    private final HolidayDayRepository holidayDayRepository;
     private final UserRepository userRepository;
 
     /**
      * Расчёт возможности изготовления.
      *
-     * @param form       изделие, количество, дата начала
+     * @param form       изделие, количество, дата начала, приоритет
      * @param ignoreLoad не учитывать уже внесённый план (CONFIRMED)
      */
     @Transactional(readOnly = true)
@@ -88,7 +111,7 @@ public class CapacityForecastService {
             boolean ignoreLoad
     ) {
         int quantity = Math.max(1, form.quantity());
-        LocalDate startDate = form.startDate() != null
+        LocalDate requestedStart = form.startDate() != null
                 ? form.startDate()
                 : LocalDate.now();
 
@@ -101,14 +124,14 @@ public class CapacityForecastService {
                     .orElse(null);
 
         if (classifier == null) {
-            return emptyResult(quantity, startDate, warnings,
+            return emptyResult(quantity, requestedStart, warnings,
                     "Изделие не найдено — выберите его из справочника.");
         }
 
         TechProcess process = resolveProcess(classifier, warnings);
 
         if (process == null) {
-            return emptyResult(quantity, startDate, warnings,
+            return emptyResult(quantity, requestedStart, warnings,
                     "Для изделия «" + classifier.getDisplayName()
                             + "» не задан техпроцесс. "
                             + "Сначала создайте маршрут операций.");
@@ -117,10 +140,39 @@ public class CapacityForecastService {
         List<TechProcessOperation> route = orderedRoute(process);
 
         if (route.isEmpty()) {
-            return emptyResult(quantity, startDate, warnings,
+            return emptyResult(quantity, requestedStart, warnings,
                     "Техпроцесс " + process.getCode()
                             + " не содержит операций.");
         }
+
+        /*
+         * Приоритет: правила запуска, переходов и загрузки.
+         */
+        OrderPriority priority = resolvePriority(form.priorityId(), warnings);
+
+        int startDays = priority == null || priority.getStartDays() == null
+                ? 0
+                : Math.max(0, priority.getStartDays());
+        int transitionDays =
+                priority == null || priority.getTransitionDays() == null
+                        ? 0
+                        : Math.max(0, priority.getTransitionDays());
+        int maxLoadPercent =
+                priority == null || priority.getMaxLoadPercent() == null
+                        ? 100
+                        : Math.max(1, Math.min(100,
+                                priority.getMaxLoadPercent()));
+
+        /*
+         * Календарь рабочих дней: выходные и праздники.
+         */
+        WorkingCalendar calendar = loadCalendar(
+                requestedStart,
+                requestedStart.plusDays(MAX_DAYS_AHEAD)
+        );
+
+        LocalDate startDate = plusWorkingDays(
+                requestedStart, startDays, calendar);
 
         /*
          * Мощность цехов и текущая загрузка.
@@ -142,7 +194,8 @@ public class CapacityForecastService {
         List<ForecastOperationRow> rows = new ArrayList<>();
 
         BigDecimal totalLabor = BigDecimal.ZERO;
-        LocalDate overallFinish = startDate;
+        LocalDate overallFinish = null;
+        int missingCapacity = 0;
 
         for (TechProcessOperation node : route) {
             Operation operation = node.getOperation();
@@ -173,8 +226,15 @@ public class CapacityForecastService {
                     ? 0
                     : employeesByUnit.getOrDefault(unitId, 0);
 
+            /*
+             * Мощность цеха: люди × 8 ч, ограниченная допустимой
+             * загрузкой приоритета. 100 % — полная мощность,
+             * 90 % — пятая часть дня остаётся на прочую работу.
+             */
             BigDecimal dailyCapacity = WORKDAY_HOURS
-                    .multiply(BigDecimal.valueOf(employees));
+                    .multiply(BigDecimal.valueOf(employees))
+                    .multiply(BigDecimal.valueOf(maxLoadPercent))
+                    .divide(BigDecimal.valueOf(100), 2, RoundingMode.HALF_UP);
 
             /*
              * Потолок оборудования: daily_limit выполнений в день ×
@@ -206,7 +266,8 @@ public class CapacityForecastService {
             }
 
             /*
-             * Начало: после предшественников и не раньше даты старта.
+             * Начало: после предшественников (с паузой переходов)
+             * и не раньше даты старта.
              */
             LocalDate earliest = startDate;
 
@@ -216,22 +277,58 @@ public class CapacityForecastService {
                         : finishByNode.get(predecessor.getId());
 
                 if (predFinish != null) {
-                    LocalDate next = nextWorkingDay(predFinish);
+                    LocalDate next = plusWorkingDays(
+                            predFinish, transitionDays + 1, calendar);
                     if (next.isAfter(earliest)) {
                         earliest = next;
                     }
                 }
             }
 
-            if (unitId == null) {
-                warnings.add("«" + operation.getOperationName().getName()
-                        + "»: операция не привязана к цеху — "
-                        + "срок рассчитан без ограничения мощности.");
-            } else if (employees == 0) {
-                warnings.add("«" + operation.getOperationName().getName()
-                        + "»: в цехе «" + unitName
-                        + "» нет сотрудников — мощность нулевая, "
-                        + "срок может быть занижен.");
+            /*
+             * Нулевая мощность: срок определить нельзя. Операция
+             * не получает дату, а сводка помечает расчёт
+             * недостоверным — иначе «весь объём за один день»
+             * выдал бы фиктивный срок.
+             */
+            if (unitId == null || employees == 0) {
+                missingCapacity++;
+
+                if (unitId == null) {
+                    warnings.add("«" + operation.getOperationName().getName()
+                            + "»: операция не привязана к цеху — "
+                            + "срок по ней определить нельзя.");
+                } else {
+                    warnings.add("«" + operation.getOperationName().getName()
+                            + "»: в цехе «" + unitName
+                            + "» нет сотрудников — срок по нему "
+                            + "определить нельзя.");
+                }
+
+                rows.add(new ForecastOperationRow(
+                        node.getPosition() != null ? node.getPosition() : 0,
+                        operation.getOperationName().getCode(),
+                        operation.getOperationName().getName(),
+                        operation.getOperationType().getName(),
+                        unitName,
+                        serviceCode,
+                        labor,
+                        machine,
+                        dailyLimit,
+                        hoursForQty,
+                        employees,
+                        dailyCapacity,
+                        dayLimit,
+                        null,
+                        null,
+                        0.0,
+                        false,
+                        unitId == null
+                                ? "Операция не привязана к цеху"
+                                : "В цехе нет сотрудников"
+                ));
+
+                continue;
             }
 
             Placement placement = placeOperation(
@@ -239,12 +336,14 @@ public class CapacityForecastService {
                     hoursForQty,
                     dayLimit,
                     earliest,
-                    occupied
+                    occupied,
+                    calendar
             );
 
             finishByNode.put(node.getId(), placement.finish);
 
-            if (placement.finish.isAfter(overallFinish)) {
+            if (overallFinish == null
+                    || placement.finish.isAfter(overallFinish)) {
                 overallFinish = placement.finish;
             }
 
@@ -268,13 +367,25 @@ public class CapacityForecastService {
                     placement.finish,
                     placement.loadPercent,
                     false,
-                    unitId == null
-                            ? "Операция не привязана к цеху"
-                            : (employees == 0
-                                    ? "В цехе нет сотрудников"
-                                    : null)
+                    null
             ));
         }
+
+        boolean reliable = missingCapacity == 0;
+
+        /*
+         * Если все операции без мощности, даты завершения нет вовсе.
+         * Если мощности есть хотя бы у одной — срок считается по ней,
+         * но недостоверность всё равно видна в сводке.
+         */
+        LocalDate finishDate = reliable
+                ? (overallFinish != null ? overallFinish : startDate)
+                : null;
+
+        int workingDays = finishDate == null
+                ? 0
+                : Math.max(1, workingDaysBetween(startDate, finishDate,
+                        calendar));
 
         /*
          * Лимитирующая стадия — операция, которая закончилась
@@ -283,43 +394,62 @@ public class CapacityForecastService {
         String limitingOperation = "—";
         BigDecimal limitingHours = BigDecimal.ZERO;
 
-        for (int i = rows.size() - 1; i >= 0; i--) {
-            ForecastOperationRow row = rows.get(i);
+        if (finishDate != null) {
+            for (int i = rows.size() - 1; i >= 0; i--) {
+                ForecastOperationRow row = rows.get(i);
 
-            if (row.finish().equals(overallFinish)) {
-                limitingOperation = row.operationName();
-                limitingHours = row.hoursForQty();
+                if (row.finish() != null
+                        && row.finish().equals(overallFinish)) {
+                    limitingOperation = row.operationName();
+                    limitingHours = row.hoursForQty();
 
-                rows.set(i, new ForecastOperationRow(
-                        row.position(), row.operationCode(),
-                        row.operationName(), row.operationTypeName(),
-                        row.unitName(), row.serviceCode(),
-                        row.laborHours(), row.machineHours(),
-                        row.dailyLimit(), row.hoursForQty(),
-                        row.capacityEmployees(),
-                        row.dailyCapacityHours(),
-                        row.effectiveDailyLimitHours(),
-                        row.start(), row.finish(),
-                        row.loadPercent(), true, row.bottleneckHint()
-                ));
+                    rows.set(i, new ForecastOperationRow(
+                            row.position(), row.operationCode(),
+                            row.operationName(), row.operationTypeName(),
+                            row.unitName(), row.serviceCode(),
+                            row.laborHours(), row.machineHours(),
+                            row.dailyLimit(), row.hoursForQty(),
+                            row.capacityEmployees(),
+                            row.dailyCapacityHours(),
+                            row.effectiveDailyLimitHours(),
+                            row.start(), row.finish(),
+                            row.loadPercent(), true, row.bottleneckHint()
+                    ));
 
-                break;
+                    break;
+                }
             }
         }
 
-        boolean feasible = !overallFinish.isAfter(
-                startDate.plusDays(MAX_DAYS_AHEAD));
+        boolean feasible = reliable
+                && finishDate != null
+                && !finishDate.isAfter(
+                        startDate.plusDays(MAX_DAYS_AHEAD));
 
-        if (!feasible) {
+        if (reliable && finishDate != null && !feasible) {
             warnings.add("Расчётный срок выходит за "
                     + (MAX_DAYS_AHEAD / 365)
-                    + " года — не хватает мощностей "
-                    + "или маршрут содержит операцию без цеха.");
+                    + " года — не хватает мощностей.");
         }
 
-        int totalDays = (int) Math.max(
-                0,
-                ChronoUnit.DAYS.between(startDate, overallFinish));
+        /*
+         * Отсечка изготовления приоритета: сколько рабочих дней
+         * остаётся на изготовление перед сроком отгрузки. Если
+         * расчёт дольше — заказ не укладывается в срок.
+         */
+        if (reliable && finishDate != null && priority != null
+                && priority.getMaxManufacturingDays() != null
+                && priority.getMaxManufacturingDays() > 0
+                && workingDays > priority.getMaxManufacturingDays()) {
+
+            feasible = false;
+
+            warnings.add("Приоритет «" + priority.getName()
+                    + "» отводит на изготовление не более "
+                    + priority.getMaxManufacturingDays()
+                    + " раб. дн., а расчёт даёт " + workingDays
+                    + " раб. дн. — заказ не укладывается в срок отгрузки.");
+        }
 
         ForecastSummary summary = new ForecastSummary(
                 classifier.getId(),
@@ -330,19 +460,61 @@ public class CapacityForecastService {
                         : "—",
                 quantity,
                 startDate,
-                overallFinish,
+                finishDate,
                 totalLabor,
-                totalDays,
+                workingDays,
                 feasible,
                 limitingOperation,
-                limitingHours
+                limitingHours,
+                priority != null ? priority.getCode() : null,
+                priority != null ? priority.getName() : "—",
+                priority != null ? priority.getBadgeClass() : null,
+                startDays,
+                transitionDays,
+                maxLoadPercent,
+                missingCapacity
         );
 
-        List<ForecastWeekRow> weeklyPlan =
-                buildWeeklyPlan(rows, startDate, overallFinish);
+        List<ForecastWeekRow> weeklyPlan = finishDate == null
+                ? List.of()
+                : buildWeeklyPlan(rows, startDate, finishDate, calendar);
 
         return new CapacityForecastResult(
                 summary, rows, weeklyPlan, warnings, feasible);
+    }
+
+    /*
+     * Приоритет расчёта: выбранный диспетчером, иначе «обычный»,
+     * иначе — пусто (расчёт без правил приоритета).
+     */
+    private OrderPriority resolvePriority(
+            Long priorityId,
+            List<String> warnings
+    ) {
+        if (priorityId != null) {
+            OrderPriority chosen = orderPriorityRepository
+                    .findById(priorityId)
+                    .orElse(null);
+
+            if (chosen != null) {
+                return chosen;
+            }
+
+            warnings.add("Выбранный приоритет не найден — "
+                    + "расчёт выполнен по обычному приоритету.");
+        }
+
+        OrderPriority fallback = orderPriorityRepository
+                .findByCode(DEFAULT_PRIORITY_CODE)
+                .orElse(null);
+
+        if (fallback == null) {
+            warnings.add("В справочнике нет приоритета «"
+                    + DEFAULT_PRIORITY_CODE + "» — "
+                    + "расчёт без правил запуска и загрузки.");
+        }
+
+        return fallback;
     }
 
     /*
@@ -363,8 +535,23 @@ public class CapacityForecastService {
                 : null;
 
         if (process == null) {
-            warnings.add("У изделия нет базового техпроцесса — "
-                    + "взят первый действующий применённый маршрут.");
+            process = techProcessClassifierRepository
+                    .findByClassifier_Id(classifier.getId())
+                    .stream()
+                    .map(TechProcessClassifier::getTechProcess)
+                    .filter(candidate -> candidate != null
+                            && candidate.isActive())
+                    .findFirst()
+                    .orElse(null);
+
+            if (process != null) {
+                warnings.add("У изделия нет базового техпроцесса — "
+                        + "взят первый действующий применённый маршрут «"
+                        + process.getCode() + "».");
+            }
+        }
+
+        if (process == null) {
             return null;
         }
 
@@ -448,31 +635,22 @@ public class CapacityForecastService {
      * размещённые операции этого расчёта). Занимаем минимум из
      * остатка и свободного. День, в который операция закончилась,
      * становится датой окончания.
-     *
-     * Операция без цеха или с нулевой мощностью получает весь
-     * объём в первый рабочий день: расчёт не должен «зависать»,
-     * а предупреждение диспетчер уже увидел.
      */
     private Placement placeOperation(
             Long unitId,
             BigDecimal hours,
             BigDecimal dayLimit,
             LocalDate earliest,
-            Map<Long, Map<LocalDate, BigDecimal>> occupied
+            Map<Long, Map<LocalDate, BigDecimal>> occupied,
+            WorkingCalendar calendar
     ) {
-        /*
-         * Операция не может начаться раньше earliest. Если earliest
-         * попадает на выходной, сдвигаем вперёд до рабочего дня;
-         * вычитать день нельзя — рабочий earliest тогда терялся,
-         * и операция начиналась на день раньше даты старта.
-         */
-        LocalDate start = nextWorkingDay(earliest);
+        LocalDate start = calendar.nextWorkingDay(earliest);
 
         if (hours.signum() <= 0) {
             return new Placement(start, start, 0.0);
         }
 
-        if (unitId == null || dayLimit.signum() <= 0) {
+        if (dayLimit.signum() <= 0) {
             return new Placement(start, start, 100.0);
         }
 
@@ -491,7 +669,7 @@ public class CapacityForecastService {
             BigDecimal free = dayLimit.subtract(busy);
 
             if (free.signum() <= 0) {
-                date = nextWorkingDay(date);
+                date = calendar.nextWorkingDay(date.plusDays(1));
                 continue;
             }
 
@@ -511,7 +689,7 @@ public class CapacityForecastService {
             }
 
             if (remaining.signum() > 0) {
-                date = nextWorkingDay(date);
+                date = calendar.nextWorkingDay(date.plusDays(1));
             }
         }
 
@@ -582,6 +760,61 @@ public class CapacityForecastService {
     }
 
     /*
+     * Рабочий календарь: выходные и праздники справочника
+     * holiday_days. Праздники читаются одним запросом на весь
+     * горизонт расчёта.
+     */
+    private WorkingCalendar loadCalendar(LocalDate from, LocalDate to) {
+        Set<LocalDate> holidays = new HashSet<>();
+
+        for (HolidayDay holiday : holidayDayRepository
+                .findByHolidayDateBetweenOrderByHolidayDateAsc(from, to)) {
+            holidays.add(holiday.getHolidayDate());
+        }
+
+        return new WorkingCalendar(holidays);
+    }
+
+    /*
+     * Сдвиг на N рабочих дней. Ноль — ближайший рабочий день,
+     * начиная с самой даты.
+     */
+    private static LocalDate plusWorkingDays(
+            LocalDate date,
+            int days,
+            WorkingCalendar calendar
+    ) {
+        LocalDate result = calendar.nextWorkingDay(date);
+
+        for (int i = 0; i < days; i++) {
+            result = calendar.nextWorkingDay(result.plusDays(1));
+        }
+
+        return result;
+    }
+
+    /*
+     * Рабочих дней между датами включительно. Минимум 1 — «в тот же
+     * день» это один рабочий день, а не ноль.
+     */
+    private static int workingDaysBetween(
+            LocalDate from,
+            LocalDate to,
+            WorkingCalendar calendar
+    ) {
+        int count = 0;
+
+        for (LocalDate date = from; !date.isAfter(to);
+             date = date.plusDays(1)) {
+            if (calendar.isWorkingDay(date)) {
+                count++;
+            }
+        }
+
+        return Math.max(count, 1);
+    }
+
+    /*
      * Недельный план: сколько часов заказа попадает на каждую
      * неделю. Часы операции распределяются по её рабочим дням
      * равными долями.
@@ -589,33 +822,43 @@ public class CapacityForecastService {
     private List<ForecastWeekRow> buildWeeklyPlan(
             List<ForecastOperationRow> rows,
             LocalDate startDate,
-            LocalDate finishDate
+            LocalDate finishDate,
+            WorkingCalendar calendar
     ) {
         Map<LocalDate, BigDecimal> hoursByDate = new HashMap<>();
 
         for (ForecastOperationRow row : rows) {
-            long days = Math.max(
-                    1,
-                    ChronoUnit.DAYS.between(row.start(), row.finish()) + 1
-            );
+            if (row.start() == null || row.finish() == null) {
+                continue;
+            }
+
+            int days = 0;
+
+            for (LocalDate date = row.start();
+                 !date.isAfter(row.finish());
+                 date = date.plusDays(1)) {
+                if (calendar.isWorkingDay(date)) {
+                    days++;
+                }
+            }
+
+            days = Math.max(days, 1);
 
             BigDecimal perDay = row.hoursForQty()
                     .divide(BigDecimal.valueOf(days),
                             4, RoundingMode.HALF_UP);
 
-            LocalDate date = row.start();
-
-            while (!date.isAfter(row.finish())) {
-                if (isWorkingDay(date)) {
+            for (LocalDate date = row.start();
+                 !date.isAfter(row.finish());
+                 date = date.plusDays(1)) {
+                if (calendar.isWorkingDay(date)) {
                     hoursByDate.merge(date, perDay, BigDecimal::add);
                 }
-
-                date = date.plusDays(1);
             }
         }
 
-        long weeksBetween = ChronoUnit.WEEKS.between(
-                startDate, finishDate) + 1;
+        long weeksBetween = (workingDaysBetween(startDate, finishDate,
+                calendar) + 4) / 5;
         int weeks = (int) Math.min(
                 Math.max(1, weeksBetween),
                 MAX_PLAN_WEEKS
@@ -665,27 +908,6 @@ public class CapacityForecastService {
         return result;
     }
 
-    private static boolean isWorkingDay(LocalDate date) {
-        return date.getDayOfWeek() != DayOfWeek.SATURDAY
-                && date.getDayOfWeek() != DayOfWeek.SUNDAY;
-    }
-
-    private static LocalDate nextWorkingDay(LocalDate date) {
-        LocalDate candidate = date;
-
-        if (candidate == null) {
-            return LocalDate.now();
-        }
-
-        int guard = 0;
-
-        while (!isWorkingDay(candidate) && guard++ < 10) {
-            candidate = candidate.plusDays(1);
-        }
-
-        return candidate;
-    }
-
     private CapacityForecastResult emptyResult(
             int quantity,
             LocalDate startDate,
@@ -694,12 +916,18 @@ public class CapacityForecastService {
     ) {
         warnings.add(message);
 
+        /*
+         * finishDate = null: расчёт не состоялся, и подставлять дату
+         * старта вместо срока нельзя — диспетчер прочитал бы её как
+         * «заказ готов в день начала».
+         */
         return new CapacityForecastResult(
                 new ForecastSummary(
                         null, null, "—", "—",
-                        quantity, startDate, startDate,
+                        quantity, startDate, null,
                         BigDecimal.ZERO, 0, false,
-                        "—", BigDecimal.ZERO
+                        "—", BigDecimal.ZERO,
+                        null, null, null, 0, 0, 100, 0
                 ),
                 List.of(),
                 List.of(),
@@ -714,4 +942,36 @@ public class CapacityForecastService {
             LocalDate finish,
             double loadPercent
     ) {}
+
+    /**
+     * Рабочий календарь: будни без праздников справочника.
+     */
+    private static final class WorkingCalendar {
+
+        private final Set<LocalDate> holidays;
+
+        private WorkingCalendar(Set<LocalDate> holidays) {
+            this.holidays = holidays;
+        }
+
+        private boolean isWorkingDay(LocalDate date) {
+            DayOfWeek day = date.getDayOfWeek();
+
+            return day != DayOfWeek.SATURDAY
+                    && day != DayOfWeek.SUNDAY
+                    && !holidays.contains(date);
+        }
+
+        private LocalDate nextWorkingDay(LocalDate date) {
+            LocalDate candidate = date;
+
+            int guard = 0;
+
+            while (!isWorkingDay(candidate) && guard++ < 30) {
+                candidate = candidate.plusDays(1);
+            }
+
+            return candidate;
+        }
+    }
 }

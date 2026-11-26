@@ -104,4 +104,13 @@ public interface EmployeeAbsenceRepository
             LocalDate from,
             LocalDate to
     );
+
+    /**
+     * Есть ли у сотрудника отсутствие на конкретную дату.
+     *
+     * Имя метода держит {@code AbsenceDate}, а не {@code Date}: поле
+     * сущности — {@code absenceDate}, и короткое имя Spring Data не
+     * разрешает в запрос.
+     */
+    boolean existsByEmployeeIdAndAbsenceDate(Long employeeId, LocalDate date);
 }

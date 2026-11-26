@@ -191,8 +191,17 @@ body {
         box-shadow var(--workshop-sidebar-duration) ease;
 }
 
+/*
+ * Меню раскрывают наведение и клавиатурный фокус.
+ *
+ * :focus-within здесь не годится: фокус остаётся внутри панели после
+ * щелчка по её кнопкам, а окно «Справка» возвращает фокус кнопке в
+ * футере. С :focus-within меню залипал раскрытым, пока человек не
+ * щёлкнет вне панели. :focus-visible даёт фокус только при обходе с
+ * клавиатуры — мышь и программный focus() меню больше не держат.
+ */
 .workshop-sidebar:hover,
-.workshop-sidebar:focus-within {
+.workshop-sidebar:has(:focus-visible) {
     width: var(--workshop-sidebar-expanded-width) !important;
     box-shadow: 12px 0 34px rgba(6, 26, 20, 0.3);
 }
@@ -210,7 +219,7 @@ body {
  * ожидает человек, открывающий меню.
  */
 .app-shell:has(.workshop-sidebar:hover),
-.app-shell:has(.workshop-sidebar:focus-within) {
+.app-shell:has(.workshop-sidebar:has(:focus-visible)) {
     grid-template-columns:
         var(--workshop-sidebar-expanded-width)
         minmax(0, 1fr) !important;
@@ -233,7 +242,7 @@ body {
 }
 
 .workshop-sidebar:hover .department-brand__logo,
-.workshop-sidebar:focus-within .department-brand__logo {
+.workshop-sidebar:has(:focus-visible) .department-brand__logo {
     width: 248px;
     height: 62px;
     padding: 7px 10px;
@@ -270,7 +279,7 @@ body {
 }
 
 .workshop-sidebar:hover .workshop-sidebar__workshop,
-.workshop-sidebar:focus-within .workshop-sidebar__workshop {
+.workshop-sidebar:has(:focus-visible) .workshop-sidebar__workshop {
     opacity: 1;
     transform: translateX(0);
 }
@@ -377,7 +386,7 @@ body {
 }
 
 .workshop-sidebar:hover .workshop-navigation__text,
-.workshop-sidebar:focus-within .workshop-navigation__text {
+.workshop-sidebar:has(:focus-visible) .workshop-navigation__text {
     opacity: 1;
     transform: translateX(0);
 }
@@ -405,7 +414,7 @@ body {
 }
 
 .workshop-sidebar:hover .workshop-navigation__counter,
-.workshop-sidebar:focus-within .workshop-navigation__counter {
+.workshop-sidebar:has(:focus-visible) .workshop-navigation__counter {
     opacity: 1;
 }
 
@@ -475,7 +484,7 @@ body {
 }
 
 .workshop-sidebar:hover .workshop-sidebar__logout-text,
-.workshop-sidebar:focus-within .workshop-sidebar__logout-text {
+.workshop-sidebar:has(:focus-visible) .workshop-sidebar__logout-text {
     opacity: 1;
     transform: translateX(0);
 }
@@ -1218,6 +1227,122 @@ body {
     .workshop-sidebar__logout,
     .workshop-sidebar__logout-text,
     .workshop-day {
-        transition: none !important;
+        transition: none !important;     
     }
+}
+
+/* ============================================================
+   ПРЕДУПРЕЖДЕНИЕ О НЕПРИСВОЕННЫХ ОПЕРАЦИЯХ
+
+   Полноширинная полоса в шапке модуля: показывает, сколько
+   операций действующих маршрутов подразделения закреплено
+   ни за одним сотрудником. Руководитель кликает и переходит
+   в раздел «Операции и рабочие места», где видит перечень.
+   ============================================================ */
+
+.workshop-warning-bar {
+    background: #fff4e6;
+    border-top: 1px solid #ffe0b2;
+    padding: 8px 24px;
+}
+
+.workshop-warning-bar__link {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    color: #7a4b00;
+    font-size: 14px;
+    font-weight: 600;
+    text-decoration: none;
+    transition: color 150ms;
+}
+
+.workshop-warning-bar__link:hover {
+    color: #5c3800;
+}
+
+.workshop-warning-bar__icon {
+    font-size: 18px;
+    line-height: 1;
+}
+
+.workshop-warning-bar__text strong {
+    margin-right: 4px;
+}
+
+.workshop-warning-bar__hint {
+    margin-left: auto;
+    font-weight: 400;
+    font-size: 13px;
+    opacity: 0.8;
+}
+}
+/*
+ * Фильтр периода. Подписи стоят над полями, поля — в карточке.
+ */
+.workshop-filter {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    gap: 14px;
+    margin: 0;
+}
+
+.workshop-filter__field {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    font-size: 11px;
+    font-weight: 800;
+    color: var(--muted);
+}
+
+.workshop-filter__field select,
+.workshop-filter__field input {
+    height: 42px;
+    min-width: 170px;
+    padding: 0 12px;
+    border: 1px solid var(--line);
+    border-radius: 9px;
+    background: #fff;
+    color: var(--text);
+    font: inherit;
+    font-weight: 600;
+    transition: border-color 160ms ease, box-shadow 160ms ease;
+}
+
+.workshop-filter__field select:focus-visible,
+.workshop-filter__field input:focus-visible {
+    outline: 0;
+    border-color: var(--orange);
+    box-shadow: 0 0 0 4px rgba(239, 125, 0, 0.11);
+}
+
+.workshop-filter__dash {
+    padding-bottom: 11px;
+    color: var(--muted);
+    font-weight: 700;
+}
+
+/*
+ * Подсветка значений в таблицах модуля.
+ */
+.is-success {
+    color: var(--workshop-accent, #ef7d00);
+    font-weight: 800;
+}
+
+.is-danger {
+    color: var(--red, #c73a43);
+    font-weight: 800;
+}
+
+/*
+ * Числовые колонки таблиц: значения прижаты вправо, чтобы их было
+ * удобно сравнивать по разрядам единиц.
+ */
+.workshop-num {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
 }

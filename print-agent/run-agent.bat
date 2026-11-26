@@ -26,6 +26,20 @@ if not defined JAVA_EXE for /d %%D in (
 
 if not defined JAVA_EXE goto nojava
 
+REM The agent is shipped as one jar file. Separate .class files are still
+REM accepted: they need both PrintAgent.class and PrintAgent$Config.class.
+if exist "print-agent.jar" goto runjar
+if exist "PrintAgent.class" goto runclasses
+
+echo.
+echo ERROR: print-agent.jar not found in this folder:
+echo   %~dp0
+echo Copy print-agent.jar here next to this file.
+echo.
+pause
+exit /b 1
+
+:runjar
 REM UTF-8 console: the agent prints Russian text, cp866 would garble it.
 chcp 65001 >nul
 
@@ -35,14 +49,43 @@ echo  Address: 127.0.0.1:7788
 echo  Close this window to stop the agent.
 echo ========================================
 echo  Java: %JAVA_EXE%
+echo  File: print-agent.jar
+echo.
+
+"%JAVA_EXE%" -Dfile.encoding=UTF-8 -jar "%~dp0print-agent.jar"
+goto stopped
+
+:runclasses
+chcp 65001 >nul
+
+if not exist "PrintAgent$Config.class" goto noconfig
+
+echo ========================================
+echo  Label print agent
+echo  Address: 127.0.0.1:7788
+echo  Close this window to stop the agent.
+echo ========================================
+echo  Java: %JAVA_EXE%
+echo  File: PrintAgent.class
 echo.
 
 "%JAVA_EXE%" -Dfile.encoding=UTF-8 -cp "%~dp0." PrintAgent
+goto stopped
 
+:stopped
 echo.
 echo Agent stopped. Press any key to close.
 pause >nul
 exit /b 0
+
+:noconfig
+echo.
+echo ERROR: PrintAgent$Config.class is missing.
+echo Copy print-agent.jar instead of separate class files:
+echo it is one file and cannot be copied partially.
+echo.
+pause
+exit /b 1
 
 :nojava
 echo.

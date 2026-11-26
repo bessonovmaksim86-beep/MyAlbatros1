@@ -51,6 +51,7 @@ public class GlobalNotificationService {
     private final WorkshopDistributionService distributionService;
     private final WorkshopStaffService staffService;
     private final ProductionOrderRepository productionOrderRepository;
+    private final WorkshopUnitOperationsService unitOperationsService;
 
     /**
      * Счётчики разделов, открытых пользователю.
@@ -69,6 +70,17 @@ public class GlobalNotificationService {
         List<CounterItem> result = new ArrayList<>();
 
         addOwnOperations(result, user);
+
+        if (WorkshopUnitOperationsService
+                .warnsOnUnassigned(user.getRole())) {
+            result.add(new CounterItem(
+                    "unassigned-operations",
+                    "Неприсвоенные операции",
+                    "/workshop/operations",
+                    unitOperationsService
+                            .countUnassignedOperations(user)
+            ));
+        }
 
         if (ModuleRoutes.canOpen(user.getRole(), "/dispatcher/group-znp")) {
             addDispatcherCounters(result);

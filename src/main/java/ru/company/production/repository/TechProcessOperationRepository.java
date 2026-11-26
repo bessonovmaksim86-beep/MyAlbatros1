@@ -325,4 +325,45 @@ public interface TechProcessOperationRepository
             @Param("nodeId") Long nodeId
     );
 
+    /**
+     * Сколько операций подразделений в действующих маршрутах осталось
+     * без живого исполнителя — цифра предупреждения руководителя.
+     *
+     * Отчёт {@link #findUnitRouteOperations} отдаёт строки «маршрут —
+     * операция», а сервис вычитает привязки в памяти. Предупреждение
+     * читается на каждом экране модуля и в опросе уведомлений раз в
+     * полминуты, где собирать ради одной цифры сотни строк означало бы
+     * полное чтение маршрутов за каждое число.
+     *
+     * Привязка считается по тем же условиям, что у
+     * {@link WorkshopStaffBindingRepository#findAssignedOperationIds}:
+     * только закрепление операции (не рабочего места) и только у
+     * действующего сотрудника своего подразделения. Иначе счётчик в
+     * предупреждении разошёлся бы с перечнем, который руководитель
+     * видит в разделе «Операции и рабочие места».
+     */
+    @Query("""
+            select count(distinct operation.id)
+            from TechProcessOperation node
+            join node.techProcess process
+            join node.operation operation
+            join operation.organizationUnit unit
+            where process.active = true
+              and unit.id in :unitIds
+              and not exists (
+                      select 1
+                      from WorkshopStaffBinding binding
+                      where binding.operation.id = operation.id
+                        and binding.bindingType =
+                              ru.company.production.entity
+                                  .StaffBindingType.OPERATION
+                        and binding.employee.active = true
+                        and binding.employee.organizationUnit.id
+                                in :unitIds
+              )
+            """)
+    long countUnassignedForUnits(
+            @Param("unitIds") List<Long> unitIds
+    );
+
 }

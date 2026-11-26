@@ -13,6 +13,7 @@ import ru.company.production.service.PendingDefectService;
 import ru.company.production.service.RepairKittingService;
 import ru.company.production.service.ReworkReturnService;
 import ru.company.production.service.WorkshopStaffService;
+import ru.company.production.service.WorkshopUnitOperationsService;
 
 import java.util.List;
 
@@ -73,7 +74,15 @@ import java.util.List;
                  * модуля: подписи рода подразделения и его граница
                  * нужны и здесь.
                  */
-                ReworkReturnController.class
+                ReworkReturnController.class,
+                /*
+                 * Статистика производительности и работа без плана
+                 * рисуют то же боковое меню и ту же верхнюю панель:
+                 * подписи рода подразделения и его граница нужны
+                 * и здесь.
+                 */
+                WorkshopProductivityController.class,
+                WorkWithoutPlanController.class
         }
 )
 @RequiredArgsConstructor
@@ -85,6 +94,7 @@ public class WorkshopViewAdvice {
     private final PendingDefectService pendingDefectService;
     private final ReworkReturnService reworkReturnService;
     private final RepairKittingService repairKittingService;
+    private final WorkshopUnitOperationsService unitOperationsService;
 
     @ModelAttribute
     public void addWorkshopContext(
@@ -330,6 +340,32 @@ public class WorkshopViewAdvice {
         model.addAttribute(
                 "unitOperationCount",
                 canViewUnit ? staffService.countUnitOperations(scope) : 0L
+        );
+
+        /*
+         * Операции действующих маршрутов подразделения, закреплённые ни
+         * за одним сотрудником, — предупреждение в шапке модуля.
+         *
+         * Такую работу не увидит ни один исполнитель: в «Мои операции»
+         * она не попадает, пока руководитель не закрепит человека, и
+         * без напоминания простоит в плане до срыва срока.
+         *
+         * Считается не для всех ролей модуля. Бюро входного контроля и
+         * склады берут работу из общего перечня подразделения, а не из
+         * личного закрепления, и для них «операция без исполнителя» —
+         * рабочий порядок, а не нарушение (см.
+         * WorkshopUnitOperationsService#warnsOnUnassigned).
+         */
+        boolean warnUnassigned = canViewUnit
+                && WorkshopUnitOperationsService
+                        .warnsOnUnassigned(supervisor.getRole());
+
+        model.addAttribute(
+                "unassignedOperationCount",
+                warnUnassigned
+                        ? unitOperationsService
+                                .countUnassignedOperations(supervisor)
+                        : 0L
         );
     }
 }

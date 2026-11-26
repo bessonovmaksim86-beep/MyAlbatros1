@@ -61,6 +61,15 @@
     flex: 0 0 150px;
 }
 
+/* Приоритет: подпись пункта длинная — даём селекту больше места. */
+.forecast-form__field--priority {
+    flex: 0 1 300px;
+}
+
+.forecast-form__field--priority select {
+    font-size: 12px;
+}
+
 .forecast-item__remove {
     display: inline-flex;
     align-items: center;
@@ -205,6 +214,21 @@
     border-radius: 9px;
 }
 
+.forecast-alert strong {
+    display: block;
+
+    margin-bottom: 3px;
+    font-size: 13px;
+}
+
+.forecast-alert--danger {
+    color: #8f1f27;
+
+    background: rgba(198, 40, 40, 0.07);
+    border-color: rgba(198, 40, 40, 0.35);
+    border-left-color: var(--forecast-danger, #c62828);
+}
+
 /* ------------------------------------------------------------
    Сводка
    ------------------------------------------------------------ */
@@ -267,6 +291,16 @@
 
 .forecast-summary.is-infeasible .forecast-summary__date strong {
     color: var(--forecast-danger);
+}
+
+/*
+ * Срок определить нельзя: фраза вместо даты — уменьшаем кегль,
+ * чтобы она не ломала карточку сводки.
+ */
+.forecast-summary__date.is-unknown strong {
+    font-size: 20px;
+    line-height: 1.25;
+    text-transform: none;
 }
 
 .forecast-summary__info {

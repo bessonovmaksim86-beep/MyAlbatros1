@@ -2553,4 +2553,157 @@ public interface OrderScheduleRowRepository
         /** Подразделение самой операции — запасной адрес. */
         String getOperationUnitName();
     }
+
+    /* ============================================================
+     * СТАТИСТИКА ПРОИЗВОДИТЕЛЬНОСТИ СОТРУДНИКОВ ЦЕХА
+     *
+     * Два разреза одного и того же объёма работ:
+     *   «назначенные» — строки, закреплённые за исполнителем по дате
+     * плана (объём порученной работы);
+     *   «закрытые»    — строки, проведённые этим исполнителем по дате
+     * проведения (фактическая выработка).
+     *
+     * Дата у двух разрезов разная по смыслу: план смотрит на
+     * planned_date, факт — на completed_at. Склеивать их в один запрос
+     * нельзя: строка, запланированная в марте и закрытая в апреле,
+     * попала бы в разные периоды, и процент выработки перестал бы
+     * относиться к выбранному месяцу.
+     *
+     * Основание строки фильтруется тем же парным EXISTS, что и очередь
+     * распределения: заказ, снятый с работы, обязан забрать свой план и
+     * свою выработку (см. комментарий класса).
+     * ============================================================ */
+
+    /**
+     * Назначенные часы по каждому исполнителю за период по дате плана.
+     */
+    @Query("""
+            select row.executor.id    as employeeId,
+                   sum(row.laborHours) as totalHours,
+                   count(row.id)       as rowCount
+            from OrderScheduleRow row
+            where row.executor.id in :employeeIds
+              and row.plannedDate between :from and :to
+              and (exists (select 1 from CustomerOrder co
+                           where co.id = row.customerOrder.id
+                             and co.active = true)
+                or exists (select 1 from ProductionOrder po
+                           where po.id = row.productionOrder.id
+                             and po.active = true))
+            group by row.executor.id
+            """)
+    List<HoursByEmployee> sumAssignedHoursByEmployees(
+            @Param("employeeIds") Collection<Long> employeeIds,
+            @Param("from") LocalDate from,
+            @Param("to") LocalDate to
+    );
+
+    /**
+     * Закрытые часы по каждому исполнителю за период по дате проведения.
+     */
+    @Query("""
+            select row.completedBy.id  as employeeId,
+                   sum(row.laborHours) as totalHours,
+                   count(row.id)       as rowCount
+            from OrderScheduleRow row
+            where row.completedBy.id in :employeeIds
+              and row.completedAt between :fromTime and :toTime
+              and (exists (select 1 from CustomerOrder co
+                           where co.id = row.customerOrder.id
+                             and co.active = true)
+                or exists (select 1 from ProductionOrder po
+                           where po.id = row.productionOrder.id
+                             and po.active = true))
+            group by row.completedBy.id
+            """)
+    List<HoursByEmployee> sumClosedHoursByEmployees(
+            @Param("employeeIds") Collection<Long> employeeIds,
+            @Param("fromTime") java.time.LocalDateTime fromTime,
+            @Param("toTime") java.time.LocalDateTime toTime
+    );
+
+    /**
+     * Закрытые часы по паре «сотрудник и операция» за период.
+     *
+     * Имя операции берётся из справочника, поэтому строки «работы без
+     * плана» сюда не попадают: они живут отдельной таблицей и
+     * добавляются сервисом второй строкой того же разреза.
+     */
+    @Query("""
+            select row.completedBy.id     as employeeId,
+                   operationName.name     as operationName,
+                   count(row.id)          as rowCount,
+                   sum(row.laborHours)    as totalHours
+            from OrderScheduleRow row
+            join row.operation operation
+            join operation.operationName operationName
+            where row.completedBy.id in :employeeIds
+              and row.completedAt between :fromTime and :toTime
+              and (exists (select 1 from CustomerOrder co
+                           where co.id = row.customerOrder.id
+                             and co.active = true)
+                or exists (select 1 from ProductionOrder po
+                           where po.id = row.productionOrder.id
+                             and po.active = true))
+            group by row.completedBy.id, operationName.name
+            order by row.completedBy.id asc, sum(row.laborHours) desc
+            """)
+    List<HoursByEmployeeOperation> sumClosedHoursByEmployeeOperation(
+            @Param("employeeIds") Collection<Long> employeeIds,
+            @Param("fromTime") java.time.LocalDateTime fromTime,
+            @Param("toTime") java.time.LocalDateTime toTime
+    );
+
+    /**
+     * Часы и число строк, собранные по одному сотруднику.
+     */
+    interface HoursByEmployee {
+
+        Long getEmployeeId();
+
+        BigDecimal getTotalHours();
+
+        Long getRowCount();
+    }
+
+    /**
+     * Часы и число строк по одной операции одного сотрудника.
+     */
+    interface HoursByEmployeeOperation {
+
+        Long getEmployeeId();
+
+        String getOperationName();
+
+        Long getRowCount();
+
+        BigDecimal getTotalHours();
+    }
+
+    /**
+     * Сумма закрытых часов одним сотрудником за конкретный день.
+     *
+     * День задан парой границ момента, а не {@code function('date',
+     * completed_at)}: функция от колонки ли оптимизатор индекса и
+     * по-разному ведёт себя в диалектах, тогда как диапазон сравним
+     * с обычным индексом по {@code completed_at}.
+     */
+    @Query("""
+            select coalesce(sum(row.laborHours), 0)
+            from OrderScheduleRow row
+            where row.completedBy.id = :employeeId
+              and row.completedAt >= :fromTime
+              and row.completedAt < :toTime
+              and (exists (select 1 from CustomerOrder co
+                           where co.id = row.customerOrder.id
+                             and co.active = true)
+                or exists (select 1 from ProductionOrder po
+                           where po.id = row.productionOrder.id
+                             and po.active = true))
+            """)
+    BigDecimal sumClosedHoursByEmployee(
+            @Param("employeeId") Long employeeId,
+            @Param("fromTime") java.time.LocalDateTime fromTime,
+            @Param("toTime") java.time.LocalDateTime toTime
+    );
 }

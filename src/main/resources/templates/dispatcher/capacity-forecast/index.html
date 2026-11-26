@@ -133,6 +133,22 @@
                                                ? startDate : today}">
                             </label>
 
+                            <label class="forecast-form__field forecast-form__field--priority">
+                                <span>Приоритет</span>
+
+                                <select name="priorityId">
+                                    <option th:each="p : ${priorities}"
+                                            th:value="${p.id}"
+                                            th:selected="${priorityId != null
+                                                    and p.id == priorityId}"
+                                            th:text="${p.name
+                                                    + ' · запуск ' + p.startDays + ' дн.'
+                                                    + ' · загрузка до ' + p.maxLoadPercent + '%'}">
+                                        Обычный · запуск 3 дн. · загрузка до 90%
+                                    </option>
+                                </select>
+                            </label>
+
                             <label class="forecast-form__check">
                                 <input type="checkbox"
                                        name="ignoreLoad"
@@ -194,20 +210,25 @@
                  ================================================= -->
             <th:block th:if="${aggregated != null}">
 
-                <!-- Сводка по заказу целиком -->
+                <!-- Сводка -->
                 <div class="forecast-summary"
-                     th:classappend="${aggregated.feasible()}
-                             ? ' is-feasible' : ' is-infeasible'">
+                     th:classappend="${aggregated.feasible()} ? ' is-feasible' : ' is-infeasible'">
 
                     <div class="forecast-summary__main">
 
-                        <div class="forecast-summary__date">
+                        <div class="forecast-summary__date"
+                             th:classappend="${aggregated.finishDate() == null}
+                                     ? ' is-unknown'">
 
-                            <small>Заказ будет выполнен до</small>
+                            <small th:text="${aggregated.finishDate() != null
+                                    ? 'Заказ будет выполнен до'
+                                    : 'Срок выполнения'}">
+                                Заказ будет выполнен до
+                            </small>
 
                             <strong th:text="${aggregated.finishDate() != null
                                     ? #temporals.format(aggregated.finishDate(), 'dd.MM.yyyy')
-                                    : '—'}">
+                                    : 'определить нельзя'}">
                                 01.12.2026
                             </strong>
                         </div>
@@ -244,7 +265,9 @@
                             <div>
                                 <small>Срок изготовления</small>
 
-                                <strong th:text="${aggregated.totalWorkingDays() + ' дн.'}">
+                                <strong th:text="${aggregated.finishDate() != null
+                                        ? aggregated.totalWorkingDays() + ' дн.'
+                                        : '—'}">
                                     15 дн.
                                 </strong>
                             </div>
@@ -254,6 +277,18 @@
 
                                 <strong th:text="${#numbers.formatDecimal(aggregated.totalLaborHours(), 1, 0) + ' ч'}">
                                     120 ч
+                                </strong>
+                            </div>
+
+                            <div th:if="${aggregated.priorityName() != null}">
+                                <small>Приоритет</small>
+
+                                <strong>
+                                    <span class="status"
+                                          th:classappend="${aggregated.priorityBadgeClass()}"
+                                          th:text="${aggregated.priorityName()}">
+                                        Обычный
+                                    </span>
                                 </strong>
                             </div>
                         </div>
@@ -279,6 +314,39 @@
                             24 ч
                         </span>
                     </div>
+                </div>
+
+                <!-- Нехватка мощностей: срок недостоверен -->
+                <div class="forecast-alert forecast-alert--danger"
+                     th:if="${aggregated.missingCapacityOperations() > 0}">
+
+                    <strong>
+                        Срок выполнения определить нельзя.
+                    </strong>
+
+                    <span th:text="${aggregated.missingCapacityOperations()
+                            + ' операц. без мощности: у подразделения нет сотрудников'
+                            + ' или операция не привязана к цеху. Назначьте'
+                            + ' исполнителей или укажите цех — и повторите расчёт.'}">
+                        1 операц. без мощности: у подразделения нет
+                        сотрудников или операция не привязана к цеху.
+                    </span>
+                </div>
+
+                <!-- Срок не рассчитан по другой причине -->
+                <div class="forecast-alert"
+                     th:if="${aggregated.finishDate() == null
+                             and aggregated.missingCapacityOperations() == 0}">
+
+                    <strong>
+                        Срок выполнения не рассчитан.
+                    </strong>
+
+                    <span>
+                        У изделия нет действующего техпроцесса или маршрут
+                        не содержит операций — проверьте настройку
+                        технологии.
+                    </span>
                 </div>
 
                 <!-- Позиции расчёта -->
@@ -387,10 +455,10 @@
                         </span>
 
                         <small th:text="${r.summary().quantity() + ' шт. · '
-                                + #numbers.formatDecimal(r.summary().totalLaborHours(), 1, 0) + ' ч · до '
+                                + #numbers.formatDecimal(r.summary().totalLaborHours(), 1, 0) + ' ч · '
                                 + (r.summary().finishDate() != null
-                                    ? #temporals.format(r.summary().finishDate(), 'dd.MM.yyyy')
-                                    : '—')}">
+                                    ? 'до ' + #temporals.format(r.summary().finishDate(), 'dd.MM.yyyy')
+                                    : 'срок не определён')}">
                             10 шт. · 120 ч · до 01.12.2026
                         </small>
                     </summary>
@@ -455,7 +523,7 @@
                         </section>
 
                         <!-- Операции -->
-                        <section class="card">
+                <section class="card">
 
                             <div class="card-head">
 
@@ -563,25 +631,31 @@
                             </div>
                         </section>
 
-                        <!-- Вердикт позиции -->
-                        <div class="forecast-verdict"
-                             th:classappend="${r.feasible()}
-                                     ? ' is-ok' : ' is-bad'">
+                        <!-- Итог -->
+                <div class="forecast-verdict"
+                     th:classappend="${r.feasible()} ? ' is-ok' : ' is-bad'">
 
                             <strong th:if="${r.feasible()}">
                                 ✓ Заказ выполним в рассчитанный срок
                             </strong>
 
-                            <strong th:if="${!r.feasible()}">
+                            <strong th:if="${!r.feasible()
+                                    and r.summary().missingCapacityOperations() > 0}">
+                                ✗ Срок определить нельзя: нет мощностей
+                            </strong>
+
+                            <strong th:if="${!r.feasible()
+                                    and r.summary().missingCapacityOperations() == 0}">
                                 ✗ Заказ не выполним в пределах года
                             </strong>
 
-                            <span th:text="${'Дата завершения: '
-                                    + (r.summary().finishDate() != null
-                                        ? #temporals.format(r.summary().finishDate(), 'dd.MM.yyyy')
-                                        : '—')
-                                    + '. Лимитирующая стадия: '
-                                    + r.summary().limitingOperation()}">
+                            <span th:text="${r.summary().finishDate() != null
+                                    ? 'Дата завершения: '
+                                        + #temporals.format(r.summary().finishDate(), 'dd.MM.yyyy')
+                                        + '. Лимитирующая стадия: '
+                                        + r.summary().limitingOperation()
+                                    : 'Заказ содержит операции без мощности — '
+                                        + 'дата завершения не рассчитывается.'}">
                                 Дата завершения: 01.12.2026
                             </span>
                         </div>
