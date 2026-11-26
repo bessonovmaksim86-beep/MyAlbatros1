@@ -91,8 +91,9 @@
                     }
                 })
                 .catch(() => {
-                    showStatus('Агент печати не запущен на этом компьютере — '
-                        + 'запустите run-agent.bat');
+                    showStatus('Агент печати не отвечает по адресу '
+                        + healthUrl + ' — запустите run-agent.bat на этом '
+                        + 'компьютере и оставьте его окно открытым');
                 });
 
             agentButton.addEventListener('click', async () => {
@@ -132,8 +133,9 @@
                         body: body
                     });
                 } catch (error) {
-                    showStatus('Агент печати не запущен на этом компьютере — '
-                        + 'запустите run-agent.bat');
+                    showStatus('Агент печати не отвечает по адресу '
+                        + agentUrl + ' — запустите run-agent.bat на этом '
+                        + 'компьютере и оставьте его окно открытым');
                     agentButton.disabled = false;
                     return;
                 }

@@ -7,6 +7,7 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
+import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -16,8 +17,11 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 
@@ -73,7 +77,34 @@ public final class PrintAgent {
 
     private static final Object PRINT_LOCK = new Object();
 
+    /** Имя файла настроек рядом с агентом. */
+    private static final String CONFIG_NAME = "agent.properties";
+
+    /** Ключи, которые агент понимает; остальные попадают в журнал. */
+    private static final Set<String> KNOWN_KEYS = new LinkedHashSet<>(List.of(
+            "port",
+            "bartender.path",
+            "template.path",
+            "printer",
+            "data.dir",
+            "delimiter",
+            "encoding",
+            "header",
+            "copies",
+            "timeout.seconds",
+            "token"
+    ));
+
     private static Path logFile;
+
+    /** Имена прочитанных ключей (для диагностики). */
+    private static List<String> configKeys = List.of();
+
+    /** Путь к файлу настроек, который искал агент (для /health и журнала). */
+    private static String configFile = "";
+
+    /** Найден ли файл настроек. */
+    private static boolean configFound;
 
     public static void main(String[] args) throws Exception {
 
@@ -81,12 +112,22 @@ public final class PrintAgent {
 
         logFile = baseDir.resolve("print-agent.log");
 
-        Config config = readConfig(baseDir.resolve("agent.properties"));
+        Config config = readConfig(baseDir);
 
-        HttpServer server = HttpServer.create(
-                new InetSocketAddress(InetAddress.getLoopbackAddress(), config.port()),
-                0
-        );
+        HttpServer server;
+
+        try {
+            server = HttpServer.create(
+                    new InetSocketAddress(InetAddress.getLoopbackAddress(), config.port()),
+                    0
+            );
+        } catch (java.net.BindException exception) {
+            log("Порт 127.0.0.1:" + config.port() + " уже занят: агент печати "
+                    + "уже запущен в другом окне. Закройте прежнее окно "
+                    + "run-agent.bat и запустите это заново. Если окна нет — "
+                    + "найдите процесс java в Диспетчере задач и завершите его.");
+            return;
+        }
 
         server.createContext("/health", exchange -> {
             try {
@@ -112,6 +153,8 @@ public final class PrintAgent {
         server.start();
 
         log("Агент печати запущен на 127.0.0.1:" + config.port());
+        log("Настройки: " + (configFound ? configFile
+                : "файл не найден — " + configFile));
         log("BarTender: " + describe(config.bartenderPath()));
         log("Шаблон: " + describe(config.templatePath()));
         log("Принтер: " + (config.printer().isBlank()
@@ -147,6 +190,9 @@ public final class PrintAgent {
 
         String body = "{\"ok\":" + (problem == null)
                 + ",\"ready\":" + (problem == null)
+                + ",\"configFile\":\"" + escape(configFile) + "\""
+                + ",\"configFound\":" + configFound
+                + ",\"keys\":\"" + escape(String.join(",", configKeys)) + "\""
                 + ",\"bartender\":\"" + escape(config.bartenderPath()) + "\""
                 + ",\"template\":\"" + escape(config.templatePath()) + "\""
                 + ",\"message\":\"" + escape(problem == null ? "" : problem) + "\"}";
@@ -268,22 +314,66 @@ public final class PrintAgent {
      */
     private static String configurationProblem(Config config) {
 
+        String emptyBartender = "Не задан путь к bartend.exe (ключ bartender.path). "
+                + "Заполните файл " + configFile + ".";
+
+        if (!configFound) {
+            return "Файл настроек agent.properties не найден в папке агента: "
+                    + configFile + ". Агент работает на значениях по умолчанию. "
+                    + "Скопируйте и отредактируйте agent.properties в той же "
+                    + "папке, где лежат файлы PrintAgent.class и run-agent.bat.";
+        }
+
         if (config.bartenderPath().isBlank()) {
-            return "Не задан путь к bartend.exe в agent.properties (bartender.path)";
+
+            /* Ключ есть, но значение после «=» пустое. */
+            if (configKeys.contains("bartender.path")) {
+                return "Ключ bartender.path в файле " + configFile
+                        + " есть, но значение пустое. Впишите полный путь "
+                        + "после знака «=», например: "
+                        + "bartender.path=C:\\Program Files\\Seagull\\"
+                        + "BarTender 2022\\BarTend.exe — и перезапустите "
+                        + "run-agent.bat (настройки читаются только при старте).";
+            }
+
+            if (configKeys.isEmpty()) {
+                return emptyBartender + " В файле не найдено ни одной строки "
+                        + "вида ключ=значение. Проверьте кодировку файла: "
+                        + "подходит UTF-8 или «Юникод» (UTF-16) из Блокнота.";
+            }
+
+            /* Поиск похожих ключей (опечатки, другой регистр). */
+            for (String key : configKeys) {
+                if (key.toLowerCase(Locale.ROOT).contains("bartend")) {
+                    return emptyBartender
+                            + " В файле найден похожий ключ «" + key
+                            + "». Агент ищет ключ «bartender.path» — "
+                            + "замените имя строки в файле настроек.";
+                }
+            }
+
+            String keysText = String.join(", ", configKeys);
+
+            return emptyBartender
+                    + " В файле прочитаны ключи: " + keysText
+                    + " — строки bartender.path среди них нет. "
+                    + "Проверьте, что ключ записан точно: "
+                    + "bartender.path = C:\\Program Files\\…";
         }
 
         if (!Files.isRegularFile(Paths.get(config.bartenderPath()))) {
             return "BarTender не найден по пути «" + config.bartenderPath()
-                    + "» — проверьте bartender.path в agent.properties";
+                    + "» — проверьте bartender.path в " + configFile;
         }
 
         if (config.templatePath().isBlank()) {
-            return "Не задан путь к шаблону этикетки в agent.properties (template.path)";
+            return "Не задан путь к шаблону этикетки (ключ template.path). "
+                            + "Заполните файл " + configFile + ".";
         }
 
         if (!Files.isRegularFile(Paths.get(config.templatePath()))) {
             return "Шаблон этикетки не найден по пути «" + config.templatePath()
-                    + "» — проверьте template.path в agent.properties";
+                    + "» — проверьте template.path в " + configFile;
         }
 
         return null;
@@ -444,36 +534,184 @@ public final class PrintAgent {
         return fields;
     }
 
-    /** Читает agent.properties рядом с агентом; отсутствие файла — значения по умолчанию. */
-    private static Config readConfig(Path file) throws IOException {
+    /**
+     * Читает agent.properties и запоминает, где он его нашёл.
+     *
+     * Файл ищется в двух местах: рядом с классами агента и в рабочей
+     * папке (её выставляет run-agent.bat через cd /d "%~dp0"). Это
+     * спасает случай, когда .class скопировали отдельно от настроек.
+     *
+     * Три поломки, которые встречаются на практике и выглядят как
+     * «я же прописал путь»:
+     *
+     *   1. Блокнот сохранил файл как agent.properties.txt, потому что
+     *      Windows скрывает известные расширения — агент такой файл
+     *      не видит и работает на значениях по умолчанию;
+     *   2. Блокнот записал UTF-8 с BOM: невидимые байты в начале
+     *      превращают первый ключ в «\uFEFFport»;
+     *   3. файл сохранён в UTF-16 — тогда строки выглядят как мусор.
+     *
+     * Поэтому BOM срезается, а о ненайденном файле рядом с которым
+     * лежит .txt-двойник агент говорит отдельной строкой в журнале.
+     */
+    private static Config readConfig(Path directory) throws IOException {
+
+        Path file = locateConfig(directory);
 
         Map<String, String> values = new LinkedHashMap<>();
 
-        if (Files.isRegularFile(file)) {
-            for (String line : Files.readAllLines(file, StandardCharsets.UTF_8)) {
+        if (file == null) {
+            Path twin = directory.resolve(CONFIG_NAME + ".txt");
 
-                String trimmed = line.trim();
-
-                if (trimmed.isEmpty() || trimmed.startsWith("#")) {
-                    continue;
-                }
-
-                int separator = trimmed.indexOf('=');
-
-                if (separator <= 0) {
-                    continue;
-                }
-
-                values.put(
-                        trimmed.substring(0, separator).trim(),
-                        trimmed.substring(separator + 1).trim()
-                );
+            if (Files.isRegularFile(twin)) {
+                log("Настройки не прочитаны: файл называется "
+                        + CONFIG_NAME + ".txt вместо " + CONFIG_NAME
+                        + ". Windows скрывает расширения — переименуйте файл.");
+            } else {
+                log("Файл настроек не найден: " + directory.resolve(CONFIG_NAME)
+                        + " — используются значения по умолчанию");
             }
-        } else {
-            log("Файл настроек не найден: " + file
-                    + " — используются значения по умолчанию");
+
+            configFile = directory.resolve(CONFIG_NAME).toString();
+            configFound = false;
+
+            return defaults(values);
         }
 
+        configFile = file.toString();
+        configFound = true;
+
+        List<String> lines = readConfigLines(file);
+
+        int lineNumber = 0;
+
+        for (String line : lines) {
+            lineNumber++;
+
+            /* BOM от Блокнота: в первом ключе он превращает имя в мусор. */
+            String trimmed = stripBom(line).trim();
+
+            if (trimmed.isEmpty()
+                    || trimmed.startsWith("#")
+                    || trimmed.startsWith(";")) {
+                continue;
+            }
+
+            int separator = trimmed.indexOf('=');
+
+            if (separator <= 0) {
+                log("Строка " + lineNumber + " пропущена (нет знака =): "
+                        + trimmed);
+                continue;
+            }
+
+            String key = trimmed.substring(0, separator).trim();
+            String value = trimmed.substring(separator + 1).trim();
+
+            if (key.startsWith("\uFEFF")) {
+                key = key.substring(1);
+            }
+
+            /* Bartender.Path и bartender.path — один и тот же ключ. */
+            key = key.toLowerCase(Locale.ROOT);
+
+            if (!KNOWN_KEYS.contains(key)) {
+                log("Строка " + lineNumber + ": ключ «" + key
+                        + "» агенту неизвестен и пропущен — возможно, опечатка");
+            }
+
+            values.put(key, value);
+        }
+
+        configKeys = List.copyOf(values.keySet());
+
+        log("Настройки прочитаны: " + file
+                + " (ключей: " + values.size() + ")");
+        log("Ключи настроек: " + String.join(", ", configKeys));
+        log("bartender.path: " + describe(values.getOrDefault("bartender.path", "")));
+
+        return defaults(values);
+    }
+
+    /**
+     * Читает файл настроек в кодировке, в которой его сохранили.
+     *
+     * Блокнот сохраняет «Юникод» как UTF-16 с меткой порядка байтов.
+     * Раньше файл читался только как UTF-8: сохранённый в UTF-16 он
+     * останавливал агент исключением ещё до открытия порта, и на
+     * странице печати нельзя было показать причину. Теперь кодировка
+     * определяется по метке в первых байтах файла.
+     */
+    private static List<String> readConfigLines(Path file) throws IOException {
+
+        byte[] bytes = Files.readAllBytes(file);
+
+        String text;
+
+        if (bytes.length >= 2
+                && (bytes[0] & 0xFF) == 0xFF
+                && (bytes[1] & 0xFF) == 0xFE) {
+            text = new String(bytes, 2, bytes.length - 2,
+                    StandardCharsets.UTF_16LE);
+        } else if (bytes.length >= 2
+                && (bytes[0] & 0xFF) == 0xFE
+                && (bytes[1] & 0xFF) == 0xFF) {
+            text = new String(bytes, 2, bytes.length - 2,
+                    StandardCharsets.UTF_16BE);
+        } else if (bytes.length >= 3
+                && (bytes[0] & 0xFF) == 0xEF
+                && (bytes[1] & 0xFF) == 0xBB
+                && (bytes[2] & 0xFF) == 0xBF) {
+            text = new String(bytes, 3, bytes.length - 3,
+                    StandardCharsets.UTF_8);
+        } else {
+            text = new String(bytes, StandardCharsets.UTF_8);
+
+            /* Старый Блокнот сохранял кириллицу в Windows-1251. */
+            if (text.indexOf('\uFFFD') >= 0) {
+                text = new String(bytes, Charset.forName("windows-1251"));
+            }
+        }
+
+        return List.of(text.split("\\R", -1));
+    }
+
+    /**
+     * Ищет файл настроек рядом с классами, затем в рабочей папке.
+     *
+     * Второе место нужно, когда .class скопировали отдельно от
+     * agent.properties: run-agent.bat выставляет рабочую папку на своё
+     * расположение, и настройки находятся там, где их ждёт человек.
+     */
+    private static Path locateConfig(Path directory) {
+
+        Path primary = directory.resolve(CONFIG_NAME);
+
+        if (Files.isRegularFile(primary)) {
+            return primary;
+        }
+
+        Path working = Paths.get(System.getProperty("user.dir", "."))
+                .toAbsolutePath()
+                .resolve(CONFIG_NAME);
+
+        if (Files.isRegularFile(working)
+                && !working.equals(primary.toAbsolutePath())) {
+            log("Настройки найдены в рабочей папке: " + working);
+            return working;
+        }
+
+        return null;
+    }
+
+    /**
+     * Собирает конфигурацию из прочитанных ключей.
+     *
+     * Отдельным методом, чтобы отсутствие файла и его наличие шли
+     * через одни и те же значения по умолчанию: иначе пустой файл и
+     * отсутствующий файл давали бы разное поведение.
+     */
+    private static Config defaults(Map<String, String> values) {
         return new Config(
                 configInt(values, "port", DEFAULT_PORT),
                 values.getOrDefault("bartender.path", ""),
@@ -487,6 +725,13 @@ public final class PrintAgent {
                 configInt(values, "timeout.seconds", DEFAULT_TIMEOUT_SECONDS),
                 values.getOrDefault("token", "")
         );
+    }
+
+    /** Срезает метку порядка байтов, которую добавляет Блокнот. */
+    private static String stripBom(String line) {
+        return line != null && line.startsWith("\uFEFF")
+                ? line.substring(1)
+                : line;
     }
 
     /** Каталог агента: рядом с jar, а при запуске из классов — текущий. */
