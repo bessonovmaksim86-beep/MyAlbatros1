@@ -69,8 +69,8 @@ public class WorkshopScrapController {
      * чем закончилась оформленная вчера заявка.
      */
     @GetMapping({"", "/", "/new", "/new/"})
-    public String form(@RequestParam(required = false) String number,
-                       @RequestParam(required = false) String filter,
+    public String form(@RequestParam(name = "number", required = false) String number,
+                       @RequestParam(name = "filter", required = false) String filter,
                        Authentication authentication,
                        Model model) {
 
@@ -128,7 +128,7 @@ public class WorkshopScrapController {
      */
     @GetMapping("/preview")
     @ResponseBody
-    public CellScrapPreview preview(@RequestParam(required = false)
+    public CellScrapPreview preview(@RequestParam(name = "number", required = false)
                                     String number) {
         return scrapService.preview(number);
     }
@@ -147,9 +147,9 @@ public class WorkshopScrapController {
      * второй раз.
      */
     @PostMapping("/decide")
-    public String decide(@RequestParam Long defectId,
-                         @RequestParam String decision,
-                         @RequestParam(required = false) String comment,
+    public String decide(@RequestParam("defectId") Long defectId,
+                         @RequestParam("decision") String decision,
+                         @RequestParam(name = "comment", required = false) String comment,
                          Authentication authentication,
                          RedirectAttributes redirectAttributes) {
 

@@ -50,7 +50,7 @@ public class WarehouseDeviceZnpAcceptanceController {
      */
     @GetMapping("/{id}")
     public String acceptPage(
-            @PathVariable Long id,
+            @PathVariable("id") Long id,
             Model model,
             RedirectAttributes redirectAttributes
     ) {
@@ -72,7 +72,7 @@ public class WarehouseDeviceZnpAcceptanceController {
      */
     @PostMapping("/{id}")
     public String accept(
-            @PathVariable Long id,
+            @PathVariable("id") Long id,
             Authentication authentication,
             RedirectAttributes redirectAttributes
     ) {

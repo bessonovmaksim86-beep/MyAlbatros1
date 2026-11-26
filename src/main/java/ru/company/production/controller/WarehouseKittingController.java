@@ -163,8 +163,8 @@ public class WarehouseKittingController {
      */
     @PostMapping("/kitting/complete")
     public String complete(
-            @RequestParam Long rowId,
-            @RequestParam(required = false) String section,
+            @RequestParam("rowId") Long rowId,
+            @RequestParam(name = "section", required = false) String section,
             Authentication authentication,
             RedirectAttributes redirectAttributes
     ) {
@@ -250,9 +250,9 @@ public class WarehouseKittingController {
      */
     @PostMapping("/kitting/attach-cell")
     public String attachCell(
-            @RequestParam Long rowId,
-            @RequestParam String cellNumber,
-            @RequestParam(required = false) String section,
+            @RequestParam("rowId") Long rowId,
+            @RequestParam("cellNumber") String cellNumber,
+            @RequestParam(name = "section", required = false) String section,
             Authentication authentication,
             RedirectAttributes redirectAttributes
     ) {

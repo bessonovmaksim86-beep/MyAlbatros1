@@ -671,7 +671,7 @@ public class MyOperationsController {
      */
     @GetMapping("/complete/{rowId}")
     public String completeForm(
-            @PathVariable Long rowId,
+            @PathVariable("rowId") Long rowId,
             @RequestParam(name = "mode", required = false) String mode,        
             @RequestParam(name = "expanded", required = false) String expanded,
             @RequestParam(name = "periodFrom", required = false) String periodFrom,
@@ -745,7 +745,7 @@ public class MyOperationsController {
      */
     @PostMapping("/complete/{rowId}")
     public String completeWithControlParams(
-            @PathVariable Long rowId,
+            @PathVariable("rowId") Long rowId,
             @RequestParam(name = "mode", required = false) String mode,
             @RequestParam(name = "expanded", required = false) String expanded,
             @RequestParam(name = "periodFrom", required = false) String periodFrom,
@@ -792,7 +792,7 @@ public class MyOperationsController {
      */
     @PostMapping("/complete/{rowId}/bind-cell")
     public String bindCell(
-            @PathVariable Long rowId,
+            @PathVariable("rowId") Long rowId,
             @RequestParam(name = "linkId") Long linkId,
             @RequestParam(name = "cellNumber", required = false)
                     String cellNumber,
@@ -875,7 +875,7 @@ public class MyOperationsController {
 
     @PostMapping("/complete")
     public String complete(
-            @RequestParam Long rowId,
+            @RequestParam("rowId") Long rowId,
             @RequestParam(name = "mode", required = false) String mode,
             @RequestParam(name = "expanded", required = false) String expanded,
             @RequestParam(name = "periodFrom", required = false) String periodFrom,
@@ -949,7 +949,7 @@ public class MyOperationsController {
      */
     @PostMapping("/complete-group")
     public String completeGroup(
-            @RequestParam Long operationId,
+            @RequestParam("operationId") Long operationId,
             @RequestParam(name = "plannedDate", required = false) String plannedDate,
             @RequestParam(name = "mode", required = false) String mode,
             @RequestParam(name = "expanded", required = false) String expanded,
@@ -1352,10 +1352,10 @@ public class MyOperationsController {
      */
     @GetMapping("/repair-kitting/{znpId}")
     public String repairKitting(
-            @PathVariable Long znpId,
-            @RequestParam(required = false) String kind,
-            @RequestParam(required = false) Long classifierId,
-            @RequestParam(required = false) Long reasonId,
+            @PathVariable("znpId") Long znpId,
+            @RequestParam(name = "kind", required = false) String kind,
+            @RequestParam(name = "classifierId", required = false) Long classifierId,
+            @RequestParam(name = "reasonId", required = false) Long reasonId,
             Authentication authentication,
             Model model
     ) {
@@ -1402,11 +1402,11 @@ public class MyOperationsController {
      */
     @PostMapping("/repair-kitting/{znpId}/kit")
     public String kit(
-            @PathVariable Long znpId,
+            @PathVariable("znpId") Long znpId,
             @RequestParam(name = "cell", required = false) List<String> cells,
-            @RequestParam(required = false) String kind,
-            @RequestParam(required = false) Long classifierId,
-            @RequestParam(required = false) Long reasonId,
+            @RequestParam(name = "kind", required = false) String kind,
+            @RequestParam(name = "classifierId", required = false) Long classifierId,
+            @RequestParam(name = "reasonId", required = false) Long reasonId,
             Authentication authentication,
             RedirectAttributes redirectAttributes
     ) {

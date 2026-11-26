@@ -135,7 +135,7 @@ public class InputControlComponentController {
      */
     @GetMapping("/edit/{id}")
     public String edit(
-            @PathVariable Long id,
+            @PathVariable("id") Long id,
             Model model,
             RedirectAttributes redirectAttributes
     ) {
@@ -262,7 +262,7 @@ public class InputControlComponentController {
      */
     @PostMapping("/{id}/delete")
     public String delete(
-            @PathVariable Long id,
+            @PathVariable("id") Long id,
             RedirectAttributes redirectAttributes
     ) {
         try {

@@ -26,7 +26,7 @@ public class AdminSwitchController {
 
     @PostMapping("/admin/switch/{userId}")
     public String enter(
-            @PathVariable Long userId,
+            @PathVariable("userId") Long userId,
             HttpServletRequest request,
             HttpServletResponse response,
             RedirectAttributes redirectAttributes

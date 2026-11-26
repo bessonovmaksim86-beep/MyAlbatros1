@@ -54,7 +54,7 @@ public class WarehouseAcceptanceController {
     /** Экран приёмки: реквизиты партии, её годные и забракованные номера. */
     @GetMapping("/{id}")
     public String acceptPage(
-            @PathVariable Long id,
+            @PathVariable("id") Long id,
             Model model,
             RedirectAttributes redirectAttributes
     ) {
@@ -80,7 +80,7 @@ public class WarehouseAcceptanceController {
      */
     @PostMapping("/{id}")
     public String accept(
-            @PathVariable Long id,
+            @PathVariable("id") Long id,
             @Valid
             @ModelAttribute("acceptanceForm") BvkAcceptanceForm acceptanceForm,
             BindingResult errors,

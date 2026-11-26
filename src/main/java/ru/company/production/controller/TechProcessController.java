@@ -151,8 +151,8 @@ public class TechProcessController {
      */
     @GetMapping("/create/new")
     public String createPage(
-            @RequestParam(required = false) Long classifierId,
-            @RequestParam(required = false) Long sourceId,
+            @RequestParam(name = "classifierId", required = false) Long classifierId,
+            @RequestParam(name = "sourceId", required = false) Long sourceId,
             Model model,
             RedirectAttributes redirectAttributes
     ) {
@@ -190,7 +190,7 @@ public class TechProcessController {
      */
     @GetMapping("/{id}/create-from")
     public String createFromSelectionPage(
-            @PathVariable Long id,
+            @PathVariable("id") Long id,
             Model model,
             RedirectAttributes redirectAttributes
     ) {
@@ -285,7 +285,7 @@ public class TechProcessController {
      */
     @GetMapping("/update/{id}")
     public String updatePage(
-            @PathVariable Long id,
+            @PathVariable("id") Long id,
             Model model,
             RedirectAttributes redirectAttributes
     ) {
@@ -320,7 +320,7 @@ public class TechProcessController {
      */
     @PostMapping("/update/{id}")
     public String update(
-            @PathVariable Long id,
+            @PathVariable("id") Long id,
             @Valid
             @ModelAttribute("techProcessForm")
             TechProcessForm form,
@@ -382,7 +382,7 @@ public class TechProcessController {
      */
     @GetMapping("/delete/{id}")
     public String deletePage(
-            @PathVariable Long id,
+            @PathVariable("id") Long id,
             Model model,
             RedirectAttributes redirectAttributes
     ) {
@@ -413,7 +413,7 @@ public class TechProcessController {
      */
     @PostMapping("/delete/{id}")
     public String delete(
-            @PathVariable Long id,
+            @PathVariable("id") Long id,
             RedirectAttributes redirectAttributes
     ) {
         try {
@@ -442,7 +442,7 @@ public class TechProcessController {
      */
     @GetMapping("/{id}/view")
     public String view(
-            @PathVariable Long id,
+            @PathVariable("id") Long id,
             Model model,
             RedirectAttributes redirectAttributes
     ) {
@@ -476,7 +476,7 @@ public class TechProcessController {
      */
     @GetMapping("/{id}/copy")
     public String applyPage(
-            @PathVariable Long id,
+            @PathVariable("id") Long id,
             Model model,
             RedirectAttributes redirectAttributes
     ) {
@@ -517,8 +517,8 @@ public class TechProcessController {
      */
     @PostMapping("/{id}/copy")
     public String apply(
-            @PathVariable Long id,
-            @RequestParam Long targetClassifierId,
+            @PathVariable("id") Long id,
+            @RequestParam("targetClassifierId") Long targetClassifierId,
             RedirectAttributes redirectAttributes
     ) {
         try {
@@ -553,8 +553,8 @@ public class TechProcessController {
      */
     @PostMapping("/{id}/remove-classifier")
     public String removeClassifier(
-            @PathVariable Long id,
-            @RequestParam Long classifierId,
+            @PathVariable("id") Long id,
+            @RequestParam("classifierId") Long classifierId,
             RedirectAttributes redirectAttributes
     ) {
         try {

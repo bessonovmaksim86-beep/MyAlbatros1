@@ -92,7 +92,7 @@ public class DispatcherPriorityController {
      */
     @GetMapping("/{id}/edit")
     public String editPage(
-            @PathVariable Long id,
+            @PathVariable("id") Long id,
             Model model,
             RedirectAttributes redirectAttributes
     ) {
@@ -142,7 +142,7 @@ public class DispatcherPriorityController {
      */
     @PostMapping("/{id}/edit")
     public String edit(
-            @PathVariable Long id,
+            @PathVariable("id") Long id,
             @Valid
             @ModelAttribute("orderPriorityForm")
             OrderPriorityForm orderPriorityForm,
@@ -193,7 +193,7 @@ public class DispatcherPriorityController {
      */
     @PostMapping("/{id}/deactivate")
     public String deactivate(
-            @PathVariable Long id,
+            @PathVariable("id") Long id,
             RedirectAttributes redirectAttributes
     ) {
         return changeActivity(
@@ -208,7 +208,7 @@ public class DispatcherPriorityController {
      */
     @PostMapping("/{id}/activate")
     public String activate(
-            @PathVariable Long id,
+            @PathVariable("id") Long id,
             RedirectAttributes redirectAttributes
     ) {
         return changeActivity(

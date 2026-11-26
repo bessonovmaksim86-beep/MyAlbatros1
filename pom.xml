@@ -131,6 +131,22 @@
 
     <build>
         <plugins>
+            <!--
+                -parameters обязателен: в проекте часть аннотаций
+                @RequestParam/@PathVariable задана без имени. Spring берёт
+                имя параметра из байткода, и без флага любой запрос с таким
+                параметром падает с «Name for argument of type ... not
+                specified». IDEA подхватывает эту настройку при импорте
+                Maven-проекта; без неё она компилирует своим компилятором
+                и флаг теряет.
+            -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <configuration>
+                    <parameters>true</parameters>
+                </configuration>
+            </plugin>
             <plugin>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-maven-plugin</artifactId>

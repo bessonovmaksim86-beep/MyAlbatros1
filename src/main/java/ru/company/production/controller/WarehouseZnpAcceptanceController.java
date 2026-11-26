@@ -51,7 +51,7 @@ public class WarehouseZnpAcceptanceController {
     /** Экран приёмки заказа: его реквизиты и непринятые ячейки. */
     @GetMapping("/{id}")
     public String acceptPage(
-            @PathVariable Long id,
+            @PathVariable("id") Long id,
             Model model,
             RedirectAttributes redirectAttributes
     ) {
@@ -73,7 +73,7 @@ public class WarehouseZnpAcceptanceController {
      */
     @PostMapping("/{id}")
     public String accept(
-            @PathVariable Long id,
+            @PathVariable("id") Long id,
             @ModelAttribute("znpForm") ZnpAcceptanceForm form,
             Authentication authentication,
             RedirectAttributes redirectAttributes

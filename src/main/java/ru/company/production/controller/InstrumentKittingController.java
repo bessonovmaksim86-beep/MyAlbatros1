@@ -60,7 +60,7 @@ public class InstrumentKittingController {
      */
     @GetMapping("/{id}")
     public String acceptPage(
-            @PathVariable Long id,
+            @PathVariable("id") Long id,
             Model model,
             RedirectAttributes redirectAttributes
     ) {
@@ -85,8 +85,8 @@ public class InstrumentKittingController {
      */
     @PostMapping("/{id}")
     public String attach(
-            @PathVariable Long id,
-            @RequestParam Map<String, String> formParams,
+            @PathVariable("id") Long id,
+            @RequestParam("formParams") Map<String, String> formParams,
             Authentication authentication,
             RedirectAttributes redirectAttributes
     ) {

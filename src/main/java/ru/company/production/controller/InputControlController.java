@@ -344,7 +344,7 @@ public class InputControlController {
      */
     @PostMapping("/control/{batchId}/take")
     public String takeInWork(
-            @PathVariable Long batchId,
+            @PathVariable("batchId") Long batchId,
             Authentication authentication,
             RedirectAttributes redirectAttributes
     ) {
@@ -370,7 +370,7 @@ public class InputControlController {
 
     /** Карточка проверки партии. */
     @GetMapping("/control/{id}")
-    public String card(@PathVariable Long id,
+    public String card(@PathVariable("id") Long id,
                        Model model,
                        RedirectAttributes redirectAttributes) {
 
@@ -396,7 +396,7 @@ public class InputControlController {
      */
     @PostMapping("/control/{id}")
     public String save(
-            @PathVariable Long id,
+            @PathVariable("id") Long id,
             @Valid @ModelAttribute("inputControlForm") InputControlForm form,
             BindingResult errors,
             Model model,
@@ -447,7 +447,7 @@ public class InputControlController {
      */
     @PostMapping("/control/{id}/mark")
     public String mark(
-            @PathVariable Long id,
+            @PathVariable("id") Long id,
             @RequestParam("type") String typeValue,
             @Valid @ModelAttribute("inputControlForm") InputControlForm form,
             BindingResult errors,

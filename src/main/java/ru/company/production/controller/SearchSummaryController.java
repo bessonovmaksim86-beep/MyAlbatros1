@@ -43,8 +43,8 @@ public class SearchSummaryController {
 
     @GetMapping("/search/object/{category}/{id}")
     public String object(
-            @PathVariable String category,
-            @PathVariable Long id,
+            @PathVariable("category") String category,
+            @PathVariable("id") Long id,
             Model model
     ) {
         SearchSummaryView summary = searchSummaryService.build(category, id);
@@ -64,7 +64,7 @@ public class SearchSummaryController {
      */
     @GetMapping("/search/graph/{id}")
     public String graph(
-            @PathVariable Long id,
+            @PathVariable("id") Long id,
             Model model,
             RedirectAttributes redirectAttributes
     ) {

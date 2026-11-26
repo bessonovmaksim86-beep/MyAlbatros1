@@ -72,7 +72,7 @@ public class WorkshopCalendarController {
      */
     @GetMapping({"", "/"})
     public String index(
-            @RequestParam(required = false) String month,
+            @RequestParam(name = "month", required = false) String month,
             @ModelAttribute("absenceForm") AbsenceForm absenceForm,
             Authentication authentication,
             Model model
@@ -136,7 +136,7 @@ public class WorkshopCalendarController {
     @PostMapping("/unmark")
     public String unmark(
             @ModelAttribute("absenceForm") AbsenceForm absenceForm,
-            @RequestParam(required = false) String month,
+            @RequestParam(name = "month", required = false) String month,
             Authentication authentication,
             RedirectAttributes redirectAttributes
     ) {

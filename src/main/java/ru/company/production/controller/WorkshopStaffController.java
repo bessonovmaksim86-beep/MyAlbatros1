@@ -133,7 +133,7 @@ public class WorkshopStaffController {
      */
     @PostMapping("/unbind")
     public String unbind(
-            @RequestParam Long bindingId,
+            @RequestParam("bindingId") Long bindingId,
             Authentication authentication,
             RedirectAttributes redirectAttributes
     ) {

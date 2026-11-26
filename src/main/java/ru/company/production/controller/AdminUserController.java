@@ -47,7 +47,7 @@ public class AdminUserController {
     @GetMapping("/suggest-login")
     @ResponseBody
     public Map<String, String> suggestLogin(
-            @RequestParam(defaultValue = "") String fullName
+            @RequestParam(name = "fullName", defaultValue = "") String fullName
     ) {
         return Map.of(
                 "login",
@@ -70,7 +70,7 @@ public class AdminUserController {
      */
     @GetMapping("/{id}/password")
     @ResponseBody
-    public Map<String, String> password(@PathVariable Long id) {
+    public Map<String, String> password(@PathVariable("id") Long id) {
         try {
             return Map.of(
                     "password",
@@ -124,7 +124,7 @@ public class AdminUserController {
      */
     @PostMapping("/{id}/deactivate")
     public String deactivate(
-            @PathVariable Long id,
+            @PathVariable("id") Long id,
             Authentication authentication,
             RedirectAttributes redirectAttributes
     ) {

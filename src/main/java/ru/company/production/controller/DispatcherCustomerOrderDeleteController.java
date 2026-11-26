@@ -56,7 +56,7 @@ public class DispatcherCustomerOrderDeleteController {
      */
     @PostMapping("/{id}/delete")
     public String delete(
-            @PathVariable Long id,
+            @PathVariable("id") Long id,
             RedirectAttributes redirectAttributes
     ) {
         CustomerOrder deleted;

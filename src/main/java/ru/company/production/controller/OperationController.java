@@ -332,7 +332,7 @@ public class OperationController {
 
     @PostMapping("/{id}/delete")
     public String delete(
-            @PathVariable Long id,
+            @PathVariable("id") Long id,
             RedirectAttributes redirectAttributes
     ) {
         try {
@@ -363,7 +363,7 @@ public class OperationController {
 
     @PostMapping("/{id}/update")
     public String update(
-            @PathVariable Long id,
+            @PathVariable("id") Long id,
             @Valid
             @ModelAttribute("operationForm")
             OperationForm operationForm,

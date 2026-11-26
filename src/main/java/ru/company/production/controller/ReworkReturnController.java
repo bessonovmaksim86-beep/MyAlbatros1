@@ -69,8 +69,8 @@ public class ReworkReturnController {
      */
     @PostMapping("/mark-for-rework")
     public String markForRework(
-            @RequestParam List<Long> rowIds,
-            @RequestParam String reason,
+            @RequestParam("rowIds") List<Long> rowIds,
+            @RequestParam("reason") String reason,
             Authentication authentication,
             RedirectAttributes redirectAttributes
     ) {
@@ -96,8 +96,8 @@ public class ReworkReturnController {
      */
     @PostMapping("/send-to-predecessor")
     public String sendToPredecessor(
-            @RequestParam List<Long> rowIds,
-            @RequestParam String reason,
+            @RequestParam("rowIds") List<Long> rowIds,
+            @RequestParam("reason") String reason,
             Authentication authentication,
             RedirectAttributes redirectAttributes
     ) {

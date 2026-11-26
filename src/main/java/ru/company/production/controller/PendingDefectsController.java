@@ -55,7 +55,7 @@ public class PendingDefectsController {
      * номером — так работает ссылка «отбраковать» из перечня ячейки.
      */
     @GetMapping({"/new", "/new/"})
-    public String newForm(@RequestParam(required = false) String number,
+    public String newForm(@RequestParam(name = "number", required = false) String number,
                           Model model) {
 
         model.addAttribute("activePage", "defects");
@@ -76,7 +76,7 @@ public class PendingDefectsController {
      * Реестр заявок: очередь согласования и принятые решения.
      */
     @GetMapping({"", "/", "/list", "/list/"})
-    public String list(@RequestParam(required = false) String tab,
+    public String list(@RequestParam(name = "tab", required = false) String tab,
                        Model model) {
 
         model.addAttribute("activePage", "defects");
@@ -140,9 +140,9 @@ public class PendingDefectsController {
      * обязан объяснить, почему ячейку признали годной или нет.
      */
     @PostMapping("/decide")
-    public String decide(@RequestParam Long defectId,
-                         @RequestParam String decision,
-                         @RequestParam(required = false) String comment,
+    public String decide(@RequestParam("defectId") Long defectId,
+                         @RequestParam("decision") String decision,
+                         @RequestParam(name = "comment", required = false) String comment,
                          Authentication authentication,
                          RedirectAttributes redirectAttributes) {
 

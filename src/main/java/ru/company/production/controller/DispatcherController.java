@@ -510,7 +510,7 @@ public class DispatcherController {
      */
     @GetMapping("/customer-order/{id}")
     public String customerOrderView(
-            @PathVariable Long id,
+            @PathVariable("id") Long id,
             Model model
     ) {
         model.addAttribute("activePage", "customerOrder");
@@ -558,7 +558,7 @@ public class DispatcherController {
      */
     @GetMapping("/customer-order/{id}/edit")
     public String editPage(
-            @PathVariable Long id,
+            @PathVariable("id") Long id,
             Model model
     ) {
         CustomerOrder order = customerOrderRepository
@@ -585,7 +585,7 @@ public class DispatcherController {
      */
     @PostMapping("/customer-order/{id}/edit")
     public String edit(
-            @PathVariable Long id,
+            @PathVariable("id") Long id,
             @Valid
             @ModelAttribute("customerOrderForm")
             CustomerOrderForm form,
@@ -635,7 +635,7 @@ public class DispatcherController {
      */
     @GetMapping("/customer-order/{id}/schedule-preview")
     public String schedulePreview(
-            @PathVariable Long id,
+            @PathVariable("id") Long id,
             Model model,
             RedirectAttributes redirectAttributes
     ) {
@@ -670,7 +670,7 @@ public class DispatcherController {
      */
     @PostMapping("/customer-order/{id}/schedule-confirm")
     public String scheduleConfirm(
-            @PathVariable Long id,
+            @PathVariable("id") Long id,
             RedirectAttributes redirectAttributes
     ) {
         try {
@@ -701,7 +701,7 @@ public class DispatcherController {
      */
     @PostMapping("/customer-order/{id}/plan")
     public String plan(
-            @PathVariable Long id,
+            @PathVariable("id") Long id,
             RedirectAttributes redirectAttributes
     ) {
         try {
@@ -975,13 +975,13 @@ public class DispatcherController {
      */
     @GetMapping("/production-order/create")
     public String createProductionPage(
-            @RequestParam(required = false) Long parentId,
-            @RequestParam(required = false, defaultValue = "false")
+            @RequestParam(name = "parentId", required = false) Long parentId,
+            @RequestParam(name = "release", required = false, defaultValue = "false")
             boolean release,
-            @RequestParam(required = false) String kind,
-            @RequestParam(required = false, defaultValue = "false")
+            @RequestParam(name = "kind", required = false) String kind,
+            @RequestParam(name = "group", required = false, defaultValue = "false")
             boolean group,
-            @RequestParam(required = false) Long techProcessId,
+            @RequestParam(name = "techProcessId", required = false) Long techProcessId,
             Model model
     ) {
 
@@ -1101,7 +1101,7 @@ public class DispatcherController {
      */
     @PostMapping("/production-order/create")
     public String createProduction(
-            @RequestParam(required = false, defaultValue = "false")
+            @RequestParam(name = "release", required = false, defaultValue = "false")
             boolean release,
             @Valid
             @ModelAttribute("productionOrderForm")
@@ -1252,7 +1252,7 @@ public class DispatcherController {
      */
     @GetMapping("/production-order/{id}")
     public String productionOrderView(
-            @PathVariable Long id,
+            @PathVariable("id") Long id,
             Model model
     ) {
         ProductionOrder order = productionOrderRepository
@@ -1408,7 +1408,7 @@ public class DispatcherController {
      */
     @PostMapping("/production-order/{id}/plan")
     public String planProduction(
-            @PathVariable Long id,
+            @PathVariable("id") Long id,
             RedirectAttributes redirectAttributes
     ) {
         return runProductionAction(
@@ -1424,7 +1424,7 @@ public class DispatcherController {
      */
     @PostMapping("/production-order/{id}/complete")
     public String completeProduction(
-            @PathVariable Long id,
+            @PathVariable("id") Long id,
             RedirectAttributes redirectAttributes
     ) {
         return runProductionAction(
@@ -1440,7 +1440,7 @@ public class DispatcherController {
      */
     @PostMapping("/production-order/{id}/cancel")
     public String cancelProduction(
-            @PathVariable Long id,
+            @PathVariable("id") Long id,
             RedirectAttributes redirectAttributes
     ) {
         return runProductionAction(
@@ -1456,7 +1456,7 @@ public class DispatcherController {
      */
     @PostMapping("/production-order/{id}/reopen")
     public String reopenProduction(
-            @PathVariable Long id,
+            @PathVariable("id") Long id,
             RedirectAttributes redirectAttributes
     ) {
         return runProductionAction(
@@ -1472,7 +1472,7 @@ public class DispatcherController {
      */
     @PostMapping("/production-order/{id}/delete")
     public String deleteProduction(
-            @PathVariable Long id,
+            @PathVariable("id") Long id,
             Authentication authentication,
             RedirectAttributes redirectAttributes
     ) {
@@ -2432,7 +2432,7 @@ public class DispatcherController {
     @GetMapping("/production-order/kind-classifiers")
     @ResponseBody
     public List<Map<String, Object>> kindClassifiers(
-            @RequestParam(required = false) String kind
+            @RequestParam(name = "kind", required = false) String kind
     ) {
         List<Map<String, Object>> rows = new ArrayList<>();
 
@@ -2468,7 +2468,7 @@ public class DispatcherController {
     @GetMapping("/production-order/classifier-routes")
     @ResponseBody
     public List<Map<String, Object>> classifierRoutes(
-            @RequestParam(required = false) Long classifierId
+            @RequestParam(name = "classifierId", required = false) Long classifierId
     ) {
         List<Map<String, Object>> rows = new ArrayList<>();
 
@@ -2499,7 +2499,7 @@ public class DispatcherController {
     @GetMapping("/production-order/kind-proposal")
     @ResponseBody
     public GroupZnpKindProposal kindProposal(
-            @RequestParam(required = false) Long techProcessId
+            @RequestParam(name = "techProcessId", required = false) Long techProcessId
     ) {
         return productionOrderService
                 .resolveKindByTechProcess(techProcessId);
@@ -2515,7 +2515,7 @@ public class DispatcherController {
     @GetMapping("/production-order/parent-serials")
     @ResponseBody
     public List<Map<String, Object>> parentSerials(
-            @RequestParam(required = false) Long parentId
+            @RequestParam(name = "parentId", required = false) Long parentId
     ) {
         List<Map<String, Object>> rows = new ArrayList<>();
 
@@ -2550,7 +2550,7 @@ public class DispatcherController {
     @GetMapping("/production-order/customer-order-items")
     @ResponseBody
     public List<Map<String, Object>> productionPreview(
-            @RequestParam(required = false) Long customerOrderId
+            @RequestParam(name = "customerOrderId", required = false) Long customerOrderId
     ) {
         if (customerOrderId == null) {
             return Collections.emptyList();
@@ -2609,7 +2609,7 @@ public class DispatcherController {
     @GetMapping("/production-order/release-serials")
     @ResponseBody
     public List<Map<String, Object>> releaseSerials(
-            @RequestParam(required = false) Long customerOrderId
+            @RequestParam(name = "customerOrderId", required = false) Long customerOrderId
     ) {
         if (customerOrderId == null) {
             return Collections.emptyList();
@@ -2657,7 +2657,7 @@ public class DispatcherController {
     @GetMapping("/customer-order/system-components")
     @ResponseBody
     public List<Map<String, Object>> systemComponents(
-            @RequestParam(required = false) Long systemId
+            @RequestParam(name = "systemId", required = false) Long systemId
     ) {
         if (systemId == null) {
             return Collections.emptyList();
@@ -2701,7 +2701,7 @@ public class DispatcherController {
     @GetMapping("/customer-order/sensor-match")
     @ResponseBody
     public Map<String, Object> sensorMatch(
-            @RequestParam(required = false) String fullName
+            @RequestParam(name = "fullName", required = false) String fullName
     ) {
         Map<String, Object> result = new LinkedHashMap<>();
 
@@ -2902,7 +2902,7 @@ public class DispatcherController {
     @GetMapping("/production-order/serial-kitting-operations")
     @ResponseBody
     public List<Map<String, Object>> serialKittingOperations(
-            @RequestParam(required = false) Long serialId
+            @RequestParam(name = "serialId", required = false) Long serialId
     ) {
         List<Map<String, Object>> rows = new ArrayList<>();
 
@@ -2940,7 +2940,7 @@ public class DispatcherController {
     @PostMapping("/production-order/{id}/kitting-orders")
     @ResponseBody
     public Map<String, Object> createKittingOrders(
-            @PathVariable Long id,
+            @PathVariable("id") Long id,
             @RequestBody List<Map<String, Object>> pairs,
             Authentication authentication
     ) {

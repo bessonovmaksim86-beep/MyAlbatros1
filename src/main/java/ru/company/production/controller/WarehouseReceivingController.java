@@ -122,7 +122,7 @@ public class WarehouseReceivingController {
 
     /** Шаг печати: перечень номеров и передача их в программу этикеток. */
     @GetMapping("/{id}/qr")
-    public String qrPage(@PathVariable Long id,
+    public String qrPage(@PathVariable("id") Long id,
                          Model model,
                          RedirectAttributes redirectAttributes) {
 
@@ -199,7 +199,7 @@ public class WarehouseReceivingController {
      */
     @PostMapping("/{id}/qr/print")
     public String printLabels(
-            @PathVariable Long id,
+            @PathVariable("id") Long id,
             RedirectAttributes redirectAttributes
     ) {
         CellReceivingBatch batch;
@@ -244,7 +244,7 @@ public class WarehouseReceivingController {
      */
     @GetMapping("/{id}/qr/probe")
     public ResponseEntity<Resource> qrProbe(
-            @PathVariable Long id,
+            @PathVariable("id") Long id,
             RedirectAttributes redirectAttributes
     ) {
         CellReceivingBatch batch;
@@ -295,7 +295,7 @@ public class WarehouseReceivingController {
      */
     @PostMapping("/{id}/qr/agent-printed")
     @ResponseBody
-    public ResponseEntity<?> markPrintedByAgent(@PathVariable Long id) {
+    public ResponseEntity<?> markPrintedByAgent(@PathVariable("id") Long id) {
 
         try {
             receivingService.markQrPrinted(id);
@@ -322,7 +322,7 @@ public class WarehouseReceivingController {
      */
     @PostMapping("/{id}/qr")
     public String markPrinted(
-            @PathVariable Long id,
+            @PathVariable("id") Long id,
             RedirectAttributes redirectAttributes
     ) {
         try {
@@ -347,7 +347,7 @@ public class WarehouseReceivingController {
      * перечислены все данные, которые оператор вводил сам.
      */
     @GetMapping("/{id}/confirm")
-    public String confirmPage(@PathVariable Long id,
+    public String confirmPage(@PathVariable("id") Long id,
                               Model model,
                               RedirectAttributes redirectAttributes) {
 
@@ -367,7 +367,7 @@ public class WarehouseReceivingController {
 
     /** Поле сканирования: ячейки партии вводятся по одной. */
     @GetMapping("/{id}/scan")
-    public String scanPage(@PathVariable Long id,
+    public String scanPage(@PathVariable("id") Long id,
                            Model model,
                            RedirectAttributes redirectAttributes) {
 
@@ -395,7 +395,7 @@ public class WarehouseReceivingController {
      */
     @PostMapping("/{id}/scan")
     public String scan(
-            @PathVariable Long id,
+            @PathVariable("id") Long id,
             @RequestParam(name = "scanned", required = false)
             List<String> scanned,
             Model model,
@@ -466,7 +466,7 @@ public class WarehouseReceivingController {
      */
     @PostMapping("/{id}/delete")
     public String delete(
-            @PathVariable Long id,
+            @PathVariable("id") Long id,
             RedirectAttributes redirectAttributes
     ) {
         try {

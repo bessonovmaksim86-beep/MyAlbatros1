@@ -54,8 +54,8 @@ public class AdminStartSerialsController {
      */
     @PostMapping("/save")
     public String save(
-            @RequestParam Long classifierId,
-            @RequestParam(required = false) String startSerial,
+            @RequestParam("classifierId") Long classifierId,
+            @RequestParam(name = "startSerial", required = false) String startSerial,
             RedirectAttributes redirectAttributes
     ) {
         try {

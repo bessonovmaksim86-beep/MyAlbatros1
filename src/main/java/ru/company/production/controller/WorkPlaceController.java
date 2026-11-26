@@ -281,7 +281,7 @@ public class WorkPlaceController {
 
     @PostMapping("/{id}/delete")
     public String delete(
-            @PathVariable Long id,
+            @PathVariable("id") Long id,
             RedirectAttributes redirectAttributes
     ) {
         try {
@@ -312,7 +312,7 @@ public class WorkPlaceController {
 
     @PostMapping("/{id}/update")
     public String update(
-            @PathVariable Long id,
+            @PathVariable("id") Long id,
             @Valid
             @ModelAttribute("workPlaceForm")
             WorkPlaceForm workPlaceForm,

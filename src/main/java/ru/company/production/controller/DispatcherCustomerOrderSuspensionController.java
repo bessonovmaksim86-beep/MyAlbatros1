@@ -48,7 +48,7 @@ public class DispatcherCustomerOrderSuspensionController {
      */
     @PostMapping("/{id}/suspend")
     public String suspend(
-            @PathVariable Long id,
+            @PathVariable("id") Long id,
             @RequestParam(name = "reason", required = false) String reason,
             RedirectAttributes redirectAttributes
     ) {
@@ -85,7 +85,7 @@ public class DispatcherCustomerOrderSuspensionController {
      */
     @PostMapping("/{id}/resume")
     public String resume(
-            @PathVariable Long id,
+            @PathVariable("id") Long id,
             RedirectAttributes redirectAttributes
     ) {
         CustomerOrder order;

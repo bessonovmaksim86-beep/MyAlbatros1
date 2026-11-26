@@ -174,7 +174,7 @@ public class QualityController {
 
     /** Карточка заказа: состав ячеек и переходы по статусу. */
     @GetMapping("/orders/{id}")
-    public String order(@PathVariable Long id,
+    public String order(@PathVariable("id") Long id,
                         Model model,
                         RedirectAttributes redirectAttributes) {
 
@@ -258,7 +258,7 @@ public class QualityController {
 
     /** Берёт заказ в работу. */
     @PostMapping("/orders/{id}/start")
-    public String start(@PathVariable Long id,
+    public String start(@PathVariable("id") Long id,
                         RedirectAttributes redirectAttributes) {
         return changeStatus(id, redirectAttributes, "в работу",
                 qualityService::start);
@@ -266,7 +266,7 @@ public class QualityController {
 
     /** Закрывает заказ как выполненный. */
     @PostMapping("/orders/{id}/complete")
-    public String complete(@PathVariable Long id,
+    public String complete(@PathVariable("id") Long id,
                            RedirectAttributes redirectAttributes) {
         return changeStatus(id, redirectAttributes, "выполненным",
                 qualityService::complete);
@@ -274,7 +274,7 @@ public class QualityController {
 
     /** Отменяет заказ: ячейки возвращаются в изолятор. */
     @PostMapping("/orders/{id}/cancel")
-    public String cancel(@PathVariable Long id,
+    public String cancel(@PathVariable("id") Long id,
                          RedirectAttributes redirectAttributes) {
         return changeStatus(id, redirectAttributes, "отменённым",
                 qualityService::cancel);

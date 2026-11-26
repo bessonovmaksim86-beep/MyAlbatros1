@@ -58,7 +58,7 @@ public class SubassemblyKittingController {
      */
     @GetMapping("/{id}")
     public String acceptPage(
-            @PathVariable Long id,
+            @PathVariable("id") Long id,
             Model model,
             RedirectAttributes redirectAttributes
     ) {
@@ -83,8 +83,8 @@ public class SubassemblyKittingController {
      */
     @PostMapping("/{id}")
     public String attach(
-            @PathVariable Long id,
-            @RequestParam(required = false) String cellNumbers,
+            @PathVariable("id") Long id,
+            @RequestParam(name = "cellNumbers", required = false) String cellNumbers,
             Authentication authentication,
             RedirectAttributes redirectAttributes
     ) {

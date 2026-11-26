@@ -30,7 +30,7 @@ public class ProductPassportController {
     private final ProductPassportService passportService;
 
     @GetMapping("/passport/{fullNumber}")
-    public String passport(@PathVariable String fullNumber, Model model) {
+    public String passport(@PathVariable("fullNumber") String fullNumber, Model model) {
 
         PassportView passport = passportService.build(fullNumber);
 

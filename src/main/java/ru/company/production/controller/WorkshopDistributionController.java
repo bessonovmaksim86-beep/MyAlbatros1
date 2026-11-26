@@ -137,7 +137,7 @@ public class WorkshopDistributionController {
      */
     @PostMapping("/assign")
     public String assign(
-            @RequestParam Long rowId,
+            @RequestParam("rowId") Long rowId,
             @RequestParam(name = "executorId", required = false) Long executorId,
             @RequestParam(name = "periodFrom", required = false) String periodFrom,
             @RequestParam(name = "periodTo", required = false) String periodTo,
@@ -182,7 +182,7 @@ public class WorkshopDistributionController {
      */
     @PostMapping("/unassign")
     public String unassign(
-            @RequestParam Long rowId,
+            @RequestParam("rowId") Long rowId,
             @RequestParam(name = "periodFrom", required = false) String periodFrom,
             @RequestParam(name = "periodTo", required = false) String periodTo,
             @RequestParam(name = "mode", required = false) String mode,

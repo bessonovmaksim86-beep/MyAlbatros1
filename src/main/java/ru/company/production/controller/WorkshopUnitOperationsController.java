@@ -169,7 +169,7 @@ public class WorkshopUnitOperationsController {
      */
     @PostMapping("/operation/delete")
     public String deleteOperation(
-            @RequestParam Long operationId,
+            @RequestParam("operationId") Long operationId,
             Authentication authentication,
             RedirectAttributes redirectAttributes
     ) {
@@ -208,7 +208,7 @@ public class WorkshopUnitOperationsController {
      */
     @PostMapping("/work-place/delete")
     public String deleteWorkPlace(
-            @RequestParam Long workPlaceId,
+            @RequestParam("workPlaceId") Long workPlaceId,
             Authentication authentication,
             RedirectAttributes redirectAttributes
     ) {

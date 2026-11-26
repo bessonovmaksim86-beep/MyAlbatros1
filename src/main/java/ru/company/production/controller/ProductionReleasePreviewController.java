@@ -63,7 +63,7 @@ public class ProductionReleasePreviewController {
     @GetMapping("/release-preview")
     @ResponseBody
     public List<Map<String, Object>> releasePreview(
-            @RequestParam(required = false) Long customerOrderId
+            @RequestParam(name = "customerOrderId", required = false) Long customerOrderId
     ) {
         if (customerOrderId == null) {
             return List.of();

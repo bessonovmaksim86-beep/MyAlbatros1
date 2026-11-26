@@ -255,7 +255,7 @@ public class TechnologyClassifierController {
      */
     @GetMapping("/update/{id}")
     public String updateClassifierPage(
-            @PathVariable Long id,
+            @PathVariable("id") Long id,
             Model model,
             RedirectAttributes redirectAttributes
     ) {
@@ -288,7 +288,7 @@ public class TechnologyClassifierController {
      */
     @PostMapping("/update/{id}")
     public String updateClassifier(
-            @PathVariable Long id,
+            @PathVariable("id") Long id,
             @Valid
             @ModelAttribute("classifierForm")
             ClassifierForm form,
@@ -364,7 +364,7 @@ public class TechnologyClassifierController {
      */
     @GetMapping("/delete/{id}")
     public String deleteClassifierPage(
-            @PathVariable Long id,
+            @PathVariable("id") Long id,
             Model model,
             RedirectAttributes redirectAttributes
     ) {
@@ -397,7 +397,7 @@ public class TechnologyClassifierController {
      */
     @PostMapping("/delete/{id}")
     public String deleteClassifier(
-            @PathVariable Long id,
+            @PathVariable("id") Long id,
             RedirectAttributes redirectAttributes
     ) {
         try {
@@ -433,7 +433,7 @@ public class TechnologyClassifierController {
      */
     @GetMapping("/{id}/tp")
     public String addTechProcessPage(
-            @PathVariable Long id,
+            @PathVariable("id") Long id,
             Model model,
             RedirectAttributes redirectAttributes
     ) {
@@ -487,8 +487,8 @@ public class TechnologyClassifierController {
      */
     @PostMapping("/{id}/tp")
     public String addTechProcess(
-            @PathVariable Long id,
-            @RequestParam Long processId,
+            @PathVariable("id") Long id,
+            @RequestParam("processId") Long processId,
             @RequestParam(
                     name = "asBasic",
                     defaultValue = "false"
@@ -527,7 +527,7 @@ public class TechnologyClassifierController {
      */
     @GetMapping("/{id}/tp/basic")
     public String basicTechProcessPage(
-            @PathVariable Long id,
+            @PathVariable("id") Long id,
             Model model,
             RedirectAttributes redirectAttributes
     ) {
@@ -563,8 +563,8 @@ public class TechnologyClassifierController {
      */
     @PostMapping("/{id}/tp/basic")
     public String changeBasicTechProcess(
-            @PathVariable Long id,
-            @RequestParam Long processId,
+            @PathVariable("id") Long id,
+            @RequestParam("processId") Long processId,
             RedirectAttributes redirectAttributes
     ) {
         try {

@@ -57,7 +57,7 @@ public class AdminDataCleanupController {
      */
     @GetMapping({"", "/"})
     public String index(
-            @RequestParam(required = false) String query,
+            @RequestParam(name = "query", required = false) String query,
             Model model
     ) {
         model.addAttribute("activePage", "cleanup");
@@ -75,8 +75,8 @@ public class AdminDataCleanupController {
     /** Предпросмотр: что именно уйдёт вместе с записью. */
     @GetMapping("/preview/{kind}/{id}")
     public String preview(
-            @PathVariable String kind,
-            @PathVariable Long id,
+            @PathVariable("kind") String kind,
+            @PathVariable("id") Long id,
             Model model,
             RedirectAttributes redirectAttributes
     ) {
@@ -140,7 +140,7 @@ public class AdminDataCleanupController {
     /** Жёсткое удаление заказа на производство вместе с отмеченным составом. */
     @PostMapping("/order/{id}/delete")
     public String deleteOrder(
-            @PathVariable Long id,
+            @PathVariable("id") Long id,
             @RequestParam(value = "groups", required = false) List<String> groups,
             @RequestParam(value = "confirmationToken", required = false) String token,
             @RequestParam(value = "confirmed", required = false) boolean confirmed,
@@ -186,7 +186,7 @@ public class AdminDataCleanupController {
     /** Откат оприходования партии (или полное снятие заявки прихода). */
     @PostMapping("/batch/{id}/rollback")
     public String rollbackBatch(
-            @PathVariable Long id,
+            @PathVariable("id") Long id,
             @RequestParam(value = "groups", required = false) List<String> groups,
             @RequestParam(value = "confirmationToken", required = false) String token,
             @RequestParam(value = "confirmed", required = false) boolean confirmed,

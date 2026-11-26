@@ -61,7 +61,7 @@ public class AdminHolidayController {
 
     @GetMapping({"", "/"})
     public String index(
-            @RequestParam(required = false) String month,
+            @RequestParam(name = "month", required = false) String month,
             @ModelAttribute("holidayForm") HolidayForm holidayForm,
             Model model
     ) {
@@ -123,8 +123,8 @@ public class AdminHolidayController {
      */
     @PostMapping("/weekends")
     public String addWeekends(
-            @RequestParam(required = false) String month,
-            @RequestParam(required = false, defaultValue = "false")
+            @RequestParam(name = "month", required = false) String month,
+            @RequestParam(name = "replaceExisting", required = false, defaultValue = "false")
             boolean replaceExisting,
             RedirectAttributes redirectAttributes
     ) {
@@ -157,8 +157,8 @@ public class AdminHolidayController {
 
     @PostMapping("/delete/{id}")
     public String delete(
-            @PathVariable Long id,
-            @RequestParam(required = false) String month,
+            @PathVariable("id") Long id,
+            @RequestParam(name = "month", required = false) String month,
             RedirectAttributes redirectAttributes
     ) {
         try {
